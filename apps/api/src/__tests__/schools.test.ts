@@ -264,6 +264,7 @@ describe('PATCH /api/schools/:schoolId/academic-config', () => {
 
 describe('POST /api/schools/:schoolId/logo', () => {
   it('uploads PNG and returns logo_url', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
     mockQueries.updateIdentityConfig.mockResolvedValueOnce(undefined);
     mockAudit.logAudit.mockResolvedValueOnce(undefined);
 
@@ -281,6 +282,7 @@ describe('POST /api/schools/:schoolId/logo', () => {
   });
 
   it('returns 400 for missing file', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
     const res = await request(app)
       .post('/api/schools/school-uuid-001/logo')
       .set('Authorization', `Bearer ${makeToken('super_admin')}`);
@@ -289,6 +291,7 @@ describe('POST /api/schools/:schoolId/logo', () => {
   });
 
   it('returns 400 for unsupported file type (gif)', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
     const res = await request(app)
       .post('/api/schools/school-uuid-001/logo')
       .set('Authorization', `Bearer ${makeToken('super_admin')}`)

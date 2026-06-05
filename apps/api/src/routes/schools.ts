@@ -230,6 +230,11 @@ router.post(
   upload.single('logo'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const school = await findSchoolById(req.params.schoolId);
+      if (!school) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'School not found' } });
+      }
+
       const file = req.file;
       if (!file) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "logo".' } });

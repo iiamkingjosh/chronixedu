@@ -53,11 +53,13 @@ export const NIGERIAN_DEFAULTS: AcademicConfig = {
  * Example: "St. Mary's School" → "st-marys-school"
  */
 export function slugify(name: string): string {
-  return name
+  const slug = name
     .toLowerCase()
     .replace(/['']/g, '')
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
+  if (!slug) throw new Error(`Cannot generate a valid slug from school name: "${name}"`);
+  return slug;
 }
 
 /**
