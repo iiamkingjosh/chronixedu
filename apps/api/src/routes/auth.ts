@@ -25,7 +25,7 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
     } as any);
     if (error) return res.status(500).json({ error: error.message });
 
-    const userId = data?.user?.id || data?.id || null;
+    const userId = data?.user?.id ?? null;
 
     // insert into local users table
     const pg = getPgClient();
