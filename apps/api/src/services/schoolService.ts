@@ -19,11 +19,18 @@ export interface AcademicCalendarTerm {
   typical_end: string;
 }
 
+export interface CalendarTerm {
+  name: string;
+  start_month: number;
+  end_month: number;
+}
+
 export interface AcademicConfig {
   grading_scale: GradeBand[];
   promotion_cutoff: number;
   assessment_components: AssessmentComponent[];
   academic_calendar: AcademicCalendarTerm[];
+  calendar: CalendarTerm[];
 }
 
 export const NIGERIAN_DEFAULTS: AcademicConfig = {
@@ -45,6 +52,11 @@ export const NIGERIAN_DEFAULTS: AcademicConfig = {
     { term: 'First Term',  typical_start: 'September', typical_end: 'December' },
     { term: 'Second Term', typical_start: 'January',   typical_end: 'April' },
     { term: 'Third Term',  typical_start: 'May',       typical_end: 'July' },
+  ],
+  calendar: [
+    { name: 'First Term',  start_month: 9, end_month: 12 },
+    { name: 'Second Term', start_month: 1, end_month: 4  },
+    { name: 'Third Term',  start_month: 5, end_month: 7  },
   ],
 };
 

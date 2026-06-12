@@ -14,24 +14,36 @@
     "lint:api": "npm --workspace=@chronixedu/api run lint",
     "lint": "npm run lint:web && npm run lint:api",
     "test": "jest --passWithNoTests",
+    "test:isolation": "jest --testPathPattern=apps/api/tests/ --passWithNoTests",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "husky install"
   },
   "dependencies": {
+    "@sendgrid/mail": "^8.1.4",
     "@supabase/supabase-js": "^2.25.0",
     "bcryptjs": "^2.4.3",
     "express-rate-limit": "^8.5.2",
+    "handlebars": "^4.7.8",
     "jsonwebtoken": "^9.0.0",
     "multer": "^2.1.1",
+    "node-cache": "^5.1.2",
+    "node-cron": "^3.0.3",
     "pg": "^8.12.0",
+    "puppeteer": "^22.15.0",
     "winston": "^3.19.0",
     "zod": "^4.4.3"
   },
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "roots": ["<rootDir>/apps/api/src"],
-    "testMatch": ["**/__tests__/**/*.test.ts"],
+    "roots": [
+      "<rootDir>/apps/api/src",
+      "<rootDir>/apps/api/tests"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.test.ts",
+      "**/tests/**/*.test.ts"
+    ],
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/apps/api/$1"
     }
@@ -41,6 +53,7 @@
     "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.1.0",
+    "@types/node-cron": "^3.0.11",
     "@types/pg": "^8.20.0",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^6.11.0",

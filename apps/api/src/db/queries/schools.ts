@@ -12,6 +12,8 @@ export interface SchoolRow {
 export interface SchoolWithSettings extends SchoolRow {
   identity_config: Record<string, unknown>;
   academic_config: Record<string, unknown>;
+  notification_config: Record<string, unknown>;
+  report_config: Record<string, unknown>;
 }
 
 export async function insertSchool(name: string, slug: string): Promise<SchoolRow> {
@@ -39,7 +41,7 @@ export async function insertSchoolSettings(
 export async function findSchoolById(schoolId: string): Promise<SchoolWithSettings | null> {
   const result = await pool.query<SchoolWithSettings>(
     `SELECT s.id, s.name, s.slug, s.is_active, s.created_at, s.updated_at,
-            ss.identity_config, ss.academic_config
+            ss.identity_config, ss.academic_config, ss.notification_config, ss.report_config
      FROM schools s
      LEFT JOIN school_settings ss ON ss.school_id = s.id
      WHERE s.id = $1`,
@@ -74,11 +76,37 @@ export async function updateAcademicConfig(
   );
 }
 
+export async function updateNotificationConfig(
+  schoolId: string,
+  patch: Record<string, unknown>
+): Promise<void> {
+  await pool.query(
+    `UPDATE school_settings
+     SET notification_config = notification_config || $1::jsonb,
+         updated_at = NOW()
+     WHERE school_id = $2`,
+    [JSON.stringify(patch), schoolId]
+  );
+}
+
+export async function updateReportConfig(
+  schoolId: string,
+  patch: Record<string, unknown>
+): Promise<void> {
+  await pool.query(
+    `UPDATE school_settings
+     SET report_config = report_config || $1::jsonb,
+         updated_at = NOW()
+     WHERE school_id = $2`,
+    [JSON.stringify(patch), schoolId]
+  );
+}
+
 export async function checkPublishedResultsExist(schoolId: string): Promise<boolean> {
   try {
     const result = await pool.query(
       `SELECT COUNT(*)::text AS count FROM result_status
-       WHERE school_id = $1 AND status = 'published'`,
+       WHERE school_id = $1 AND status = 'published'::chronixedu_result_status`,
       [schoolId]
     );
     return parseInt(result.rows[0]?.count ?? '0', 10) > 0;
@@ -92,7 +120,7 @@ export async function checkSubmittedResultsExist(schoolId: string): Promise<bool
   try {
     const result = await pool.query(
       `SELECT COUNT(*)::text AS count FROM result_status
-       WHERE school_id = $1 AND status = 'submitted'`,
+       WHERE school_id = $1 AND status = 'submitted'::chronixedu_result_status`,
       [schoolId]
     );
     return parseInt(result.rows[0]?.count ?? '0', 10) > 0;

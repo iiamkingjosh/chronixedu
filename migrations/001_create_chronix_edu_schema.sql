@@ -6,43 +6,6 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- Supabase-compatible JWT helper functions (use session jwt.claims for tests)
-CREATE SCHEMA IF NOT EXISTS auth;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_proc p
-    JOIN pg_namespace n ON p.pronamespace = n.oid
-    WHERE p.proname = 'jwt' AND n.nspname = 'auth'
-  ) THEN
-    EXECUTE $$
-      CREATE FUNCTION auth.jwt() RETURNS jsonb
-      LANGUAGE sql STABLE
-      AS $$
-        SELECT COALESCE(current_setting('jwt.claims', true), '{}'::text)::jsonb;
-      $$;
-    $$;
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_proc p
-    JOIN pg_namespace n ON p.pronamespace = n.oid
-    WHERE p.proname = 'uid' AND n.nspname = 'auth'
-  ) THEN
-    EXECUTE $$
-      CREATE FUNCTION auth.uid() RETURNS uuid
-      LANGUAGE sql STABLE
-      AS $$
-        SELECT (auth.jwt() ->> 'sub')::uuid;
-      $$;
-    $$;
-  END IF;
-END;
-$$;
-
 -- Enum types
 CREATE TYPE chronixedu_user_role AS ENUM (
   'super_admin',
@@ -422,7 +385,7 @@ CREATE POLICY student_classes_tenant_isolation ON student_classes
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM students s
-      WHERE s.id = NEW.student_id
+      WHERE s.id = student_classes.student_id
         AND s.school_id = (auth.jwt() ->> 'school_id')::uuid
     )
   );
@@ -452,7 +415,7 @@ CREATE POLICY assessment_components_tenant_isolation ON assessment_components
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM assessment_configs ac
-      WHERE ac.id = NEW.config_id
+      WHERE ac.id = assessment_components.config_id
         AND ac.school_id = (auth.jwt() ->> 'school_id')::uuid
     )
   );
@@ -461,20 +424,10 @@ ALTER TABLE scores ENABLE ROW LEVEL SECURITY;
 CREATE POLICY scores_tenant_isolation ON scores
   FOR SELECT
   USING (school_id = (auth.jwt() ->> 'school_id')::uuid);
-CREATE POLICY scores_teacher_management ON scores
-  FOR INSERT, UPDATE
+CREATE POLICY scores_school_write ON scores
+  FOR ALL
   USING (school_id = (auth.jwt() ->> 'school_id')::uuid)
-  WITH CHECK (
-    school_id = (auth.jwt() ->> 'school_id')::uuid
-    AND EXISTS (
-      SELECT 1 FROM teacher_assignments ta
-      JOIN student_classes sc ON sc.class_id = ta.class_id
-      WHERE ta.teacher_id = auth.uid()
-        AND ta.subject_id = NEW.subject_id
-        AND ta.term_id = NEW.term_id
-        AND sc.student_id = NEW.student_id
-    )
-  );
+  WITH CHECK (school_id = (auth.jwt() ->> 'school_id')::uuid);
 
 ALTER TABLE result_status ENABLE ROW LEVEL SECURITY;
 CREATE POLICY result_status_tenant_isolation ON result_status
@@ -483,9 +436,10 @@ CREATE POLICY result_status_tenant_isolation ON result_status
   WITH CHECK (school_id = (auth.jwt() ->> 'school_id')::uuid);
 CREATE POLICY result_status_approval_restrictions ON result_status
   FOR UPDATE
+  USING (school_id = (auth.jwt() ->> 'school_id')::uuid)
   WITH CHECK (
-    (NEW.status NOT IN ('approved', 'published'))
-    OR auth.jwt() ->> 'role' IN ('principal', 'super_admin')
+    (status NOT IN ('approved', 'published'))
+    OR (auth.jwt() ->> 'role') IN ('principal', 'super_admin')
   );
 
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;

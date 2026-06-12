@@ -5,10 +5,14 @@ import schoolsRouter from '../routes/schools';
 import { errorHandler } from '../middleware/errorHandler';
 import * as schoolQueries from '../db/queries/schools';
 import * as auditLog from '../db/queries/auditLog';
+import * as reportCardService from '../services/reportCardService';
 import { supabaseAdmin } from '../supabaseClient';
 
 jest.mock('../db/queries/schools');
 jest.mock('../db/queries/auditLog');
+jest.mock('../services/reportCardService', () => ({
+  generateReportCardPreview: jest.fn(),
+}));
 jest.mock('../supabaseClient', () => ({
   supabaseAdmin: {
     storage: {
@@ -23,6 +27,7 @@ jest.mock('../supabaseClient', () => ({
 
 const mockQueries = schoolQueries as jest.Mocked<typeof schoolQueries>;
 const mockAudit  = auditLog   as jest.Mocked<typeof auditLog>;
+const mockReportCardService = reportCardService as jest.Mocked<typeof reportCardService>;
 
 process.env.JWT_SECRET = 'test-secret';
 
@@ -48,6 +53,8 @@ const SCHOOL_ROW = {
   updated_at: '2025-01-01',
   identity_config: { name: 'Test School', motto: '' },
   academic_config: {},
+  notification_config: {},
+  report_config: {},
 };
 
 // ── POST /api/schools ──────────────────────────────────────────────────────────
@@ -257,6 +264,213 @@ describe('PATCH /api/schools/:schoolId/academic-config', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.message).toMatch(/100/);
+  });
+});
+
+// ── PATCH /api/schools/:schoolId/notification-config ──────────────────────────
+
+describe('PATCH /api/schools/:schoolId/notification-config', () => {
+  it('updates the SMS sender name and returns 200', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
+    mockQueries.updateNotificationConfig.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .patch('/api/schools/school-uuid-001/notification-config')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ sms_sender_name: 'MySchool' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockQueries.updateNotificationConfig).toHaveBeenCalledWith(
+      'school-uuid-001',
+      expect.objectContaining({ sms_sender_name: 'MySchool' })
+    );
+  });
+
+  it('returns 400 when sms_sender_name exceeds 11 characters', async () => {
+    const res = await request(app)
+      .patch('/api/schools/school-uuid-001/notification-config')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ sms_sender_name: 'WayTooLongSenderName' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 404 when the school does not exist', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .patch('/api/schools/school-uuid-001/notification-config')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ sms_sender_name: 'MySchool' });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── PATCH /api/schools/:schoolId/report-config ────────────────────────────────
+
+describe('PATCH /api/schools/:schoolId/report-config', () => {
+  it('updates report config and returns 200', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
+    mockQueries.updateReportConfig.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .patch('/api/schools/school-uuid-001/report-config')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ template: 'modern', show_attendance: false, footer_text: 'Powered by Chronix Edu', next_term_resumption: '2026-09-08' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockQueries.updateReportConfig).toHaveBeenCalledWith(
+      'school-uuid-001',
+      expect.objectContaining({
+        template: 'modern',
+        show_attendance: false,
+        footer_text: 'Powered by Chronix Edu',
+        next_term_resumption: '2026-09-08',
+      })
+    );
+  });
+
+  it('returns 400 for footer_text over 200 characters', async () => {
+    const res = await request(app)
+      .patch('/api/schools/school-uuid-001/report-config')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ footer_text: 'x'.repeat(201) });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 400 for invalid template name', async () => {
+    const res = await request(app)
+      .patch('/api/schools/school-uuid-001/report-config')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ template: 'fancy' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 400 for empty body', async () => {
+    const res = await request(app)
+      .patch('/api/schools/school-uuid-001/report-config')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({});
+
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when the school does not exist', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .patch('/api/schools/school-uuid-001/report-config')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ show_attendance: true });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── POST /api/schools/:schoolId/report-config/preview ──────────────────────────
+
+describe('POST /api/schools/:schoolId/report-config/preview', () => {
+  it('returns a PDF buffer for the draft config', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
+    mockReportCardService.generateReportCardPreview.mockResolvedValueOnce(Buffer.from('%PDF-1.4 fake'));
+
+    const res = await request(app)
+      .post('/api/schools/school-uuid-001/report-config/preview')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ template: 'modern', show_attendance: false });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(mockReportCardService.generateReportCardPreview).toHaveBeenCalledWith(
+      'school-uuid-001',
+      expect.objectContaining({ template: 'modern', show_attendance: false })
+    );
+  });
+
+  it('accepts an empty body and uses default config', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
+    mockReportCardService.generateReportCardPreview.mockResolvedValueOnce(Buffer.from('%PDF-1.4 fake'));
+
+    const res = await request(app)
+      .post('/api/schools/school-uuid-001/report-config/preview')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({});
+
+    expect(res.status).toBe(200);
+  });
+
+  it('returns 400 for invalid template name', async () => {
+    const res = await request(app)
+      .post('/api/schools/school-uuid-001/report-config/preview')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({ template: 'fancy' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 404 when the school does not exist', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .post('/api/schools/school-uuid-001/report-config/preview')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .send({});
+
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── POST /api/schools/:schoolId/signature ──────────────────────────────────────
+
+describe('POST /api/schools/:schoolId/signature', () => {
+  it('uploads PNG and returns signature_url', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
+    mockQueries.updateIdentityConfig.mockResolvedValueOnce(undefined);
+    mockAudit.logAudit.mockResolvedValueOnce(undefined);
+
+    const res = await request(app)
+      .post('/api/schools/school-uuid-001/signature')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .attach('signature', Buffer.from('fake-png-data'), { filename: 'signature.png', contentType: 'image/png' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.signature_url).toBeDefined();
+    expect(mockQueries.updateIdentityConfig).toHaveBeenCalledWith(
+      'school-uuid-001',
+      expect.objectContaining({ signature_url: expect.any(String) })
+    );
+    expect(mockAudit.logAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ actionType: 'SIGNATURE_UPLOAD' })
+    );
+  });
+
+  it('returns 400 for missing file', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
+    const res = await request(app)
+      .post('/api/schools/school-uuid-001/signature')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`);
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('returns 400 for unsupported file type (gif)', async () => {
+    mockQueries.findSchoolById.mockResolvedValueOnce(SCHOOL_ROW);
+    const res = await request(app)
+      .post('/api/schools/school-uuid-001/signature')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`)
+      .attach('signature', Buffer.from('fake-gif'), { filename: 'signature.gif', contentType: 'image/gif' });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('INVALID_FILE_TYPE');
   });
 });
 

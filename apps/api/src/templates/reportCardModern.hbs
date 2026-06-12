@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="report-card-template" content="modern">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    color: #2b2b2b;
+    background: #fff;
+  }
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 10mm 12mm;
+    background: #fff;
+  }
+
+  /* ── Header ────────────────────────────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #d8dde3;
+  }
+  .header-logo { width: 64px; height: 64px; object-fit: contain; }
+  .header-stamp { width: 64px; height: 64px; object-fit: contain; }
+  .logo-placeholder { width: 64px; height: 64px; flex-shrink: 0; }
+  .header-center { flex: 1; }
+  .school-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1e3a5f;
+    letter-spacing: 0.5px;
+  }
+  .school-motto {
+    font-size: 10.5px;
+    font-style: italic;
+    color: #6b7280;
+    margin-top: 2px;
+  }
+  .school-address { font-size: 10px; color: #9aa3af; margin-top: 2px; }
+
+  .report-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #1e3a5f;
+    text-align: right;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* ── Student info ───────────────────────────────────────────────── */
+  .student-info {
+    display: flex;
+    gap: 12px;
+    background: #f5f7fa;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .student-photo {
+    width: 76px;
+    height: 86px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #d8dde3;
+    flex-shrink: 0;
+  }
+  .photo-placeholder {
+    width: 76px;
+    height: 86px;
+    background: #e9edf2;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: #9aa3af;
+    flex-shrink: 0;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .student-fields {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 24px;
+    align-content: center;
+  }
+  .field { display: flex; gap: 4px; align-items: baseline; }
+  .field-label {
+    font-weight: 600;
+    color: #6b7280;
+    white-space: nowrap;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .field-value {
+    color: #2b2b2b;
+    flex: 1;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  /* ── Section title ──────────────────────────────────────────────── */
+  .section-title {
+    font-weight: 700;
+    font-size: 10.5px;
+    color: #1e3a5f;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    letter-spacing: 1.5px;
+    padding-bottom: 3px;
+    border-bottom: 2px solid #1e3a5f;
+  }
+
+  /* ── Results table ──────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  table th {
+    background: #1e3a5f;
+    color: #fff;
+    padding: 5px 4px;
+    text-align: center;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+  table th.left { text-align: left; }
+  table td {
+    padding: 4px 4px;
+    border-bottom: 1px solid #e9edf2;
+    text-align: center;
+    vertical-align: middle;
+  }
+  table td.left { text-align: left; }
+  table tbody tr:nth-child(even) { background: #f8fafc; }
+  .grade-A { color: #15803d; font-weight: bold; }
+  .grade-B { color: #2563eb; font-weight: bold; }
+  .grade-C { color: #d97706; font-weight: bold; }
+  .grade-D { color: #ea580c; font-weight: bold; }
+  .grade-F { color: #dc2626; font-weight: bold; }
+  .overall-row {
+    background: #eef2f7 !important;
+    font-weight: bold;
+  }
+  .overall-row td { color: #1e3a5f; border-bottom: none; }
+
+  /* ── Comments ───────────────────────────────────────────────────── */
+  .comments-section { margin-top: 10px; }
+
+  /* ── Summary row ────────────────────────────────────────────────── */
+  .summary-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .summary-box {
+    flex: 1;
+    background: #f5f7fa;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .summary-box-title {
+    font-weight: 700;
+    color: #1e3a5f;
+    font-size: 10px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    letter-spacing: 0.8px;
+  }
+  .summary-line { margin-bottom: 3px; font-size: 10.5px; }
+
+  /* ── Promotion badge ────────────────────────────────────────────── */
+  .promotion-wrap { margin-top: 8px; text-align: center; }
+  .promotion-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    font-weight: 700;
+    font-size: 10.5px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .promoted { background: #dcfce7; color: #15803d; }
+  .repeat   { background: #fee2e2; color: #b91c1c; }
+  .pending  { background: #fef3c7; color: #b45309; }
+
+  /* ── Signatures ─────────────────────────────────────────────────── */
+  .footer-sig {
+    display: flex;
+    gap: 18px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #d8dde3;
+  }
+  .sig-box { flex: 1; text-align: center; }
+  .sig-line {
+    border-top: 1px solid #c2c9d1;
+    margin-top: 28px;
+    padding-top: 3px;
+    font-size: 9.5px;
+    color: #9aa3af;
+  }
+  .sig-stamp img { height: 52px; width: auto; opacity: 0.6; margin-top: 4px; }
+  .sig-signature img { height: 38px; width: auto; object-fit: contain; margin-top: 4px; }
+
+  .custom-footer {
+    font-size: 9px;
+    color: #6b7280;
+    text-align: center;
+    font-style: italic;
+    margin-top: 10px;
+    padding-top: 5px;
+    border-top: 1px solid #e9edf2;
+  }
+
+  .generated-note {
+    font-size: 8.5px;
+    color: #c2c9d1;
+    text-align: right;
+    margin-top: 5px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── School Header ──────────────────────────────────────────────── -->
+  <div class="header">
+    {{#if school.logoUrl}}
+      <img class="header-logo" src="{{school.logoUrl}}" alt="Logo" />
+    {{else}}
+      <div class="logo-placeholder"></div>
+    {{/if}}
+
+    <div class="header-center">
+      <div class="school-name">{{school.name}}</div>
+      {{#if school.motto}}
+        <div class="school-motto">"{{school.motto}}"</div>
+      {{/if}}
+      {{#if school.address}}
+        <div class="school-address">{{school.address}}</div>
+      {{/if}}
+    </div>
+
+    {{#if school.stampUrl}}
+      <img class="header-stamp" src="{{school.stampUrl}}" alt="Stamp" />
+    {{else}}
+      <div class="logo-placeholder"></div>
+    {{/if}}
+  </div>
+
+  <div class="report-title">Student Terminal Report Card</div>
+
+  <!-- ── Student Details ───────────────────────────────────────────── -->
+  <div class="student-info">
+    {{#if student.photoUrl}}
+      <img class="student-photo" src="{{student.photoUrl}}" alt="Photo" />
+    {{else}}
+      <div class="photo-placeholder">Passport<br>Photo</div>
+    {{/if}}
+
+    <div class="student-fields">
+      <div class="field">
+        <span class="field-label">Student Name</span>
+        <span class="field-value">{{student.fullName}}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">Admission No</span>
+        <span class="field-value">{{student.admissionNo}}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">Class</span>
+        <span class="field-value">{{student.className}}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">Session</span>
+        <span class="field-value">{{term.sessionName}}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">Term</span>
+        <span class="field-value">{{term.name}}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">No. in Class</span>
+        <span class="field-value">{{overall.totalStudents}}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Academic Performance ──────────────────────────────────────── -->
+  <div class="section-title">Academic Performance</div>
+  <table>
+    <thead>
+      <tr>
+        <th class="left" style="width:22%;">Subject</th>
+        {{#each componentHeaders}}
+          <th>{{this}}</th>
+        {{/each}}
+        <th>Total<br>(%)</th>
+        <th>Grade</th>
+        <th style="width:38px;">Pos.</th>
+        <th>Class<br>Avg</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#each subjects}}
+      <tr>
+        <td class="left"><strong>{{name}}</strong></td>
+        {{#each componentScores}}
+          <td>{{this}}</td>
+        {{/each}}
+        <td><strong>{{totalScore}}</strong></td>
+        <td class="grade-{{grade}}">{{grade}}</td>
+        <td>{{position}}</td>
+        <td>{{classAverage}}</td>
+      </tr>
+      {{/each}}
+
+      <!-- Overall summary row -->
+      <tr class="overall-row">
+        <td class="left" colspan="{{overallColspan}}"><strong>OVERALL AVERAGE</strong></td>
+        <td><strong>{{overall.average}}</strong></td>
+        <td class="grade-{{overall.grade}}"><strong>{{overall.grade}}</strong></td>
+        <td><strong>{{overall.position}}</strong></td>
+        <td>—</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ── Teacher Comments ───────────────────────────────────────────── -->
+  {{#if hasComments}}
+  <div class="comments-section">
+    <div class="section-title">Class Teacher's Comments</div>
+    <table>
+      <tbody>
+        {{#each subjects}}
+          {{#if teacherComment}}
+          <tr>
+            <td class="left" style="width:24%;font-weight:600;">{{name}}</td>
+            <td class="left" style="font-style:italic;color:#555;">{{teacherComment}}</td>
+          </tr>
+          {{/if}}
+        {{/each}}
+      </tbody>
+    </table>
+  </div>
+  {{/if}}
+
+  <!-- ── Summary: Remark, Attendance, Promotion ────────────────────── -->
+  <div class="summary-row">
+
+    <!-- Principal's Remark -->
+    <div class="summary-box" style="flex:{{remarkFlex}};">
+      <div class="summary-box-title">Principal's Remark</div>
+      <div style="font-style:italic;color:#555;min-height:44px;font-size:10.5px;line-height:1.5;">
+        {{#if principalRemark}}
+          {{principalRemark}}
+        {{else}}
+          <span style="color:#c2c9d1;">—</span>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Attendance -->
+    {{#if showAttendance}}
+    <div class="summary-box">
+      <div class="summary-box-title">Attendance</div>
+      <div class="summary-line"><strong>Days Present:</strong> {{attendance.daysPresent}}</div>
+      <div class="summary-line"><strong>Days Absent:</strong> {{attendance.daysAbsent}}</div>
+      <div class="summary-line"><strong>Total Days:</strong> {{attendance.totalDays}}</div>
+      <div class="summary-line"><strong>Percentage:</strong> {{attendance.percentage}}</div>
+    </div>
+    {{/if}}
+
+    <!-- Next Term & Promotion -->
+    <div class="summary-box">
+      <div class="summary-box-title">Result Summary</div>
+      <div class="summary-line">
+        <strong>Next Term Begins:</strong><br>
+        <span>{{#if term.nextTermResumption}}{{term.nextTermResumption}}{{else}}TBD{{/if}}</span>
+      </div>
+      <div class="promotion-wrap">
+        <span class="promotion-badge {{promotionClass}}">{{promotionStatus}}</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Signatures ─────────────────────────────────────────────────── -->
+  <div class="footer-sig">
+    <div class="sig-box">
+      <div class="sig-line">Class Teacher's Signature &amp; Date</div>
+    </div>
+    <div class="sig-box sig-signature">
+      {{#if school.signatureUrl}}
+        <img src="{{school.signatureUrl}}" alt="Principal's Signature" />
+      {{/if}}
+      <div class="sig-line">Principal's Signature &amp; Date</div>
+    </div>
+    {{#if school.stampUrl}}
+    <div class="sig-box sig-stamp">
+      <img src="{{school.stampUrl}}" alt="School Stamp" />
+      <div class="sig-line">School Stamp</div>
+    </div>
+    {{else}}
+    <div class="sig-box">
+      <div class="sig-line">School Stamp</div>
+    </div>
+    {{/if}}
+  </div>
+
+  {{#if footerText}}
+  <div class="custom-footer">{{footerText}}</div>
+  {{/if}}
+
+  <div class="generated-note">Generated: {{generatedAt}}</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  .page {
+    width: 148mm;
+    min-height: 210mm;
+    padding: 10mm;
+    background: #fff;
+  }
+
+  /* ── Header ────────────────────────────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 3px solid #003366;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+  }
+  .header-logo { width: 56px; height: 56px; object-fit: contain; }
+  .logo-placeholder { width: 56px; height: 56px; flex-shrink: 0; }
+  .header-center { flex: 1; text-align: center; }
+  .school-name {
+    font-size: 15px;
+    font-weight: bold;
+    color: #003366;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .school-motto { font-size: 10px; font-style: italic; color: #444; margin-top: 2px; }
+  .school-address { font-size: 9.5px; color: #666; margin-top: 2px; }
+
+  .receipt-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #fff;
+    background: #003366;
+    padding: 5px 0;
+    text-align: center;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  /* ── Meta row ──────────────────────────────────────────────────── */
+  .meta-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 10.5px;
+  }
+  .meta-row .label { color: #666; }
+  .meta-row .value { font-weight: bold; }
+
+  /* ── Student info ──────────────────────────────────────────────── */
+  .student-info {
+    border: 1.5px solid #003366;
+    border-radius: 2px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+  }
+  .student-info .row { display: flex; justify-content: space-between; padding: 2px 0; }
+  .student-info .label { color: #666; }
+  .student-info .value { font-weight: bold; }
+
+  /* ── Payment table ─────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; font-size: 10.5px; }
+  th { background: #f0f4f8; color: #003366; text-transform: uppercase; font-size: 9.5px; }
+  .amount-cell { text-align: right; font-weight: bold; }
+
+  /* ── Summary ───────────────────────────────────────────────────── */
+  .summary { margin-top: 4px; }
+  .summary .row { display: flex; justify-content: space-between; padding: 3px 0; font-size: 10.5px; }
+  .summary .row.total { font-weight: bold; border-top: 1px solid #ccc; padding-top: 6px; margin-top: 4px; }
+  .status-paid { color: #1a7a1a; }
+  .status-partial { color: #b8860b; }
+  .status-unpaid { color: #b91c1c; }
+
+  /* ── Footer ────────────────────────────────────────────────────── */
+  .footer {
+    margin-top: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    font-size: 9.5px;
+    color: #666;
+  }
+  .signature { text-align: center; }
+  .signature .line { border-top: 1px solid #999; width: 120px; margin-bottom: 4px; }
+  .generated-at { text-align: center; font-size: 9px; color: #999; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── School Header ──────────────────────────────────────────────── -->
+  <div class="header">
+    {{#if school.logoUrl}}
+      <img class="header-logo" src="{{school.logoUrl}}" alt="Logo" />
+    {{else}}
+      <div class="logo-placeholder"></div>
+    {{/if}}
+
+    <div class="header-center">
+      <div class="school-name">{{school.name}}</div>
+      {{#if school.motto}}
+        <div class="school-motto">"{{school.motto}}"</div>
+      {{/if}}
+      {{#if school.address}}
+        <div class="school-address">{{school.address}}</div>
+      {{/if}}
+    </div>
+
+    {{#if school.stampUrl}}
+      <img class="header-logo" src="{{school.stampUrl}}" alt="Stamp" />
+    {{else}}
+      <div class="logo-placeholder"></div>
+    {{/if}}
+  </div>
+
+  <div class="receipt-title">Payment Receipt</div>
+
+  <!-- ── Meta ──────────────────────────────────────────────────────── -->
+  <div class="meta-row">
+    <div><span class="label">Receipt No:</span> <span class="value">{{receiptNo}}</span></div>
+    <div><span class="label">Date:</span> <span class="value">{{paymentDate}}</span></div>
+  </div>
+
+  <!-- ── Student Details ───────────────────────────────────────────── -->
+  <div class="student-info">
+    <div class="row"><span class="label">Student</span><span class="value">{{student.fullName}}</span></div>
+    <div class="row"><span class="label">Admission No</span><span class="value">{{student.admissionNo}}</span></div>
+    <div class="row"><span class="label">Class</span><span class="value">{{#if student.className}}{{student.className}}{{else}}—{{/if}}</span></div>
+    <div class="row"><span class="label">Term</span><span class="value">{{term.name}} ({{term.sessionName}})</span></div>
+  </div>
+
+  <!-- ── Payment Details ───────────────────────────────────────────── -->
+  <table>
+    <thead>
+      <tr>
+        <th>Payment Method</th>
+        <th>Reference</th>
+        <th style="text-align: right;">Amount Paid</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>{{payment.method}}</td>
+        <td>{{payment.reference}}</td>
+        <td class="amount-cell">{{payment.amount}}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- ── Invoice Summary ───────────────────────────────────────────── -->
+  <div class="summary">
+    <div class="row"><span>Total Invoice Amount</span><span>{{invoice.totalAmount}}</span></div>
+    <div class="row"><span>Total Amount Paid</span><span>{{invoice.amountPaid}}</span></div>
+    <div class="row total">
+      <span>Outstanding Balance</span>
+      <span class="status-{{invoice.status}}">{{invoice.balance}}</span>
+    </div>
+  </div>
+
+  <!-- ── Footer ────────────────────────────────────────────────────── -->
+  <div class="footer">
+    <div class="signature">
+      <div class="line"></div>
+      <div>Bursar's Signature</div>
+    </div>
+    {{#if school.stampUrl}}
+      <img src="{{school.stampUrl}}" alt="School Stamp" style="width: 56px; height: 56px; object-fit: contain;" />
+    {{/if}}
+  </div>
+
+  <div class="generated-at">Generated on {{generatedAt}}</div>
+
+</div>
+</body>
+</html>

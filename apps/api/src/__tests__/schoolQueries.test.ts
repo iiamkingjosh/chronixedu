@@ -5,6 +5,7 @@ import {
   findSchoolById,
   updateIdentityConfig,
   updateAcademicConfig,
+  updateReportConfig,
   checkPublishedResultsExist,
   checkSubmittedResultsExist,
 } from '../db/queries/schools';
@@ -47,7 +48,7 @@ describe('insertSchoolSettings', () => {
 describe('findSchoolById', () => {
   it('returns school with settings when found', async () => {
     mockQuery.mockResolvedValueOnce({
-      rows: [{ id: 'abc', name: 'Test', slug: 'test', is_active: true, created_at: '', updated_at: '', identity_config: {}, academic_config: {} }],
+      rows: [{ id: 'abc', name: 'Test', slug: 'test', is_active: true, created_at: '', updated_at: '', identity_config: {}, academic_config: {}, report_config: {} }],
     });
     const result = await findSchoolById('abc');
     expect(result).not.toBeNull();
@@ -58,6 +59,15 @@ describe('findSchoolById', () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
     const result = await findSchoolById('missing');
     expect(result).toBeNull();
+  });
+
+  it('selects report_config from school_settings', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await findSchoolById('abc');
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('ss.report_config'),
+      ['abc']
+    );
   });
 });
 
@@ -79,6 +89,17 @@ describe('updateAcademicConfig', () => {
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('academic_config = academic_config ||'),
       [JSON.stringify({ promotion_cutoff: 45 }), 'abc']
+    );
+  });
+});
+
+describe('updateReportConfig', () => {
+  it('merges patch into report_config JSONB', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    await updateReportConfig('abc', { template: 'modern', show_attendance: false });
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining('report_config = report_config ||'),
+      [JSON.stringify({ template: 'modern', show_attendance: false }), 'abc']
     );
   });
 });

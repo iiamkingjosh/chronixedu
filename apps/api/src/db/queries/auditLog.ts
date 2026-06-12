@@ -17,3 +17,21 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
     [entry.schoolId, entry.userId, entry.actionType, entry.entity, entry.entityId ?? null, entry.oldValue ?? null, entry.newValue ?? null]
   );
 }
+
+export async function logSettingsChange(
+  schoolId: string,
+  userId: string,
+  field: string,
+  oldValue: unknown,
+  newValue: unknown
+): Promise<void> {
+  await logAudit({
+    schoolId,
+    userId,
+    actionType: 'SETTINGS_CHANGE',
+    entity: 'school_settings',
+    entityId: schoolId,
+    oldValue: { field, value: oldValue },
+    newValue: { field, value: newValue },
+  });
+}

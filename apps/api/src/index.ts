@@ -1,30 +1,78 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
+import { generalRateLimiter, authRateLimiter } from './middleware/rateLimit';
 import authRoutes from './routes/auth';
 import schoolsRoutes from './routes/schools';
+import sessionsRoutes from './routes/sessions';
+import rosterRoutes from './routes/roster';
+import usersRoutes from './routes/users';
+import assessmentConfigRoutes from './routes/assessmentConfig';
+import studentsRoutes from './routes/students';
+import scoresRoutes from './routes/scores';
+import resultsRoutes from './routes/results';
+import dashboardRoutes from './routes/dashboard';
+import teacherDashboardRoutes from './routes/teacherDashboard';
+import attendanceRoutes from './routes/attendance';
+import parentRoutes from './routes/parent';
+import studentRoutes from './routes/student';
+import assignmentsRoutes from './routes/assignments';
+import behaviourRoutes from './routes/behaviour';
+import messagesRoutes from './routes/messages';
+import announcementsRoutes from './routes/announcements';
+import notificationsRoutes from './routes/notifications';
+import feesRoutes from './routes/fees';
+import analyticsRoutes from './routes/analytics';
+import timetableRoutes from './routes/timetable';
+import { closeReportCardBrowser } from './services/reportCardService';
+import { startNotificationWorker, stopNotificationWorker } from './services/notificationWorker';
+import { startAnalyticsCron, stopAnalyticsCron } from './services/analyticsService';
+import { startFeeReminderCron, stopFeeReminderCron } from './services/feeReminderService';
 import { errorHandler } from './middleware/errorHandler';
+import { requestLogger } from './middleware/requestLogger';
+import { validateEnv } from './config/env';
+import { logger } from './config/logger';
 
-dotenv.config();
-
-const required = ['DATABASE_URL', 'JWT_SECRET', 'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
-const missing = required.filter(k => !process.env[k]);
-if (missing.length) throw new Error(`Missing required env vars: ${missing.join(', ')}`);
+const env = validateEnv();
 
 const app = express();
-const port = process.env.PORT ?? '3001';
+const port = env.PORT;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    (req as express.Request).rawBody = buf;
+  },
+}));
+app.use(requestLogger);
 
 // Rate limiting (Agent File Rule S5: 5/min for auth, 100/min general)
-app.use('/api/auth', rateLimit({ windowMs: 60_000, max: 5 }));
-app.use('/api',      rateLimit({ windowMs: 60_000, max: 100 }));
+app.use('/api/auth', authRateLimiter);
+app.use('/api',      generalRateLimiter);
 
 // Routes
 app.use('/api/auth',    authRoutes);
 app.use('/api/schools', schoolsRoutes);
+app.use('/api/schools', sessionsRoutes);
+app.use('/api/schools', rosterRoutes);
+app.use('/api/schools', usersRoutes);
+app.use('/api/schools', assessmentConfigRoutes);
+app.use('/api/schools', studentsRoutes);
+app.use('/api/schools', scoresRoutes);
+app.use('/api/schools', resultsRoutes);
+app.use('/api/schools', dashboardRoutes);
+app.use('/api/schools', teacherDashboardRoutes);
+app.use('/api/schools', attendanceRoutes);
+app.use('/api/schools', parentRoutes);
+app.use('/api/schools', studentRoutes);
+app.use('/api/schools', assignmentsRoutes);
+app.use('/api/schools', behaviourRoutes);
+app.use('/api/schools', messagesRoutes);
+app.use('/api/schools', announcementsRoutes);
+app.use('/api/schools', notificationsRoutes);
+app.use('/api/schools', feesRoutes);
+app.use('/api/schools', analyticsRoutes);
+app.use('/api/schools', timetableRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ success: true, status: 'ok' });
@@ -33,7 +81,17 @@ app.get('/health', (_req, res) => {
 // Global error handler must be registered last
 app.use(errorHandler);
 
-app.listen(port, () => {
-  // eslint-disable-next-line no-console
-  console.log(`Chronix Edu API listening on http://localhost:${port}`);
+const server = app.listen(port, () => {
+  logger.info('server_started', { port });
+});
+
+startNotificationWorker();
+startAnalyticsCron();
+startFeeReminderCron();
+
+process.on('SIGTERM', () => {
+  stopNotificationWorker();
+  stopAnalyticsCron();
+  stopFeeReminderCron();
+  closeReportCardBrowser().finally(() => server.close());
 });

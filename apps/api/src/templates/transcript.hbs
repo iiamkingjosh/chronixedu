@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 11px;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    padding: 8mm 12mm;
+    background: #fff;
+  }
+
+  /* ── Header ────────────────────────────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 3px solid #1a5c1a;
+    padding-bottom: 8px;
+    margin-bottom: 6px;
+  }
+  .header-logo { width: 72px; height: 72px; object-fit: contain; }
+  .header-stamp { width: 72px; height: 72px; object-fit: contain; }
+  .logo-placeholder { width: 72px; height: 72px; flex-shrink: 0; }
+  .header-center { flex: 1; text-align: center; }
+  .school-name {
+    font-size: 17px;
+    font-weight: bold;
+    color: #1a5c1a;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .school-motto {
+    font-size: 10.5px;
+    font-style: italic;
+    color: #444;
+    margin-top: 2px;
+  }
+  .school-address { font-size: 10px; color: #666; margin-top: 2px; }
+
+  .report-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #fff;
+    background: #1a5c1a;
+    padding: 4px 0;
+    text-align: center;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 7px;
+  }
+
+  /* ── Student info ───────────────────────────────────────────────── */
+  .student-info {
+    display: flex;
+    gap: 10px;
+    border: 1.5px solid #1a5c1a;
+    padding: 7px 9px;
+    margin-bottom: 10px;
+    border-radius: 2px;
+  }
+  .student-photo {
+    width: 70px;
+    height: 80px;
+    object-fit: cover;
+    border: 1px solid #bbb;
+    flex-shrink: 0;
+  }
+  .photo-placeholder {
+    width: 70px;
+    height: 80px;
+    background: #f0f0f0;
+    border: 1px solid #bbb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: #999;
+    flex-shrink: 0;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .student-fields {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px 24px;
+    align-content: center;
+  }
+  .field { display: flex; gap: 4px; align-items: baseline; }
+  .field-label {
+    font-weight: bold;
+    color: #1a5c1a;
+    white-space: nowrap;
+    font-size: 10.5px;
+  }
+  .field-value {
+    color: #1a1a1a;
+    border-bottom: 1px dotted #aaa;
+    flex: 1;
+    padding-bottom: 1px;
+    font-size: 10.5px;
+  }
+
+  /* ── Session / term sections ───────────────────────────────────── */
+  .session-title {
+    font-weight: bold;
+    font-size: 11.5px;
+    color: #fff;
+    background: #1a5c1a;
+    padding: 4px 8px;
+    text-transform: uppercase;
+    margin-top: 12px;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+  }
+  .term-block { margin-bottom: 8px; page-break-inside: avoid; }
+  .term-title {
+    font-weight: bold;
+    font-size: 10.5px;
+    color: #1a5c1a;
+    padding: 3px 0;
+    border-bottom: 1px solid #cce0cc;
+    margin-bottom: 3px;
+  }
+
+  /* ── Results table ──────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  table th {
+    background: #1a5c1a;
+    color: #fff;
+    padding: 4px 4px;
+    text-align: center;
+    border: 1px solid #155215;
+    font-weight: bold;
+    line-height: 1.2;
+  }
+  table th.left { text-align: left; }
+  table td {
+    padding: 3px 4px;
+    border: 1px solid #ccc;
+    text-align: center;
+    vertical-align: middle;
+  }
+  table td.left { text-align: left; }
+  table tbody tr:nth-child(even) { background: #f6faf6; }
+  .grade-A { color: #1b5e20; font-weight: bold; }
+  .grade-B { color: #388e3c; font-weight: bold; }
+  .grade-C { color: #f57c00; font-weight: bold; }
+  .grade-D { color: #e64a19; font-weight: bold; }
+  .grade-F { color: #c62828; font-weight: bold; }
+  .overall-row {
+    background: #e8f5e9 !important;
+    font-weight: bold;
+  }
+  .overall-row td { color: #1a5c1a; }
+
+  .generated-note {
+    font-size: 8.5px;
+    color: #bbb;
+    text-align: right;
+    margin-top: 12px;
+  }
+
+  .empty-note {
+    font-size: 10.5px;
+    color: #999;
+    font-style: italic;
+    padding: 12px 0;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ── School Header ──────────────────────────────────────────────── -->
+  <div class="header">
+    {{#if school.logoUrl}}
+      <img class="header-logo" src="{{school.logoUrl}}" alt="Logo" />
+    {{else}}
+      <div class="logo-placeholder"></div>
+    {{/if}}
+
+    <div class="header-center">
+      <div class="school-name">{{school.name}}</div>
+      {{#if school.motto}}
+        <div class="school-motto">"{{school.motto}}"</div>
+      {{/if}}
+      {{#if school.address}}
+        <div class="school-address">{{school.address}}</div>
+      {{/if}}
+    </div>
+
+    {{#if school.stampUrl}}
+      <img class="header-stamp" src="{{school.stampUrl}}" alt="Stamp" />
+    {{else}}
+      <div class="logo-placeholder"></div>
+    {{/if}}
+  </div>
+
+  <div class="report-title">Academic Transcript</div>
+
+  <!-- ── Student Details ───────────────────────────────────────────── -->
+  <div class="student-info">
+    {{#if student.photoUrl}}
+      <img class="student-photo" src="{{student.photoUrl}}" alt="Photo" />
+    {{else}}
+      <div class="photo-placeholder">Passport<br>Photo</div>
+    {{/if}}
+
+    <div class="student-fields">
+      <div class="field">
+        <span class="field-label">Student Name:</span>
+        <span class="field-value">{{student.fullName}}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">Admission No:</span>
+        <span class="field-value">{{student.admissionNo}}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">Date of Birth:</span>
+        <span class="field-value">{{#if student.dob}}{{student.dob}}{{else}}—{{/if}}</span>
+      </div>
+      <div class="field">
+        <span class="field-label">Gender:</span>
+        <span class="field-value">{{#if student.gender}}{{student.gender}}{{else}}—{{/if}}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sessions ─────────────────────────────────────────────────── -->
+  {{#if sessions.length}}
+    {{#each sessions}}
+    <div class="session-title">{{sessionName}} — {{className}} ({{classLevel}})</div>
+
+    {{#each terms}}
+    <div class="term-block">
+      <div class="term-title">{{termName}}</div>
+      <table>
+        <thead>
+          <tr>
+            <th class="left" style="width:32%;">Subject</th>
+            <th>Total (%)</th>
+            <th>Grade</th>
+            <th style="width:60px;">Position</th>
+            <th>Class Avg</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each subjects}}
+          <tr>
+            <td class="left"><strong>{{name}}</strong></td>
+            <td><strong>{{totalScore}}</strong></td>
+            <td class="grade-{{grade}}">{{grade}}</td>
+            <td>{{position}}</td>
+            <td>{{classAverage}}</td>
+          </tr>
+          {{/each}}
+          <tr class="overall-row">
+            <td class="left"><strong>OVERALL AVERAGE</strong></td>
+            <td><strong>{{overall.average}}</strong></td>
+            <td class="grade-{{overall.grade}}"><strong>{{overall.grade}}</strong></td>
+            <td><strong>{{overall.position}}</strong></td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    {{/each}}
+
+    {{/each}}
+  {{else}}
+    <div class="empty-note">No published results are available for this student yet.</div>
+  {{/if}}
+
+  <div class="generated-note">Generated: {{generatedAt}}</div>
+
+</div>
+</body>
+</html>

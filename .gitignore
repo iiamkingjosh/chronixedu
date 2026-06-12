@@ -3,12 +3,19 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
 pnpm-lock.yaml
 
 # Next.js
 .next/
 out/
+
+# next-pwa generated service worker artifacts
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/workbox-*.js
+apps/web/public/workbox-*.js.map
+apps/web/public/fallback-*.js
+apps/web/public/swe-worker-*.js
 
 # Build output
 dist/

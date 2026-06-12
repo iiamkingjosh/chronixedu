@@ -7,22 +7,25 @@ export interface AuthUser {
   role?: string;
   email?: string;
   title?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: AuthUser;
-    }
+declare module 'express-serve-static-core' {
+  interface Request {
+    user?: AuthUser;
+    rawBody?: Buffer;
   }
 }
 
 export function verifyToken(req: Request, res: Response, next: NextFunction) {
   const auth = req.headers.authorization;
-  if (!auth) return res.status(401).json({ error: 'Missing Authorization header' });
+  if (!auth) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing Authorization header' } });
+  }
   const parts = auth.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') return res.status(401).json({ error: 'Invalid Authorization format' });
+  if (parts.length !== 2 || parts[0] !== 'Bearer') {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid Authorization format' } });
+  }
   const token = parts[1];
   try {
     const secret = process.env.JWT_SECRET || '';
@@ -30,15 +33,15 @@ export function verifyToken(req: Request, res: Response, next: NextFunction) {
     req.user = payload;
     return next();
   } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' });
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
   }
 }
 
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const role = req.user?.role;
-    if (!role) return res.status(403).json({ error: 'Missing role' });
-    if (!roles.includes(role)) return res.status(403).json({ error: 'Forbidden' });
+    if (!role) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Missing role' } });
+    if (!roles.includes(role)) return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Forbidden' } });
     return next();
   };
 }
