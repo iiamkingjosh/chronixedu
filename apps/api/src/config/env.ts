@@ -28,6 +28,7 @@ const envSchema = z.object({
   APP_URL: z.string().url('APP_URL must be a valid URL').optional(),
   NEXTAUTH_URL: z.string().url('NEXTAUTH_URL must be a valid URL').optional(),
   NEXT_PUBLIC_API_URL: z.string().url('NEXT_PUBLIC_API_URL must be a valid URL').optional(),
+  CORS_ORIGIN: z.string().url('CORS_ORIGIN must be a valid URL').optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

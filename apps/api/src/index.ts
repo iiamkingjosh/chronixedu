@@ -39,7 +39,9 @@ const env = validateEnv();
 const app = express();
 const port = env.PORT;
 
-app.use(cors());
+const allowedOrigins = ['http://localhost:3000', ...(env.CORS_ORIGIN ? [env.CORS_ORIGIN] : [])];
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({
   verify: (req, _res, buf) => {
     (req as express.Request).rawBody = buf;
