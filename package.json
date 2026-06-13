@@ -16,7 +16,7 @@
     "test": "jest --passWithNoTests",
     "test:isolation": "jest --testPathPattern=apps/api/tests/ --passWithNoTests",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "prepare": "husky install"
+    "prepare": "node -e \"if(!process.env.CI && require('fs').existsSync('.git')) process.exit(1)\" || husky install"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.4",

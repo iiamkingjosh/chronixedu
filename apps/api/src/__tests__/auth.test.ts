@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import { errorHandler } from '../middleware/errorHandler';
 
 process.env.JWT_SECRET = 'test-secret';
-process.env.NODE_ENV = 'development';
+(process.env as Record<string, string>).NODE_ENV = 'development';
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
 
 const mockSignIn = jest.fn();
