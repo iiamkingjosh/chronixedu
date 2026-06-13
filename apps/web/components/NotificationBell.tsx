@@ -42,6 +42,72 @@ function timeAgo(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+function formatTimestamp(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
+}
+
+// ── Modal ─────────────────────────────────────────────────────────────────────
+
+function NotificationModal({
+  notification,
+  onClose,
+  onViewThread,
+}: {
+  notification: NotificationItem;
+  onClose: () => void;
+  onViewThread?: () => void;
+}) {
+  const hasThread = notification.type === 'message' && !!notification.payload?.thread_id;
+
+  return (
+    <div
+      className="modal-overlay fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="modal-panel w-full max-w-md bg-white rounded-xl shadow-lg text-gray-900"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-100">
+          <h2 className="font-heading text-base font-semibold text-gray-900">{notification.title}</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="p-1 -mt-1 -mr-1 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors duration-200"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="px-5 py-4">
+          {notification.body ? (
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{notification.body}</p>
+          ) : (
+            <p className="text-sm text-gray-400">No additional details.</p>
+          )}
+          <p className="text-xs text-gray-400 mt-4">{formatTimestamp(notification.created_at)}</p>
+        </div>
+        {hasThread && (
+          <div className="px-5 py-4 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={onViewThread}
+              className="btn-primary"
+            >
+              View conversation
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function NotificationBell({ variant = 'dark' }: { variant?: 'light' | 'dark' }) {
@@ -50,6 +116,7 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedNotification, setSelectedNotification] = useState<NotificationItem | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(() => {
@@ -103,11 +170,17 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
       }
     }
     setOpen(false);
+    setSelectedNotification({ ...n, is_read: true });
+  }
 
-    if (n.type === 'message' && n.payload?.thread_id && user) {
+  function handleViewThread() {
+    if (!selectedNotification || !user) return;
+    const threadId = selectedNotification.payload?.thread_id;
+    if (threadId) {
       const path = MESSAGES_PATH_BY_ROLE[user.role] ?? '/parent/messages';
-      router.push(`${path}?thread=${n.payload.thread_id}`);
+      router.push(`${path}?thread=${threadId}`);
     }
+    setSelectedNotification(null);
   }
 
   const iconColor = variant === 'light' ? 'text-white' : 'text-gray-500';
@@ -132,9 +205,9 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] bg-white border border-gray-200 rounded-xl shadow-lg z-50 text-gray-900">
+        <div className="animate-fade-in absolute right-0 mt-2 w-80 max-w-[90vw] bg-white border border-gray-200 rounded-xl shadow-lg z-50 text-gray-900">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <p className="text-sm font-semibold text-gray-900">Notifications</p>
+            <p className="font-heading text-sm font-semibold text-gray-900">Notifications</p>
             {unreadCount > 0 && (
               <button
                 type="button"
@@ -154,7 +227,7 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
                   key={n.id}
                   type="button"
                   onClick={() => handleClickNotification(n)}
-                  className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${n.is_read ? '' : 'bg-blue-50/50'}`}
+                  className={`table-row-hover w-full text-left px-4 py-3 ${n.is_read ? '' : 'bg-blue-50/50'}`}
                 >
                   <div className="flex items-start gap-2">
                     {!n.is_read && <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-[#2472B4] shrink-0" />}
@@ -169,6 +242,14 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
             )}
           </div>
         </div>
+      )}
+
+      {selectedNotification && (
+        <NotificationModal
+          notification={selectedNotification}
+          onClose={() => setSelectedNotification(null)}
+          onViewThread={handleViewThread}
+        />
       )}
     </div>
   );

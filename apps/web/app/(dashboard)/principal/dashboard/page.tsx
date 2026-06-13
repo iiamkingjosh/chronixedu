@@ -15,12 +15,30 @@ interface PrincipalOverview {
   school_average: number | null;
 }
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+type StatAccent = 'navy' | 'orange' | 'blue';
+
+const ACCENT_CLASSES: Record<StatAccent, string> = {
+  navy: 'text-[#003366]',
+  orange: 'text-[#FF761B]',
+  blue: 'text-[#2472B4]',
+};
+
+function StatCard({ label, value, sub, accent = 'navy' }: { label: string; value: string | number; sub?: string; accent?: StatAccent }) {
   return (
-    <div className="rounded-xl bg-white border border-gray-200 p-5 shadow-sm">
+    <div className="card card-hover p-5">
       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className="mt-2 text-3xl font-semibold text-[#003366]">{value}</p>
+      <p className={`stat-value mt-2 text-3xl font-semibold font-heading ${ACCENT_CLASSES[accent]}`}>{value}</p>
       {sub && <p className="mt-1 text-sm text-gray-500">{sub}</p>}
+    </div>
+  );
+}
+
+function StatCardSkeleton() {
+  return (
+    <div className="card p-5">
+      <div className="skeleton h-3 w-20" />
+      <div className="skeleton h-8 w-16 mt-3" />
+      <div className="skeleton h-3 w-24 mt-2" />
     </div>
   );
 }
@@ -48,8 +66,21 @@ export default function PrincipalDashboardPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <p className="text-sm text-gray-500">Loading dashboard…</p>
+      <div className="p-8 max-w-5xl">
+        <div className="mb-8">
+          <div className="skeleton h-7 w-64" />
+          <div className="skeleton h-4 w-40 mt-2" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)}
+        </div>
+        <div className="card p-6">
+          <div className="skeleton h-4 w-28 mb-4" />
+          <div className="flex gap-3">
+            <div className="skeleton h-9 w-32" />
+            <div className="skeleton h-9 w-32" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -79,29 +110,24 @@ export default function PrincipalDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Students" value={overview.total_students} />
-        <StatCard label="Teachers" value={overview.total_teachers} />
-        <StatCard label="Classes" value={overview.total_classes} />
+        <StatCard label="Students" value={overview.total_students} accent="navy" />
+        <StatCard label="Teachers" value={overview.total_teachers} accent="blue" />
+        <StatCard label="Classes" value={overview.total_classes} accent="orange" />
         <StatCard
           label="School Average"
           value={overview.school_average !== null ? `${overview.school_average}%` : '—'}
           sub={overview.school_average !== null ? 'Current term' : 'No scores yet'}
+          accent="navy"
         />
       </div>
 
-      <div className="rounded-xl bg-white border border-gray-200 p-6 shadow-sm">
+      <div className="card p-6">
         <h2 className="text-base font-semibold text-gray-900 mb-4">Quick actions</h2>
         <div className="flex flex-wrap gap-3">
-          <Link
-            href="/principal/results"
-            className="inline-flex items-center rounded-lg bg-[#003366] px-4 py-2 text-sm font-medium text-white hover:bg-[#002244] transition-colors"
-          >
+          <Link href="/principal/results" className="btn-primary">
             Review results
           </Link>
-          <Link
-            href="/principal/report-cards"
-            className="inline-flex items-center rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          >
+          <Link href="/principal/report-cards" className="btn-secondary">
             Report cards
           </Link>
         </div>

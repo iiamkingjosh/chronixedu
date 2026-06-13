@@ -6,7 +6,8 @@ import { supabaseAdmin } from '../supabaseClient';
 import { findSchoolById } from '../db/queries/schools';
 import {
   fetchStudentReportData,
-  fetchSubjectComments,
+  fetchClassTeacherComment,
+  fetchFormTeacher,
   fetchPrincipalRemark,
   upsertReportCard,
 } from '../db/queries/reportCards';
@@ -136,6 +137,25 @@ export function lookupGrade(score: number, scale: Array<{ min: number; max: numb
   return 'F';
 }
 
+// Promotion decisions are only made at the end of the academic session (Third Term).
+export function computePromotionStatus(
+  termName: string,
+  scoredSubjectsCount: number,
+  overallAvg: number,
+  promotionCutoff: number
+): { promotionClass: 'promoted' | 'repeat' | 'pending' | 'not-applicable'; promotionStatus: string } {
+  if (termName.trim().toLowerCase() !== 'third term') {
+    return { promotionClass: 'not-applicable', promotionStatus: 'Term Completed' };
+  }
+  if (scoredSubjectsCount === 0) {
+    return { promotionClass: 'pending', promotionStatus: 'Pending' };
+  }
+  if (overallAvg >= promotionCutoff) {
+    return { promotionClass: 'promoted', promotionStatus: 'Promoted' };
+  }
+  return { promotionClass: 'repeat', promotionStatus: 'Repeat Class' };
+}
+
 // Build per-subject position from class results (DENSE_RANK per subject)
 export function buildSubjectPositions(
   classResult: ClassResult
@@ -186,12 +206,11 @@ export async function generateReportCard(
   if (!studentData) throw new Error(`Student report data not found for ${studentId}`);
   if (!school)      throw new Error(`School not found: ${schoolId}`);
 
-  const [comments, principalRemark] = await Promise.all([
-    fetchSubjectComments(studentId, termId),
+  const [classTeacherComment, formTeacher, principalRemark] = await Promise.all([
+    fetchClassTeacherComment(studentId, termId),
+    fetchFormTeacher(studentData.class_id),
     fetchPrincipalRemark(studentId, termId),
   ]);
-
-  const commentMap = new Map(comments.map(c => [c.subject_id, c.comment_text]));
 
   const identityConfig = (school.identity_config ?? {}) as Record<string, string | null>;
   const academicConfig = (school.academic_config ?? {}) as Record<string, unknown>;
@@ -260,11 +279,8 @@ export async function generateReportCard(
       grade:           gradeClass(grade),
       position,
       classAverage,
-      teacherComment:  commentMap.get(sub.subject_id) ?? null,
     };
   });
-
-  const hasComments = subjectRows.some(s => s.teacherComment);
 
   // Overall average
   const scoredSubjects = (studentRecord?.subjects ?? []).filter(s => s.result !== null);
@@ -275,15 +291,12 @@ export async function generateReportCard(
       : 0;
   const overallGrade = overallAvg > 0 ? lookupGrade(overallAvg, gradingScale) : '—';
 
-  let promotionClass: 'promoted' | 'repeat' | 'pending';
-  let promotionStatus: string;
-  if (scoredSubjects.length === 0) {
-    promotionClass = 'pending'; promotionStatus = 'Pending';
-  } else if (overallAvg >= promotionCutoff) {
-    promotionClass = 'promoted'; promotionStatus = 'Promoted';
-  } else {
-    promotionClass = 'repeat'; promotionStatus = 'Repeat Class';
-  }
+  const { promotionClass, promotionStatus } = computePromotionStatus(
+    studentData.term_name,
+    scoredSubjects.length,
+    overallAvg,
+    promotionCutoff
+  );
 
   const templateData = {
     school: {
@@ -313,7 +326,8 @@ export async function generateReportCard(
       position:     studentRecord?.position !== undefined ? ordinal(studentRecord.position) : '—',
       totalStudents: classResult.students.length,
     },
-    hasComments,
+    classTeacherComment: classTeacherComment?.comment_text ?? null,
+    formTeacher: formTeacher ? { name: formTeacher.full_name, signatureUrl: formTeacher.signature_url } : null,
     principalRemark: principalRemark?.remark_text ?? null,
     attendance: {
       daysPresent: '—',
@@ -387,9 +401,9 @@ function dummyTemplateData(): Record<string, unknown> {
     componentHeaders: ['CA1', 'CA2', 'Exam'],
     overallColspan:   4,
     subjects: [
-      { name: 'Mathematics',      componentScores: ['9.00', '8.00', '65.00'], totalScore: '82.00', grade: 'A', position: '1st', classAverage: '68.5', teacherComment: 'Excellent performance this term.' },
-      { name: 'English Language', componentScores: ['7.00', '8.00', '55.00'], totalScore: '70.00', grade: 'B', position: '3rd', classAverage: '60.2', teacherComment: 'Good effort, keep it up.' },
-      { name: 'Basic Science',    componentScores: ['8.00', '7.00', '50.00'], totalScore: '65.00', grade: 'B', position: '4th', classAverage: '58.0', teacherComment: null },
+      { name: 'Mathematics',      componentScores: ['9.00', '8.00', '65.00'], totalScore: '82.00', grade: 'A', position: '1st', classAverage: '68.5' },
+      { name: 'English Language', componentScores: ['7.00', '8.00', '55.00'], totalScore: '70.00', grade: 'B', position: '3rd', classAverage: '60.2' },
+      { name: 'Basic Science',    componentScores: ['8.00', '7.00', '50.00'], totalScore: '65.00', grade: 'B', position: '4th', classAverage: '58.0' },
     ],
     overall: {
       average:       '72.33',
@@ -397,7 +411,8 @@ function dummyTemplateData(): Record<string, unknown> {
       position:      '2nd',
       totalStudents: 32,
     },
-    hasComments: true,
+    classTeacherComment: 'A pleasure to teach. Keeps up consistent effort across all subjects.',
+    formTeacher: { name: 'Sample Teacher', signatureUrl: null },
     principalRemark: 'A commendable result. Keep up the good work.',
     attendance: {
       daysPresent: 58,
@@ -405,8 +420,8 @@ function dummyTemplateData(): Record<string, unknown> {
       totalDays:   60,
       percentage:  '96.7%',
     },
-    promotionClass:  'promoted',
-    promotionStatus: 'Promoted',
+    promotionClass:  'not-applicable',
+    promotionStatus: 'Term Completed',
     generatedAt: new Date().toLocaleDateString('en-GB', {
       day: '2-digit', month: 'long', year: 'numeric',
     }),

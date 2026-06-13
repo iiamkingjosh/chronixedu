@@ -19,6 +19,7 @@ export const TEACHER_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/teacher/dashboard' },
   { label: 'Timetable', href: '/teacher/timetable' },
   { label: 'Score Entry', href: '/teacher/scores' },
+  { label: 'Class Comments', href: '/teacher/class-comments' },
   { label: 'Attendance', href: '/teacher/attendance' },
   { label: 'Assignments', href: '/teacher/assignments' },
   { label: 'Behaviour', href: '/teacher/behaviour' },

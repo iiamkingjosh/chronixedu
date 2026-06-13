@@ -11,10 +11,11 @@ import { apiFetch, apiUpload } from '@/lib/api';
 // ── Schema ────────────────────────────────────────────────────────────────────
 
 const schema = z.object({
-  name:           z.string().min(1, 'School name is required'),
-  motto:          z.string().max(500).optional().or(z.literal('')),
-  address:        z.string().optional().or(z.literal('')),
-  primary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour'),
+  name:              z.string().min(1, 'School name is required'),
+  motto:             z.string().max(500).optional().or(z.literal('')),
+  address:           z.string().optional().or(z.literal('')),
+  primary_colour:    z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour'),
+  admission_prefix:  z.string().trim().max(10).regex(/^[A-Za-z0-9]*$/, 'Must be alphanumeric').optional().or(z.literal('')),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -38,12 +39,15 @@ export default function IdentityPage() {
   const [logoUrl, setLogoUrl]         = useState<string | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [stampUrl, setStampUrl]         = useState<string | null>(null);
+  const [stampPreview, setStampPreview] = useState<string | null>(null);
+  const [stampUploading, setStampUploading] = useState(false);
   const [loading, setLoading]   = useState(true);
   const [saving, setSaving]     = useState(false);
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', motto: '', address: '', primary_colour: '#1a5c1a' },
+    defaultValues: { name: '', motto: '', address: '', primary_colour: '#1a5c1a', admission_prefix: '' },
   });
 
   const primaryColour = watch('primary_colour');
@@ -57,12 +61,14 @@ export default function IdentityPage() {
       .then(({ data }) => {
         const ic = data.identity_config ?? {};
         reset({
-          name:           data.name ?? '',
-          motto:          ic.motto          ?? '',
-          address:        ic.address        ?? '',
-          primary_colour: ic.primary_colour ?? '#1a5c1a',
+          name:             data.name ?? '',
+          motto:            ic.motto             ?? '',
+          address:          ic.address           ?? '',
+          primary_colour:   ic.primary_colour    ?? '#1a5c1a',
+          admission_prefix: ic.admission_prefix  ?? '',
         });
         setLogoUrl(ic.logo_url ?? null);
+        setStampUrl(ic.stamp_url ?? null);
       })
       .catch(() => show('Failed to load school settings', 'error'))
       .finally(() => setLoading(false));
@@ -99,6 +105,36 @@ export default function IdentityPage() {
     maxSize: 2 * 1024 * 1024,
   });
 
+  // Stamp drag-and-drop
+  const onDropStamp = useCallback(async (files: File[]) => {
+    const file = files[0];
+    if (!file || !schoolId) return;
+    setStampPreview(URL.createObjectURL(file));
+    setStampUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('stamp', file);
+      const res = await apiUpload<{ success: boolean; data: { stamp_url: string } }>(
+        `/api/schools/${schoolId}/stamp`,
+        fd
+      );
+      setStampUrl(res.data.stamp_url);
+      show('Stamp uploaded');
+    } catch (err: unknown) {
+      show(err instanceof Error ? err.message : 'Stamp upload failed', 'error');
+      setStampPreview(null);
+    } finally {
+      setStampUploading(false);
+    }
+  }, [schoolId, show]);
+
+  const { getRootProps: getStampRootProps, getInputProps: getStampInputProps, isDragActive: isStampDragActive } = useDropzone({
+    onDrop: onDropStamp,
+    accept: { 'image/jpeg': [], 'image/png': [] },
+    maxFiles: 1,
+    maxSize: 2 * 1024 * 1024,
+  });
+
   // Form submit
   async function onSubmit(values: FormValues) {
     if (!schoolId) return;
@@ -107,9 +143,10 @@ export default function IdentityPage() {
       await apiFetch(`/api/schools/${schoolId}/identity`, {
         method: 'PATCH',
         body: JSON.stringify({
-          name:           values.name,
-          motto:          values.motto || undefined,
-          primary_colour: values.primary_colour,
+          name:             values.name,
+          motto:            values.motto || undefined,
+          primary_colour:   values.primary_colour,
+          admission_prefix: values.admission_prefix || undefined,
         }),
       });
       show('Settings saved');
@@ -122,20 +159,31 @@ export default function IdentityPage() {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-64">
-        <div className="text-gray-500 text-sm">Loading…</div>
+      <div className="max-w-2xl mx-auto p-8 space-y-8">
+        <div>
+          <div className="skeleton h-6 w-40" />
+          <div className="skeleton h-4 w-64 mt-2" />
+        </div>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="card p-6 space-y-4">
+            <div className="skeleton h-3 w-24" />
+            <div className="skeleton h-9 w-full" />
+            <div className="skeleton h-9 w-full" />
+          </div>
+        ))}
       </div>
     );
   }
 
   const displayLogo = logoPreview ?? logoUrl;
+  const displayStamp = stampPreview ?? stampUrl;
 
   return (
     <div className="max-w-2xl mx-auto p-8">
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-sm font-medium text-white transition-all ${
+          className={`toast-enter fixed top-4 right-4 z-50 px-4 py-3 rounded-md shadow-lift text-sm font-medium text-white ${
             toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
           }`}
         >
@@ -149,14 +197,14 @@ export default function IdentityPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
 
         {/* Basic info */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+        <section className="card p-6 space-y-5">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Basic Info</h2>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">School Name</label>
             <input
               {...register('name')}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="input-field"
               placeholder="e.g. Lagos Grammar School"
             />
             {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name.message}</p>}
@@ -166,7 +214,7 @@ export default function IdentityPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Motto</label>
             <input
               {...register('motto')}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="input-field"
               placeholder="e.g. Excellence in Education"
             />
           </div>
@@ -175,21 +223,37 @@ export default function IdentityPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
             <input
               {...register('address')}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              className="input-field"
               placeholder="e.g. 12 Victoria Island, Lagos"
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Admission Number Prefix</label>
+            <input
+              {...register('admission_prefix')}
+              className="input-field uppercase"
+              placeholder="SCH"
+              maxLength={10}
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Used to generate admission numbers, e.g. SCH/2026/0001. Defaults to &quot;SCH&quot; if left blank.
+            </p>
+            {errors.admission_prefix && (
+              <p className="mt-1 text-xs text-red-600">{errors.admission_prefix.message}</p>
+            )}
           </div>
         </section>
 
         {/* Logo */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <section className="card p-6 space-y-4">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">School Logo</h2>
 
           <div
             {...getRootProps()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors duration-200 ${
               isDragActive
-                ? 'border-slate-500 bg-slate-50'
+                ? 'border-[#2472B4] bg-blue-50'
                 : 'border-gray-300 hover:border-gray-400'
             }`}
           >
@@ -218,15 +282,55 @@ export default function IdentityPage() {
           </div>
         </section>
 
+        {/* Stamp */}
+        <section className="card p-6 space-y-4">
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">School Stamp</h2>
+          <p className="text-sm text-gray-500">
+            Printed on report cards next to the school header and on the &quot;School Stamp&quot; signature line.
+          </p>
+
+          <div
+            {...getStampRootProps()}
+            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors duration-200 ${
+              isStampDragActive
+                ? 'border-[#2472B4] bg-blue-50'
+                : 'border-gray-300 hover:border-gray-400'
+            }`}
+          >
+            <input {...getStampInputProps()} />
+            {displayStamp ? (
+              <div className="flex flex-col items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={displayStamp} alt="Stamp preview" className="h-24 w-24 object-contain rounded" />
+                <p className="text-xs text-gray-500">
+                  {stampUploading ? 'Uploading…' : 'Drop a new image to replace'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <p className="text-sm text-gray-600">
+                  {isStampDragActive ? 'Drop image here' : 'Drag & drop your school stamp, or click to browse'}
+                </p>
+                <p className="text-xs text-gray-400">PNG, JPG · max 2 MB</p>
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Colour */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <section className="card p-6 space-y-4">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Primary Colour</h2>
 
           <div className="flex items-center gap-4">
             <input
               type="color"
               {...register('primary_colour')}
-              className="h-10 w-14 rounded-lg cursor-pointer border border-gray-300 p-0.5"
+              className="h-10 w-14 rounded-md cursor-pointer border border-gray-300 p-0.5"
             />
             <span className="text-sm font-mono text-gray-600">{primaryColour}</span>
           </div>
@@ -246,7 +350,7 @@ export default function IdentityPage() {
               ) : (
                 <div className="h-6 w-6 rounded bg-white/20" />
               )}
-              <span className="text-white text-sm font-semibold tracking-wide">Chronix Edu</span>
+              <span className="font-heading text-white text-sm font-semibold tracking-wide">Chronix Edu</span>
               <div className="ml-auto flex items-center gap-3">
                 <div className="h-2 w-16 rounded-full bg-white/30" />
                 <div className="h-2 w-12 rounded-full bg-white/30" />
@@ -266,7 +370,7 @@ export default function IdentityPage() {
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors"
+            className="btn-primary"
           >
             {saving ? 'Saving…' : 'Save Changes'}
           </button>

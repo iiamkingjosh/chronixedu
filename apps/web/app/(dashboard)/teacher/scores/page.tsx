@@ -231,7 +231,20 @@ function ScoreGrid({
   }
 
   if (loading) {
-    return <p className="text-sm text-gray-500 py-10 text-center">Loading score sheet…</p>;
+    return (
+      <div className="overflow-hidden border border-gray-200 rounded-xl">
+        <div className="skeleton h-10 w-full rounded-none" />
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-4 py-3 border-t border-gray-100">
+            <div className="skeleton h-4 w-32" />
+            <div className="skeleton h-4 w-20" />
+            <div className="skeleton h-7 w-14 ml-auto" />
+            <div className="skeleton h-7 w-14" />
+            <div className="skeleton h-7 w-14" />
+          </div>
+        ))}
+      </div>
+    );
   }
 
   if (!sheet) {
@@ -265,7 +278,7 @@ function ScoreGrid({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {sheet.students.map(student => (
-              <tr key={student.student_id}>
+              <tr key={student.student_id} className="table-row-hover">
                 <td className="px-4 py-2.5 whitespace-nowrap text-gray-900">
                   {student.first_name} {student.last_name}
                 </td>
@@ -286,7 +299,7 @@ function ScoreGrid({
                           min={0}
                           value={raw}
                           onChange={e => handleChange(student.student_id, comp.id, e.target.value)}
-                          className={`w-16 text-center border rounded-md px-1.5 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 ${
+                          className={`w-16 text-center border rounded-md px-1.5 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#2472B4] transition-colors duration-200 ${
                             exceeds ? 'border-red-400 bg-red-50 text-red-700' : 'border-gray-300'
                           }`}
                         />
@@ -303,7 +316,7 @@ function ScoreGrid({
 
       <div className="mt-4 flex items-center justify-between gap-4">
         {isSubmitted ? (
-          <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">
+          <span className="badge-info">
             Submitted — awaiting approval
           </span>
         ) : (
@@ -314,14 +327,14 @@ function ScoreGrid({
             <button
               onClick={handleSave}
               disabled={saving || submitting}
-              className="px-4 py-2 border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              className="btn-secondary"
             >
               {saving ? 'Saving…' : 'Save scores'}
             </button>
             <button
               onClick={handleSubmit}
               disabled={saving || submitting}
-              className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50"
+              className="btn-primary"
             >
               {submitting ? 'Submitting…' : submitButtonLabel}
             </button>
@@ -389,22 +402,22 @@ function SubjectModeBoard({
           const noneSubmitted = subject.classes.every(c => c.result_status !== 'submitted');
           const summary = allSubmitted ? 'All submitted' : noneSubmitted ? 'Draft' : 'Partially submitted';
           const summaryClasses = allSubmitted
-            ? 'bg-green-50 text-green-700 border-green-200'
+            ? 'badge-success'
             : noneSubmitted
-            ? 'bg-gray-100 text-gray-500 border-gray-200'
-            : 'bg-amber-50 text-amber-700 border-amber-200';
+            ? 'badge-default'
+            : 'badge-warning';
           const active = subject.subject_id === selectedSubjectId;
           return (
             <button
               key={subject.subject_id}
               onClick={() => setSelectedSubjectId(subject.subject_id)}
-              className={`text-left border rounded-xl px-4 py-3.5 transition-colors ${
-                active ? 'border-slate-500 bg-slate-50 ring-1 ring-slate-300' : 'border-gray-200 hover:border-slate-300'
+              className={`card card-hover text-left px-4 py-3.5 ${
+                active ? 'border-[#2472B4] ring-1 ring-[#2472B4]/30' : ''
               }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <h3 className="text-sm font-semibold text-gray-900">{subject.subject_name}</h3>
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border whitespace-nowrap ${summaryClasses}`}>
+                <span className={`${summaryClasses} text-[11px] whitespace-nowrap`}>
                   {summary}
                 </span>
               </div>
@@ -423,13 +436,13 @@ function SubjectModeBoard({
                 <button
                   key={c.class_id}
                   onClick={() => setSelectedClassId(c.class_id)}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                    active ? 'border-slate-700 text-slate-900' : 'border-transparent text-gray-500 hover:text-gray-800'
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors duration-200 ${
+                    active ? 'border-[#2472B4] text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-800'
                   }`}
                 >
                   {c.class_name}
                   {c.result_status === 'submitted' && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border bg-blue-50 text-blue-700 border-blue-200">
+                    <span className="badge-info text-[10px] px-1.5 py-0.5">
                       Submitted
                     </span>
                   )}
@@ -504,8 +517,8 @@ function ClassModeBoard({
               <button
                 key={c.class_id}
                 onClick={() => { setSelectedClassId(c.class_id); setSelectedSubjectId(null); }}
-                className={`px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                  active ? 'border-slate-500 bg-slate-50 text-slate-900' : 'border-gray-200 text-gray-600 hover:border-slate-300'
+                className={`px-4 py-2 text-sm font-medium rounded-md border transition-colors duration-200 ${
+                  active ? 'border-[#2472B4] bg-blue-50 text-[#2472B4]' : 'border-gray-200 text-gray-600 hover:border-[#2472B4]/50'
                 }`}
               >
                 {c.class_name}
@@ -525,13 +538,13 @@ function ClassModeBoard({
                 <button
                   key={s.subject_id}
                   onClick={() => setSelectedSubjectId(s.subject_id)}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
-                    active ? 'border-slate-500 bg-slate-50 text-slate-900' : 'border-gray-200 text-gray-600 hover:border-slate-300'
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md border transition-colors duration-200 ${
+                    active ? 'border-[#2472B4] bg-blue-50 text-[#2472B4]' : 'border-gray-200 text-gray-600 hover:border-[#2472B4]/50'
                   }`}
                 >
                   {s.subject_name}
                   {s.result_status === 'submitted' && (
-                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border bg-blue-50 text-blue-700 border-blue-200">
+                    <span className="badge-info text-[10px] px-1.5 py-0.5">
                       Submitted
                     </span>
                   )}
@@ -623,7 +636,16 @@ export default function TeacherScoresPage() {
   if (!schoolId || loading) {
     return (
       <div className="max-w-6xl mx-auto p-8">
-        <p className="text-sm text-gray-500">Loading score entry…</p>
+        <div className="skeleton h-6 w-32 mb-2" />
+        <div className="skeleton h-4 w-80 mb-6" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="card p-4">
+              <div className="skeleton h-4 w-24 mb-2" />
+              <div className="skeleton h-3 w-32" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -649,7 +671,7 @@ export default function TeacherScoresPage() {
   return (
     <div className="max-w-6xl mx-auto p-8">
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-sm font-medium text-white ${
+        <div className={`toast-enter fixed top-4 right-4 z-50 px-4 py-3 rounded-md shadow-lift text-sm font-medium text-white ${
           toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
         }`}>
           {toast.message}

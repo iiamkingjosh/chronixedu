@@ -51,6 +51,44 @@ interface FeeInvoiceSummary {
   status: 'unpaid' | 'partial' | 'paid';
 }
 
+// ── Stat card ─────────────────────────────────────────────────────────────────
+
+type StatTone = 'default' | 'green' | 'amber' | 'red';
+
+const TONE_CLASSES: Record<StatTone, { card: string; value: string }> = {
+  default: { card: 'bg-white border-gray-200', value: 'text-[#003366]' },
+  green:   { card: 'bg-green-50 border-green-200', value: 'text-green-700' },
+  amber:   { card: 'bg-amber-50 border-amber-200', value: 'text-amber-700' },
+  red:     { card: 'bg-red-50 border-red-200', value: 'text-red-700' },
+};
+
+function attendanceTone(percentage: number): StatTone {
+  if (percentage > 80) return 'green';
+  if (percentage >= 60) return 'amber';
+  return 'red';
+}
+
+function StatCard({ label, value, sub, tone = 'default' }: { label: string; value: string | number; sub?: string; tone?: StatTone }) {
+  const t = TONE_CLASSES[tone];
+  return (
+    <div className={`card card-hover border p-5 ${t.card}`}>
+      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className={`stat-value mt-2 text-3xl font-semibold font-heading ${t.value}`}>{value}</p>
+      {sub && <p className="mt-1 text-sm text-gray-500">{sub}</p>}
+    </div>
+  );
+}
+
+function StatCardSkeleton() {
+  return (
+    <div className="card p-5">
+      <div className="skeleton h-3 w-20" />
+      <div className="skeleton h-8 w-16 mt-3" />
+      <div className="skeleton h-3 w-24 mt-2" />
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ParentDashboardPage() {
@@ -124,15 +162,21 @@ export default function ParentDashboardPage() {
 
   if (childrenLoading) {
     return (
-      <div className="max-w-2xl mx-auto p-4">
-        <p className="text-sm text-gray-500">Loading…</p>
+      <div className="p-8 max-w-5xl mx-auto space-y-6">
+        <div>
+          <div className="skeleton h-7 w-40" />
+          <div className="skeleton h-4 w-72 mt-2" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)}
+        </div>
       </div>
     );
   }
 
   if (childrenError) {
     return (
-      <div className="max-w-2xl mx-auto p-4">
+      <div className="p-8 max-w-5xl mx-auto">
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{childrenError}</div>
       </div>
     );
@@ -140,7 +184,7 @@ export default function ParentDashboardPage() {
 
   if (linkedChildren.length === 0 || !selectedChild) {
     return (
-      <div className="max-w-2xl mx-auto p-4">
+      <div className="p-8 max-w-5xl mx-auto">
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-700">
           No students are linked to your account yet. Please contact your school&apos;s administration.
         </div>
@@ -148,14 +192,16 @@ export default function ParentDashboardPage() {
     );
   }
 
+  const academic = snapshot?.academic ?? null;
+  const attendancePct = snapshot?.attendance.percentage ?? 0;
+
   return (
-    <div className="max-w-2xl mx-auto p-4 space-y-4">
+    <div className="p-8 max-w-5xl mx-auto space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">
-          {selectedChild.first_name} {selectedChild.last_name}
-        </h1>
-        <p className="text-sm text-gray-500">
-          {selectedChild.class_name ?? 'No class assigned'} · {selectedChild.admission_no}
+        <h1 className="text-2xl font-semibold text-gray-900">Welcome back</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Here&apos;s how <span className="font-medium text-gray-700">{selectedChild.first_name} {selectedChild.last_name}</span> is doing in{' '}
+          <span className="font-medium text-gray-700">{selectedChild.class_name ?? 'their class'}</span> · {selectedChild.admission_no}
         </p>
       </div>
 
@@ -164,112 +210,106 @@ export default function ParentDashboardPage() {
       )}
 
       {loading ? (
-        <p className="text-sm text-gray-500 py-10 text-center">Loading dashboard…</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <StatCardSkeleton key={i} />)}
+        </div>
       ) : snapshot && (
         <>
-          {/* Academic Snapshot */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Academic Snapshot</h2>
-            {snapshot.academic ? (
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-[#003366]">{snapshot.academic.overall_average}</p>
-                  <p className="text-xs text-gray-500 mt-1">Average</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-[#003366]">
-                    {snapshot.academic.position}<span className="text-sm font-normal text-gray-400">/{snapshot.academic.total_students}</span>
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">Position</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-[#003366]">
-                    {snapshot.academic.subjects_scored}<span className="text-sm font-normal text-gray-400">/{snapshot.academic.total_subjects}</span>
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">Subjects scored</p>
-                </div>
-              </div>
-            ) : (
-              <p className="text-sm text-gray-500">No results have been recorded for this term yet.</p>
-            )}
+          {/* Stat cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              label="Overall Average"
+              value={academic ? academic.overall_average : '—'}
+              sub={academic ? `${academic.subjects_scored}/${academic.total_subjects} subjects scored` : 'No results yet'}
+            />
+            <StatCard
+              label="Class Position"
+              value={academic ? `${academic.position}/${academic.total_students}` : '—'}
+              sub="Current term"
+            />
+            <StatCard
+              label="Attendance"
+              value={`${attendancePct}%`}
+              sub="Term attendance rate"
+              tone={attendanceTone(attendancePct)}
+            />
+            <StatCard
+              label="Fee Balance"
+              value={feeInvoice ? `₦${Number(feeInvoice.balance).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+              sub={feeInvoice ? (feeInvoice.status === 'paid' ? 'Fully paid' : 'Outstanding for this term') : 'No invoice yet'}
+            />
           </div>
 
-          {/* Behaviour */}
-          {behaviour && (
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-              <h2 className="text-sm font-semibold text-gray-900 mb-3">Behaviour</h2>
-              {behaviour.incident_count === 0 ? (
-                <p className="text-sm text-gray-500">No incidents recorded this term.</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Recent Results */}
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-semibold text-gray-900">Recent Results</h2>
+                <Link href="/parent/results" className="text-xs font-medium text-[#2472B4] hover:underline">
+                  View all
+                </Link>
+              </div>
+              {snapshot.recent_results.length === 0 ? (
+                <p className="text-sm text-gray-500">No subject results available yet.</p>
               ) : (
-                <p className="text-sm text-gray-700">
-                  <span className="text-2xl font-bold text-[#003366] mr-2">{behaviour.incident_count}</span>
-                  incident{behaviour.incident_count === 1 ? '' : 's'} recorded this term.
-                </p>
+                <div className="divide-y divide-gray-100">
+                  {snapshot.recent_results.map(r => (
+                    <div key={r.subject_id} className="table-row-hover -mx-2 px-2 flex items-center justify-between py-2 text-sm rounded-md">
+                      <span className="text-gray-700">{r.subject_name}</span>
+                      <span className="text-gray-900 font-medium">
+                        {r.total_score !== null ? r.total_score : '—'}
+                        {r.grade ? <span className="ml-2 text-xs text-gray-500">({r.grade})</span> : null}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-          )}
 
-          {/* Attendance — always visible */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Attendance</h2>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-2xl font-bold text-[#2472B4]">{snapshot.attendance.percentage}%</p>
-                <p className="text-xs text-gray-500 mt-1">Term attendance rate</p>
+            {/* Attendance breakdown + Behaviour */}
+            <div className="space-y-4">
+              <div className="card p-6">
+                <h2 className="text-base font-semibold text-gray-900 mb-3">Attendance Breakdown</h2>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <p>Present: <span className="font-medium text-gray-700">{snapshot.attendance.present}</span></p>
+                  <p>Absent: <span className="font-medium text-gray-700">{snapshot.attendance.absent}</span></p>
+                  <p>Late: <span className="font-medium text-gray-700">{snapshot.attendance.late}</span></p>
+                  <p>Excused: <span className="font-medium text-gray-700">{snapshot.attendance.excused}</span></p>
+                </div>
+                <Link href="/parent/attendance" className="mt-3 inline-block text-xs font-medium text-[#2472B4] hover:underline">
+                  View full attendance
+                </Link>
               </div>
-              <div className="text-right text-xs text-gray-500 space-y-0.5">
-                <p>Present: <span className="font-medium text-gray-700">{snapshot.attendance.present}</span></p>
-                <p>Absent: <span className="font-medium text-gray-700">{snapshot.attendance.absent}</span></p>
-                <p>Late: <span className="font-medium text-gray-700">{snapshot.attendance.late}</span></p>
-                <p>Excused: <span className="font-medium text-gray-700">{snapshot.attendance.excused}</span></p>
-              </div>
+
+              {behaviour && (
+                <div className="card p-6">
+                  <h2 className="text-base font-semibold text-gray-900 mb-3">Behaviour</h2>
+                  {behaviour.incident_count === 0 ? (
+                    <p className="text-sm text-gray-500">No incidents recorded this term.</p>
+                  ) : (
+                    <p className="text-sm text-gray-700">
+                      <span className="font-heading text-2xl font-bold text-[#003366] mr-2">{behaviour.incident_count}</span>
+                      incident{behaviour.incident_count === 1 ? '' : 's'} recorded this term.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Recent Results */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-900">Recent Results</h2>
-              <Link href="/parent/results" className="text-xs font-medium text-[#2472B4] hover:underline">
-                View all
-              </Link>
+          {/* Fees CTA */}
+          <div className="card p-6 flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Fees</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                {feeInvoice
+                  ? feeInvoice.status === 'paid'
+                    ? 'This term\'s invoice is fully paid.'
+                    : 'You have an outstanding balance for this term.'
+                  : 'No fee invoice has been generated for this term yet.'}
+              </p>
             </div>
-            {snapshot.recent_results.length === 0 ? (
-              <p className="text-sm text-gray-500">No subject results available yet.</p>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {snapshot.recent_results.map(r => (
-                  <div key={r.subject_id} className="flex items-center justify-between py-2 text-sm">
-                    <span className="text-gray-700">{r.subject_name}</span>
-                    <span className="text-gray-900 font-medium">
-                      {r.total_score !== null ? r.total_score : '—'}
-                      {r.grade ? <span className="ml-2 text-xs text-gray-500">({r.grade})</span> : null}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Fee Balance */}
-          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-            <h2 className="text-sm font-semibold text-gray-900 mb-3">Fee Balance</h2>
-            {feeInvoice ? (
-              <>
-                <p className="text-2xl font-bold text-[#003366] mb-1">
-                  ₦{Number(feeInvoice.balance).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </p>
-                <p className="text-xs text-gray-500 mb-4">
-                  {feeInvoice.status === 'paid' ? 'This term\'s invoice is fully paid.' : 'Outstanding balance for this term.'}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-gray-500 mb-4">No fee invoice has been generated for this term yet.</p>
-            )}
-            <Link
-              href="/parent/fees"
-              className="block w-full text-center px-4 py-2.5 bg-[#003366] text-white text-sm font-medium rounded-lg hover:bg-[#002347]"
-            >
+            <Link href="/parent/fees" className="btn-primary">
               {feeInvoice && Number(feeInvoice.balance) > 0 ? 'Pay Now' : 'View Fees'}
             </Link>
           </div>

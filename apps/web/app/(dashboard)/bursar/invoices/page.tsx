@@ -103,7 +103,7 @@ export default function InvoicesPage() {
             value={termId}
             onChange={(e) => setTermId(e.target.value)}
             disabled={contextLoading}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             {terms.length === 0 && <option value="">No terms available</option>}
             {terms.map((t) => (
@@ -120,7 +120,7 @@ export default function InvoicesPage() {
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
             disabled={contextLoading}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             <option value="">All classes</option>
             {classes.map((c) => (
@@ -134,7 +134,7 @@ export default function InvoicesPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as '' | InvoiceStatus)}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             <option value="">All statuses</option>
             <option value="unpaid">{STATUS_LABELS.unpaid}</option>
@@ -146,7 +146,7 @@ export default function InvoicesPage() {
 
       {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="card overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -168,7 +168,7 @@ export default function InvoicesPage() {
               <tr><td colSpan={8} className="px-4 py-6 text-center text-gray-400">No invoices found for the selected filters.</td></tr>
             )}
             {!loading && invoices.map((inv) => (
-              <tr key={inv.id}>
+              <tr key={inv.id} className="table-row-hover">
                 <td className="px-4 py-3 font-medium text-gray-900">{inv.first_name} {inv.last_name}</td>
                 <td className="px-4 py-3 text-gray-600">{inv.admission_no}</td>
                 <td className="px-4 py-3 text-gray-600">{inv.class_name ?? '—'}</td>
@@ -183,7 +183,7 @@ export default function InvoicesPage() {
                     type="button"
                     onClick={() => setPaymentTarget(inv)}
                     disabled={inv.balance <= 0}
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                    className="btn-secondary !px-3 !py-1.5 text-xs disabled:opacity-40"
                   >
                     Record Payment
                   </button>
@@ -273,7 +273,7 @@ function RecordPaymentModal({
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           />
         </div>
 
@@ -282,7 +282,7 @@ function RecordPaymentModal({
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value as 'cash' | 'bank_transfer' | 'waiver')}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             <option value="cash">Cash</option>
             <option value="bank_transfer">Bank Transfer</option>
@@ -297,15 +297,15 @@ function RecordPaymentModal({
             value={reference}
             onChange={(e) => setReference(e.target.value)}
             placeholder="e.g. teller number, transaction ID"
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           />
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <button type="button" onClick={onClose} className="btn-secondary">
             Cancel
           </button>
-          <button type="submit" disabled={submitting} className="rounded-lg bg-[#003366] px-4 py-2 text-sm font-medium text-white hover:bg-[#00254d] disabled:opacity-50">
+          <button type="submit" disabled={submitting} className="btn-primary">
             {submitting ? 'Recording…' : 'Record Payment'}
           </button>
         </div>

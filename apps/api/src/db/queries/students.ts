@@ -99,18 +99,24 @@ export async function registerStudent(
 
     const year = new Date().getFullYear();
 
-    // Generate admission_no — sequence is per school per year
-    // SUBSTRING(admission_no FROM 9) extracts the numeric part after "SCHyyyy-"
+    // Admission number prefix is configurable per school (school_settings.identity_config.admission_prefix)
+    const prefixResult = await client.query<{ admission_prefix: string | null }>(
+      `SELECT identity_config->>'admission_prefix' AS admission_prefix FROM school_settings WHERE school_id = $1`,
+      [schoolId]
+    );
+    const prefix = prefixResult.rows[0]?.admission_prefix?.trim() || 'SCH';
+
+    // Generate admission_no — sequence is per school per year, format PREFIX/YEAR/seq
     const seqResult = await client.query<{ next_seq: string }>(
-      `SELECT COALESCE(MAX(CAST(SUBSTRING(admission_no FROM 9) AS INTEGER)), 0) + 1 AS next_seq
+      `SELECT COALESCE(MAX(CAST(SUBSTRING(admission_no FROM '([0-9]{4})$') AS INTEGER)), 0) + 1 AS next_seq
        FROM students
        WHERE school_id = $1 AND admission_no LIKE $2`,
-      [schoolId, `SCH${year}-%`]
+      [schoolId, `${prefix}/${year}/%`]
     );
     const nextSeq = parseInt(seqResult.rows[0].next_seq, 10);
-    const admissionNo = `SCH${year}-${String(nextSeq).padStart(4, '0')}`;
+    const admissionNo = `${prefix}/${year}/${String(nextSeq).padStart(4, '0')}`;
 
-    const email = data.email ?? `${admissionNo.toLowerCase()}@students.internal`;
+    const email = data.email ?? `${admissionNo.toLowerCase().replace(/\//g, '-')}@students.internal`;
 
     // Create student user account
     const userResult = await client.query<{ id: string }>(

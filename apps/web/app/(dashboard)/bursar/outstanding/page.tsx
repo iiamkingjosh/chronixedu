@@ -138,7 +138,7 @@ export default function OutstandingBalancesPage() {
             type="button"
             onClick={sendReminders}
             disabled={sendingReminders}
-            className="rounded-lg border border-[#003366] px-4 py-2 text-sm font-medium text-[#003366] hover:bg-blue-50 disabled:opacity-50"
+            className="btn-secondary"
           >
             {sendingReminders ? 'Sending…' : 'Send Fee Reminders'}
           </button>
@@ -146,7 +146,7 @@ export default function OutstandingBalancesPage() {
             type="button"
             onClick={exportCsv}
             disabled={loading || rows.length === 0}
-            className="rounded-lg bg-[#003366] px-4 py-2 text-sm font-medium text-white hover:bg-[#00254d] disabled:opacity-50"
+            className="btn-primary"
           >
             Export CSV
           </button>
@@ -162,7 +162,7 @@ export default function OutstandingBalancesPage() {
             value={termId}
             onChange={(e) => setTermId(e.target.value)}
             disabled={contextLoading}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             {terms.length === 0 && <option value="">No terms available</option>}
             {terms.map((t) => (
@@ -179,7 +179,7 @@ export default function OutstandingBalancesPage() {
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
             disabled={contextLoading}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             <option value="">All classes</option>
             {classes.map((c) => (
@@ -197,7 +197,7 @@ export default function OutstandingBalancesPage() {
         </div>
       )}
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="card overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -218,7 +218,7 @@ export default function OutstandingBalancesPage() {
               <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">No outstanding balances for the selected filters.</td></tr>
             )}
             {!loading && rows.map((r) => (
-              <tr key={r.student_id}>
+              <tr key={r.student_id} className="table-row-hover">
                 <td className="px-4 py-3 font-medium text-gray-900">{r.first_name} {r.last_name}</td>
                 <td className="px-4 py-3 text-gray-600">{r.admission_no}</td>
                 <td className="px-4 py-3 text-gray-600">{r.class_name ?? '—'}</td>

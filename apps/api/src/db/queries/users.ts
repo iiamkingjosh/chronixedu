@@ -15,11 +15,12 @@ export interface UserRow {
   is_active: boolean;
   last_login_at: string | null;
   created_at: string;
+  signature_url: string | null;
 }
 
 const USER_COLUMNS = `
   id, school_id, email, role, first_name, last_name, title, teacher_mode,
-  phone, is_active, last_login_at, created_at`;
+  phone, is_active, last_login_at, created_at, signature_url`;
 
 // ── List (paginated + filtered) ────────────────────────────────────────────────
 
@@ -146,6 +147,15 @@ export async function updateUserProfile(userId: string, schoolId: string, patch:
     params
   );
   return result.rows[0];
+}
+
+// ── Signature ──────────────────────────────────────────────────────────────────
+
+export async function updateUserSignature(userId: string, schoolId: string, signatureUrl: string): Promise<void> {
+  await pool.query(
+    `UPDATE users SET signature_url = $1 WHERE id = $2 AND school_id = $3`,
+    [signatureUrl, userId, schoolId]
+  );
 }
 
 // ── Activate / deactivate ──────────────────────────────────────────────────────

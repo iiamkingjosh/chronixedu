@@ -24,6 +24,7 @@ import notificationsRoutes from './routes/notifications';
 import feesRoutes from './routes/fees';
 import analyticsRoutes from './routes/analytics';
 import timetableRoutes from './routes/timetable';
+import classCommentsRoutes from './routes/classComments';
 import { closeReportCardBrowser } from './services/reportCardService';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationWorker';
 import { startAnalyticsCron, stopAnalyticsCron } from './services/analyticsService';
@@ -73,6 +74,7 @@ app.use('/api/schools', notificationsRoutes);
 app.use('/api/schools', feesRoutes);
 app.use('/api/schools', analyticsRoutes);
 app.use('/api/schools', timetableRoutes);
+app.use('/api/schools', classCommentsRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ success: true, status: 'ok' });

@@ -68,11 +68,11 @@ function useToast() {
 
 function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className={`bg-white rounded-xl shadow-xl w-full ${wide ? 'max-w-2xl' : 'max-w-md'}`}>
+    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className={`modal-panel bg-white rounded-xl shadow-xl w-full ${wide ? 'max-w-2xl' : 'max-w-md'}`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <h3 className="font-heading text-base font-semibold text-gray-900">{title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors duration-200">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -94,7 +94,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   );
 }
 
-const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400';
+const inputClass = 'input-field';
 
 function fullName(row: StudentListRow): string {
   return `${row.first_name} ${row.last_name}`;
@@ -210,8 +210,8 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
           const n = idx + 1;
           return (
             <div key={label} className="flex items-center gap-2 flex-1">
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
-                step === n ? 'bg-slate-800 text-white' : step > n ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
+              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 transition-colors duration-200 ${
+                step === n ? 'bg-[#003366] text-white' : step > n ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
               }`}>
                 {step > n ? '✓' : n}
               </div>
@@ -289,7 +289,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
               <button
                 type="button"
                 onClick={() => append({ email: '', first_name: '', last_name: '', phone: '', relationship_type: '', is_primary_contact: fields.length === 0 })}
-                className="px-3 py-1.5 bg-slate-800 text-white text-xs font-medium rounded-lg hover:bg-slate-700 transition-colors"
+                className="btn-primary !px-3 !py-1.5 text-xs"
               >
                 Add Parent / Guardian
               </button>
@@ -303,7 +303,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
                   <div key={field.id} className="border border-gray-200 rounded-xl p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-medium text-gray-700">Parent / Guardian {idx + 1}</p>
-                      <button type="button" onClick={() => remove(idx)} className="text-xs font-medium text-red-600 hover:text-red-800">Remove</button>
+                      <button type="button" onClick={() => remove(idx)} className="text-xs font-medium text-red-600 hover:text-red-800 transition-colors duration-200">Remove</button>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <Field label="First name" error={errors.parents?.[idx]?.first_name?.message}>
@@ -344,15 +344,15 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
         )}
 
         <div className="flex justify-between pt-2">
-          <button type="button" onClick={step === 1 ? onClose : goBack} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">
+          <button type="button" onClick={step === 1 ? onClose : goBack} className="btn-ghost">
             {step === 1 ? 'Cancel' : 'Back'}
           </button>
           {step < 3 ? (
-            <button type="button" onClick={goNext} className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors">
+            <button type="button" onClick={goNext} className="btn-primary !px-5">
               Continue
             </button>
           ) : (
-            <button type="submit" disabled={submitting} className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors">
+            <button type="submit" disabled={submitting} className="btn-primary !px-5">
               {submitting ? 'Registering…' : 'Register Student'}
             </button>
           )}
@@ -429,7 +429,7 @@ export default function StudentRegistrationPage() {
   return (
     <div className="max-w-5xl mx-auto p-8">
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-sm font-medium text-white ${
+        <div className={`toast-enter fixed top-4 right-4 z-50 px-4 py-3 rounded-md shadow-lift text-sm font-medium text-white ${
           toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
         }`}>
           {toast.message}
@@ -440,7 +440,7 @@ export default function StudentRegistrationPage() {
         <h1 className="text-xl font-semibold text-gray-900">Student Registration</h1>
         <button
           onClick={() => setRegisterOpen(true)}
-          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+          className="btn-primary gap-1.5"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -471,7 +471,7 @@ export default function StudentRegistrationPage() {
             )}
             <p className="text-xs text-green-600">These temporary passwords are shown only once. Each user should change their password on first login.</p>
           </div>
-          <button onClick={() => setCredentials(null)} className="text-green-500 hover:text-green-700 shrink-0">
+          <button onClick={() => setCredentials(null)} className="text-green-500 hover:text-green-700 shrink-0 transition-colors duration-200">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -489,12 +489,22 @@ export default function StudentRegistrationPage() {
       </div>
 
       {loading ? (
-        <p className="text-sm text-gray-500">Loading students…</p>
+        <div className="card overflow-hidden">
+          <div className="skeleton h-9 w-full rounded-none" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-6 px-5 py-3 border-t border-gray-100">
+              <div className="skeleton h-4 w-20" />
+              <div className="skeleton h-4 w-32" />
+              <div className="skeleton h-4 w-24" />
+              <div className="skeleton h-4 w-40 ml-auto" />
+            </div>
+          ))}
+        </div>
       ) : students.length === 0 ? (
         <p className="text-sm text-gray-500">{debouncedSearch ? 'No students match your search.' : 'No students have been registered yet.'}</p>
       ) : (
         <>
-          <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="card overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                 <tr>
@@ -507,13 +517,13 @@ export default function StudentRegistrationPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {students.map(s => (
-                  <tr key={s.id}>
+                  <tr key={s.id} className="table-row-hover">
                     <td className="px-5 py-3 text-gray-900 font-mono">{s.admission_no}</td>
                     <td className="px-5 py-3 text-gray-900 font-medium">{fullName(s)}</td>
                     <td className="px-5 py-3 text-gray-600">{s.class_name ? `${s.class_name} (${s.class_level})` : '—'}</td>
                     <td className="px-5 py-3 text-gray-600">{s.email}</td>
                     <td className="px-5 py-3 text-right">
-                      <Link href={`/registrar/students/${s.id}`} className="text-sm font-medium text-slate-700 hover:text-slate-900">
+                      <Link href={`/registrar/students/${s.id}`} className="text-sm font-medium text-[#2472B4] hover:underline">
                         View Profile
                       </Link>
                     </td>
@@ -530,14 +540,14 @@ export default function StudentRegistrationPage() {
                 <button
                   onClick={() => setPage(p => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                  className="btn-secondary !px-3 !py-1.5 disabled:opacity-40"
                 >
                   Previous
                 </button>
                 <button
                   onClick={() => setPage(p => Math.min(meta.pages, p + 1))}
                   disabled={page >= meta.pages}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                  className="btn-secondary !px-3 !py-1.5 disabled:opacity-40"
                 >
                   Next
                 </button>

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import multer from 'multer';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../supabaseClient';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
@@ -12,9 +13,11 @@ import {
   insertUser,
   updateUserProfile,
   setUserActive,
+  updateUserSignature,
 } from '../db/queries/users';
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 const ROLES = ['super_admin', 'principal', 'teacher', 'parent', 'student', 'registrar', 'bursar'] as const;
 
@@ -260,6 +263,71 @@ router.post(
       });
 
       return res.json({ success: true, data: { reset_link: actionLink } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/users/:userId/signature ────────────────────────────────────
+// Uploads a teacher's signature image, rendered on report cards as the
+// "Class Teacher's Signature & Date" for classes where they are the form teacher.
+
+router.post(
+  '/:schoolId/users/:userId/signature',
+  verifyToken,
+  requireSchoolAccess,
+  upload.single('signature'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const isSelf = req.user!.user_id === req.params.userId;
+      const isAdmin = req.user!.role === 'super_admin' || req.user!.role === 'principal';
+      if (!isSelf && !isAdmin) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+      }
+
+      const existing = await findUserById(req.params.userId, req.params.schoolId);
+      if (!existing) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+      }
+
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "signature".' } });
+      }
+
+      const allowed = ['image/jpeg', 'image/png'];
+      if (!allowed.includes(file.mimetype)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'Only JPEG and PNG files are allowed.' } });
+      }
+
+      const ext = file.mimetype === 'image/png' ? 'png' : 'jpg';
+      const storagePath = `schools/${req.params.schoolId}/signatures/${req.params.userId}.${ext}`;
+      const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from(bucket)
+        .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+
+      if (uploadError) {
+        return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
+      }
+
+      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(storagePath);
+      const signatureUrl = urlData.publicUrl;
+
+      await updateUserSignature(req.params.userId, req.params.schoolId, signatureUrl);
+
+      await logAudit({
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TEACHER_SIGNATURE_UPLOAD',
+        entity: 'users',
+        entityId: existing.id,
+        newValue: { signature_url: signatureUrl },
+      });
+
+      return res.json({ success: true, data: { signature_url: signatureUrl } });
     } catch (err) {
       return next(err);
     }

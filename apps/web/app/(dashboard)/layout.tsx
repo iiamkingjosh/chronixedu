@@ -14,10 +14,10 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
   return (
     <Link
       href={item.href}
-      className={`flex items-center px-4 py-2.5 text-sm font-medium rounded-lg mx-2 transition-colors ${
+      className={`nav-link flex items-center px-4 py-2.5 text-sm font-medium mx-2 rounded-md ${
         active
-          ? 'bg-[#003366] text-white'
-          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+          ? 'nav-link-active bg-white/10 text-white'
+          : 'border-l-[3px] border-transparent text-white/70 hover:bg-white/5 hover:text-white'
       }`}
     >
       {item.label}
@@ -58,16 +58,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <aside className="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col">
-        <div className="px-5 py-5 border-b border-gray-200">
-          <p className="text-lg font-semibold text-[#003366]">Chronix Edu</p>
-          <p className="text-xs text-gray-400 mt-0.5 truncate">{user.email}</p>
+      <aside className="w-60 shrink-0 bg-gradient-to-b from-[#003366] to-[#002244] flex flex-col">
+        <div className="px-5 py-5 border-b border-white/10">
+          <p className="font-heading text-lg font-semibold text-white">Chronix Edu</p>
+          <p className="text-xs text-white/50 mt-0.5 truncate">{user.email}</p>
         </div>
 
         <nav className="flex-1 py-4 overflow-y-auto">
           {mainNav.length > 0 && (
             <div className="mb-4">
-              <p className="px-5 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
                 {user.role === 'teacher' ? 'Teaching' : user.role === 'registrar' ? 'Registrar' : user.role === 'bursar' ? 'Bursar' : 'Principal'}
               </p>
               {mainNav.map((item) => (
@@ -78,7 +78,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
           {showSettings && (
             <div>
-              <p className="px-5 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
                 Settings
               </p>
               {SETTINGS_NAV.map((item) => (
@@ -88,11 +88,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
         </nav>
 
-        <div className="px-4 py-4 border-t border-gray-200">
+        <div className="px-4 py-4 border-t border-white/10">
           <button
             type="button"
             onClick={handleLogout}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+            className="w-full rounded-md border border-white/10 px-3 py-2 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors duration-200"
           >
             Sign out
           </button>
@@ -107,7 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NotificationBell variant="dark" />
           </div>
         </header>
-        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
+        <main key={pathname} className="flex-1 min-w-0 overflow-y-auto page-transition">{children}</main>
       </div>
     </div>
   );

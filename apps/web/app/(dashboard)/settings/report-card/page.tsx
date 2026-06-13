@@ -187,8 +187,18 @@ export default function ReportCardSettingsPage() {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-64">
-        <div className="text-gray-500 text-sm">Loading…</div>
+      <div className="max-w-3xl mx-auto p-8">
+        <div className="skeleton h-6 w-48 mb-2" />
+        <div className="skeleton h-4 w-80 mb-8" />
+        <div className="space-y-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="card p-6 space-y-4">
+              <div className="skeleton h-4 w-32" />
+              <div className="skeleton h-4 w-full" />
+              <div className="skeleton h-9 w-48" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -198,29 +208,29 @@ export default function ReportCardSettingsPage() {
   return (
     <div className="max-w-3xl mx-auto p-8">
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-sm font-medium text-white ${
+        <div className={`toast-enter fixed top-4 right-4 z-50 px-4 py-3 rounded-md shadow-lift text-sm font-medium text-white ${
           toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
         }`}>
           {toast.message}
         </div>
       )}
 
-      <h1 className="text-xl font-semibold text-gray-900 mb-1">Report Card Settings</h1>
+      <h1 className="font-heading text-xl font-semibold text-gray-900 mb-1">Report Card Settings</h1>
       <p className="text-sm text-gray-500 mb-8">Configure report card layout and generation settings</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
 
         {/* Template selector */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Template</h2>
+        <section className="card p-6 space-y-4">
+          <h2 className="font-heading text-sm font-semibold text-gray-700 uppercase tracking-wide">Template</h2>
           <p className="text-sm text-gray-500">Choose the layout used when generating report cards.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {TEMPLATES.map(t => (
               <label
                 key={t.value}
-                className={`cursor-pointer rounded-xl border-2 p-3 transition-colors ${
+                className={`cursor-pointer rounded-xl border-2 p-3 transition-colors duration-200 ${
                   selectedTemplate === t.value
-                    ? 'border-slate-700 bg-slate-50'
+                    ? 'border-[#2472B4] bg-blue-50'
                     : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
@@ -244,15 +254,15 @@ export default function ReportCardSettingsPage() {
         </section>
 
         {/* Principal signature */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Principal&apos;s Signature</h2>
+        <section className="card p-6 space-y-4">
+          <h2 className="font-heading text-sm font-semibold text-gray-700 uppercase tracking-wide">Principal&apos;s Signature</h2>
           <p className="text-sm text-gray-500">Uploaded as an image and printed above the principal&apos;s signature line.</p>
 
           <div
             {...getRootProps()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors duration-200 ${
               isDragActive
-                ? 'border-slate-500 bg-slate-50'
+                ? 'border-[#2472B4] bg-blue-50'
                 : 'border-gray-300 hover:border-gray-400'
             }`}
           >
@@ -282,13 +292,13 @@ export default function ReportCardSettingsPage() {
         </section>
 
         {/* Next term resumption */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Next Term Resumption</h2>
+        <section className="card p-6 space-y-4">
+          <h2 className="font-heading text-sm font-semibold text-gray-700 uppercase tracking-wide">Next Term Resumption</h2>
           <p className="text-sm text-gray-500">Shown on the report card as the date school resumes for the next term.</p>
           <input
             type="date"
             {...register('next_term_resumption')}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field w-auto"
           />
           {errors.next_term_resumption && (
             <p className="text-xs text-red-600">{errors.next_term_resumption.message}</p>
@@ -296,14 +306,14 @@ export default function ReportCardSettingsPage() {
         </section>
 
         {/* Footer text */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Custom Footer Text</h2>
+        <section className="card p-6 space-y-4">
+          <h2 className="font-heading text-sm font-semibold text-gray-700 uppercase tracking-wide">Custom Footer Text</h2>
           <p className="text-sm text-gray-500">An optional note printed at the bottom of every report card.</p>
           <textarea
             {...register('footer_text')}
             maxLength={200}
             rows={3}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
             placeholder="e.g. School resumes for the next term on the date shown above."
           />
           <div className="flex justify-between items-center">
@@ -315,8 +325,8 @@ export default function ReportCardSettingsPage() {
         </section>
 
         {/* Attendance toggle */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Attendance Summary</h2>
+        <section className="card p-6 space-y-4">
+          <h2 className="font-heading text-sm font-semibold text-gray-700 uppercase tracking-wide">Attendance Summary</h2>
           <label className="flex items-center justify-between cursor-pointer">
             <div>
               <p className="text-sm font-medium text-gray-900">Show attendance summary</p>
@@ -330,7 +340,7 @@ export default function ReportCardSettingsPage() {
                   type="checkbox"
                   checked={f.value}
                   onChange={e => f.onChange(e.target.checked)}
-                  className="h-5 w-5 rounded border-gray-300 accent-slate-700 cursor-pointer"
+                  className="h-5 w-5 rounded border-gray-300 accent-[#2472B4] cursor-pointer"
                 />
               )}
             />
@@ -338,8 +348,8 @@ export default function ReportCardSettingsPage() {
         </section>
 
         {/* Live preview */}
-        <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Live Preview</h2>
+        <section className="card p-6 space-y-4">
+          <h2 className="font-heading text-sm font-semibold text-gray-700 uppercase tracking-wide">Live Preview</h2>
           <p className="text-sm text-gray-500">
             Generates a sample report card using dummy student data with the settings above and your school&apos;s real branding.
           </p>
@@ -347,7 +357,7 @@ export default function ReportCardSettingsPage() {
             type="button"
             onClick={generatePreview}
             disabled={previewLoading}
-            className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+            className="btn-secondary disabled:opacity-50"
           >
             {previewLoading ? 'Generating…' : 'Generate Preview'}
           </button>
@@ -359,7 +369,7 @@ export default function ReportCardSettingsPage() {
               className="w-full h-[700px] rounded-lg border border-gray-200"
             >
               <p className="text-sm text-gray-500 p-4">
-                Unable to display PDF inline. <a href={previewUrl} target="_blank" rel="noreferrer" className="text-slate-700 underline">Open in a new tab</a>.
+                Unable to display PDF inline. <a href={previewUrl} target="_blank" rel="noreferrer" className="text-[#2472B4] hover:underline">Open in a new tab</a>.
               </p>
             </object>
           )}
@@ -369,7 +379,7 @@ export default function ReportCardSettingsPage() {
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors"
+            className="btn-primary !px-6"
           >
             {saving ? 'Saving…' : 'Save Changes'}
           </button>

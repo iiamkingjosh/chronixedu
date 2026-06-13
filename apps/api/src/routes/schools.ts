@@ -38,6 +38,7 @@ const updateIdentitySchema = z.object({
   stamp_url: z.string().url().optional(),
   primary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
   secondary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
+  admission_prefix: z.string().trim().min(1).max(10).regex(/^[A-Za-z0-9]+$/, 'Must be alphanumeric').optional(),
 }).refine(obj => Object.keys(obj).length > 0, { message: 'At least one field is required' });
 
 const gradeBandSchema = z.object({
@@ -516,6 +517,63 @@ router.post(
       });
 
       return res.json({ success: true, data: { signature_url: signatureUrl } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /api/schools/:schoolId/stamp ─────────────────────────────────────────
+
+router.post(
+  '/:schoolId/stamp',
+  verifyToken,
+  requireSchoolAccess,
+  upload.single('stamp'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const school = await findSchoolById(req.params.schoolId);
+      if (!school) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'School not found' } });
+      }
+
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "stamp".' } });
+      }
+
+      const allowed = ['image/jpeg', 'image/png'];
+      if (!allowed.includes(file.mimetype)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'Only JPEG and PNG files are allowed.' } });
+      }
+
+      const ext = file.mimetype === 'image/png' ? 'png' : 'jpg';
+      const storagePath = `schools/${req.params.schoolId}/stamp.${ext}`;
+      const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from(bucket)
+        .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+
+      if (uploadError) {
+        return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
+      }
+
+      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(storagePath);
+      const stampUrl = urlData.publicUrl;
+
+      await updateIdentityConfig(req.params.schoolId, { stamp_url: stampUrl });
+
+      await logAudit({
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'STAMP_UPLOAD',
+        entity: 'school_settings',
+        entityId: req.params.schoolId,
+        newValue: { stamp_url: stampUrl },
+      });
+
+      return res.json({ success: true, data: { stamp_url: stampUrl } });
     } catch (err) {
       return next(err);
     }

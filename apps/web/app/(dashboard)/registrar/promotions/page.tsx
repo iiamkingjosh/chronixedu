@@ -56,7 +56,7 @@ function useToast() {
   return { toast, show };
 }
 
-const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400';
+const inputClass = 'input-field';
 
 function fullName(s: StudentListRow): string {
   return `${s.first_name} ${s.last_name}`;
@@ -191,26 +191,35 @@ export default function PromotionsPage() {
   }
 
   if (!schoolId) {
-    return <div className="max-w-5xl mx-auto p-8"><p className="text-sm text-gray-500">Loading…</p></div>;
+    return (
+      <div className="max-w-5xl mx-auto p-8">
+        <div className="skeleton h-6 w-48 mb-2" />
+        <div className="skeleton h-4 w-96 mb-6" />
+        <div className="card p-6 mb-6 space-y-3">
+          <div className="skeleton h-4 w-32" />
+          <div className="skeleton h-9 w-full" />
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="max-w-5xl mx-auto p-8">
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-sm font-medium text-white ${
+        <div className={`toast-enter fixed top-4 right-4 z-50 px-4 py-3 rounded-md shadow-lift text-sm font-medium text-white ${
           toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
         }`}>
           {toast.message}
         </div>
       )}
 
-      <h1 className="text-xl font-semibold text-gray-900 mb-1">Promotion Manager</h1>
+      <h1 className="font-heading text-xl font-semibold text-gray-900 mb-1">Promotion Manager</h1>
       <p className="text-sm text-gray-500 mb-6">
         Review students at the end of a session and decide who is promoted to the next class or repeats.
       </p>
 
       {/* Session selectors */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+      <div className="card p-6 mb-6">
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">From session (ending)</label>
@@ -243,24 +252,33 @@ export default function PromotionsPage() {
       </div>
 
       {/* Students table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
+      <div className="card overflow-hidden mb-6">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-sm font-semibold text-gray-900">
+          <h2 className="font-heading text-sm font-semibold text-gray-900">
             Students ({visibleStudents.length})
           </h2>
           <div className="flex gap-2">
-            <button onClick={() => setAllPromote(true)} className="text-xs font-medium text-slate-700 hover:text-slate-900">
+            <button onClick={() => setAllPromote(true)} className="text-xs font-medium text-[#2472B4] hover:underline transition-colors duration-200">
               Mark all promoted
             </button>
             <span className="text-gray-300">|</span>
-            <button onClick={() => setAllPromote(false)} className="text-xs font-medium text-slate-700 hover:text-slate-900">
+            <button onClick={() => setAllPromote(false)} className="text-xs font-medium text-[#2472B4] hover:underline transition-colors duration-200">
               Mark all repeat
             </button>
           </div>
         </div>
 
         {loadingStudents ? (
-          <p className="text-sm text-gray-500 px-6 py-8 text-center">Loading students…</p>
+          <div className="px-6 py-4 space-y-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-6">
+                <div className="skeleton h-4 w-32" />
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-4 w-28" />
+                <div className="skeleton h-4 w-40 ml-auto" />
+              </div>
+            ))}
+          </div>
         ) : visibleStudents.length === 0 ? (
           <p className="text-sm text-gray-400 italic px-6 py-8 text-center">No students found for this session.</p>
         ) : (
@@ -279,7 +297,7 @@ export default function PromotionsPage() {
                 const d = decisions[s.id] ?? { promote: true, classId: s.class_id ?? '' };
                 const result = results?.find(r => r.student_id === s.id);
                 return (
-                  <tr key={s.id}>
+                  <tr key={s.id} className="table-row-hover">
                     <td className="px-5 py-3 text-gray-900 font-medium">{fullName(s)}</td>
                     <td className="px-5 py-3 text-gray-600">{s.admission_no}</td>
                     <td className="px-5 py-3 text-gray-600">
@@ -322,7 +340,7 @@ export default function PromotionsPage() {
         <button
           onClick={handleSubmit}
           disabled={submitting || !toSessionId || visibleStudents.length === 0}
-          className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors"
+          className="btn-primary"
         >
           {submitting ? 'Running promotion…' : `Run Bulk Promotion (${visibleStudents.length})`}
         </button>

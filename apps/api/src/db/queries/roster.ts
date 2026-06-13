@@ -8,11 +8,12 @@ export interface ClassRow {
   name: string;
   level: string;
   stream: string | null;
+  form_teacher_id: string | null;
 }
 
 export async function findClassByName(schoolId: string, name: string): Promise<ClassRow | null> {
   const result = await pool.query<ClassRow>(
-    `SELECT id, school_id, name, level, stream FROM classes WHERE school_id = $1 AND name = $2`,
+    `SELECT id, school_id, name, level, stream, form_teacher_id FROM classes WHERE school_id = $1 AND name = $2`,
     [schoolId, name]
   );
   return result.rows[0] ?? null;
@@ -22,13 +23,14 @@ export async function insertClass(
   schoolId: string,
   name: string,
   level: string,
-  stream: string | null
+  stream: string | null,
+  formTeacherId: string | null
 ): Promise<ClassRow> {
   const result = await pool.query<ClassRow>(
-    `INSERT INTO classes (school_id, name, level, stream)
-     VALUES ($1, $2, $3, $4)
-     RETURNING id, school_id, name, level, stream`,
-    [schoolId, name, level, stream ?? null]
+    `INSERT INTO classes (school_id, name, level, stream, form_teacher_id)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, school_id, name, level, stream, form_teacher_id`,
+    [schoolId, name, level, stream ?? null, formTeacherId]
   );
   return result.rows[0];
 }
@@ -36,20 +38,20 @@ export async function insertClass(
 export async function updateClass(
   classId: string,
   schoolId: string,
-  data: { name: string; level: string; stream: string | null }
+  data: { name: string; level: string; stream: string | null; form_teacher_id: string | null }
 ): Promise<ClassRow> {
   const result = await pool.query<ClassRow>(
-    `UPDATE classes SET name = $1, level = $2, stream = $3
-     WHERE id = $4 AND school_id = $5
-     RETURNING id, school_id, name, level, stream`,
-    [data.name, data.level, data.stream, classId, schoolId]
+    `UPDATE classes SET name = $1, level = $2, stream = $3, form_teacher_id = $4
+     WHERE id = $5 AND school_id = $6
+     RETURNING id, school_id, name, level, stream, form_teacher_id`,
+    [data.name, data.level, data.stream, data.form_teacher_id, classId, schoolId]
   );
   return result.rows[0];
 }
 
 export async function listClasses(schoolId: string): Promise<ClassRow[]> {
   const result = await pool.query<ClassRow>(
-    `SELECT id, school_id, name, level, stream
+    `SELECT id, school_id, name, level, stream, form_teacher_id
      FROM classes
      WHERE school_id = $1
      ORDER BY level, name`,
@@ -264,7 +266,7 @@ export async function deleteTeacherAssignment(id: string, schoolId: string): Pro
 
 export async function findClassById(classId: string, schoolId: string): Promise<ClassRow | null> {
   const result = await pool.query<ClassRow>(
-    `SELECT id, school_id, name, level, stream FROM classes WHERE id = $1 AND school_id = $2`,
+    `SELECT id, school_id, name, level, stream, form_teacher_id FROM classes WHERE id = $1 AND school_id = $2`,
     [classId, schoolId]
   );
   return result.rows[0] ?? null;

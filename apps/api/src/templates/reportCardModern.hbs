@@ -14,7 +14,6 @@
   }
   .page {
     width: 210mm;
-    min-height: 297mm;
     padding: 10mm 12mm;
     background: #fff;
   }
@@ -190,6 +189,7 @@
   .promoted { background: #dcfce7; color: #15803d; }
   .repeat   { background: #fee2e2; color: #b91c1c; }
   .pending  { background: #fef3c7; color: #b45309; }
+  .not-applicable { background: #e5e7eb; color: #4b5563; }
 
   /* ── Signatures ─────────────────────────────────────────────────── */
   .footer-sig {
@@ -334,22 +334,13 @@
     </tbody>
   </table>
 
-  <!-- ── Teacher Comments ───────────────────────────────────────────── -->
-  {{#if hasComments}}
+  <!-- ── Form Teacher's Remark ──────────────────────────────────────── -->
+  {{#if classTeacherComment}}
   <div class="comments-section">
-    <div class="section-title">Class Teacher's Comments</div>
-    <table>
-      <tbody>
-        {{#each subjects}}
-          {{#if teacherComment}}
-          <tr>
-            <td class="left" style="width:24%;font-weight:600;">{{name}}</td>
-            <td class="left" style="font-style:italic;color:#555;">{{teacherComment}}</td>
-          </tr>
-          {{/if}}
-        {{/each}}
-      </tbody>
-    </table>
+    <div class="section-title">Form Teacher's Remark</div>
+    <div style="font-style:italic;color:#555;font-size:10.5px;line-height:1.5;">
+      {{classTeacherComment}}
+    </div>
   </div>
   {{/if}}
 
@@ -395,7 +386,10 @@
 
   <!-- ── Signatures ─────────────────────────────────────────────────── -->
   <div class="footer-sig">
-    <div class="sig-box">
+    <div class="sig-box sig-signature">
+      {{#if formTeacher.signatureUrl}}
+        <img src="{{formTeacher.signatureUrl}}" alt="Class Teacher's Signature" />
+      {{/if}}
       <div class="sig-line">Class Teacher's Signature &amp; Date</div>
     </div>
     <div class="sig-box sig-signature">

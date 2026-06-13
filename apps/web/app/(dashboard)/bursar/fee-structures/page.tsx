@@ -85,7 +85,7 @@ export default function FeeStructuresPage() {
             type="button"
             onClick={() => setShowGenerateModal(true)}
             disabled={!termId}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="btn-secondary"
           >
             Generate Invoices
           </button>
@@ -93,7 +93,7 @@ export default function FeeStructuresPage() {
             type="button"
             onClick={() => setShowAddModal(true)}
             disabled={!termId}
-            className="rounded-lg bg-[#003366] px-4 py-2 text-sm font-medium text-white hover:bg-[#00254d] disabled:opacity-50"
+            className="btn-primary"
           >
             + Add Fee Component
           </button>
@@ -109,7 +109,7 @@ export default function FeeStructuresPage() {
             value={termId}
             onChange={(e) => setTermId(e.target.value)}
             disabled={contextLoading}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             {terms.length === 0 && <option value="">No terms available</option>}
             {terms.map((t) => (
@@ -126,7 +126,7 @@ export default function FeeStructuresPage() {
             value={classFilter}
             onChange={(e) => setClassFilter(e.target.value)}
             disabled={contextLoading}
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             <option value="">All classes</option>
             {classes.map((c) => (
@@ -138,7 +138,7 @@ export default function FeeStructuresPage() {
 
       {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="card overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -158,15 +158,15 @@ export default function FeeStructuresPage() {
             {!loading && structures.map((s) => {
               const cls = classes.find((c) => c.id === s.class_id);
               return (
-                <tr key={s.id}>
+                <tr key={s.id} className="table-row-hover">
                   <td className="px-4 py-3 font-medium text-gray-900">{s.component_name}</td>
                   <td className="px-4 py-3 text-gray-600">{cls ? classLabel(cls) : 'All classes'}</td>
                   <td className="px-4 py-3 text-right text-gray-900">{formatCurrency(s.amount)}</td>
                   <td className="px-4 py-3 text-center">
                     {s.is_mandatory ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-blue-50 text-blue-700 border-blue-200">Mandatory</span>
+                      <span className="badge-info">Mandatory</span>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-gray-50 text-gray-600 border-gray-200">Optional</span>
+                      <span className="badge-default">Optional</span>
                     )}
                   </td>
                 </tr>
@@ -270,7 +270,7 @@ function AddFeeStructureModal({
             onChange={(e) => setComponentName(e.target.value)}
             placeholder="e.g. Tuition, PTA Levy, Sports Fee"
             required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           />
         </div>
 
@@ -283,7 +283,7 @@ function AddFeeStructureModal({
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           />
         </div>
 
@@ -292,7 +292,7 @@ function AddFeeStructureModal({
           <select
             value={classId}
             onChange={(e) => setClassId(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             <option value="">All classes (school-wide)</option>
             {classes.map((c) => (
@@ -307,10 +307,10 @@ function AddFeeStructureModal({
         </label>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <button type="button" onClick={onClose} className="btn-secondary">
             Cancel
           </button>
-          <button type="submit" disabled={submitting} className="rounded-lg bg-[#003366] px-4 py-2 text-sm font-medium text-white hover:bg-[#00254d] disabled:opacity-50">
+          <button type="submit" disabled={submitting} className="btn-primary">
             {submitting ? 'Saving…' : 'Add Component'}
           </button>
         </div>
@@ -371,7 +371,7 @@ function GenerateInvoicesModal({
             value={classId}
             onChange={(e) => setClassId(e.target.value)}
             required
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            className="input-field"
           >
             <option value="">Select a class…</option>
             {classes.map((c) => (
@@ -381,10 +381,10 @@ function GenerateInvoicesModal({
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <button type="button" onClick={onClose} className="btn-secondary">
             Cancel
           </button>
-          <button type="submit" disabled={submitting || !classId} className="rounded-lg bg-[#003366] px-4 py-2 text-sm font-medium text-white hover:bg-[#00254d] disabled:opacity-50">
+          <button type="submit" disabled={submitting || !classId} className="btn-primary">
             {submitting ? 'Generating…' : 'Generate'}
           </button>
         </div>

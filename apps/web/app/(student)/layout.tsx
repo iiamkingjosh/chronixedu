@@ -12,18 +12,18 @@ function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 flex">
+    <nav className="fixed bottom-0 inset-x-0 z-40 bg-white border-t border-gray-200 flex shadow-[0_-4px_6px_-4px_rgb(0_0_0_/_0.05)]">
       {STUDENT_NAV.map(item => {
         const active = pathname === item.href || pathname.startsWith(item.href + '/');
         return (
           <Link
             key={item.href}
             href={item.href}
-            className={`flex-1 flex flex-col items-center justify-center py-2.5 text-xs font-medium transition-colors ${
+            className={`relative flex-1 flex flex-col items-center justify-center py-2.5 text-xs font-medium transition-colors duration-200 ${
               active ? 'text-[#003366]' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            <span className={`mb-1 h-1.5 w-1.5 rounded-full ${active ? 'bg-[#FF761B]' : 'bg-transparent'}`} />
+            <span className={`absolute top-0 inset-x-3 h-0.5 rounded-full transition-colors duration-200 ${active ? 'bg-[#FF761B]' : 'bg-transparent'}`} />
             {item.label}
           </Link>
         );
@@ -35,6 +35,7 @@ function BottomNav() {
 function StudentChrome({ children }: { children: React.ReactNode }) {
   const { logout } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   function handleLogout() {
     logout();
@@ -43,21 +44,21 @@ function StudentChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="shrink-0 bg-[#003366] text-white px-4 py-3 flex items-center justify-between">
-        <p className="text-sm font-semibold">Chronix Edu — Student</p>
+      <header className="shrink-0 bg-gradient-to-r from-[#003366] to-[#002244] text-white px-4 py-3 flex items-center justify-between">
+        <p className="font-heading text-sm font-semibold">Chronix Edu — Student</p>
         <div className="flex items-center gap-1">
           <SyncIndicator variant="light" />
           <NotificationBell variant="light" />
           <button
             type="button"
             onClick={handleLogout}
-            className="text-xs font-medium text-white/80 hover:text-white px-2"
+            className="text-xs font-medium text-white/80 hover:text-white px-2 transition-colors duration-200"
           >
             Sign out
           </button>
         </div>
       </header>
-      <main className="flex-1 min-w-0 pb-16">{children}</main>
+      <main key={pathname} className="flex-1 min-w-0 pb-16 page-transition">{children}</main>
       <BottomNav />
     </div>
   );

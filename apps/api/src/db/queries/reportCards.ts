@@ -15,9 +15,15 @@ export interface StudentReportData {
   next_term_resumption: string | null;
 }
 
-export interface SubjectComment {
-  subject_id:   string;
+export interface ClassTeacherComment {
   comment_text: string;
+}
+
+export interface FormTeacher {
+  id:            string;
+  full_name:     string;
+  title:         string | null;
+  signature_url: string | null;
 }
 
 export interface PrincipalRemark {
@@ -70,17 +76,28 @@ export async function fetchStudentReportData(
   return result.rows[0] ?? null;
 }
 
-export async function fetchSubjectComments(
+export async function fetchClassTeacherComment(
   studentId: string,
   termId: string
-): Promise<SubjectComment[]> {
-  const result = await pool.query<SubjectComment>(
-    `SELECT subject_id, comment_text
-     FROM report_card_comments
+): Promise<ClassTeacherComment | null> {
+  const result = await pool.query<ClassTeacherComment>(
+    `SELECT comment_text
+     FROM class_teacher_comments
      WHERE student_id = $1 AND term_id = $2`,
     [studentId, termId]
   );
-  return result.rows;
+  return result.rows[0] ?? null;
+}
+
+export async function fetchFormTeacher(classId: string): Promise<FormTeacher | null> {
+  const result = await pool.query<FormTeacher>(
+    `SELECT u.id, (u.first_name || ' ' || u.last_name) AS full_name, u.title, u.signature_url
+     FROM classes c
+     JOIN users u ON u.id = c.form_teacher_id
+     WHERE c.id = $1`,
+    [classId]
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function fetchPrincipalRemark(

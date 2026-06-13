@@ -10,16 +10,29 @@ import {
   findDuplicateAssignment, insertTeacherAssignment, listTeacherAssignments,
   findAssignmentById, scoresExistForAssignment, deleteTeacherAssignment,
 } from '../db/queries/roster';
+import { findUserById } from '../db/queries/users';
 
 const router = Router();
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
 const classSchema = z.object({
-  name:   z.string().min(1).max(255),
-  level:  z.string().min(1).max(100),
-  stream: z.string().max(100).optional(),
+  name:            z.string().min(1).max(255),
+  level:           z.string().min(1).max(100),
+  stream:          z.string().max(100).optional(),
+  form_teacher_id: z.string().uuid().nullable().optional(),
 });
+
+// ── Validate that form_teacher_id (if provided) is a teacher in this school ─────
+
+async function validateFormTeacher(schoolId: string, formTeacherId: string | null | undefined): Promise<string | null> {
+  if (!formTeacherId) return null;
+  const user = await findUserById(formTeacherId, schoolId);
+  if (!user || user.role !== 'teacher') {
+    return 'form_teacher_id must reference a teacher in this school';
+  }
+  return null;
+}
 
 const subjectSchema = z.object({
   name: z.string().min(1).max(255),
@@ -59,14 +72,19 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
 
-      const { name, level, stream } = parsed.data;
+      const { name, level, stream, form_teacher_id } = parsed.data;
+
+      const formTeacherError = await validateFormTeacher(req.params.schoolId, form_teacher_id);
+      if (formTeacherError) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_FORM_TEACHER', message: formTeacherError } });
+      }
 
       const existing = await findClassByName(req.params.schoolId, name);
       if (existing) {
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_CLASS', message: `A class named "${name}" already exists in this school` } });
       }
 
-      const cls = await insertClass(req.params.schoolId, name, level, stream ?? null);
+      const cls = await insertClass(req.params.schoolId, name, level, stream ?? null, form_teacher_id ?? null);
       return res.status(201).json({ success: true, data: cls });
     } catch (err) {
       return next(err);
@@ -109,14 +127,21 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Class not found' } });
       }
 
-      const { name, level, stream } = parsed.data;
+      const { name, level, stream, form_teacher_id } = parsed.data;
+
+      const formTeacherError = await validateFormTeacher(req.params.schoolId, form_teacher_id);
+      if (formTeacherError) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_FORM_TEACHER', message: formTeacherError } });
+      }
 
       const duplicate = await findClassByName(req.params.schoolId, name);
       if (duplicate && duplicate.id !== existing.id) {
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_CLASS', message: `A class named "${name}" already exists in this school` } });
       }
 
-      const cls = await updateClass(req.params.classId, req.params.schoolId, { name, level, stream: stream ?? null });
+      const cls = await updateClass(req.params.classId, req.params.schoolId, {
+        name, level, stream: stream ?? null, form_teacher_id: form_teacher_id ?? null,
+      });
       return res.json({ success: true, data: cls });
     } catch (err) {
       return next(err);

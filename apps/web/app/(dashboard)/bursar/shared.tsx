@@ -42,13 +42,13 @@ export const STATUS_LABELS: Record<InvoiceStatus, string> = {
 };
 
 export const STATUS_STYLES: Record<InvoiceStatus, string> = {
-  unpaid: 'bg-red-50 text-red-700 border-red-200',
-  partial: 'bg-amber-50 text-amber-700 border-amber-200',
-  paid: 'bg-green-50 text-green-700 border-green-200',
+  unpaid: 'badge-danger',
+  partial: 'badge-warning',
+  paid: 'badge-success',
 };
 
 export function statusBadgeClass(status: InvoiceStatus): string {
-  return `inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${STATUS_STYLES[status]}`;
+  return STATUS_STYLES[status];
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ export function useToast() {
 export function ToastBanner({ toast }: { toast: { message: string; type: 'success' | 'error' } | null }) {
   if (!toast) return null;
   return (
-    <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-sm font-medium text-white ${
+    <div className={`toast-enter fixed top-4 right-4 z-50 px-4 py-3 rounded-md shadow-lift text-sm font-medium text-white ${
       toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
     }`}>
       {toast.message}
@@ -79,11 +79,11 @@ export function ToastBanner({ toast }: { toast: { message: string; type: 'succes
 
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="modal-panel bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <h3 className="font-heading text-base font-semibold text-gray-900">{title}</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors duration-200">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>

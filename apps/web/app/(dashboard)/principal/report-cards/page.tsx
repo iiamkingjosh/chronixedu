@@ -73,16 +73,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400';
+const inputClass = 'input-field';
 
 function badgeClass(tone: 'gray' | 'blue' | 'green' | 'red'): string {
   const tones: Record<string, string> = {
-    gray:  'bg-gray-100 text-gray-600 border-gray-200',
-    blue:  'bg-blue-50 text-blue-700 border-blue-200',
-    green: 'bg-green-50 text-green-700 border-green-200',
-    red:   'bg-red-50 text-red-700 border-red-200',
+    gray:  'badge-default',
+    blue:  'badge-info',
+    green: 'badge-success',
+    red:   'badge-danger',
   };
-  return `inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${tones[tone]}`;
+  return tones[tone];
 }
 
 function formatDateTime(value: string | null | undefined): string {
@@ -195,8 +195,8 @@ function GenerationSection({
   const jobActive = job ? (job.status === 'pending' || job.status === 'running') : false;
 
   return (
-    <div className="border border-gray-200 rounded-xl p-5">
-      <h2 className="text-base font-semibold text-gray-900 mb-1">Generate report cards</h2>
+    <div className="card p-5">
+      <h2 className="font-heading text-base font-semibold text-gray-900 mb-1">Generate report cards</h2>
       <p className="text-sm text-gray-500 mb-4">Pick a class and term to review generation status or generate PDF report cards.</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
@@ -253,14 +253,14 @@ function GenerationSection({
         <button
           onClick={handleGenerate}
           disabled={generating || jobActive || !classId || !termId}
-          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {jobActive ? 'Generating…' : 'Generate report cards'}
         </button>
         <button
           onClick={handleViewSample}
           disabled={!sampleAvailable}
-          className="px-4 py-2 border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="btn-secondary disabled:opacity-40 disabled:cursor-not-allowed"
         >
           View sample
         </button>
@@ -334,8 +334,8 @@ function StudentLookupSection({
   useEffect(() => { loadCard(); }, [loadCard]);
 
   return (
-    <div className="border border-gray-200 rounded-xl p-5">
-      <h2 className="text-base font-semibold text-gray-900 mb-1">Look up a student&rsquo;s report card</h2>
+    <div className="card p-5">
+      <h2 className="font-heading text-base font-semibold text-gray-900 mb-1">Look up a student&rsquo;s report card</h2>
       <p className="text-sm text-gray-500 mb-4">Search for a student to view or download their report card for any term.</p>
 
       <form onSubmit={handleSearch} className="flex items-center gap-3 mb-4">
@@ -345,7 +345,7 @@ function StudentLookupSection({
           placeholder="Search by name or admission number…"
           className={`${inputClass} flex-1`}
         />
-        <button type="submit" disabled={searching} className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50">
+        <button type="submit" disabled={searching} className="btn-primary disabled:opacity-50">
           {searching ? 'Searching…' : 'Search'}
         </button>
       </form>
@@ -358,7 +358,7 @@ function StudentLookupSection({
               <button
                 key={student.id}
                 onClick={() => setSelected(student)}
-                className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${active ? 'bg-slate-50' : 'hover:bg-gray-50'}`}
+                className={`w-full text-left px-4 py-2.5 text-sm transition-colors duration-200 ${active ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
               >
                 <span className="font-medium text-gray-900">{student.first_name} {student.last_name}</span>
                 <span className="ml-2 text-gray-400">{student.admission_no}</span>
@@ -370,7 +370,7 @@ function StudentLookupSection({
       )}
 
       {selected && (
-        <div className="border border-gray-200 rounded-lg p-4">
+        <div className="card p-4">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
             <p className="text-sm font-medium text-gray-900">
               {selected.first_name} {selected.last_name} <span className="text-gray-400 font-normal">({selected.admission_no})</span>
@@ -384,10 +384,10 @@ function StudentLookupSection({
             <p className="text-sm text-gray-500">Loading report card…</p>
           ) : card?.pdf_url ? (
             <div className="flex flex-wrap items-center gap-3">
-              <a href={card.pdf_url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700">
+              <a href={card.pdf_url} target="_blank" rel="noopener noreferrer" className="btn-primary">
                 View report card
               </a>
-              <a href={card.pdf_url} download className="px-4 py-2 border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50">
+              <a href={card.pdf_url} download className="btn-secondary">
                 Download
               </a>
               <span className={badgeClass(card.is_published ? 'green' : 'gray')}>{card.is_published ? 'Published' : 'Not yet published'}</span>
@@ -445,7 +445,21 @@ export default function PrincipalReportCardsPage() {
   }, [schoolId]);
 
   if (!schoolId || loading) {
-    return <div className="max-w-5xl mx-auto p-8"><p className="text-sm text-gray-500">Loading report cards…</p></div>;
+    return (
+      <div className="max-w-5xl mx-auto p-8">
+        <div className="skeleton h-6 w-40 mb-2" />
+        <div className="skeleton h-4 w-96 mb-6" />
+        <div className="space-y-6">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="card p-5 space-y-3">
+              <div className="skeleton h-4 w-48" />
+              <div className="skeleton h-9 w-full" />
+              <div className="skeleton h-16 w-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (error) {
@@ -459,14 +473,14 @@ export default function PrincipalReportCardsPage() {
   return (
     <div className="max-w-5xl mx-auto p-8">
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded shadow-lg text-sm font-medium text-white ${
+        <div className={`toast-enter fixed top-4 right-4 z-50 px-4 py-3 rounded-md shadow-lift text-sm font-medium text-white ${
           toast.type === 'success' ? 'bg-green-600' : 'bg-red-600'
         }`}>
           {toast.message}
         </div>
       )}
 
-      <h1 className="text-xl font-semibold text-gray-900 mb-1">Report Cards</h1>
+      <h1 className="font-heading text-xl font-semibold text-gray-900 mb-1">Report Cards</h1>
       <p className="text-sm text-gray-500 mb-6">Generate report card PDFs for a class and term, or look up an individual student&rsquo;s report card.</p>
 
       {classes.length === 0 || terms.length === 0 ? (

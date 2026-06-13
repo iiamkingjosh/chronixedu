@@ -1,8 +1,22 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter, Poppins } from 'next/font/google';
 import { AuthProvider } from './providers';
 import { SyncStatusProvider } from '@/lib/syncStatus';
 import PwaRegister from '@/components/PwaRegister';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+const poppins = Poppins({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-poppins',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'Chronix Edu',
@@ -17,7 +31,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${poppins.variable}`}>
       <body>
         <AuthProvider>
           <SyncStatusProvider>

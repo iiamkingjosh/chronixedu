@@ -15,6 +15,7 @@ interface ClassRow {
   name: string;
   level: string;
   stream: string | null;
+  form_teacher_id: string | null;
 }
 
 interface SubjectRow {
@@ -147,28 +148,35 @@ function DeleteConfirmModal({
 // ── Classes tab ────────────────────────────────────────────────────────────────
 
 const classFormSchema = z.object({
-  name:   z.string().min(1, 'Class name is required').max(255),
-  level:  z.string().min(1, 'Level is required').max(100),
-  stream: z.string().max(100).optional().or(z.literal('')),
+  name:            z.string().min(1, 'Class name is required').max(255),
+  level:           z.string().min(1, 'Level is required').max(100),
+  stream:          z.string().max(100).optional().or(z.literal('')),
+  form_teacher_id: z.string().optional().or(z.literal('')),
 });
 
 type ClassForm = z.infer<typeof classFormSchema>;
 
-function ClassFormModal({ schoolId, cls, onClose, onSaved }: {
+function ClassFormModal({ schoolId, cls, teachers, onClose, onSaved }: {
   schoolId: string;
   cls: ClassRow | null;
+  teachers: TeacherOption[];
   onClose: () => void;
   onSaved: (cls: ClassRow, isNew: boolean) => void;
 }) {
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ClassForm>({
     resolver: zodResolver(classFormSchema),
-    defaultValues: { name: cls?.name ?? '', level: cls?.level ?? '', stream: cls?.stream ?? '' },
+    defaultValues: { name: cls?.name ?? '', level: cls?.level ?? '', stream: cls?.stream ?? '', form_teacher_id: cls?.form_teacher_id ?? '' },
   });
   const [apiError, setApiError] = useState('');
 
   async function onSubmit(values: ClassForm) {
     setApiError('');
-    const payload = { name: values.name, level: values.level, ...(values.stream ? { stream: values.stream } : {}) };
+    const payload = {
+      name: values.name,
+      level: values.level,
+      ...(values.stream ? { stream: values.stream } : {}),
+      form_teacher_id: values.form_teacher_id || null,
+    };
     try {
       const res = cls
         ? await apiFetch<{ success: boolean; data: ClassRow }>(`/api/schools/${schoolId}/classes/${cls.id}`, { method: 'PATCH', body: JSON.stringify(payload) })
@@ -191,6 +199,12 @@ function ClassFormModal({ schoolId, cls, onClose, onSaved }: {
         <Field label="Stream (optional)" error={errors.stream?.message}>
           <input {...register('stream')} className={inputClass} placeholder="Science, Arts…" />
         </Field>
+        <Field label="Form Teacher (optional)" error={errors.form_teacher_id?.message}>
+          <select {...register('form_teacher_id')} className={inputClass} defaultValue={cls?.form_teacher_id ?? ''}>
+            <option value="">— None —</option>
+            {teachers.map(t => <option key={t.id} value={t.id}>{teacherName(t)}</option>)}
+          </select>
+        </Field>
 
         {apiError && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
@@ -212,14 +226,21 @@ function ClassFormModal({ schoolId, cls, onClose, onSaved }: {
 function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState<ClassRow[]>([]);
+  const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [formTarget, setFormTarget] = useState<{ cls: ClassRow | null } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ClassRow | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
-    apiFetch<{ success: boolean; data: ClassRow[] }>(`/api/schools/${schoolId}/classes`)
-      .then(({ data }) => setClasses(data))
+    Promise.all([
+      apiFetch<{ success: boolean; data: ClassRow[] }>(`/api/schools/${schoolId}/classes`),
+      apiFetch<{ success: boolean; data: { users: TeacherOption[]; total: number } }>(`/api/schools/${schoolId}/users?role=teacher&limit=100`),
+    ])
+      .then(([classesRes, teachersRes]) => {
+        setClasses(classesRes.data);
+        setTeachers(teachersRes.data.users);
+      })
       .catch(() => show('Failed to load classes', 'error'))
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -275,6 +296,7 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
                 <th className="text-left px-5 py-2.5 font-medium">Name</th>
                 <th className="text-left px-5 py-2.5 font-medium">Level</th>
                 <th className="text-left px-5 py-2.5 font-medium">Stream</th>
+                <th className="text-left px-5 py-2.5 font-medium">Form Teacher</th>
                 <th className="text-right px-5 py-2.5 font-medium">Actions</th>
               </tr>
             </thead>
@@ -284,6 +306,12 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
                   <td className="px-5 py-3 text-gray-900 font-medium">{cls.name}</td>
                   <td className="px-5 py-3 text-gray-600">{cls.level}</td>
                   <td className="px-5 py-3 text-gray-600">{cls.stream ?? '—'}</td>
+                  <td className="px-5 py-3 text-gray-600">
+                    {(() => {
+                      const t = teachers.find(t => t.id === cls.form_teacher_id);
+                      return t ? teacherName(t) : '—';
+                    })()}
+                  </td>
                   <td className="px-5 py-3 text-right space-x-3">
                     <button onClick={() => setFormTarget({ cls })} className="text-sm font-medium text-slate-700 hover:text-slate-900">Edit</button>
                     <button onClick={() => setDeleteTarget(cls)} className="text-sm font-medium text-red-600 hover:text-red-800">Delete</button>
@@ -296,7 +324,7 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
       )}
 
       {formTarget && (
-        <ClassFormModal schoolId={schoolId} cls={formTarget.cls} onClose={() => setFormTarget(null)} onSaved={handleSaved} />
+        <ClassFormModal schoolId={schoolId} cls={formTarget.cls} teachers={teachers} onClose={() => setFormTarget(null)} onSaved={handleSaved} />
       )}
 
       {deleteTarget && (
