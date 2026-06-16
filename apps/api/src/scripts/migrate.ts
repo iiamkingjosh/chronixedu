@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import pool from '../db/client';
 
-const MIGRATIONS_DIR = path.join(__dirname, '../../migrations');
+const MIGRATIONS_DIR = path.join(__dirname, '../migrations');
 
 async function migrate() {
   // Ensure tracking table exists
