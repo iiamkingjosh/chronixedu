@@ -29,6 +29,7 @@ const envSchema = z.object({
   NEXTAUTH_URL: z.string().url('NEXTAUTH_URL must be a valid URL').optional(),
   NEXT_PUBLIC_API_URL: z.string().url('NEXT_PUBLIC_API_URL must be a valid URL').optional(),
   CORS_ORIGIN: z.string().url('CORS_ORIGIN must be a valid URL').optional(),
+  SENTRY_DSN: z.string().url('SENTRY_DSN must be a valid URL').optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

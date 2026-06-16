@@ -56,9 +56,17 @@ const withPWA = require('@ducanh2912/next-pwa').default({
   },
 });
 
+const { withSentryConfig } = require('@sentry/nextjs');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
 };
 
-module.exports = withPWA(nextConfig);
+const sentryConfig = {
+  silent: true,
+  hideSourceMaps: true,
+  disableLogger: true,
+};
+
+module.exports = withSentryConfig(withPWA(nextConfig), sentryConfig);
