@@ -1,4 +1,4 @@
-import { apiFetch, apiFetchBlob } from './api';
+﻿import { apiFetch, apiFetchBlob } from './api';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -110,17 +110,17 @@ export async function getSuperAdminSchools(params: ListSchoolsParams = {}): Prom
   if (params.status) query.set('status', params.status);
   if (params.plan) query.set('plan', params.plan);
   const qs = query.toString();
-  const res = await apiFetch<ApiResponse<SchoolsListResponse>>(`/super-admin/schools${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch<ApiResponse<SchoolsListResponse>>(`/api/super-admin/schools${qs ? `?${qs}` : ''}`);
   return res.data;
 }
 
 export async function getSuperAdminSchool(id: string): Promise<SchoolDetail> {
-  const res = await apiFetch<ApiResponse<SchoolDetail>>(`/super-admin/schools/${id}`);
+  const res = await apiFetch<ApiResponse<SchoolDetail>>(`/api/super-admin/schools/${id}`);
   return res.data;
 }
 
 export async function suspendSchool(id: string, reason: string): Promise<SuspendReactivateResponse> {
-  const res = await apiFetch<ApiResponse<SuspendReactivateResponse>>(`/super-admin/schools/${id}/suspend`, {
+  const res = await apiFetch<ApiResponse<SuspendReactivateResponse>>(`/api/super-admin/schools/${id}/suspend`, {
     method: 'PATCH',
     body: JSON.stringify({ reason }),
   });
@@ -128,7 +128,7 @@ export async function suspendSchool(id: string, reason: string): Promise<Suspend
 }
 
 export async function reactivateSchool(id: string, reason: string): Promise<SuspendReactivateResponse> {
-  const res = await apiFetch<ApiResponse<SuspendReactivateResponse>>(`/super-admin/schools/${id}/reactivate`, {
+  const res = await apiFetch<ApiResponse<SuspendReactivateResponse>>(`/api/super-admin/schools/${id}/reactivate`, {
     method: 'PATCH',
     body: JSON.stringify({ reason }),
   });
@@ -136,7 +136,7 @@ export async function reactivateSchool(id: string, reason: string): Promise<Susp
 }
 
 export async function exportSchoolData(id: string): Promise<Blob> {
-  return apiFetchBlob(`/super-admin/schools/${id}/export`);
+  return apiFetchBlob(`/api/super-admin/schools/${id}/export`);
 }
 
 // ── Subscriptions ────────────────────────────────────────────────────────────
@@ -247,17 +247,17 @@ export async function getSubscriptions(params: ListSubscriptionsParams = {}): Pr
   if (params.plan) query.set('plan', params.plan);
   if (params.page) query.set('page', String(params.page));
   const qs = query.toString();
-  const res = await apiFetch<ApiResponse<SubscriptionsListResponse>>(`/super-admin/subscriptions${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch<ApiResponse<SubscriptionsListResponse>>(`/api/super-admin/subscriptions${qs ? `?${qs}` : ''}`);
   return res.data;
 }
 
 export async function getMRR(): Promise<MRRResponse> {
-  const res = await apiFetch<ApiResponse<MRRResponse>>('/super-admin/subscriptions/mrr');
+  const res = await apiFetch<ApiResponse<MRRResponse>>('/api/super-admin/subscriptions/mrr');
   return res.data;
 }
 
 export async function createSubscription(data: CreateSubscriptionInput): Promise<PlatformSubscription> {
-  const res = await apiFetch<ApiResponse<PlatformSubscription>>('/super-admin/subscriptions', {
+  const res = await apiFetch<ApiResponse<PlatformSubscription>>('/api/super-admin/subscriptions', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -265,7 +265,7 @@ export async function createSubscription(data: CreateSubscriptionInput): Promise
 }
 
 export async function updateSubscription(id: string, data: UpdateSubscriptionInput): Promise<PlatformSubscription> {
-  const res = await apiFetch<ApiResponse<PlatformSubscription>>(`/super-admin/subscriptions/${id}`, {
+  const res = await apiFetch<ApiResponse<PlatformSubscription>>(`/api/super-admin/subscriptions/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
@@ -273,7 +273,7 @@ export async function updateSubscription(id: string, data: UpdateSubscriptionInp
 }
 
 export async function recordPayment(subId: string, data: RecordPaymentInput): Promise<RecordPaymentResponse> {
-  const res = await apiFetch<ApiResponse<RecordPaymentResponse>>(`/super-admin/subscriptions/${subId}/record-payment`, {
+  const res = await apiFetch<ApiResponse<RecordPaymentResponse>>(`/api/super-admin/subscriptions/${subId}/record-payment`, {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -281,7 +281,7 @@ export async function recordPayment(subId: string, data: RecordPaymentInput): Pr
 }
 
 export async function extendTrial(subId: string, days: 7 | 14 | 30): Promise<ExtendTrialResponse> {
-  const res = await apiFetch<ApiResponse<ExtendTrialResponse>>(`/super-admin/subscriptions/${subId}/extend-trial`, {
+  const res = await apiFetch<ApiResponse<ExtendTrialResponse>>(`/api/super-admin/subscriptions/${subId}/extend-trial`, {
     method: 'POST',
     body: JSON.stringify({ days }),
   });
@@ -340,7 +340,7 @@ export interface CompleteOnboardingResponse {
 }
 
 export async function startOnboarding(data: StartOnboardingInput): Promise<StartOnboardingResponse> {
-  const res = await apiFetch<ApiResponse<StartOnboardingResponse>>('/super-admin/onboarding', {
+  const res = await apiFetch<ApiResponse<StartOnboardingResponse>>('/api/super-admin/onboarding', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -352,7 +352,7 @@ export async function saveOnboardingStep(
   step: number,
   data: Record<string, unknown>
 ): Promise<OnboardingStepResponse> {
-  const res = await apiFetch<ApiResponse<OnboardingStepResponse>>(`/super-admin/onboarding/${sessionId}/step/${step}`, {
+  const res = await apiFetch<ApiResponse<OnboardingStepResponse>>(`/api/super-admin/onboarding/${sessionId}/step/${step}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
@@ -360,7 +360,7 @@ export async function saveOnboardingStep(
 }
 
 export async function completeOnboarding(sessionId: string): Promise<CompleteOnboardingResponse> {
-  const res = await apiFetch<ApiResponse<CompleteOnboardingResponse>>(`/super-admin/onboarding/${sessionId}/complete`, {
+  const res = await apiFetch<ApiResponse<CompleteOnboardingResponse>>(`/api/super-admin/onboarding/${sessionId}/complete`, {
     method: 'POST',
   });
   return res.data;
@@ -406,22 +406,22 @@ export interface GrowthData {
 }
 
 export async function getSuperAdminOverview(): Promise<SuperAdminOverview> {
-  const res = await apiFetch<ApiResponse<SuperAdminOverview>>('/super-admin/analytics/overview');
+  const res = await apiFetch<ApiResponse<SuperAdminOverview>>('/api/super-admin/analytics/overview');
   return res.data;
 }
 
 export async function getSchoolsActivity(): Promise<SchoolActivity[]> {
-  const res = await apiFetch<ApiResponse<SchoolActivity[]>>('/super-admin/analytics/schools');
+  const res = await apiFetch<ApiResponse<SchoolActivity[]>>('/api/super-admin/analytics/schools');
   return res.data;
 }
 
 export async function getFeatureAdoption(): Promise<FeatureAdoption[]> {
-  const res = await apiFetch<ApiResponse<FeatureAdoption[]>>('/super-admin/analytics/feature-adoption');
+  const res = await apiFetch<ApiResponse<FeatureAdoption[]>>('/api/super-admin/analytics/feature-adoption');
   return res.data;
 }
 
 export async function getGrowthData(): Promise<GrowthData> {
-  const res = await apiFetch<ApiResponse<GrowthData>>('/super-admin/analytics/growth');
+  const res = await apiFetch<ApiResponse<GrowthData>>('/api/super-admin/analytics/growth');
   return res.data;
 }
 
@@ -461,12 +461,12 @@ export interface CronStatusEntry {
 }
 
 export async function getHealthOverview(): Promise<HealthOverview> {
-  const res = await apiFetch<ApiResponse<HealthOverview>>('/super-admin/health/overview');
+  const res = await apiFetch<ApiResponse<HealthOverview>>('/api/super-admin/health/overview');
   return res.data;
 }
 
 export async function getCronStatus(): Promise<CronStatusEntry[]> {
-  const res = await apiFetch<ApiResponse<CronStatusEntry[]>>('/super-admin/health/crons');
+  const res = await apiFetch<ApiResponse<CronStatusEntry[]>>('/api/super-admin/health/crons');
   return res.data;
 }
 
@@ -513,12 +513,12 @@ export interface PublishAnnouncementResponse {
 
 export async function getAnnouncements(status?: AnnouncementStatusFilter): Promise<Announcement[]> {
   const qs = status ? `?status=${status}` : '';
-  const res = await apiFetch<ApiResponse<Announcement[]>>(`/super-admin/announcements${qs}`);
+  const res = await apiFetch<ApiResponse<Announcement[]>>(`/api/super-admin/announcements${qs}`);
   return res.data;
 }
 
 export async function createAnnouncement(data: CreateAnnouncementInput): Promise<Announcement> {
-  const res = await apiFetch<ApiResponse<Announcement>>('/super-admin/announcements', {
+  const res = await apiFetch<ApiResponse<Announcement>>('/api/super-admin/announcements', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -526,7 +526,7 @@ export async function createAnnouncement(data: CreateAnnouncementInput): Promise
 }
 
 export async function updateAnnouncement(id: string, data: UpdateAnnouncementInput): Promise<Announcement> {
-  const res = await apiFetch<ApiResponse<Announcement>>(`/super-admin/announcements/${id}`, {
+  const res = await apiFetch<ApiResponse<Announcement>>(`/api/super-admin/announcements/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
@@ -534,14 +534,14 @@ export async function updateAnnouncement(id: string, data: UpdateAnnouncementInp
 }
 
 export async function publishAnnouncement(id: string): Promise<PublishAnnouncementResponse> {
-  const res = await apiFetch<ApiResponse<PublishAnnouncementResponse>>(`/super-admin/announcements/${id}/publish`, {
+  const res = await apiFetch<ApiResponse<PublishAnnouncementResponse>>(`/api/super-admin/announcements/${id}/publish`, {
     method: 'POST',
   });
   return res.data;
 }
 
 export async function deleteAnnouncement(id: string): Promise<{ deleted: boolean; id: string }> {
-  const res = await apiFetch<ApiResponse<{ deleted: boolean; id: string }>>(`/super-admin/announcements/${id}`, {
+  const res = await apiFetch<ApiResponse<{ deleted: boolean; id: string }>>(`/api/super-admin/announcements/${id}`, {
     method: 'DELETE',
   });
   return res.data;
@@ -579,12 +579,12 @@ export interface EndSupportSessionResponse {
 }
 
 export async function getSupportSessions(): Promise<SupportSession[]> {
-  const res = await apiFetch<ApiResponse<SupportSession[]>>('/super-admin/support-sessions');
+  const res = await apiFetch<ApiResponse<SupportSession[]>>('/api/super-admin/support-sessions');
   return res.data;
 }
 
 export async function startSupportSession(data: StartSupportSessionInput): Promise<StartSupportSessionResponse> {
-  const res = await apiFetch<ApiResponse<StartSupportSessionResponse>>('/super-admin/support-sessions', {
+  const res = await apiFetch<ApiResponse<StartSupportSessionResponse>>('/api/super-admin/support-sessions', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -592,7 +592,7 @@ export async function startSupportSession(data: StartSupportSessionInput): Promi
 }
 
 export async function endSupportSession(id: string): Promise<EndSupportSessionResponse> {
-  const res = await apiFetch<ApiResponse<EndSupportSessionResponse>>(`/super-admin/support-sessions/${id}/end`, {
+  const res = await apiFetch<ApiResponse<EndSupportSessionResponse>>(`/api/super-admin/support-sessions/${id}/end`, {
     method: 'PATCH',
   });
   return res.data;
@@ -629,6 +629,6 @@ export async function getAuditLogs(params: AuditLogsParams = {}): Promise<Platfo
   if (params.from) query.set('from', params.from);
   if (params.to) query.set('to', params.to);
   const qs = query.toString();
-  const res = await apiFetch<ApiResponse<PlatformAuditLog[]>>(`/super-admin/audit-logs${qs ? `?${qs}` : ''}`);
+  const res = await apiFetch<ApiResponse<PlatformAuditLog[]>>(`/api/super-admin/audit-logs${qs ? `?${qs}` : ''}`);
   return res.data;
 }
