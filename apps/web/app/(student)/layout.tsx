@@ -26,7 +26,7 @@ function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: stri
 }
 
 function StudentChrome({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
