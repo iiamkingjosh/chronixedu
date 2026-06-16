@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '@/app/providers';
 import {
   getSuperAdminOverview,
   getCronStatus,
   type SuperAdminOverview,
   type CronStatusEntry,
 } from '@/lib/superAdminApi';
+
+function getGreeting(firstName: string, lastName: string): string {
+  const hour = new Date().getHours();
+  const time = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  return `${time}, ${firstName} ${lastName}`;
+}
 
 function formatNaira(value: number): string {
   return `₦${Math.round(value).toLocaleString('en-NG')}`;
@@ -75,6 +82,7 @@ function KpiCardSkeleton() {
 
 export default function SuperAdminDashboardPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [overview, setOverview] = useState<SuperAdminOverview | null>(null);
   const [crons, setCrons] = useState<CronStatusEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -118,7 +126,10 @@ export default function SuperAdminDashboardPage() {
   return (
     <div className="p-8 max-w-6xl">
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-gray-900 font-heading">Platform Dashboard</h1>
+        <h1 className="text-2xl font-semibold text-gray-900 font-heading">
+          {user ? getGreeting(user.first_name ?? 'Admin', user.last_name ?? '') : 'Platform Dashboard'}
+        </h1>
+        <p className="mt-1 text-sm text-gray-500">Platform Admin · Chronix Edu</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

@@ -21,6 +21,7 @@ const SUPER_ADMIN_NAV: NavItem[] = [
   { label: 'Support', href: '/super-admin/support' },
   { label: 'Health', href: '/super-admin/health' },
   { label: 'Audit Logs', href: '/super-admin/audit' },
+  { label: 'Platform Admins', href: '/super-admin/admins' },
 ];
 
 function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
