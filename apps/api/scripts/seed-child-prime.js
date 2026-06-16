@@ -154,7 +154,7 @@ async function main() {
   // ── 2. School ─────────────────────────────────────────────────────────────
   console.log('Step 2 — Creating Child Prime school...');
   const { rows: [school] } = await pg.query(
-    `INSERT INTO schools (name, slug, is_active) VALUES ('Child Prime','child-prime',true) RETURNING id`
+    `INSERT INTO schools (name, slug, is_active) VALUES ('Child Prime Onyx School','child-prime-onyx-school',true) RETURNING id`
   );
   const SCHOOL_ID = school.id;
   await pg.query(
@@ -165,7 +165,7 @@ async function main() {
      )`,
     [
       SCHOOL_ID,
-      JSON.stringify({ school_name: 'Child Prime', address: 'Lagos, Nigeria', phone: '', email: 'admin@childprime.edu.ng' }),
+      JSON.stringify({ school_name: 'Child Prime Onyx School', address: 'Lagos, Nigeria', phone: '', email: 'admin@childprimeonyx.edu.ng' }),
       JSON.stringify({
         grading_scale: [
           { label: 'A1', min: 75, max: 100, remark: 'Excellent'  },
