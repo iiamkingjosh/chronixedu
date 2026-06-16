@@ -81,38 +81,36 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    const userId = data?.user?.id || null;
+    const userId = data.user.id;
 
-    // fetch local user record
+    // fetch local user record by Supabase UUID — not by email, which may be shared across roles
     const pg = getPgClient();
     await pg.connect();
-    const r = await pg.query('SELECT id, school_id, role, title, email, password_hash FROM users WHERE email = $1', [email]);
+    const r = await pg.query('SELECT id, school_id, role, title, email, first_name, last_name FROM users WHERE id = $1', [userId]);
     await pg.end();
     const local = r.rows[0];
-    logger.debug('login_local_user_lookup', { found: !!local, email });
+    logger.debug('login_local_user_lookup', { found: !!local, userId });
     if (!local) {
       return res.status(500).json({
         success: false,
-        error: { code: 'USER_RECORD_MISSING', message: 'Local user record missing' },
+        error: { code: 'USER_RECORD_MISSING', message: 'Local user record missing. Contact support.' },
       });
     }
 
-    const passwordMatch = bcrypt.compareSync(password, local.password_hash);
-    logger.debug('login_password_match', { match: passwordMatch });
-
-    if (passwordMatch) {
-      const pg2 = getPgClient();
-      await pg2.connect();
-      await pg2.query('UPDATE users SET last_login_at = now() WHERE id = $1', [local.id]);
-      await pg2.end();
-    }
+    // Supabase already verified the password — update last login unconditionally
+    const pg2 = getPgClient();
+    await pg2.connect();
+    await pg2.query('UPDATE users SET last_login_at = now() WHERE id = $1', [local.id]);
+    await pg2.end();
 
     const payload = {
-      user_id: userId || local.id,
+      user_id: local.id,
       school_id: local.school_id,
       role: local.role,
       email: local.email,
-      title: local.title
+      title: local.title,
+      first_name: local.first_name,
+      last_name: local.last_name,
     };
 
     const token = jwt.sign(payload, process.env.JWT_SECRET || '', { expiresIn: '1h' });
