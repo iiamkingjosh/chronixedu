@@ -1981,4 +1981,84 @@ router.post(
   }
 );
 
+// ── GET /admins ──────────────────────────────────────────────────────────────
+// Lists all platform admin (super_admin) accounts.
+
+router.get(
+  '/admins',
+  ...guard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, email, first_name, last_name, created_at, last_login_at
+         FROM users
+         WHERE role = 'super_admin'
+         ORDER BY created_at ASC`
+      );
+      return res.json({ success: true, data: result.rows });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /admins ──────────────────────────────────────────────────────────────
+// Creates a new platform admin account (Supabase Auth + local users row).
+
+const createPlatformAdminSchema = z.object({
+  first_name: z.string().min(1),
+  last_name: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
+router.post(
+  '/admins',
+  ...guard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = createPlatformAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const { first_name, last_name, email, password } = parsed.data;
+
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { first_name, last_name, role: 'super_admin' },
+      });
+      if (authError) {
+        return res.status(400).json({ success: false, error: { code: 'AUTH_CREATE_FAILED', message: authError.message } });
+      }
+
+      const userId = authData.user.id;
+      const bcrypt = await import('bcryptjs');
+      const hashed = bcrypt.hashSync(password, 10);
+
+      await pool.query(
+        `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
+         VALUES ($1, NULL, $2, $3, 'super_admin', $4, $5)`,
+        [userId, email, hashed, first_name, last_name]
+      );
+
+      await pool.query(
+        `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
+         VALUES ($1, 'PLATFORM_ADMIN_CREATED', $2, $3, $4)`,
+        [
+          req.user!.user_id,
+          userId,
+          JSON.stringify({ email, first_name, last_name }),
+          req.ip ?? null,
+        ]
+      );
+
+      return res.status(201).json({ success: true, data: { user_id: userId, email } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 export default router;
