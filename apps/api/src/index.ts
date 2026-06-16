@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { initSentry, Sentry } from './config/sentry';
+initSentry(); // must be first
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -132,6 +134,10 @@ app.get('/health', async (_req, res) => {
     });
   }
 });
+
+// Sentry error handler must be before the custom error handler
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+app.use(Sentry.expressErrorHandler() as any);
 
 // Global error handler must be registered last
 app.use(errorHandler);

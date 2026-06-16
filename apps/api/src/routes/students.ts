@@ -20,7 +20,42 @@ import {
 import { findClassById } from '../db/queries/roster';
 import { logAudit } from '../db/queries/auditLog';
 import { generateTranscript } from '../services/transcriptService';
+import { sendEmail } from '../services/emailService';
 import pool from '../db/client';
+
+async function getSchoolName(schoolId: string): Promise<string> {
+  const r = await pool.query<{ name: string }>('SELECT name FROM schools WHERE id = $1', [schoolId]);
+  return r.rows[0]?.name ?? 'your school';
+}
+
+function welcomeEmailBody(
+  role: 'parent' | 'student',
+  name: string,
+  email: string,
+  tempPassword: string,
+  schoolName: string,
+  appUrl: string
+): string {
+  const portalLabel = role === 'parent' ? 'Parent Portal' : 'Student Portal';
+  return [
+    `Hello ${name},`,
+    '',
+    `You have been registered on Chronix Edu as a ${role} for ${schoolName}.`,
+    '',
+    'Your login credentials:',
+    `  Email:    ${email}`,
+    `  Password: ${tempPassword}`,
+    '',
+    `Log in here: ${appUrl}/login`,
+    '',
+    'IMPORTANT: Please change your password immediately after your first login.',
+    `Your ${portalLabel} gives you access to attendance, results, fees, and more.`,
+    '',
+    'If you did not expect this email, please contact your school administrator.',
+    '',
+    '— Chronix Edu',
+  ].join('\n');
+}
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -129,6 +164,22 @@ router.post(
         { ...studentData, passwordHash },
         parentsWithHashes
       );
+
+      // Send welcome emails to newly created parent accounts (fire-and-forget)
+      if (result.new_parents.length > 0) {
+        const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
+        getSchoolName(req.params.schoolId).then(schoolName => {
+          for (const p of result.new_parents) {
+            const parent = parentsWithHashes.find(ph => ph.email === p.email);
+            const name = parent ? `${parent.first_name} ${parent.last_name}` : p.email;
+            sendEmail(
+              p.email,
+              `Welcome to Chronix Edu — Your Parent Portal Access`,
+              welcomeEmailBody('parent', name, p.email, p.temp_password, schoolName, appUrl)
+            ).catch(() => {});
+          }
+        }).catch(() => {});
+      }
 
       return res.status(201).json({
         success: true,
@@ -581,6 +632,19 @@ router.post(
          VALUES ($1, $2, $3, $4)`,
         [parentUserId, studentId, relationship_type, is_primary_contact ?? false]
       );
+
+      // Send welcome email to newly created parent accounts (fire-and-forget)
+      if (isNewAccount && tempPassword !== null) {
+        const pw = tempPassword;
+        const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
+        getSchoolName(schoolId).then(schoolName => {
+          sendEmail(
+            email,
+            `Welcome to Chronix Edu — Your Parent Portal Access`,
+            welcomeEmailBody('parent', `${first_name} ${last_name}`, email, pw, schoolName, appUrl)
+          ).catch(() => {});
+        }).catch(() => {});
+      }
 
       return res.status(201).json({
         success: true,
