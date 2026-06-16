@@ -33,3 +33,7 @@ dist/
 # Editor
 .vscode/
 *.swp
+
+# Sensitive local docs — never commit
+chronixedu-test-credentials.html
+chronixedu-setup-instructions.html
