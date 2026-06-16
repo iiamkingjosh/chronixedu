@@ -14,6 +14,7 @@
     "lint:api": "npm --workspace=@chronixedu/api run lint",
     "lint": "npm run lint:web && npm run lint:api",
     "test": "jest --passWithNoTests",
+    "migrate": "npm --workspace=@chronixedu/api run migrate",
     "test:isolation": "jest --testPathPattern=apps/api/tests/ --passWithNoTests",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "node -e \"if(!process.env.CI && require('fs').existsSync('.git')) process.exit(1)\" || husky install"
@@ -21,9 +22,11 @@
   "dependencies": {
     "@sendgrid/mail": "^8.1.4",
     "@supabase/supabase-js": "^2.25.0",
+    "@types/helmet": "^0.0.48",
     "bcryptjs": "^2.4.3",
     "express-rate-limit": "^8.5.2",
     "handlebars": "^4.7.8",
+    "helmet": "^8.2.0",
     "jsonwebtoken": "^9.0.0",
     "multer": "^2.1.1",
     "node-cache": "^5.1.2",

@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
+import pool from './db/client';
 import { generalRateLimiter, authRateLimiter } from './middleware/rateLimit';
 import authRoutes from './routes/auth';
 import schoolsRoutes from './routes/schools';
@@ -45,7 +47,27 @@ const port = env.PORT;
 
 const allowedOrigins = ['http://localhost:3000', ...(env.CORS_ORIGIN ? [env.CORS_ORIGIN] : [])];
 
-app.use(cors({ origin: allowedOrigins }));
+app.use(helmet({
+  crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+    },
+  },
+}));
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true,
+}));
 app.use(express.json({
   verify: (req, _res, buf) => {
     (req as express.Request).rawBody = buf;
@@ -90,8 +112,25 @@ app.use('/api/schools', classCommentsRoutes);
 // must NOT have detectSupportSession applied.
 app.use('/api/super-admin', superAdminRoutes);
 
-app.get('/health', (_req, res) => {
-  res.json({ success: true, status: 'ok' });
+app.get('/health', async (_req, res) => {
+  const dbStart = Date.now();
+  try {
+    await pool.query('SELECT 1');
+    res.json({
+      success: true,
+      status: 'ok',
+      db: 'ok',
+      dbLatencyMs: Date.now() - dbStart,
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  } catch {
+    res.status(503).json({
+      success: false,
+      status: 'degraded',
+      db: 'error',
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  }
 });
 
 // Global error handler must be registered last
