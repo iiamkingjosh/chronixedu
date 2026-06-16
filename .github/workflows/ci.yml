@@ -59,3 +59,20 @@ jobs:
 
       - name: Run tests
         run: npm test
+
+  deploy:
+    name: Deploy to Railway
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Trigger Railway deploy
+        env:
+          DEPLOY_HOOK: ${{ secrets.RAILWAY_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "RAILWAY_DEPLOY_HOOK not configured — skipping deploy trigger"
+            exit 0
+          fi
+          curl -fsSX POST "$DEPLOY_HOOK"

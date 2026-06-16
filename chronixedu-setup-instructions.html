@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chronix Edu — Production Setup Instructions</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .page {
+      max-width: 860px;
+      margin: 32px auto;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+      overflow: hidden;
+    }
+    header {
+      background: linear-gradient(135deg, #1a56db 0%, #0e3a8a 100%);
+      color: #fff;
+      padding: 36px 48px 28px;
+    }
+    header h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+    header p { margin-top: 6px; opacity: 0.85; font-size: 13px; }
+    .badge {
+      display: inline-block;
+      margin-top: 12px;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.30);
+      border-radius: 20px;
+      padding: 3px 14px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .toc {
+      background: #f7f9fc;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 20px 48px;
+    }
+    .toc h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #718096; margin-bottom: 10px; }
+    .toc ol { padding-left: 18px; }
+    .toc li { margin-bottom: 3px; }
+    .toc a { color: #1a56db; text-decoration: none; font-size: 13px; }
+    .toc a:hover { text-decoration: underline; }
+    .body { padding: 36px 48px 48px; }
+    section { margin-bottom: 40px; }
+    h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #1a202c;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 8px;
+      margin-bottom: 18px;
+    }
+    h3 { font-size: 14px; font-weight: 600; color: #2d3748; margin: 18px 0 8px; }
+    p { margin-bottom: 10px; }
+    ul, ol { padding-left: 20px; margin-bottom: 10px; }
+    li { margin-bottom: 5px; }
+    code {
+      background: #edf2f7;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 12.5px;
+      color: #c53030;
+    }
+    pre {
+      background: #1a202c;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 16px 18px;
+      overflow-x: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.7;
+      margin: 10px 0 14px;
+    }
+    pre .comment { color: #718096; }
+    pre .key { color: #63b3ed; }
+    pre .val { color: #68d391; }
+    .step {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 14px;
+      align-items: flex-start;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      background: #1a56db;
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      margin-top: 2px;
+    }
+    .step-body { flex: 1; }
+    .callout {
+      border-left: 4px solid;
+      border-radius: 0 6px 6px 0;
+      padding: 12px 16px;
+      margin: 14px 0;
+      font-size: 13px;
+    }
+    .callout.info { border-color: #1a56db; background: #ebf4ff; }
+    .callout.warn { border-color: #d69e2e; background: #fffff0; }
+    .callout.danger { border-color: #e53e3e; background: #fff5f5; }
+    .callout.success { border-color: #38a169; background: #f0fff4; }
+    .callout strong { display: block; margin-bottom: 4px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 12px 0 16px;
+    }
+    th {
+      background: #f7f9fc;
+      border: 1px solid #e2e8f0;
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 600;
+      color: #4a5568;
+    }
+    td {
+      border: 1px solid #e2e8f0;
+      padding: 8px 12px;
+      vertical-align: top;
+    }
+    td:first-child { font-family: 'Courier New', monospace; font-size: 12px; color: #c53030; white-space: nowrap; }
+    tr:nth-child(even) td { background: #f7f9fc; }
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .tag.required { background: #fed7d7; color: #c53030; }
+    .tag.optional { background: #e9d8fd; color: #6b46c1; }
+    .tag.auto { background: #c6f6d5; color: #276749; }
+    footer {
+      background: #f7f9fc;
+      border-top: 1px solid #e2e8f0;
+      text-align: center;
+      padding: 18px 48px;
+      font-size: 12px;
+      color: #718096;
+    }
+    @media print {
+      body { background: #fff; }
+      .page { margin: 0; box-shadow: none; border-radius: 0; }
+      header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      pre { background: #1a202c !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .callout { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <h1>Chronix Edu — Production Setup Instructions</h1>
+    <p>External configuration steps required to fully activate all platform services.</p>
+    <span class="badge">Confidential — Internal Use Only</span>
+  </header>
+
+  <div class="toc">
+    <h2>Contents</h2>
+    <ol>
+      <li><a href="#overview">Overview</a></li>
+      <li><a href="#env-vars">Environment Variables Reference</a></li>
+      <li><a href="#sentry">Sentry Error Tracking</a></li>
+      <li><a href="#sendgrid">SendGrid Email Service</a></li>
+      <li><a href="#github-secrets">GitHub Repository Secrets</a></li>
+      <li><a href="#railway">Railway Deployment</a></li>
+      <li><a href="#custom-domain">Custom Domain &amp; DNS</a></li>
+      <li><a href="#supabase-backups">Supabase Backups</a></li>
+      <li><a href="#uptime">Uptime Monitoring</a></li>
+      <li><a href="#checklist">Final Go-Live Checklist</a></li>
+    </ol>
+  </div>
+
+  <div class="body">
+
+    <!-- OVERVIEW -->
+    <section id="overview">
+      <h2>1. Overview</h2>
+      <p>Chronix Edu is fully deployed on Railway (API + Web) backed by Supabase (Postgres + Auth). The codebase is complete and self-contained. The items in this document are <strong>external service configurations</strong> — secrets, DNS records, and third-party account setup — that cannot be automated from within the codebase.</p>
+      <p>Work through the sections in order. Each section tells you exactly what to create, where to paste it, and what to verify.</p>
+      <div class="callout info">
+        <strong>Who should do this?</strong>
+        A developer or DevOps person with admin access to: GitHub, Railway, Supabase, SendGrid, Sentry, and your DNS registrar.
+      </div>
+    </section>
+
+    <!-- ENV VARS REFERENCE -->
+    <section id="env-vars">
+      <h2>2. Environment Variables Reference</h2>
+      <p>These variables must be set in <strong>Railway</strong> (for both the API and Web services) and in <strong>GitHub Actions secrets</strong> for CI. Descriptions of each are below.</p>
+
+      <h3>API Service Variables</h3>
+      <table>
+        <tr><th>Variable</th><th>Description</th><th>Required?</th></tr>
+        <tr><td>DATABASE_URL</td><td>PostgreSQL connection string from Supabase → Settings → Database → Connection string (URI mode). Enable pgBouncer / connection pooling.</td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>JWT_SECRET</td><td>A long random string (min 64 chars) used to sign session tokens. Generate with: <code>openssl rand -hex 64</code></td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>SUPABASE_URL</td><td>Your Supabase project URL. Found in: Supabase Dashboard → Settings → API → Project URL.</td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>SUPABASE_SERVICE_ROLE_KEY</td><td>Service role secret key — bypasses RLS. Found in: Supabase Dashboard → Settings → API → service_role key. <strong>Keep secret.</strong></td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>CORS_ORIGIN</td><td>Your production web URL, e.g. <code>https://app.chronixedu.com</code>. Used to restrict CORS to your frontend only.</td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>SENDGRID_API_KEY</td><td>SendGrid API key with Mail Send permission. See Section 4.</td><td><span class="tag optional">Optional*</span></td></tr>
+        <tr><td>SENDGRID_FROM_EMAIL</td><td>Verified sender email, e.g. <code>noreply@chronixedu.com</code>. Must be verified in SendGrid.</td><td><span class="tag optional">Optional*</span></td></tr>
+        <tr><td>SENTRY_DSN</td><td>Sentry Data Source Name for the API service. See Section 3.</td><td><span class="tag optional">Optional*</span></td></tr>
+        <tr><td>NODE_ENV</td><td>Set to <code>production</code> in Railway production environment.</td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>PORT</td><td>Railway sets this automatically. Do not override.</td><td><span class="tag auto">Auto</span></td></tr>
+      </table>
+
+      <h3>Web (Next.js) Service Variables</h3>
+      <table>
+        <tr><th>Variable</th><th>Description</th><th>Required?</th></tr>
+        <tr><td>NEXT_PUBLIC_API_URL</td><td>URL of your deployed API service, e.g. <code>https://api.chronixedu.com</code></td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>NEXT_PUBLIC_SUPABASE_URL</td><td>Same as <code>SUPABASE_URL</code> above — used client-side for Supabase Auth.</td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>NEXT_PUBLIC_SUPABASE_ANON_KEY</td><td>Supabase anon/publishable key. Found in: Supabase Dashboard → Settings → API → anon key. Safe to expose.</td><td><span class="tag required">Required</span></td></tr>
+        <tr><td>NEXT_PUBLIC_SENTRY_DSN</td><td>Sentry DSN for the frontend (can be same DSN as API or a separate project). See Section 3.</td><td><span class="tag optional">Optional*</span></td></tr>
+        <tr><td>NODE_ENV</td><td>Set to <code>production</code>.</td><td><span class="tag required">Required</span></td></tr>
+      </table>
+
+      <p style="font-size:12px;color:#718096;">* Optional = the feature degrades gracefully if not set. Emails won't send without SendGrid; errors won't be tracked without Sentry. Both are strongly recommended for production.</p>
+    </section>
+
+    <!-- SENTRY -->
+    <section id="sentry">
+      <h2>3. Sentry Error Tracking</h2>
+      <div class="callout info">
+        <strong>What this does:</strong>
+        Captures unhandled exceptions and API errors in real time. You get an alert the moment something breaks in production — before users report it.
+      </div>
+
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        Go to <strong>sentry.io</strong> and sign in (or create a free account).
+      </div></div>
+
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Create a new project: <strong>Organization → Projects → Create Project</strong>.<br/>
+        Choose platform: <strong>Node.js / Express</strong> for the API. Name it <code>chronixedu-api</code>.
+      </div></div>
+
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        Copy the <strong>DSN</strong> shown after project creation (looks like <code>https://abc123@o12345.ingest.sentry.io/789</code>).
+      </div></div>
+
+      <div class="step"><div class="step-num">4</div><div class="step-body">
+        Repeat steps 2–3 for a second project: <strong>Next.js</strong>, name it <code>chronixedu-web</code>.
+      </div></div>
+
+      <div class="step"><div class="step-num">5</div><div class="step-body">
+        Add the DSNs as Railway environment variables:
+        <pre>
+<span class="comment"># API service</span>
+<span class="key">SENTRY_DSN</span>=<span class="val">https://&lt;api-dsn&gt;@o&lt;id&gt;.ingest.sentry.io/&lt;project&gt;</span>
+
+<span class="comment"># Web service</span>
+<span class="key">NEXT_PUBLIC_SENTRY_DSN</span>=<span class="val">https://&lt;web-dsn&gt;@o&lt;id&gt;.ingest.sentry.io/&lt;project&gt;</span></pre>
+      </div></div>
+
+      <div class="step"><div class="step-num">6</div><div class="step-body">
+        Also add both DSNs to GitHub Actions secrets (see Section 5) so CI test runs can report errors too.
+      </div></div>
+
+      <div class="callout success">
+        <strong>Verify:</strong> Deploy the app, then deliberately visit a non-existent API route. You should see an event appear in the Sentry dashboard within 30 seconds.
+      </div>
+    </section>
+
+    <!-- SENDGRID -->
+    <section id="sendgrid">
+      <h2>4. SendGrid Email Service</h2>
+      <div class="callout info">
+        <strong>What this does:</strong>
+        Sends welcome emails to new parent and student accounts with their login credentials and a temporary password.
+      </div>
+
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        Go to <strong>sendgrid.com</strong> and sign in (or create a free account — 100 emails/day free).
+      </div></div>
+
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Verify your sender domain or email: <strong>Settings → Sender Authentication → Domain Authentication</strong>.<br/>
+        Recommended: authenticate your full domain (e.g., <code>chronixedu.com</code>) rather than a single email — this improves deliverability.
+      </div></div>
+
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        Create an API key: <strong>Settings → API Keys → Create API Key</strong>.<br/>
+        Permission: <strong>Restricted Access → Mail Send → Full Access</strong>. Copy the key immediately — it's shown only once.
+      </div></div>
+
+      <div class="step"><div class="step-num">4</div><div class="step-body">
+        Add to Railway environment variables (API service only):
+        <pre>
+<span class="key">SENDGRID_API_KEY</span>=<span class="val">SG.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</span>
+<span class="key">SENDGRID_FROM_EMAIL</span>=<span class="val">noreply@chronixedu.com</span></pre>
+      </div></div>
+
+      <div class="callout warn">
+        <strong>DNS records for domain authentication:</strong>
+        SendGrid will give you CNAME records to add to your DNS. Add all of them — this is required for emails to land in the inbox and not spam.
+      </div>
+
+      <div class="callout success">
+        <strong>Verify:</strong> Register a test student with a parent email you control. The parent should receive a welcome email with login credentials within 1–2 minutes.
+      </div>
+    </section>
+
+    <!-- GITHUB SECRETS -->
+    <section id="github-secrets">
+      <h2>5. GitHub Repository Secrets</h2>
+      <p>These secrets are used by the GitHub Actions CI pipeline (<code>.github/workflows/ci.yml</code>) for running tests and triggering Railway deploys.</p>
+
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        Go to your GitHub repository → <strong>Settings → Secrets and variables → Actions → New repository secret</strong>.
+      </div></div>
+
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Add each of the following secrets:
+        <table>
+          <tr><th>Secret Name</th><th>Value</th></tr>
+          <tr><td>DATABASE_URL</td><td>Your Supabase PostgreSQL connection string (same as Railway)</td></tr>
+          <tr><td>JWT_SECRET</td><td>Same JWT secret as Railway — must match exactly</td></tr>
+          <tr><td>SUPABASE_URL</td><td>Your Supabase project URL</td></tr>
+          <tr><td>SUPABASE_PUBLISHABLE_KEY</td><td>Supabase anon/publishable key</td></tr>
+          <tr><td>SUPABASE_SERVICE_ROLE_KEY</td><td>Supabase service role key</td></tr>
+          <tr><td>SENTRY_DSN</td><td>Sentry API project DSN</td></tr>
+          <tr><td>NEXT_PUBLIC_SENTRY_DSN</td><td>Sentry Web project DSN</td></tr>
+          <tr><td>RAILWAY_DEPLOY_HOOK</td><td>Railway deploy hook URL — see Section 6</td></tr>
+        </table>
+      </div></div>
+
+      <div class="callout info">
+        <strong>Why duplicate with Railway?</strong>
+        Railway variables are only available to running services. GitHub Actions needs its own copies to run tests in the CI environment. The values must be identical.
+      </div>
+    </section>
+
+    <!-- RAILWAY -->
+    <section id="railway">
+      <h2>6. Railway Deployment</h2>
+
+      <h3>6.1 Get the Deploy Hook URL</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        In Railway: open your project → select your <strong>API or Web service</strong> → <strong>Settings → Deploy → Deploy Hook</strong>.
+      </div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Click <strong>Generate webhook</strong>. Copy the URL (looks like <code>https://backboard.railway.app/webhooks/deploy/xxx</code>).
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        Paste it as the GitHub secret <code>RAILWAY_DEPLOY_HOOK</code> (Section 5). From now on, every push to <code>main</code> that passes CI will trigger a Railway redeploy automatically.
+      </div></div>
+
+      <div class="callout warn">
+        <strong>One hook per service:</strong>
+        Railway generates one hook per service. If you have both an API and Web service, you may need to chain both hooks in the CI step, or use Railway's GitHub integration instead (which auto-deploys on push without needing a hook). Check your Railway plan for available options.
+      </div>
+
+      <h3>6.2 Set All Environment Variables in Railway</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        In Railway: select each service → <strong>Variables</strong> tab → add all variables from Section 2.
+      </div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Set <code>NODE_ENV=production</code> on both services.
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        On the Web service, set <code>NEXT_PUBLIC_API_URL</code> to the Railway-assigned URL of your API service (or your custom domain if already set up).
+      </div></div>
+
+      <h3>6.3 Run Database Migrations</h3>
+      <div class="callout danger">
+        <strong>Do this before first launch.</strong>
+        The migration runner applies all pending SQL migrations to your production database. Run it once after initial deploy, then it's automatic on subsequent deploys.
+      </div>
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        In Railway: open the API service → <strong>Settings → Deploy → Start Command</strong>.<br/>
+        Temporarily change to: <code>npm --workspace=@chronixedu/api run migrate &amp;&amp; npm --workspace=@chronixedu/api start</code><br/>
+        (Or run the migrate command once manually via Railway's shell, then revert.)
+      </div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Alternatively, run migrations locally against the production DB:
+        <pre>DATABASE_URL="your-production-db-url" npm run migrate</pre>
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        Verify: check Supabase Table Editor — you should see a <code>schema_migrations</code> table with all migration filenames listed.
+      </div></div>
+    </section>
+
+    <!-- CUSTOM DOMAIN -->
+    <section id="custom-domain">
+      <h2>7. Custom Domain &amp; DNS</h2>
+
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        In Railway: select your Web service → <strong>Settings → Networking → Custom Domain</strong> → enter your domain (e.g., <code>app.chronixedu.com</code>).
+      </div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Railway will show you a <strong>CNAME target</strong> (e.g., <code>xyz.up.railway.app</code>).
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        In your DNS registrar (e.g., Cloudflare, Namecheap), add:
+        <pre>
+<span class="comment"># Web frontend</span>
+<span class="key">Type</span>:  CNAME
+<span class="key">Name</span>:  app
+<span class="key">Value</span>: <span class="val">&lt;railway-cname-target&gt;</span>
+<span class="key">TTL</span>:   Auto
+
+<span class="comment"># API (if using custom domain for API too)</span>
+<span class="key">Type</span>:  CNAME
+<span class="key">Name</span>:  api
+<span class="key">Value</span>: <span class="val">&lt;railway-api-cname-target&gt;</span>
+<span class="key">TTL</span>:   Auto</pre>
+      </div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">
+        Wait for DNS propagation (usually 5–30 minutes). Railway automatically provisions an SSL certificate via Let's Encrypt — no action needed.
+      </div></div>
+      <div class="step"><div class="step-num">5</div><div class="step-body">
+        Update your Railway <strong>Web</strong> service: set <code>NEXT_PUBLIC_API_URL=https://api.chronixedu.com</code> (your actual API domain).<br/>
+        Update your Railway <strong>API</strong> service: set <code>CORS_ORIGIN=https://app.chronixedu.com</code>.
+      </div></div>
+
+      <div class="callout success">
+        <strong>Verify:</strong> Visit <code>https://app.chronixedu.com</code> — should load with a padlock. Visit <code>https://api.chronixedu.com/health</code> — should return JSON with <code>"status": "ok"</code>.
+      </div>
+    </section>
+
+    <!-- SUPABASE BACKUPS -->
+    <section id="supabase-backups">
+      <h2>8. Supabase Backups</h2>
+
+      <div class="callout info">
+        <strong>What Supabase provides by default:</strong>
+        Free plan: no automated backups. Pro plan ($25/mo): daily backups retained for 7 days. Enterprise: point-in-time recovery (PITR).
+      </div>
+
+      <h3>Option A — Upgrade to Supabase Pro (Recommended for production)</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        Supabase Dashboard → <strong>Settings → Billing → Upgrade to Pro</strong>.
+      </div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Once on Pro: <strong>Settings → Database → Backups</strong> — daily backups appear here automatically. You can download or restore from this panel.
+      </div></div>
+
+      <h3>Option B — Manual pg_dump via Railway Cron (Free alternative)</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        Add a Railway Cron job service with schedule <code>0 2 * * *</code> (2 AM daily).
+      </div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Run script:
+        <pre>pg_dump "$DATABASE_URL" | gzip > /backups/chronixedu-$(date +%Y%m%d).sql.gz</pre>
+        Mount a Railway volume to <code>/backups</code> for persistence.
+      </div></div>
+
+      <div class="callout warn">
+        <strong>Test your restore procedure</strong> before going live. A backup you've never restored is an untested backup.
+        <br/>To test: create a throwaway Supabase project, restore the dump, verify data integrity.
+      </div>
+    </section>
+
+    <!-- UPTIME MONITORING -->
+    <section id="uptime">
+      <h2>9. Uptime Monitoring</h2>
+
+      <div class="callout info">
+        <strong>What this does:</strong>
+        Pings your <code>/health</code> endpoint every 1–5 minutes and alerts you (email/SMS/Slack) if the API goes down. The <code>/health</code> endpoint is already built — it checks both the server and the database connection.
+      </div>
+
+      <h3>Using UptimeRobot (Free)</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body">
+        Go to <strong>uptimerobot.com</strong> → Create free account → <strong>Add New Monitor</strong>.
+      </div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body">
+        Settings:
+        <pre>
+<span class="key">Monitor Type</span>:  <span class="val">HTTP(s)</span>
+<span class="key">Friendly Name</span>: <span class="val">Chronix Edu API</span>
+<span class="key">URL</span>:           <span class="val">https://api.chronixedu.com/health</span>
+<span class="key">Monitoring Interval</span>: <span class="val">5 minutes</span></pre>
+      </div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body">
+        Under <strong>Alert Contacts</strong>: add your email and optionally a Slack webhook URL.
+      </div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body">
+        Add a second monitor for the frontend:
+        <pre>
+<span class="key">URL</span>: <span class="val">https://app.chronixedu.com</span>
+<span class="key">Expected status code</span>: <span class="val">200</span></pre>
+      </div></div>
+
+      <div class="callout success">
+        <strong>Verify:</strong> UptimeRobot will send a test alert when you first save the monitor. Confirm you receive it.
+      </div>
+    </section>
+
+    <!-- CHECKLIST -->
+    <section id="checklist">
+      <h2>10. Final Go-Live Checklist</h2>
+      <p>Work through this in order before announcing the platform to users.</p>
+
+      <h3>Infrastructure</h3>
+      <ul>
+        <li>☐ Railway API service deployed and healthy (<code>/health</code> returns <code>200 ok</code>)</li>
+        <li>☐ Railway Web service deployed and loading</li>
+        <li>☐ All environment variables set on both services</li>
+        <li>☐ Database migrations run — <code>schema_migrations</code> table shows all entries</li>
+        <li>☐ Custom domains configured, SSL certificates active (padlock visible)</li>
+        <li>☐ CORS origin matches your production web domain exactly</li>
+      </ul>
+
+      <h3>External Services</h3>
+      <ul>
+        <li>☐ Sentry projects created, DSNs configured, test error received</li>
+        <li>☐ SendGrid API key added, sender domain verified, test welcome email received</li>
+        <li>☐ Railway deploy hook added to GitHub secrets</li>
+        <li>☐ GitHub Actions CI passing on main branch (check Actions tab)</li>
+        <li>☐ UptimeRobot monitors active and alert email received</li>
+        <li>☐ Supabase backups enabled (Pro plan) or manual cron configured</li>
+      </ul>
+
+      <h3>Functional Smoke Test</h3>
+      <ul>
+        <li>☐ Super admin can log in</li>
+        <li>☐ Super admin can create a school</li>
+        <li>☐ Principal / Admin can log in to school dashboard</li>
+        <li>☐ Registrar can add a student + parent — welcome email arrives</li>
+        <li>☐ Parent can log in with temporary password</li>
+        <li>☐ Teacher can take attendance and enter scores</li>
+        <li>☐ Report card generation produces a PDF</li>
+        <li>☐ Fee invoice creation and payment recording work</li>
+        <li>☐ <code>/health</code> shows <code>db: "ok"</code> with a latency reading</li>
+      </ul>
+
+      <h3>Security</h3>
+      <ul>
+        <li>☐ No <code>.env</code> files committed to git (<code>git log --all -- '*.env'</code> returns nothing)</li>
+        <li>☐ <code>chronixedu-test-credentials.html</code> NOT committed to git</li>
+        <li>☐ Supabase service role key is NOT exposed in any client-side code</li>
+        <li>☐ Response headers include <code>X-Frame-Options: SAMEORIGIN</code> and <code>Strict-Transport-Security</code></li>
+      </ul>
+
+      <div class="callout success">
+        <strong>You're live!</strong>
+        Once all boxes are checked, the platform is production-ready. Share the URL with your school administrators.
+      </div>
+    </section>
+
+  </div>
+
+  <footer>
+    Chronix Edu &mdash; Production Setup Instructions &mdash; Prepared June 2026 &mdash; Internal use only. Do not share publicly.
+  </footer>
+
+</div>
+</body>
+</html>
