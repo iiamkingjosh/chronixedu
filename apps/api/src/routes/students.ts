@@ -498,6 +498,107 @@ router.post(
   }
 );
 
+// ── POST /:schoolId/students/:studentId/parents ───────────────────────────────
+
+const addParentSchema = z.object({
+  email:              z.string().email(),
+  first_name:         z.string().min(1).max(100),
+  last_name:          z.string().min(1).max(100),
+  phone:              z.string().max(30).optional(),
+  relationship_type:  z.string().min(1).max(50),
+  is_primary_contact: z.boolean().optional().default(false),
+});
+
+router.post(
+  '/:schoolId/students/:studentId/parents',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'registrar'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = addParentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const { schoolId, studentId } = req.params;
+      const { email, first_name, last_name, phone, relationship_type, is_primary_contact } = parsed.data;
+
+      const student = await findStudentById(studentId, schoolId);
+      if (!student) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
+      }
+
+      const existingUser = await pool.query<{ id: string; role: string }>(
+        `SELECT id, role FROM users WHERE email = $1`, [email]
+      );
+
+      let parentUserId: string;
+      let tempPassword: string | null = null;
+      let isNewAccount = false;
+
+      if (existingUser.rows.length > 0) {
+        const existing = existingUser.rows[0];
+        if (existing.role !== 'parent') {
+          return res.status(409).json({ success: false, error: { code: 'CONFLICT', message: 'A non-parent account already exists with this email' } });
+        }
+        parentUserId = existing.id;
+      } else {
+        isNewAccount = true;
+        const rawPassword = randomBytes(8).toString('hex');
+        tempPassword = rawPassword;
+        const passwordHash = hashSync(rawPassword, 10);
+
+        const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password: rawPassword,
+          email_confirm: true,
+        });
+
+        if (authError || !authUser.user) {
+          return res.status(500).json({ success: false, error: { code: 'AUTH_ERROR', message: authError?.message ?? 'Failed to create auth user' } });
+        }
+
+        parentUserId = authUser.user.id;
+
+        await pool.query(
+          `INSERT INTO users (id, school_id, email, first_name, last_name, phone, role, password_hash)
+           VALUES ($1, $2, $3, $4, $5, $6, 'parent', $7)`,
+          [parentUserId, schoolId, email, first_name, last_name, phone ?? null, passwordHash]
+        );
+      }
+
+      const alreadyLinked = await pool.query(
+        `SELECT id FROM parent_students WHERE parent_id = $1 AND student_id = $2`,
+        [parentUserId, studentId]
+      );
+      if (alreadyLinked.rows.length > 0) {
+        return res.status(409).json({ success: false, error: { code: 'ALREADY_LINKED', message: 'This parent is already linked to this student' } });
+      }
+
+      await pool.query(
+        `INSERT INTO parent_students (parent_id, student_id, relationship_type, is_primary_contact)
+         VALUES ($1, $2, $3, $4)`,
+        [parentUserId, studentId, relationship_type, is_primary_contact ?? false]
+      );
+
+      return res.status(201).json({
+        success: true,
+        data: {
+          parent_id: parentUserId,
+          email,
+          first_name,
+          last_name,
+          is_new_account: isNewAccount,
+          temp_password: tempPassword,
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 // ── POST /:schoolId/students/:studentId/transcript ────────────────────────────
 
 router.post(
