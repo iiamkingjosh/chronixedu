@@ -333,14 +333,14 @@ export default function AcademicStructurePage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-8">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 mb-1">Academic Structure</h1>
           <p className="text-sm text-gray-500">Manage sessions and terms</p>
         </div>
         <button
           onClick={() => setShowCreateSession(true)}
-          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700"
+          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 self-start sm:self-auto"
         >
           + New Session
         </button>

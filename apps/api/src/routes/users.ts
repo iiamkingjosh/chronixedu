@@ -51,7 +51,10 @@ const patchUserSchema = z.object({
   title:      z.string().max(20).optional().nullable(),
 }).refine(obj => Object.keys(obj).length > 0, { message: 'At least one field is required' });
 
-const statusSchema = z.object({ is_active: z.boolean() });
+const statusSchema = z.object({
+  is_active: z.boolean(),
+  reason: z.string().min(10, 'Reason must be at least 10 characters'),
+});
 
 // ── Middleware: super_admin or the school's own principal ──────────────────────
 
@@ -215,11 +218,11 @@ router.patch(
       await logAudit({
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
-        actionType: parsed.data.is_active ? 'USER_REACTIVATE' : 'USER_DEACTIVATE',
+        actionType: parsed.data.is_active ? 'USER_REACTIVATED' : 'USER_SUSPENDED',
         entity: 'users',
         entityId: existing.id,
         oldValue: { is_active: existing.is_active },
-        newValue: { is_active: updated.is_active },
+        newValue: { is_active: updated.is_active, reason: parsed.data.reason },
       });
 
       return res.json({ success: true, data: updated });

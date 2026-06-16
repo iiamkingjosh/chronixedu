@@ -148,7 +148,7 @@ function ThirtyDayCalendar({ schoolId, studentId, termId }: { schoolId: string; 
 
   return (
     <div className="py-3">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-2">
         <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Last 30 days</p>
         {history && (
           <p className="text-xs text-gray-500">

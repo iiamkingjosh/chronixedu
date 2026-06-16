@@ -271,11 +271,11 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">Classes are used to group students and assign teachers and subjects.</p>
         <button
           onClick={() => setFormTarget({ cls: null })}
-          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -290,6 +290,7 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
         <p className="text-sm text-gray-500">No classes have been created yet.</p>
       ) : (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
@@ -320,6 +321,7 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -448,11 +450,11 @@ function SubjectsTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">Subjects are taught by teachers and assessed against students per term.</p>
         <button
           onClick={() => setFormTarget({ subject: null })}
-          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -467,6 +469,7 @@ function SubjectsTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
         <p className="text-sm text-gray-500">No subjects have been created yet.</p>
       ) : (
         <div className="border border-gray-200 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
@@ -492,6 +495,7 @@ function SubjectsTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
 
@@ -720,6 +724,7 @@ function AssignmentsTab({ schoolId, show }: { schoolId: string; show: ToastFn })
           ) : assignments.length === 0 ? (
             <p className="px-5 py-4 text-sm text-gray-500">No class or subject assignments for the current term.</p>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                 <tr>
@@ -740,6 +745,7 @@ function AssignmentsTab({ schoolId, show }: { schoolId: string; show: ToastFn })
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}

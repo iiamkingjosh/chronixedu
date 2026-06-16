@@ -15,8 +15,9 @@ export function getDefaultDashboardPath(role: string): string {
     case 'bursar':
       return '/bursar/fee-structures';
     case 'principal':
-    case 'super_admin':
       return '/principal/dashboard';
+    case 'super_admin':
+      return '/super-admin/dashboard';
     case 'parent':
       return '/parent/dashboard';
     case 'student':

@@ -179,6 +179,7 @@ function CompRows({ fields, append, remove, control, register, errors, total, is
   return (
     <div className="space-y-3">
       <div className="border border-gray-200 rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -244,6 +245,7 @@ function CompRows({ fields, append, remove, control, register, errors, total, is
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {!isLocked && (
@@ -371,7 +373,7 @@ function CreateModal({
         {/* Scope */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Scope</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {SCOPES.map(s => (
               <label
                 key={s}
@@ -811,7 +813,7 @@ export default function AssessmentConfigPage() {
       )}
 
       {/* Page header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-900 mb-1">Assessment Configuration</h1>
           <p className="text-sm text-gray-500">
@@ -838,6 +840,7 @@ export default function AssessmentConfigPage() {
             No configurations yet. Create one to define how scores are structured for a term.
           </div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -881,6 +884,7 @@ export default function AssessmentConfigPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

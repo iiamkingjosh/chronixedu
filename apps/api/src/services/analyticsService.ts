@@ -9,6 +9,11 @@ import {
 } from '../db/queries/analytics';
 import { getCollectionSummary } from '../db/queries/fees';
 import { logger } from '../config/logger';
+import { registerCron, markCronRun } from './cronTracker';
+
+const CRON_NAME = 'nightly-analytics-snapshot';
+
+registerCron(CRON_NAME, '0 2 * * *', 'Generates nightly school analytics snapshots for every school');
 
 function todayDateString(): string {
   return new Date().toISOString().slice(0, 10);
@@ -52,9 +57,13 @@ let task: cron.ScheduledTask | null = null;
 export function startAnalyticsCron(): void {
   if (task) return;
   task = cron.schedule('0 2 * * *', () => {
-    runNightlyAnalyticsSnapshot().catch(err => {
-      logger.error('analytics_cron_error', { error: err instanceof Error ? err.message : err });
-    });
+    runNightlyAnalyticsSnapshot()
+      .then(() => markCronRun(CRON_NAME, 'success'))
+      .catch(err => {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('analytics_cron_error', { error: message });
+        markCronRun(CRON_NAME, 'error', message);
+      });
   });
 }
 

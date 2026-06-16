@@ -220,7 +220,7 @@ export default function PromotionsPage() {
 
       {/* Session selectors */}
       <div className="card p-6 mb-6">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">From session (ending)</label>
             <select value={fromSessionId} onChange={e => setFromSessionId(e.target.value)} className={inputClass}>
@@ -282,6 +282,7 @@ export default function PromotionsPage() {
         ) : visibleStudents.length === 0 ? (
           <p className="text-sm text-gray-400 italic px-6 py-8 text-center">No students found for this session.</p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
               <tr>
@@ -333,6 +334,7 @@ export default function PromotionsPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

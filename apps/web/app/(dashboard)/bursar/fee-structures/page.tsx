@@ -75,12 +75,12 @@ export default function FeeStructuresPage() {
     <div className="max-w-5xl mx-auto p-8">
       <ToastBanner toast={toast} />
 
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Fee Structures</h1>
           <p className="text-sm text-gray-500 mt-1">Configure fee components and generate invoices for a term.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => setShowGenerateModal(true)}
@@ -139,6 +139,7 @@ export default function FeeStructuresPage() {
       {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
       <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -174,6 +175,7 @@ export default function FeeStructuresPage() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {showAddModal && termId && (

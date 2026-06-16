@@ -25,10 +25,14 @@ import feesRoutes from './routes/fees';
 import analyticsRoutes from './routes/analytics';
 import timetableRoutes from './routes/timetable';
 import classCommentsRoutes from './routes/classComments';
+import superAdminRoutes from './routes/superAdmin';
+import { detectSupportSession } from './middleware/detectSupportSession';
 import { closeReportCardBrowser } from './services/reportCardService';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationWorker';
 import { startAnalyticsCron, stopAnalyticsCron } from './services/analyticsService';
 import { startFeeReminderCron, stopFeeReminderCron } from './services/feeReminderService';
+import { startSubscriptionCron, stopSubscriptionCron } from './services/subscriptionService';
+import { startPlatformAnalyticsCron, stopPlatformAnalyticsCron } from './services/platformAnalyticsService';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { validateEnv } from './config/env';
@@ -55,6 +59,10 @@ app.use('/api',      generalRateLimiter);
 
 // Routes
 app.use('/api/auth',    authRoutes);
+
+// Support session impersonation — must be before school-level routes
+app.use('/api/schools', detectSupportSession);
+
 app.use('/api/schools', schoolsRoutes);
 app.use('/api/schools', sessionsRoutes);
 app.use('/api/schools', rosterRoutes);
@@ -78,6 +86,10 @@ app.use('/api/schools', analyticsRoutes);
 app.use('/api/schools', timetableRoutes);
 app.use('/api/schools', classCommentsRoutes);
 
+// Super admin platform routes — guarded by requireRole('super_admin'),
+// must NOT have detectSupportSession applied.
+app.use('/api/super-admin', superAdminRoutes);
+
 app.get('/health', (_req, res) => {
   res.json({ success: true, status: 'ok' });
 });
@@ -92,10 +104,14 @@ const server = app.listen(port, () => {
 startNotificationWorker();
 startAnalyticsCron();
 startFeeReminderCron();
+startSubscriptionCron();
+startPlatformAnalyticsCron();
 
 process.on('SIGTERM', () => {
   stopNotificationWorker();
   stopAnalyticsCron();
   stopFeeReminderCron();
+  stopSubscriptionCron();
+  stopPlatformAnalyticsCron();
   closeReportCardBrowser().finally(() => server.close());
 });

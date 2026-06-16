@@ -7,6 +7,11 @@ import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notific
 import { sendEmail } from './emailService';
 import { sendTermiiSms } from './termiiService';
 import { logger } from '../config/logger';
+import { registerCron, markCronRun } from './cronTracker';
+
+const CRON_NAME = 'weekly-fee-reminders';
+
+registerCron(CRON_NAME, '0 8 * * 1', 'Sends weekly fee payment reminders to parents with outstanding balances');
 
 const REMINDER_TYPE = 'fee_reminder';
 
@@ -74,9 +79,13 @@ let task: cron.ScheduledTask | null = null;
 export function startFeeReminderCron(): void {
   if (task) return;
   task = cron.schedule('0 8 * * 1', () => {
-    runFeeReminders().catch(err => {
-      logger.error('fee_reminder_cron_error', { error: err instanceof Error ? err.message : err });
-    });
+    runFeeReminders()
+      .then(() => markCronRun(CRON_NAME, 'success'))
+      .catch(err => {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('fee_reminder_cron_error', { error: message });
+        markCronRun(CRON_NAME, 'error', message);
+      });
   });
 }
 

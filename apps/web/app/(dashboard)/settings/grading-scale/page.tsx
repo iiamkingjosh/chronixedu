@@ -206,9 +206,9 @@ export default function GradingScalePage() {
       )}
 
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto mb-6">
           {/* Table header */}
-          <div className="grid grid-cols-[80px_80px_80px_1fr_1fr_40px] gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
+          <div className="grid grid-cols-[80px_80px_80px_1fr_1fr_40px] gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200 min-w-[560px]">
             {['Grade', 'Min', 'Max', 'Label', 'Remark', ''].map((h, i) => (
               <span key={i} className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</span>
             ))}
@@ -217,7 +217,7 @@ export default function GradingScalePage() {
           {/* Rows */}
           <div className="divide-y divide-gray-100">
             {fields.map((field, index) => (
-              <div key={field.id} className="grid grid-cols-[80px_80px_80px_1fr_1fr_40px] gap-3 px-5 py-3 items-start">
+              <div key={field.id} className="grid grid-cols-[80px_80px_80px_1fr_1fr_40px] gap-3 px-5 py-3 items-start min-w-[560px]">
                 {/* Grade */}
                 <div>
                   <input

@@ -110,7 +110,7 @@ export default function StudentDashboardPage() {
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Academic Overview</h2>
         {data.academic ? (
-          <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
             <div>
               <p className="text-2xl font-bold text-[#003366]">{data.academic.overall_average}</p>
               <p className="text-xs text-gray-500 mt-1">Average</p>

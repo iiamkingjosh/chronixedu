@@ -45,3 +45,26 @@ export function requireRole(...roles: string[]) {
     return next();
   };
 }
+
+export function requireSuperAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void | Response {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      error: { code: 'UNAUTHORIZED', message: 'Not authenticated' },
+    });
+  }
+  if (req.user.role !== 'super_admin') {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Super admin access required'
+      },
+    });
+  }
+  return next();
+}

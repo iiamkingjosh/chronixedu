@@ -194,7 +194,7 @@ export default function ParentFeesPage() {
                 {STATUS_LABELS[invoice.status]}
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-3 text-center mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center mb-4">
               <div>
                 <p className="text-lg font-bold text-[#003366]">{formatCurrency(invoice.total_amount)}</p>
                 <p className="text-xs text-gray-500 mt-1">Total</p>

@@ -225,7 +225,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         {step === 1 && (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="First name" error={errors.first_name?.message}>
                 <input {...register('first_name')} className={inputClass} />
               </Field>
@@ -233,7 +233,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
                 <input {...register('last_name')} className={inputClass} />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Email (optional)" error={errors.email?.message}>
                 <input {...register('email')} type="email" className={inputClass} />
               </Field>
@@ -241,7 +241,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
                 <input {...register('phone')} className={inputClass} />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Date of birth (optional)" error={errors.dob?.message}>
                 <input {...register('dob')} type="date" className={inputClass} />
               </Field>
@@ -256,7 +256,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
             <Field label="Address (optional)" error={errors.address?.message}>
               <textarea {...register('address')} rows={2} className={inputClass} />
             </Field>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Blood group (optional)" error={errors.blood_group?.message}>
                 <input {...register('blood_group')} className={inputClass} placeholder="O+" />
               </Field>
@@ -305,7 +305,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
                       <p className="text-sm font-medium text-gray-700">Parent / Guardian {idx + 1}</p>
                       <button type="button" onClick={() => remove(idx)} className="text-xs font-medium text-red-600 hover:text-red-800 transition-colors duration-200">Remove</button>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <Field label="First name" error={errors.parents?.[idx]?.first_name?.message}>
                         <input {...register(`parents.${idx}.first_name`)} className={inputClass} />
                       </Field>
@@ -313,7 +313,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
                         <input {...register(`parents.${idx}.last_name`)} className={inputClass} />
                       </Field>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <Field label="Email" error={errors.parents?.[idx]?.email?.message}>
                         <input {...register(`parents.${idx}.email`)} type="email" className={inputClass} />
                       </Field>
@@ -321,7 +321,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
                         <input {...register(`parents.${idx}.phone`)} className={inputClass} />
                       </Field>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 items-end">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                       <Field label="Relationship" error={errors.parents?.[idx]?.relationship_type?.message}>
                         <input {...register(`parents.${idx}.relationship_type`)} className={inputClass} placeholder="Father, Mother, Guardian…" />
                       </Field>
@@ -436,11 +436,11 @@ export default function StudentRegistrationPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
         <h1 className="text-xl font-semibold text-gray-900">Student Registration</h1>
         <button
           onClick={() => setRegisterOpen(true)}
-          className="btn-primary gap-1.5"
+          className="btn-primary gap-1.5 self-start sm:self-auto"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -505,6 +505,7 @@ export default function StudentRegistrationPage() {
       ) : (
         <>
           <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                 <tr>
@@ -531,6 +532,7 @@ export default function StudentRegistrationPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
 
           {meta && meta.pages > 1 && (

@@ -128,7 +128,7 @@ export default function OutstandingBalancesPage() {
     <div className="max-w-5xl mx-auto p-8">
       <ToastBanner toast={toast} />
 
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Outstanding Balances</h1>
           <p className="text-sm text-gray-500 mt-1">Students with unpaid or partially paid invoices.</p>
@@ -198,6 +198,7 @@ export default function OutstandingBalancesPage() {
       )}
 
       <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -232,6 +233,7 @@ export default function OutstandingBalancesPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

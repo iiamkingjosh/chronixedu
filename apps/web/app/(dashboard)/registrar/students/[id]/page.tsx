@@ -379,7 +379,7 @@ export default function StudentProfilePage() {
       <div className="card p-6 mb-6">
         <h2 className="font-heading text-sm font-semibold text-gray-900 mb-4">Student Details</h2>
         <form onSubmit={handleSubmit(onSaveBio)} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="First name" error={errors.first_name?.message}>
               <input {...register('first_name')} className={inputClass} />
             </Field>
@@ -387,7 +387,7 @@ export default function StudentProfilePage() {
               <input {...register('last_name')} className={inputClass} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Phone" error={errors.phone?.message}>
               <input {...register('phone')} className={inputClass} />
             </Field>
@@ -395,7 +395,7 @@ export default function StudentProfilePage() {
               <input {...register('dob')} type="date" className={inputClass} />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Gender" error={errors.gender?.message}>
               <select {...register('gender')} className={inputClass} defaultValue="">
                 <option value="">Select…</option>
@@ -410,7 +410,7 @@ export default function StudentProfilePage() {
           <Field label="Address" error={errors.address?.message}>
             <textarea {...register('address')} rows={2} className={inputClass} />
           </Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Emergency contact name" error={errors.emergency_contact_name?.message}>
               <input {...register('emergency_contact_name')} className={inputClass} />
             </Field>
@@ -433,6 +433,7 @@ export default function StudentProfilePage() {
           <p className="text-sm text-gray-400 italic">No enrollment records.</p>
         ) : (
           <div className="card overflow-hidden">
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
                 <tr>
@@ -451,6 +452,7 @@ export default function StudentProfilePage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

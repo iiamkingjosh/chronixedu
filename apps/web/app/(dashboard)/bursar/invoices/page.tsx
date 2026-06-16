@@ -147,6 +147,7 @@ export default function InvoicesPage() {
       {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
 
       <div className="card overflow-hidden">
+        <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200 text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -192,6 +193,7 @@ export default function InvoicesPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       {paymentTarget && (

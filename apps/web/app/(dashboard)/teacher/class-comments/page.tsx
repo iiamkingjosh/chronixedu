@@ -160,6 +160,7 @@ export default function ClassCommentsPage() {
       </p>
 
       <div className="card overflow-hidden mb-6">
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-xs uppercase text-gray-500">
             <tr>
@@ -197,6 +198,7 @@ export default function ClassCommentsPage() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
 
       <section className="card p-6 space-y-4">

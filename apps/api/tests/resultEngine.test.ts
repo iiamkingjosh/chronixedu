@@ -14,13 +14,16 @@ const MATH_ID   = '9ddb5e1d-c3ce-4205-ad0e-9ec584656e2d';
 const TERM_ID   = '3df9f000-f173-4307-a986-64516372c2a0';
 const CLASS_ID  = '7a4dded1-ded1-4022-abde-a32d03cd359e';
 
-// CA1 score=8, max_score=10, weight_percent=10 → 8/10 × 10 = 8.00
-const EXPECTED_FATIMA_TOTAL = 8.00;
+// Fatima has all 4 components scored for Mathematics:
+//   CA1=8/10×10=8, CA2=9/10×10=9, Mid-Term=7/10×10=7, Exam=58/70×70=58
+//   total = 8 + 9 + 7 + 58 = 82.00
+const EXPECTED_FATIMA_TOTAL = 82.00;
 
 describe('resultEngine — database integration', () => {
   let emekaId: string;
   let ca1ComponentId: string;
   let fatimaUserId: string; // valid users.id to use as entered_by in test inserts
+  let fatimaMathScores: { component_id: string; score: string }[]; // all 4 component scores, used to mirror Fatima's total for Emeka in Test 3
 
   beforeAll(async () => {
     // Fatima's user_id — valid FK for entered_by
@@ -46,6 +49,16 @@ describe('resultEngine — database integration', () => {
       );
     }
     ca1ComponentId = scoreRow.rows[0].component_id;
+
+    // All of Fatima's Mathematics component scores — mirrored onto Emeka in Test 3
+    // to produce a genuine tie (both totals = 82.00)
+    const fatimaScoresResult = await pool.query<{ component_id: string; score: string }>(
+      `SELECT component_id, score::text AS score
+       FROM scores
+       WHERE student_id = $1 AND subject_id = $2 AND term_id = $3`,
+      [FATIMA_ID, MATH_ID, TERM_ID]
+    );
+    fatimaMathScores = fatimaScoresResult.rows;
 
     // Emeka: any student enrolled in this class for this term's session, not Fatima
     const emekaRow = await pool.query<{ id: string }>(
@@ -110,7 +123,7 @@ describe('resultEngine — database integration', () => {
   it(
     'computeClassResults — distinct scores: higher average gets lower position number',
     async () => {
-      // Emeka scores 6 on CA1 → total 6.00 < Fatima 8.00 → Fatima is ranked first
+      // Emeka scores 6 on CA1 → total 6.00 < Fatima 82.00 → Fatima is ranked first
       await pool.query(
         `INSERT INTO scores
            (school_id, student_id, subject_id, term_id, component_id, score, entered_by)
@@ -128,7 +141,7 @@ describe('resultEngine — database integration', () => {
       expect(fatima).toBeDefined();
       expect(emeka).toBeDefined();
 
-      expect(fatima!.overall_average).toBe(8.00);
+      expect(fatima!.overall_average).toBe(82.00);
       expect(emeka!.overall_average).toBe(6.00);
 
       // Fatima outscores Emeka → she holds position 1, Emeka holds position 2
@@ -148,16 +161,19 @@ describe('resultEngine — database integration', () => {
   it(
     'computeClassResults — tied positions: equal averages share rank, position 2 is skipped',
     async () => {
-      // Emeka also scores 8 → both total_score 8.00 → tied at position 1
+      // Emeka mirrors Fatima's full set of component scores (CA1=8, CA2=9, Mid-Term=7, Exam=58)
+      // → both total_score 82.00 → tied at position 1
       // Standard competition ranking: next unique rank = 1 + 2 tied = 3 (position 2 skipped)
-      await pool.query(
-        `INSERT INTO scores
-           (school_id, student_id, subject_id, term_id, component_id, score, entered_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (student_id, term_id, component_id) DO UPDATE
-           SET score = EXCLUDED.score, entered_by = EXCLUDED.entered_by`,
-        [SCHOOL_ID, emekaId, MATH_ID, TERM_ID, ca1ComponentId, 8, fatimaUserId]
-      );
+      for (const row of fatimaMathScores) {
+        await pool.query(
+          `INSERT INTO scores
+             (school_id, student_id, subject_id, term_id, component_id, score, entered_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (student_id, term_id, component_id) DO UPDATE
+             SET score = EXCLUDED.score, entered_by = EXCLUDED.entered_by`,
+          [SCHOOL_ID, emekaId, MATH_ID, TERM_ID, row.component_id, row.score, fatimaUserId]
+        );
+      }
 
       const result = await computeClassResults(CLASS_ID, TERM_ID, SCHOOL_ID);
 
@@ -167,8 +183,8 @@ describe('resultEngine — database integration', () => {
       expect(fatima).toBeDefined();
       expect(emeka).toBeDefined();
 
-      expect(fatima!.overall_average).toBe(8.00);
-      expect(emeka!.overall_average).toBe(8.00);
+      expect(fatima!.overall_average).toBe(82.00);
+      expect(emeka!.overall_average).toBe(82.00);
 
       // Tied — both share position 1
       expect(fatima!.position).toBe(1);

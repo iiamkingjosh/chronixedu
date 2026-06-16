@@ -194,7 +194,7 @@ function CreateUserModal({ schoolId, onClose, onCreated }: {
   return (
     <Modal title="Create User" onClose={onClose}>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="First Name" error={errors.first_name?.message}>
             <input {...register('first_name')} className={inputClass} placeholder="Adaeze" />
           </Field>
@@ -207,7 +207,7 @@ function CreateUserModal({ schoolId, onClose, onCreated }: {
           <input {...register('email')} type="email" className={inputClass} placeholder="adaeze.okafor@school.edu.ng" />
         </Field>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Title (optional)" error={errors.title?.message}>
             <input {...register('title')} className={inputClass} placeholder="Mrs., Dr., Mr." />
           </Field>
@@ -335,7 +335,7 @@ function EditUserModal({ schoolId, user, onClose, onSaved }: {
           <p className="w-full text-xs text-blue-700 mt-1">Role and teaching mode cannot be changed after account creation. Contact a super admin if this needs to change.</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="First Name" error={errors.first_name?.message}>
             <input {...register('first_name')} className={inputClass} />
           </Field>
@@ -344,7 +344,7 @@ function EditUserModal({ schoolId, user, onClose, onSaved }: {
           </Field>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Title (optional)" error={errors.title?.message}>
             <input {...register('title')} className={inputClass} placeholder="Mrs., Dr., Mr." />
           </Field>
@@ -573,11 +573,11 @@ export default function UsersPage() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
         <h1 className="text-xl font-semibold text-gray-900">User Management</h1>
         <button
           onClick={() => setCreateOpen(true)}
-          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+          className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-1.5 self-start sm:self-auto"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -621,8 +621,8 @@ export default function UsersPage() {
         <p className="text-sm text-gray-400">{total} user{total === 1 ? '' : 's'}</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="grid grid-cols-[1.5fr_1fr_1.5fr_100px_180px_200px] gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <div className="grid grid-cols-[1.5fr_1fr_1.5fr_100px_180px_200px] gap-3 px-5 py-3 bg-gray-50 border-b border-gray-200 min-w-[840px]">
           {['Name', 'Role', 'Email', 'Status', 'Last Login', 'Actions'].map(h => (
             <span key={h} className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</span>
           ))}
@@ -637,7 +637,7 @@ export default function UsersPage() {
         {!loading && users.length > 0 && (
           <div className="divide-y divide-gray-100">
             {users.map(u => (
-              <div key={u.id} className="grid grid-cols-[1.5fr_1fr_1.5fr_100px_180px_200px] gap-3 px-5 py-3 items-center">
+              <div key={u.id} className="grid grid-cols-[1.5fr_1fr_1.5fr_100px_180px_200px] gap-3 px-5 py-3 items-center min-w-[840px]">
                 <span className="text-sm font-medium text-gray-900">{fullName(u)}</span>
                 <RoleBadge role={u.role} />
                 <span className="text-sm text-gray-600 truncate">{u.email}</span>
