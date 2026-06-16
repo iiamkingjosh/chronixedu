@@ -50,6 +50,60 @@ interface RegistrationResult {
   new_parents: NewParentRow[];
 }
 
+function printCredentialsSlip({
+  studentName,
+  admissionNo,
+  email,
+  password,
+  parents,
+}: {
+  studentName: string;
+  admissionNo: string;
+  email: string;
+  password: string;
+  parents: NewParentRow[];
+}) {
+  const w = window.open('', '_blank', 'width=640,height=720');
+  if (!w) return;
+  const parentRows = parents
+    .map(p => `<tr><td>Parent / Guardian</td><td style="font-family:monospace">${p.email}</td><td style="font-family:monospace">${p.temp_password}</td></tr>`)
+    .join('');
+  w.document.write(`<!DOCTYPE html>
+<html><head><title>Credentials — ${studentName}</title>
+<style>
+  body{font-family:Arial,sans-serif;font-size:13px;padding:32px;color:#111}
+  h1{font-size:18px;color:#003366;margin-bottom:2px}
+  .sub{font-size:11px;color:#888;margin-bottom:16px}
+  hr{border:none;border-top:2px solid #003366;margin:14px 0}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th{background:#003366;color:#fff;padding:8px 12px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px}
+  td{padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:12px;vertical-align:top}
+  tr:nth-child(even) td{background:#f9fafb}
+  .note{margin-top:18px;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px 14px;font-size:11px;color:#92400e}
+  @media print{body{padding:16px}}
+</style>
+</head><body>
+<h1>Chronix Edu — Login Credentials</h1>
+<p class="sub">Confidential · Hand this slip to the student's parent or guardian only</p>
+<hr/>
+<table>
+  <thead><tr><th>Account</th><th>Email</th><th>Temporary Password</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>${studentName}</strong><br/><span style="font-size:11px;color:#666">Student · Adm. ${admissionNo}</span></td>
+      <td style="font-family:monospace">${email || '—'}</td>
+      <td style="font-family:monospace">${password}</td>
+    </tr>
+    ${parentRows}
+  </tbody>
+</table>
+<div class="note">⚠ These are temporary passwords. Each user must change their password on first login. Student credentials are managed by the school and should not be shared.</div>
+</body></html>`);
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
 const PAGE_SIZE = 20;
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -140,7 +194,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
   schoolId: string;
   classes: ClassRow[];
   onClose: () => void;
-  onRegistered: (result: RegistrationResult) => void;
+  onRegistered: (result: RegistrationResult, studentName: string) => void;
 }) {
   const [step, setStep] = useState(1);
   const [apiError, setApiError] = useState('');
@@ -195,7 +249,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      onRegistered(res.data);
+      onRegistered(res.data, `${values.first_name} ${values.last_name}`);
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : 'Failed to register student');
     } finally {
@@ -378,7 +432,7 @@ export default function StudentRegistrationPage() {
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [credentials, setCredentials] = useState<{ admission_no: string; email: string; temp_password: string; new_parents: NewParentRow[] } | null>(null);
+  const [credentials, setCredentials] = useState<{ student_name: string; admission_no: string; email: string; temp_password: string; new_parents: NewParentRow[] } | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 350);
@@ -409,9 +463,10 @@ export default function StudentRegistrationPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
-  function handleRegistered(result: RegistrationResult) {
+  function handleRegistered(result: RegistrationResult, studentName: string) {
     setRegisterOpen(false);
     setCredentials({
+      student_name: studentName,
       admission_no: result.admission_no,
       email: result.student.email,
       temp_password: result.temp_password,
@@ -451,31 +506,50 @@ export default function StudentRegistrationPage() {
       <p className="text-sm text-gray-500 mb-6">Search existing students or register a new student into the school.</p>
 
       {credentials && (
-        <div className="mb-6 bg-green-50 border border-green-200 rounded-xl px-5 py-4 flex items-start justify-between gap-4">
-          <div className="space-y-2">
+        <div className="mb-6 bg-green-50 border border-green-200 rounded-xl px-5 py-4">
+          <div className="flex items-start justify-between gap-4 mb-3">
             <p className="text-sm font-semibold text-green-800">
-              Student registered (admission no. {credentials.admission_no}) — share these credentials securely:
+              Student registered — Adm. {credentials.admission_no}
             </p>
-            <p className="text-sm text-green-700 font-mono">
-              {credentials.email || '(no email set)'} &nbsp;/&nbsp; {credentials.temp_password}
-            </p>
-            {credentials.new_parents.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-green-800 uppercase tracking-wide mt-2 mb-1">Parent / guardian accounts created</p>
-                <ul className="text-sm text-green-700 font-mono space-y-0.5">
-                  {credentials.new_parents.map(p => (
-                    <li key={p.email}>{p.email} / {p.temp_password}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            <p className="text-xs text-green-600">These temporary passwords are shown only once. Each user should change their password on first login.</p>
+            <button onClick={() => setCredentials(null)} className="text-green-500 hover:text-green-700 shrink-0 transition-colors duration-200">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <button onClick={() => setCredentials(null)} className="text-green-500 hover:text-green-700 shrink-0 transition-colors duration-200">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="space-y-1 mb-3">
+            <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Student</p>
+            <p className="text-sm text-green-700 font-mono">{credentials.email || '(no email)'} / {credentials.temp_password}</p>
+          </div>
+          {credentials.new_parents.length > 0 && (
+            <div className="space-y-1 mb-3">
+              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Parent / Guardian accounts</p>
+              <ul className="text-sm text-green-700 font-mono space-y-0.5">
+                {credentials.new_parents.map(p => (
+                  <li key={p.email}>{p.email} / {p.temp_password}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-green-200">
+            <p className="text-xs text-green-600">Temporary passwords are shown only once. Print the credentials slip and hand it to the parent/guardian.</p>
+            <button
+              type="button"
+              onClick={() => printCredentialsSlip({
+                studentName: credentials.student_name,
+                admissionNo: credentials.admission_no,
+                email: credentials.email,
+                password: credentials.temp_password,
+                parents: credentials.new_parents,
+              })}
+              className="shrink-0 ml-4 inline-flex items-center gap-1.5 rounded-lg border border-green-600 px-3 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100 transition-colors duration-200"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Print Credentials Slip
+            </button>
+          </div>
         </div>
       )}
 
@@ -562,6 +636,7 @@ export default function StudentRegistrationPage() {
       {registerOpen && (
         <RegisterStudentModal schoolId={schoolId} classes={classes} onClose={() => setRegisterOpen(false)} onRegistered={handleRegistered} />
       )}
+
     </div>
   );
 }

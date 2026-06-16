@@ -62,6 +62,15 @@ interface ClassRow {
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
+interface AddParentResult {
+  parent_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  is_new_account: boolean;
+  temp_password: string | null;
+}
+
 // ── Toast & shared bits ───────────────────────────────────────────────────────
 
 type ToastFn = (message: string, type?: 'success' | 'error') => void;
@@ -108,6 +117,93 @@ const inputClass = 'input-field';
 function formatDate(value: string | null): string {
   if (!value) return '—';
   return new Date(value).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// ── Add parent modal ──────────────────────────────────────────────────────────
+
+const addParentSchema = z.object({
+  first_name:         z.string().min(1, 'Required').max(100),
+  last_name:          z.string().min(1, 'Required').max(100),
+  email:              z.string().email('Enter a valid email'),
+  phone:              z.string().max(30).optional().or(z.literal('')),
+  relationship_type:  z.string().min(1, 'Required').max(50),
+  is_primary_contact: z.boolean().optional(),
+});
+type AddParentForm = z.infer<typeof addParentSchema>;
+
+function AddParentModal({ schoolId, studentId, onClose, onAdded }: {
+  schoolId: string;
+  studentId: string;
+  onClose: () => void;
+  onAdded: (result: AddParentResult) => void;
+}) {
+  const [apiError, setApiError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const { register, handleSubmit, formState: { errors } } = useForm<AddParentForm>({
+    resolver: zodResolver(addParentSchema),
+    defaultValues: { first_name: '', last_name: '', email: '', phone: '', relationship_type: '', is_primary_contact: false },
+  });
+
+  async function onSubmit(values: AddParentForm) {
+    setApiError('');
+    setSubmitting(true);
+    try {
+      const res = await apiFetch<{ success: boolean; data: AddParentResult }>(
+        `/api/schools/${schoolId}/students/${studentId}/parents`,
+        { method: 'POST', body: JSON.stringify(values) }
+      );
+      onAdded(res.data);
+    } catch (err: unknown) {
+      setApiError(err instanceof Error ? err.message : 'Failed to add parent');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title="Add Parent / Guardian" onClose={onClose}>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="First name" error={errors.first_name?.message}>
+            <input {...register('first_name')} className={inputClass} />
+          </Field>
+          <Field label="Last name" error={errors.last_name?.message}>
+            <input {...register('last_name')} className={inputClass} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="Email" error={errors.email?.message}>
+            <input {...register('email')} type="email" className={inputClass} />
+          </Field>
+          <Field label="Phone (optional)" error={errors.phone?.message}>
+            <input {...register('phone')} className={inputClass} />
+          </Field>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+          <Field label="Relationship" error={errors.relationship_type?.message}>
+            <input {...register('relationship_type')} className={inputClass} placeholder="Father, Mother, Guardian…" />
+          </Field>
+          <label className="flex items-center gap-2 text-sm text-gray-700 mb-2">
+            <input type="checkbox" {...register('is_primary_contact')} className="rounded border-gray-300" />
+            Primary contact
+          </label>
+        </div>
+        <p className="text-xs text-gray-500">If this email has no account yet, a new parent account will be created and temporary credentials returned.</p>
+        {apiError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
+            <p className="text-sm text-red-700">{apiError}</p>
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
+          <button type="submit" disabled={submitting} className="btn-primary !px-5">
+            {submitting ? 'Adding…' : 'Add Parent'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
 }
 
 // ── Bio edit form ──────────────────────────────────────────────────────────────
@@ -221,6 +317,8 @@ export default function StudentProfilePage() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [addParentOpen, setAddParentOpen] = useState(false);
+  const [newParentCredentials, setNewParentCredentials] = useState<AddParentResult | null>(null);
   const [savingBio, setSavingBio] = useState(false);
   const [transcriptUrl, setTranscriptUrl] = useState<string | null>(null);
   const [generatingTranscript, setGeneratingTranscript] = useState(false);
@@ -459,7 +557,44 @@ export default function StudentProfilePage() {
 
       {/* Parents */}
       <div className="card p-6 mb-6">
-        <h2 className="font-heading text-sm font-semibold text-gray-900 mb-4">Parents / Guardians</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-heading text-sm font-semibold text-gray-900">Parents / Guardians</h2>
+          <button
+            type="button"
+            onClick={() => { setNewParentCredentials(null); setAddParentOpen(true); }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors duration-200"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Add Parent / Guardian
+          </button>
+        </div>
+
+        {newParentCredentials && (
+          <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+            <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mb-1">
+              {newParentCredentials.is_new_account ? 'New account created' : 'Existing account linked'}
+            </p>
+            <p className="text-sm text-blue-700 font-medium">{newParentCredentials.first_name} {newParentCredentials.last_name}</p>
+            {newParentCredentials.is_new_account && newParentCredentials.temp_password && (
+              <p className="text-sm text-blue-700 font-mono mt-1">{newParentCredentials.email} / {newParentCredentials.temp_password}</p>
+            )}
+            <p className="text-xs text-blue-600 mt-1">
+              {newParentCredentials.is_new_account
+                ? 'Temporary password shown once — print or note it before dismissing.'
+                : 'Linked to their existing account.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setNewParentCredentials(null)}
+              className="mt-2 text-xs font-medium text-blue-600 hover:text-blue-800"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         {profile.parents.length === 0 ? (
           <p className="text-sm text-gray-400 italic">No linked parents or guardians.</p>
         ) : (
@@ -512,6 +647,20 @@ export default function StudentProfilePage() {
           onUpdated={() => {
             setCorrectionOpen(false);
             show('Class updated');
+            loadProfile();
+          }}
+        />
+      )}
+
+      {addParentOpen && schoolId && (
+        <AddParentModal
+          schoolId={schoolId}
+          studentId={studentId}
+          onClose={() => setAddParentOpen(false)}
+          onAdded={(result) => {
+            setAddParentOpen(false);
+            setNewParentCredentials(result);
+            show(result.is_new_account ? 'Parent account created and linked' : 'Parent linked to student');
             loadProfile();
           }}
         />
