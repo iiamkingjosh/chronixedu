@@ -17,14 +17,26 @@ function getPgClient() {
   return new Client({ connectionString: conn });
 }
 
+const createUserSchema = z.object({
+  email:        z.email().toLowerCase().trim(),
+  password:     z.string().min(8),
+  role:         z.enum(['super_admin', 'admin', 'principal', 'teacher', 'parent', 'student']),
+  school_id:    z.uuid().optional(),
+  first_name:   z.string().min(1).max(80).trim().optional(),
+  last_name:    z.string().min(1).max(80).trim().optional(),
+  title:        z.string().max(20).trim().optional(),
+  teacher_mode: z.enum(['subject', 'form']).optional(),
+});
+
 router.post('/create-user', verifyToken, requireRole('super_admin'), async (req, res) => {
-  const { email, password, role, school_id, first_name, last_name, title, teacher_mode } = req.body;
-  if (!email || !password || !role) {
+  const parsed = createUserSchema.safeParse(req.body);
+  if (!parsed.success) {
     return res.status(400).json({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'Missing fields: email, password, role' },
+      error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' },
     });
   }
+  const { email, password, role, school_id, first_name, last_name, title, teacher_mode } = parsed.data;
 
   try {
     // create user in Supabase Auth using service role
@@ -62,32 +74,93 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
   }
 });
 
+const loginSchema = z.object({
+  email:    z.email().toLowerCase().trim(),
+  password: z.string().min(1),
+});
+
+const MAX_ATTEMPTS = 5;
+const LOCK_MINUTES = 15;
+
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
+  const parsed = loginSchema.safeParse(req.body);
+  if (!parsed.success) {
     return res.status(400).json({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'Missing credentials' },
+      error: { code: 'VALIDATION_ERROR', message: 'Valid email and password are required.' },
     });
   }
+  const { email, password } = parsed.data;
 
   try {
+    // Check account lockout before touching Supabase Auth
+    const pg = getPgClient();
+    await pg.connect();
+    const lockRow = await pg.query<{
+      id: string;
+      failed_login_attempts: number;
+      locked_until: Date | null;
+    }>(
+      `SELECT id, failed_login_attempts, locked_until FROM users WHERE email = $1 LIMIT 1`,
+      [email]
+    );
+    await pg.end();
+
+    const lockRecord = lockRow.rows[0];
+    if (lockRecord?.locked_until && lockRecord.locked_until > new Date()) {
+      const until = lockRecord.locked_until.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      return res.status(423).json({
+        success: false,
+        error: { code: 'ACCOUNT_LOCKED', message: `Account locked until ${until}. Reset your password or try again later.` },
+      });
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     logger.debug('login_auth_result', { error: error?.message ?? null, userId: data?.user?.id ?? null });
+
     if (error) {
+      // Increment failed attempt counter on the local user record
+      if (lockRecord) {
+        const attempts = (lockRecord.failed_login_attempts ?? 0) + 1;
+        const lockedUntil = attempts >= MAX_ATTEMPTS
+          ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000)
+          : null;
+        const pg2 = getPgClient();
+        await pg2.connect();
+        await pg2.query(
+          `UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3`,
+          [attempts, lockedUntil, lockRecord.id]
+        );
+        await pg2.end();
+
+        if (lockedUntil) {
+          return res.status(423).json({
+            success: false,
+            error: { code: 'ACCOUNT_LOCKED', message: `Too many failed attempts. Account locked for ${LOCK_MINUTES} minutes.` },
+          });
+        }
+        const remaining = MAX_ATTEMPTS - attempts;
+        return res.status(401).json({
+          success: false,
+          error: { code: 'INVALID_CREDENTIALS', message: `Invalid credentials. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` },
+        });
+      }
       return res.status(401).json({
         success: false,
-        error: { code: 'INVALID_CREDENTIALS', message: error.message },
+        error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials.' },
       });
     }
 
     const userId = data.user.id;
 
     // fetch local user record by Supabase UUID — not by email, which may be shared across roles
-    const pg = getPgClient();
-    await pg.connect();
-    const r = await pg.query('SELECT id, school_id, role, title, email, first_name, last_name FROM users WHERE id = $1', [userId]);
-    await pg.end();
+    const pg3 = getPgClient();
+    await pg3.connect();
+    const r = await pg3.query(
+      `SELECT id, school_id, role, title, email, first_name, last_name FROM users WHERE id = $1`,
+      [userId]
+    );
+    await pg3.end();
     const local = r.rows[0];
     logger.debug('login_local_user_lookup', { found: !!local, userId });
     if (!local) {
@@ -97,11 +170,14 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // Supabase already verified the password — update last login unconditionally
-    const pg2 = getPgClient();
-    await pg2.connect();
-    await pg2.query('UPDATE users SET last_login_at = now() WHERE id = $1', [local.id]);
-    await pg2.end();
+    // Successful login — reset lockout counter and update last login
+    const pg4 = getPgClient();
+    await pg4.connect();
+    await pg4.query(
+      `UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1`,
+      [local.id]
+    );
+    await pg4.end();
 
     const payload = {
       user_id: local.id,
