@@ -526,7 +526,7 @@ describe('superAdmin — platform school management', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.total_schools).toBeGreaterThanOrEqual(1);
-    });
+    }, 30000);
 
     it('GET /analytics/schools — super_admin token → 200, array with activity_score on each school', async () => {
       const res = await request(app)

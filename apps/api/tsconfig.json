@@ -9,6 +9,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src/**/*", "tests/**/*"],
+  "include": ["src/**/*", "tests/**/*", "jest.globalSetup.ts", "jest.globalTeardown.ts"],
   "exclude": ["node_modules"]
 }

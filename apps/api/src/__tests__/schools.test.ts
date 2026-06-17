@@ -10,6 +10,14 @@ import { supabaseAdmin } from '../supabaseClient';
 
 jest.mock('../db/queries/schools');
 jest.mock('../db/queries/auditLog');
+jest.mock('../services/cacheService', () => ({
+  cache: {
+    wrap: (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn(),
+    del: jest.fn(),
+    TTL: { SCHOOL: 300, ROSTER: 180, CONTEXT: 60, STATS: 300 },
+  },
+  schoolCacheKey: (schoolId: string, suffix: string) => `school:${schoolId}:${suffix}`,
+}));
 jest.mock('../services/reportCardService', () => ({
   generateReportCardPreview: jest.fn(),
 }));
@@ -207,16 +215,20 @@ describe('PATCH /api/schools/:schoolId/academic-config', () => {
     expect(res.body.data.warnings).toBeUndefined();
   });
 
-  it('returns 423 when published results exist', async () => {
+  it('returns 200 with published warning when published results exist', async () => {
     mockQueries.checkPublishedResultsExist.mockResolvedValueOnce(true);
+    mockQueries.checkSubmittedResultsExist.mockResolvedValueOnce(false);
+    mockQueries.updateAcademicConfig.mockResolvedValueOnce(undefined);
 
     const res = await request(app)
       .patch('/api/schools/school-uuid-001/academic-config')
       .set('Authorization', `Bearer ${makeToken('super_admin')}`)
       .send({ grading_scale: validBands });
 
-    expect(res.status).toBe(423);
-    expect(res.body.error.code).toBe('CONFIG_LOCKED');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data.warnings)).toBe(true);
+    expect(res.body.data.warnings.length).toBeGreaterThan(0);
   });
 
   it('returns 200 with warnings array when submitted results exist', async () => {

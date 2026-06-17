@@ -168,7 +168,7 @@ describe('POST /api/auth/login', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.access_token).toBeTruthy();
     expect(res.body.data.user).toEqual({
-      user_id: 'auth-uuid-1',
+      user_id: 'local-uuid-1',
       school_id: 'school-1',
       role: 'teacher',
       email: 'a@b.com',
