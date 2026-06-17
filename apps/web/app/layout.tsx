@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   title: 'Chronix Edu',
   description: 'Multi-tenant school management SaaS',
   manifest: '/manifest.json',
-  icons: { icon: '/icons/icon.svg', apple: '/icons/icon.svg' },
+  icons: { icon: '/icons/Chronix_Logo.png', apple: '/icons/Chronix_Logo.png' },
 };
 
 export const viewport: Viewport = {

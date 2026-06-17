@@ -72,8 +72,9 @@ function ParentChrome({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex md:w-60 md:shrink-0 bg-gradient-to-b from-[#003366] to-[#002244] flex-col">
         <div className="px-5 py-5 border-b border-white/10 space-y-3">
           <div>
-            <p className="font-heading text-lg font-semibold text-white">Chronix Edu</p>
-            <p className="text-xs text-white/50 mt-0.5">Parent Portal</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mb-1" />
+            <p className="text-xs text-white/50">Parent Portal</p>
           </div>
           <ChildSelector />
         </div>
@@ -107,8 +108,9 @@ function ParentChrome({ children }: { children: React.ReactNode }) {
             <div className="px-5 py-5 border-b border-white/10 space-y-3">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="font-heading text-lg font-semibold text-white">Chronix Edu</p>
-                  <p className="text-xs text-white/50 mt-0.5">Parent Portal</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mb-1" />
+                  <p className="text-xs text-white/50">Parent Portal</p>
                 </div>
                 <button
                   type="button"

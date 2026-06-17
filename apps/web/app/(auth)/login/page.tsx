@@ -75,7 +75,8 @@ export default function LoginPage() {
     <div className="w-full max-w-md">
       <div className="rounded-2xl bg-white shadow-lg border border-gray-100 overflow-hidden">
         <div className="px-8 pt-8 pb-6 text-center border-b border-gray-100 bg-[#003366]">
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Chronix Edu</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-16 w-auto mx-auto mb-3" />
           <p className="mt-1 text-sm text-blue-100">Sign in to your school portal</p>
         </div>
 

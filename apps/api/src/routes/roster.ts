@@ -11,6 +11,7 @@ import {
   findAssignmentById, scoresExistForAssignment, deleteTeacherAssignment,
 } from '../db/queries/roster';
 import { findUserById } from '../db/queries/users';
+import { cache } from '../services/cacheService';
 
 const router = Router();
 
@@ -85,6 +86,7 @@ router.post(
       }
 
       const cls = await insertClass(req.params.schoolId, name, level, stream ?? null, form_teacher_id ?? null);
+      cache.del(`roster:${req.params.schoolId}:classes`);
       return res.status(201).json({ success: true, data: cls });
     } catch (err) {
       return next(err);
@@ -100,7 +102,9 @@ router.get(
   requireSchoolAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const classes = await listClasses(req.params.schoolId);
+      const key = `roster:${req.params.schoolId}:classes`;
+      const classes = await cache.wrap(key, cache.TTL.ROSTER, () => listClasses(req.params.schoolId));
+      res.setHeader('Cache-Control', 'private, max-age=60');
       return res.json({ success: true, data: classes });
     } catch (err) {
       return next(err);
@@ -142,6 +146,7 @@ router.patch(
       const cls = await updateClass(req.params.classId, req.params.schoolId, {
         name, level, stream: stream ?? null, form_teacher_id: form_teacher_id ?? null,
       });
+      cache.del(`roster:${req.params.schoolId}:classes`);
       return res.json({ success: true, data: cls });
     } catch (err) {
       return next(err);
@@ -172,6 +177,7 @@ router.delete(
       }
 
       await deleteClass(req.params.classId, req.params.schoolId);
+      cache.del(`roster:${req.params.schoolId}:classes`);
       return res.json({ success: true, data: { message: 'Class deleted' } });
     } catch (err) {
       return next(err);
@@ -202,6 +208,7 @@ router.post(
       }
 
       const subject = await insertSubject(req.params.schoolId, name, upperCode);
+      cache.del(`roster:${req.params.schoolId}:subjects`);
       return res.status(201).json({ success: true, data: subject });
     } catch (err) {
       return next(err);
@@ -217,7 +224,9 @@ router.get(
   requireSchoolAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const subjects = await listActiveSubjects(req.params.schoolId);
+      const key = `roster:${req.params.schoolId}:subjects`;
+      const subjects = await cache.wrap(key, cache.TTL.ROSTER, () => listActiveSubjects(req.params.schoolId));
+      res.setHeader('Cache-Control', 'private, max-age=60');
       return res.json({ success: true, data: subjects });
     } catch (err) {
       return next(err);
@@ -253,6 +262,7 @@ router.patch(
       }
 
       const subject = await updateSubject(req.params.subjectId, req.params.schoolId, { name, code: upperCode });
+      cache.del(`roster:${req.params.schoolId}:subjects`);
       return res.json({ success: true, data: subject });
     } catch (err) {
       return next(err);
@@ -283,6 +293,7 @@ router.delete(
       }
 
       await deleteSubject(req.params.subjectId, req.params.schoolId);
+      cache.del(`roster:${req.params.schoolId}:subjects`);
       return res.json({ success: true, data: { message: 'Subject deleted' } });
     } catch (err) {
       return next(err);
@@ -317,6 +328,7 @@ router.post(
       }
 
       const assignment = await insertTeacherAssignment(teacher_id, class_id, subject_id, term.id, req.params.schoolId);
+      cache.del(`roster:${req.params.schoolId}:assignments:${teacher_id}`);
       return res.status(201).json({ success: true, data: assignment });
     } catch (err) {
       return next(err);
@@ -332,12 +344,13 @@ router.get(
   requireSchoolAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const term = await getActiveTerm(req.params.schoolId);
-      if (!term) {
-        return res.json({ success: true, data: { teacher_mode: 'subject', assignments: [] } });
-      }
-
-      const result = await listTeacherAssignments(req.params.teacherId, req.params.schoolId, term.id);
+      const key = `roster:${req.params.schoolId}:assignments:${req.params.teacherId}`;
+      const result = await cache.wrap(key, cache.TTL.ROSTER, async () => {
+        const term = await getActiveTerm(req.params.schoolId);
+        if (!term) return { teacher_mode: 'subject', assignments: [] };
+        return listTeacherAssignments(req.params.teacherId, req.params.schoolId, term.id);
+      });
+      res.setHeader('Cache-Control', 'private, max-age=60');
       return res.json({ success: true, data: result });
     } catch (err) {
       return next(err);
@@ -365,6 +378,7 @@ router.delete(
       }
 
       await deleteTeacherAssignment(req.params.id, req.params.schoolId);
+      cache.del(`roster:${req.params.schoolId}:assignments:${assignment.teacher_id}`);
       return res.json({ success: true, data: { message: 'Assignment removed' } });
     } catch (err) {
       return next(err);
