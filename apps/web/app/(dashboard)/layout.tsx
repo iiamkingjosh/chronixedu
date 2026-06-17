@@ -96,8 +96,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-60 md:shrink-0 bg-gradient-to-b from-[#003366] to-[#002244] flex-col">
         <div className="px-5 py-5 border-b border-white/10">
-          <p className="font-heading text-lg font-semibold text-white">Chronix Edu</p>
-          <p className="text-xs text-white/50 mt-0.5 truncate">{user.email}</p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mb-1.5" />
+          <p className="text-xs text-white/50 truncate">{user.email}</p>
         </div>
 
         <nav className="flex-1 py-4 overflow-y-auto">{renderNav()}</nav>
@@ -124,8 +125,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <aside className="absolute inset-y-0 left-0 w-64 bg-gradient-to-b from-[#003366] to-[#002244] flex flex-col shadow-lift animate-slide-in-right">
             <div className="px-5 py-5 border-b border-white/10 flex items-start justify-between">
               <div>
-                <p className="font-heading text-lg font-semibold text-white">Chronix Edu</p>
-                <p className="text-xs text-white/50 mt-0.5 truncate">{user.email}</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mb-1.5" />
+                <p className="text-xs text-white/50 truncate">{user.email}</p>
               </div>
               <button
                 type="button"

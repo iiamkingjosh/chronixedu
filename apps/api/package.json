@@ -12,9 +12,11 @@
     "migrate": "ts-node src/scripts/migrate.ts"
   },
   "dependencies": {
+    "@types/node-cache": "^4.1.3",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
-    "express": "^4.19.4"
+    "express": "^4.19.4",
+    "node-cache": "^5.1.2"
   },
   "devDependencies": {
     "@types/cors": "^2.8.13",

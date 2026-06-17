@@ -85,8 +85,9 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
             <span className="inline-block bg-[#FF761B] text-white text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded">
               Platform Admin
             </span>
-            <p className="font-heading text-lg font-semibold text-white mt-2">Chronix Edu</p>
-            <p className="text-xs text-white/50 mt-0.5 truncate">{user.email}</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mt-2 mb-1" />
+            <p className="text-xs text-white/50 truncate">{user.email}</p>
           </div>
 
           <nav className="flex-1 py-4 overflow-y-auto">{renderNav()}</nav>
@@ -116,8 +117,9 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                   <span className="inline-block bg-[#FF761B] text-white text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded">
                     Platform Admin
                   </span>
-                  <p className="font-heading text-lg font-semibold text-white mt-2">Chronix Edu</p>
-                  <p className="text-xs text-white/50 mt-0.5 truncate">{user.email}</p>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mt-2 mb-1" />
+                  <p className="text-xs text-white/50 truncate">{user.email}</p>
                 </div>
                 <button
                   type="button"

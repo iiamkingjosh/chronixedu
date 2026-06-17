@@ -15,6 +15,7 @@ import {
 } from '../db/queries/schools';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
 import { NIGERIAN_DEFAULTS, slugify, validateGradeBands } from '../services/schoolService';
+import { cache, schoolCacheKey } from '../services/cacheService';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { generateReportCardPreview } from '../services/reportCardService';
@@ -140,10 +141,12 @@ router.get(
   requireSchoolAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const school = await findSchoolById(req.params.schoolId);
+      const cacheKey = schoolCacheKey(req.params.schoolId, 'data');
+      const school = await cache.wrap(cacheKey, cache.TTL.SCHOOL, () => findSchoolById(req.params.schoolId));
       if (!school) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'School not found' } });
       }
+      res.setHeader('Cache-Control', 'private, max-age=60');
       return res.json({ success: true, data: school });
     } catch (err) {
       return next(err);
@@ -171,6 +174,7 @@ router.patch(
 
       const patch = parsed.data as Record<string, unknown>;
       await updateIdentityConfig(req.params.schoolId, patch);
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
         schoolId: req.params.schoolId,
@@ -237,6 +241,7 @@ router.patch(
       if (assessment_components) patch.assessment_components = assessment_components;
 
       await updateAcademicConfig(req.params.schoolId, patch);
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logSettingsChange(
         req.params.schoolId,
@@ -298,6 +303,7 @@ router.patch(
       }
 
       await updateNotificationConfig(req.params.schoolId, patch);
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logSettingsChange(
         req.params.schoolId,
@@ -334,6 +340,7 @@ router.patch(
 
       const patch = parsed.data as Record<string, unknown>;
       await updateReportConfig(req.params.schoolId, patch);
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logSettingsChange(
         req.params.schoolId,
@@ -449,6 +456,7 @@ router.post(
       const logoUrl = urlData.publicUrl;
 
       await updateIdentityConfig(req.params.schoolId, { logo_url: logoUrl });
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
         schoolId: req.params.schoolId,
@@ -506,6 +514,7 @@ router.post(
       const signatureUrl = urlData.publicUrl;
 
       await updateIdentityConfig(req.params.schoolId, { signature_url: signatureUrl });
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
         schoolId: req.params.schoolId,
@@ -563,6 +572,7 @@ router.post(
       const stampUrl = urlData.publicUrl;
 
       await updateIdentityConfig(req.params.schoolId, { stamp_url: stampUrl });
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
         schoolId: req.params.schoolId,
