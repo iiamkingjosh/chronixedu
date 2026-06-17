@@ -61,6 +61,47 @@ const { withSentryConfig } = require('@sentry/nextjs');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+
+  async headers() {
+    const csp = [
+      "default-src 'self'",
+      // Next.js requires unsafe-inline + unsafe-eval for hydration in production
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      // Service worker (PWA) needs blob: in worker-src
+      "worker-src 'self' blob:",
+      // API, Supabase realtime, Sentry error reporting
+      [
+        "connect-src 'self'",
+        "https://api.chronixtechnology.com",
+        "https://pgnpmqaowrnmsytpehwc.supabase.co",
+        "wss://pgnpmqaowrnmsytpehwc.supabase.co",
+        "https://*.ingest.us.sentry.io",
+        "https://*.ingest.sentry.io",
+      ].join(' '),
+      "frame-ancestors 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join('; ');
+
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'X-Frame-Options',        value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy',         value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy',      value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
+          { key: 'X-XSS-Protection',        value: '1; mode=block' },
+          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+          { key: 'Content-Security-Policy', value: csp },
+        ],
+      },
+    ];
+  },
 };
 
 const sentryConfig = {
