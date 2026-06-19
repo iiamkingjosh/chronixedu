@@ -43,11 +43,6 @@ jobs:
     needs: lint-and-typecheck
 
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      JWT_SECRET: ${{ secrets.JWT_SECRET }}
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       NODE_ENV: test
 
     steps:
@@ -62,8 +57,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test
+      # Deliberately scoped to apps/api/src/__tests__ only — this suite mocks
+      # pg/Supabase/SendGrid entirely, so it needs no real credentials and never
+      # touches a live database. It deploy-gates Railway via "Wait for CI checks".
+      #
+      # apps/api/tests/** is a SEPARATE integration suite that runs against the
+      # real production Supabase DB using hardcoded fixture UUIDs (e.g. a fixed
+      # school_id). It is NOT run here on purpose: gating deploys on it meant
+      # Railway skipped real deployments whenever that fixture data drifted in
+      # production (manual cleanup, the db-wipe script, concurrent test runs,
+      # etc.) — failures unrelated to the code being shipped. Run it manually
+      # with `npm run test:isolation` against a disposable/staging DB, never
+      # automatically against production.
+      - name: Run unit tests
+        run: npm run test:unit
 
   # Railway auto-deploys via GitHub integration — no webhook step needed.
   # Enable "Wait for CI checks" in Railway → service → Settings → Source
