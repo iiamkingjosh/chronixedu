@@ -632,3 +632,35 @@ export async function getAuditLogs(params: AuditLogsParams = {}): Promise<Platfo
   const res = await apiFetch<ApiResponse<PlatformAuditLog[]>>(`/api/super-admin/audit-logs${qs ? `?${qs}` : ''}`);
   return res.data;
 }
+
+// ── Platform Admins ──────────────────────────────────────────────────────────
+
+export interface SuspendReactivateAdminResponse {
+  admin_id: string;
+  is_active: boolean;
+  reason: string;
+}
+
+export async function suspendPlatformAdmin(id: string, reason: string): Promise<SuspendReactivateAdminResponse> {
+  const res = await apiFetch<ApiResponse<SuspendReactivateAdminResponse>>(`/api/super-admin/admins/${id}/suspend`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+  return res.data;
+}
+
+export async function reactivatePlatformAdmin(id: string, reason: string): Promise<SuspendReactivateAdminResponse> {
+  const res = await apiFetch<ApiResponse<SuspendReactivateAdminResponse>>(`/api/super-admin/admins/${id}/reactivate`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+  return res.data;
+}
+
+export async function deletePlatformAdmin(id: string, confirmationEmail: string): Promise<{ admin_id: string; deleted: boolean }> {
+  const res = await apiFetch<ApiResponse<{ admin_id: string; deleted: boolean }>>(`/api/super-admin/admins/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ confirmation_email: confirmationEmail }),
+  });
+  return res.data;
+}

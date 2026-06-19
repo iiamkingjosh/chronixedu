@@ -23,6 +23,16 @@ export default function LoginPage() {
   const { user, loading, setAuth } = useAuth();
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get('reason');
+    if (reason === 'idle') {
+      setSessionNotice('You were logged out after 10 minutes of inactivity. Please sign in again.');
+    } else if (reason === 'expired') {
+      setSessionNotice('Your session expired. Please sign in again.');
+    }
+  }, []);
 
   const {
     register,
@@ -81,6 +91,11 @@ export default function LoginPage() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="px-8 py-7 space-y-5">
+          {sessionNotice && (
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+              {sessionNotice}
+            </div>
+          )}
           {submitError && (
             <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
               {submitError}
