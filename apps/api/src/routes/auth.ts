@@ -20,7 +20,7 @@ function getPgClient() {
 const createUserSchema = z.object({
   email:        z.email().toLowerCase().trim(),
   password:     z.string().min(8),
-  role:         z.enum(['super_admin', 'admin', 'principal', 'teacher', 'parent', 'student']),
+  role:         z.enum(['super_admin', 'principal', 'registrar', 'bursar', 'teacher', 'parent', 'student']),
   school_id:    z.uuid().optional(),
   first_name:   z.string().min(1).max(80).trim().optional(),
   last_name:    z.string().min(1).max(80).trim().optional(),
@@ -157,7 +157,7 @@ router.post('/login', async (req, res) => {
     const pg3 = getPgClient();
     await pg3.connect();
     const r = await pg3.query(
-      `SELECT id, school_id, role, title, email, first_name, last_name FROM users WHERE id = $1`,
+      `SELECT id, school_id, role, title, email, first_name, last_name, is_active FROM users WHERE id = $1`,
       [userId]
     );
     await pg3.end();
@@ -167,6 +167,12 @@ router.post('/login', async (req, res) => {
       return res.status(500).json({
         success: false,
         error: { code: 'USER_RECORD_MISSING', message: 'Local user record missing. Contact support.' },
+      });
+    }
+    if (!local.is_active) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Contact your administrator.' },
       });
     }
 

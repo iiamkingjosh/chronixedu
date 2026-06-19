@@ -20,6 +20,24 @@ const router = Router();
 
 const guard = [verifyToken, requireRole('super_admin')];
 
+// Only the root Chronix Technology account can suspend, reactivate, or delete other
+// platform admins. This stops any other super_admin from acting against a peer —
+// e.g. during a dispute between platform admins — since none of them can touch
+// each other's access, only the company-owned root account can.
+const ROOT_ADMIN_EMAIL = (process.env.ROOT_ADMIN_EMAIL || 'info@chronixtechnology.com').toLowerCase();
+
+function requireRootAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.user?.email?.toLowerCase() !== ROOT_ADMIN_EMAIL) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'ROOT_ADMIN_REQUIRED', message: 'Only the root platform admin can perform this action' },
+    });
+  }
+  return next();
+}
+
+const rootGuard = [...guard, requireRootAdmin];
+
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
 const createSupportSessionSchema = z.object({
@@ -1990,7 +2008,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await pool.query(
-        `SELECT id, email, first_name, last_name, created_at, last_login_at
+        `SELECT id, email, first_name, last_name, created_at, last_login_at, is_active
          FROM users
          WHERE role = 'super_admin'
          ORDER BY created_at ASC`
@@ -2055,6 +2073,172 @@ router.post(
       );
 
       return res.status(201).json({ success: true, data: { user_id: userId, email } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── PATCH /admins/:id/suspend ────────────────────────────────────────────────
+// Suspends a platform admin — bans the Supabase Auth identity and flips the
+// local is_active flag, which the login route now checks for every account.
+
+async function countOtherActiveAdmins(excludeId: string): Promise<number> {
+  const result = await pool.query<{ count: string }>(
+    `SELECT COUNT(*) AS count FROM users WHERE role = 'super_admin' AND is_active = true AND id != $1`,
+    [excludeId]
+  );
+  return parseInt(result.rows[0]?.count ?? '0', 10);
+}
+
+router.patch(
+  '/admins/:id/suspend',
+  ...rootGuard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = schoolActionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      if (req.params.id === req.user!.user_id) {
+        return res.status(400).json({ success: false, error: { code: 'CANNOT_SUSPEND_SELF', message: 'You cannot suspend your own account' } });
+      }
+
+      const adminResult = await pool.query<{ id: string; email: string; is_active: boolean; role: string }>(
+        `SELECT id, email, is_active, role FROM users WHERE id = $1`,
+        [req.params.id]
+      );
+      const admin = adminResult.rows[0];
+      if (!admin || admin.role !== 'super_admin') {
+        return res.status(404).json({ success: false, error: { code: 'ADMIN_NOT_FOUND', message: 'Platform admin not found' } });
+      }
+      if (!admin.is_active) {
+        return res.status(409).json({ success: false, error: { code: 'ALREADY_SUSPENDED', message: 'Admin is already suspended' } });
+      }
+      if ((await countOtherActiveAdmins(req.params.id)) < 1) {
+        return res.status(409).json({ success: false, error: { code: 'LAST_ACTIVE_ADMIN', message: 'Cannot suspend the only active platform admin' } });
+      }
+
+      const { reason } = parsed.data;
+
+      await supabaseAdmin.auth.admin.updateUserById(req.params.id, { ban_duration: '87600h' });
+      await pool.query(`UPDATE users SET is_active = false WHERE id = $1`, [req.params.id]);
+
+      await pool.query(
+        `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
+         VALUES ($1, 'PLATFORM_ADMIN_SUSPENDED', $2, $3, $4)`,
+        [req.user!.user_id, req.params.id, JSON.stringify({ reason, suspended_by: req.user!.email, email: admin.email }), req.ip]
+      );
+
+      return res.json({ success: true, data: { admin_id: req.params.id, is_active: false, reason } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── PATCH /admins/:id/reactivate ─────────────────────────────────────────────
+
+router.patch(
+  '/admins/:id/reactivate',
+  ...rootGuard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = schoolActionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const adminResult = await pool.query<{ id: string; email: string; is_active: boolean; role: string }>(
+        `SELECT id, email, is_active, role FROM users WHERE id = $1`,
+        [req.params.id]
+      );
+      const admin = adminResult.rows[0];
+      if (!admin || admin.role !== 'super_admin') {
+        return res.status(404).json({ success: false, error: { code: 'ADMIN_NOT_FOUND', message: 'Platform admin not found' } });
+      }
+      if (admin.is_active) {
+        return res.status(409).json({ success: false, error: { code: 'ALREADY_ACTIVE', message: 'Admin is already active' } });
+      }
+
+      const { reason } = parsed.data;
+
+      await supabaseAdmin.auth.admin.updateUserById(req.params.id, { ban_duration: 'none' });
+      await pool.query(`UPDATE users SET is_active = true WHERE id = $1`, [req.params.id]);
+
+      await pool.query(
+        `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
+         VALUES ($1, 'PLATFORM_ADMIN_REACTIVATED', $2, $3, $4)`,
+        [req.user!.user_id, req.params.id, JSON.stringify({ reason, reactivated_by: req.user!.email, email: admin.email }), req.ip]
+      );
+
+      return res.json({ success: true, data: { admin_id: req.params.id, is_active: true, reason } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── DELETE /admins/:id ───────────────────────────────────────────────────────
+// Permanently revokes a platform admin's access: deletes their Supabase Auth
+// identity (the password can never be used again, even via password reset) and
+// anonymizes the local row. The row itself is kept rather than hard-deleted
+// because platform_audit_logs.platform_admin_id and support_sessions reference
+// it with a NOT NULL foreign key — removing the row would destroy the
+// historical record of every platform action this admin ever took.
+
+const deleteAdminSchema = z.object({
+  confirmation_email: z.string().email(),
+});
+
+router.delete(
+  '/admins/:id',
+  ...rootGuard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = deleteAdminSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      if (req.params.id === req.user!.user_id) {
+        return res.status(400).json({ success: false, error: { code: 'CANNOT_DELETE_SELF', message: 'You cannot delete your own account' } });
+      }
+
+      const adminResult = await pool.query<{ id: string; email: string; role: string }>(
+        `SELECT id, email, role FROM users WHERE id = $1`,
+        [req.params.id]
+      );
+      const admin = adminResult.rows[0];
+      if (!admin || admin.role !== 'super_admin') {
+        return res.status(404).json({ success: false, error: { code: 'ADMIN_NOT_FOUND', message: 'Platform admin not found' } });
+      }
+      if (admin.email.toLowerCase() !== parsed.data.confirmation_email.toLowerCase()) {
+        return res.status(400).json({ success: false, error: { code: 'CONFIRMATION_FAILED', message: 'Confirmation email does not match' } });
+      }
+      if ((await countOtherActiveAdmins(req.params.id)) < 1) {
+        return res.status(409).json({ success: false, error: { code: 'LAST_ACTIVE_ADMIN', message: 'Cannot delete the only active platform admin' } });
+      }
+
+      await pool.query(
+        `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
+         VALUES ($1, 'PLATFORM_ADMIN_DELETED', $2, $3, $4)`,
+        [req.user!.user_id, req.params.id, JSON.stringify({ deleted_by: req.user!.email, original_email: admin.email }), req.ip]
+      );
+
+      try {
+        await supabaseAdmin.auth.admin.deleteUser(req.params.id);
+      } catch {
+        // Best-effort — local lockout below still applies even if Auth deletion fails.
+      }
+
+      await pool.query(
+        `UPDATE users
+         SET email = $2, password_hash = $3, is_active = false, first_name = 'Deleted', last_name = 'Admin'
+         WHERE id = $1`,
+        [req.params.id, `deleted-admin-${req.params.id}@deleted.chronixedu.local`, randomUUID()]
+      );
+
+      return res.json({ success: true, data: { admin_id: req.params.id, deleted: true } });
     } catch (err) {
       return next(err);
     }

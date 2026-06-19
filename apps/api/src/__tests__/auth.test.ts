@@ -123,11 +123,13 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'Missing credentials' },
+      error: { code: 'VALIDATION_ERROR', message: 'Valid email and password are required.' },
     });
   });
 
   it('returns a 401 envelope for invalid credentials', async () => {
+    // Lock-check SELECT finds no existing user record for this email
+    mockQuery.mockResolvedValueOnce({ rows: [] });
     mockSignIn.mockResolvedValueOnce({
       data: { user: null },
       error: { message: 'Invalid login credentials' },
@@ -140,7 +142,7 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(401);
     expect(res.body).toEqual({
       success: false,
-      error: { code: 'INVALID_CREDENTIALS', message: 'Invalid login credentials' },
+      error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials.' },
     });
   });
 
@@ -148,6 +150,11 @@ describe('POST /api/auth/login', () => {
     mockSignIn.mockResolvedValueOnce({ data: { user: { id: 'auth-uuid-1' } }, error: null });
     const passwordHash = bcrypt.hashSync('password123', 10);
     mockQuery
+      // 1. lock-check SELECT by email — no lockout in place
+      .mockResolvedValueOnce({
+        rows: [{ id: 'local-uuid-1', failed_login_attempts: 0, locked_until: null }],
+      })
+      // 2. local user SELECT by Supabase auth UUID
       .mockResolvedValueOnce({
         rows: [{
           id: 'local-uuid-1',
@@ -155,9 +162,13 @@ describe('POST /api/auth/login', () => {
           role: 'teacher',
           title: null,
           email: 'a@b.com',
+          first_name: 'A',
+          last_name: 'B',
           password_hash: passwordHash,
+          is_active: true,
         }],
       })
+      // 3. UPDATE resetting failed_login_attempts on success
       .mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)
@@ -173,6 +184,36 @@ describe('POST /api/auth/login', () => {
       role: 'teacher',
       email: 'a@b.com',
       title: null,
+      first_name: 'A',
+      last_name: 'B',
+    });
+  });
+
+  it('returns a 403 envelope for a suspended account', async () => {
+    mockSignIn.mockResolvedValueOnce({ data: { user: { id: 'auth-uuid-1' } }, error: null });
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'local-uuid-1', failed_login_attempts: 0, locked_until: null }] })
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 'local-uuid-1',
+          school_id: 'school-1',
+          role: 'teacher',
+          title: null,
+          email: 'a@b.com',
+          first_name: 'A',
+          last_name: 'B',
+          is_active: false,
+        }],
+      });
+
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ email: 'a@b.com', password: 'password123' });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({
+      success: false,
+      error: { code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Contact your administrator.' },
     });
   });
 });
@@ -188,7 +229,7 @@ describe('POST /api/auth/create-user', () => {
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       success: false,
-      error: { code: 'VALIDATION_ERROR', message: 'Missing fields: email, password, role' },
+      error: { code: 'VALIDATION_ERROR', message: 'Invalid input: expected string, received undefined' },
     });
   });
 

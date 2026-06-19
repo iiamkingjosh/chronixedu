@@ -5,6 +5,17 @@ function getToken(): string | null {
   return localStorage.getItem('chronixedu_token');
 }
 
+/** Clears the stored session and sends the user back to login. Called whenever
+ *  the API rejects a request with 401 — expired, invalid, or tampered token. */
+function handleUnauthorized() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem('chronixedu_token');
+  localStorage.removeItem('chronixedu_user');
+  if (!window.location.pathname.startsWith('/login')) {
+    window.location.href = '/login?reason=expired';
+  }
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {}
@@ -18,6 +29,7 @@ export async function apiFetch<T = unknown>(
       ...(options.headers ?? {}),
     },
   });
+  if (res.status === 401) handleUnauthorized();
   const json = await res.json();
   if (!res.ok) {
     const message =
@@ -37,6 +49,7 @@ export async function apiUpload<T = unknown>(
     body: formData,
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
+  if (res.status === 401) handleUnauthorized();
   const json = await res.json();
   if (!res.ok) {
     const message =
@@ -59,6 +72,7 @@ export async function apiFetchBlob(
       ...(options.headers ?? {}),
     },
   });
+  if (res.status === 401) handleUnauthorized();
   if (!res.ok) {
     const json = await res.json().catch(() => null);
     const message =

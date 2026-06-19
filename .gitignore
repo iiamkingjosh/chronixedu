@@ -37,3 +37,6 @@ dist/
 # Sensitive local docs — never commit
 chronixedu-test-credentials.html
 chronixedu-setup-instructions.html
+chronixedu-ops-roadmap.html
+chronixedu-onboarding-guide.html
+chronixedu-db-wipe.sql

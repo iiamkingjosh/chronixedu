@@ -37,6 +37,7 @@ import { startAnalyticsCron, stopAnalyticsCron } from './services/analyticsServi
 import { startFeeReminderCron, stopFeeReminderCron } from './services/feeReminderService';
 import { startSubscriptionCron, stopSubscriptionCron } from './services/subscriptionService';
 import { startPlatformAnalyticsCron, stopPlatformAnalyticsCron } from './services/platformAnalyticsService';
+import { startEmailQueueCron, stopEmailQueueCron } from './services/emailQueueService';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { validateEnv } from './config/env';
@@ -65,8 +66,11 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: (origin, cb) => {
+    // Disallowed origins get cb(null, false) — cors omits the Allow-Origin header
+    // so browsers block the response, without throwing into a 500 that would
+    // otherwise echo the rejected origin back in the error body.
     if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin ${origin} not allowed`));
+    cb(null, false);
   },
   credentials: true,
 }));
@@ -135,6 +139,12 @@ app.get('/health', async (_req, res) => {
   }
 });
 
+// Catch-all 404 — keeps unmatched routes on the same JSON envelope as the rest
+// of the API instead of falling through to Express's default HTML error page.
+app.use((req, res) => {
+  res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Route not found' } });
+});
+
 // Sentry error handler must be before the custom error handler
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 app.use(Sentry.expressErrorHandler() as any);
@@ -151,6 +161,7 @@ startAnalyticsCron();
 startFeeReminderCron();
 startSubscriptionCron();
 startPlatformAnalyticsCron();
+startEmailQueueCron();
 
 process.on('SIGTERM', () => {
   stopNotificationWorker();
@@ -158,5 +169,6 @@ process.on('SIGTERM', () => {
   stopFeeReminderCron();
   stopSubscriptionCron();
   stopPlatformAnalyticsCron();
+  stopEmailQueueCron();
   closeReportCardBrowser().finally(() => server.close());
 });
