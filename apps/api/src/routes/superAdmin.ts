@@ -195,6 +195,10 @@ const onboardingStep6Schema = z.object({
   phone: z.string().optional(),
 });
 
+const completeOnboardingSchema = z.object({
+  accepted_legal_terms: z.literal(true),
+});
+
 const ONBOARDING_TOTAL_STEPS = 7;
 
 // ── Announcement schemas ─────────────────────────────────────────────────────
@@ -1451,6 +1455,11 @@ router.post(
   ...guard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const parsed = completeOnboardingSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'You must accept the Terms of Service, Privacy Policy, Data Processing Agreement, and Acceptable Use Policy to continue' } });
+      }
+
       const sessionResult = await pool.query(`SELECT * FROM onboarding_sessions WHERE id = $1`, [req.params.sessionId]);
       const session = sessionResult.rows[0];
       if (!session) {
@@ -1469,7 +1478,10 @@ router.post(
       const schoolResult = await pool.query(`SELECT * FROM schools WHERE id = $1`, [session.school_id]);
       const school = schoolResult.rows[0];
 
-      await pool.query(`UPDATE schools SET is_active = TRUE WHERE id = $1`, [session.school_id]);
+      await pool.query(
+        `UPDATE schools SET is_active = TRUE, legal_terms_accepted_at = NOW(), legal_terms_accepted_ip = $2 WHERE id = $1`,
+        [session.school_id, req.ip]
+      );
       await pool.query(
         `UPDATE onboarding_sessions SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
         [req.params.sessionId]
@@ -1488,19 +1500,32 @@ router.post(
       if (principalEmail) {
         const firstName = (step6Data.first_name as string | undefined) ?? '';
         const tempPassword = (step6Data.temp_password as string | undefined) ?? '';
-        const loginUrl = `${(process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '')}/login`;
+        const appUrl = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
+        const loginUrl = `${appUrl}/login`;
         const emailBody =
-          `Dear ${firstName},\n\n` +
-          `Your school has been set up on Chronix Edu.\n\n` +
-          `Login URL: ${loginUrl}\n` +
+          `Hi ${firstName},\n\n` +
+          `Welcome to Chronix Edu! Your school's account has been successfully set up and is now live and ready to use.\n\n` +
+          `Here are your login details:\n\n` +
+          `Login Portal: ${loginUrl}\n` +
           `Email: ${principalEmail}\n` +
           `Temporary Password: ${tempPassword}\n\n` +
-          `Please change your password on first login.\n\n` +
-          `Welcome aboard,\n` +
-          `Chronix Technology Limited`;
+          `For your security, you will be asked to set a new password the first time you log in.\n\n` +
+          `GETTING STARTED\n\n` +
+          `Here is a quick path to get your school fully set up:\n\n` +
+          `1. Log in and create your new password\n` +
+          `2. Add your school logo and branding under Settings → School Identity\n` +
+          `3. Set up your classes and subjects under Settings → Roster\n` +
+          `4. Add your teachers under Settings → Users\n` +
+          `5. Register your students under Registrar → Students\n\n` +
+          `If you have any questions getting started, simply reply to this email or reach us at support@chronixtechnology.com — we are happy to help.\n\n` +
+          `You can review our Terms of Service, Privacy Policy, Data Processing Agreement, and Acceptable Use Policy at ${appUrl}/legal at any time.\n\n` +
+          `Welcome aboard, and we look forward to supporting your school's journey.\n\n` +
+          `Warm regards,\n` +
+          `The Chronix Technology Team\n` +
+          `support@chronixtechnology.com`;
 
         if (isEmailConfigured()) {
-          await sendEmail(principalEmail, 'Welcome to Chronix Edu — Your school is ready', emailBody);
+          await sendEmail(principalEmail, 'Welcome to Chronix Edu — Your School Portal is Now Live', emailBody);
         } else {
           console.log(`[onboarding] SendGrid not configured. Welcome email for ${principalEmail}:\n${emailBody}`);
         }

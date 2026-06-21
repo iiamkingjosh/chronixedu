@@ -362,6 +362,7 @@ export async function saveOnboardingStep(
 export async function completeOnboarding(sessionId: string): Promise<CompleteOnboardingResponse> {
   const res = await apiFetch<ApiResponse<CompleteOnboardingResponse>>(`/api/super-admin/onboarding/${sessionId}/complete`, {
     method: 'POST',
+    body: JSON.stringify({ accepted_legal_terms: true }),
   });
   return res.data;
 }
