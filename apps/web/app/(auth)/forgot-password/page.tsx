@@ -30,7 +30,8 @@ export default function ForgotPasswordPage() {
   async function onSubmit(values: FormValues) {
     setSubmitError(null);
     try {
-      const redirectTo = `${window.location.origin}/reset-password`;
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
+      const redirectTo = `${appUrl}/reset-password`;
       const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
