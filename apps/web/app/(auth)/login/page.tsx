@@ -170,9 +170,16 @@ export default function LoginPage() {
         </form>
       </div>
 
-      <p className="mt-6 text-center text-xs text-gray-400">
-        Chronix Technology Limited
-      </p>
+      <div className="mt-6 text-center text-xs text-gray-400 space-y-1.5">
+        <p>Chronix Technology Limited</p>
+        <p className="flex justify-center gap-3 flex-wrap">
+          <Link href="/legal/privacy-policy" className="hover:underline">Privacy Policy</Link>
+          <Link href="/legal/cookie-policy" className="hover:underline">Cookie Policy</Link>
+          <Link href="/legal/terms" className="hover:underline">Terms of Service</Link>
+          <Link href="/legal/data-processing-agreement" className="hover:underline">DPA</Link>
+          <Link href="/legal/acceptable-use" className="hover:underline">Acceptable Use</Link>
+        </p>
+      </div>
     </div>
   );
 }

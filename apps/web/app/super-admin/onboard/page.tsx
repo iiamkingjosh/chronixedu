@@ -650,6 +650,7 @@ function Step7Review({ wizard, onBack, onComplete }: {
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   async function handleComplete() {
     setSubmitting(true);
@@ -707,11 +708,27 @@ function Step7Review({ wizard, onBack, onComplete }: {
         <p className="text-sm text-gray-900">{wizard.adminFirstName} {wizard.adminLastName} ({wizard.adminEmail})</p>
       </div>
 
+      <label className="flex items-start gap-2.5 bg-gray-50 rounded-lg px-4 py-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={acceptedTerms}
+          onChange={(e) => setAcceptedTerms(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span className="text-sm text-gray-700">
+          I confirm this school has agreed to Chronix Edu&apos;s{' '}
+          <Link href="/legal/terms" target="_blank" className="text-[#2472B4] hover:underline">Terms of Service</Link>,{' '}
+          <Link href="/legal/privacy-policy" target="_blank" className="text-[#2472B4] hover:underline">Privacy Policy</Link>,{' '}
+          <Link href="/legal/data-processing-agreement" target="_blank" className="text-[#2472B4] hover:underline">Data Processing Agreement</Link>, and{' '}
+          <Link href="/legal/acceptable-use" target="_blank" className="text-[#2472B4] hover:underline">Acceptable Use Policy</Link>.
+        </span>
+      </label>
+
       {apiError && <ErrorBox message={apiError} />}
 
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className={backButtonClass}>Back</button>
-        <button type="button" onClick={handleComplete} disabled={submitting} className={nextButtonClass}>
+        <button type="button" onClick={handleComplete} disabled={submitting || !acceptedTerms} className={nextButtonClass}>
           {submitting ? 'Completing…' : 'Complete Onboarding'}
         </button>
       </div>
