@@ -9,6 +9,7 @@ import * as parentQueries from '../db/queries/parents';
 import * as studentQueries from '../db/queries/students';
 import * as paystackService from '../services/paystackService';
 import * as receiptService from '../services/receiptService';
+import * as paymentReceiptNotifier from '../services/paymentReceiptNotifier';
 import * as rosterQueries from '../db/queries/roster';
 import * as feeReminderService from '../services/feeReminderService';
 
@@ -19,6 +20,7 @@ jest.mock('../db/queries/students');
 jest.mock('../db/queries/roster');
 jest.mock('../services/paystackService');
 jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
+jest.mock('../services/paymentReceiptNotifier');
 jest.mock('../services/feeReminderService');
 
 const mockFees = feesQueries as jest.Mocked<typeof feesQueries>;
@@ -27,6 +29,7 @@ const mockParents = parentQueries as jest.Mocked<typeof parentQueries>;
 const mockStudents = studentQueries as jest.Mocked<typeof studentQueries>;
 const mockPaystack = paystackService as jest.Mocked<typeof paystackService>;
 const mockReceipt = receiptService as jest.Mocked<typeof receiptService>;
+const mockNotifier = paymentReceiptNotifier as jest.Mocked<typeof paymentReceiptNotifier>;
 const mockRoster = rosterQueries as jest.Mocked<typeof rosterQueries>;
 const mockFeeReminder = feeReminderService as jest.Mocked<typeof feeReminderService>;
 
@@ -51,6 +54,8 @@ const CLASS_ID = '22222222-2222-4222-8222-222222222222';
 const STUDENT_ID = '33333333-3333-4333-8333-333333333333';
 const INVOICE_ID = '44444444-4444-4444-8444-444444444444';
 const PAYMENT_ID = '55555555-5555-4555-8555-555555555555';
+const PAYMENT_AMOUNT = 10000;
+const INVOICE_TOTAL_AMOUNT = 15000;
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -404,13 +409,13 @@ describe('GET /api/schools/:schoolId/fee-invoices/summary', () => {
 describe('POST /api/schools/:schoolId/payments', () => {
   const PAYMENT_RESULT = {
     payment: {
-      id: 'pay-1', invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: 10000,
+      id: 'pay-1', invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: PAYMENT_AMOUNT,
       payment_date: '', method: 'cash', reference: 'RCT-1', paystack_reference: null,
       recorded_by: 'user-uuid-001', created_at: '',
     },
     invoice: {
       id: INVOICE_ID, school_id: SCHOOL_ID, student_id: STUDENT_ID, term_id: TERM_ID,
-      total_amount: 15000, amount_paid: 15000, balance: 0, status: 'paid',
+      total_amount: INVOICE_TOTAL_AMOUNT, amount_paid: INVOICE_TOTAL_AMOUNT, balance: 0, status: 'paid',
       created_at: '', updated_at: '',
     },
   };
@@ -421,16 +426,17 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'cash', reference: 'RCT-1' });
+      .send({ invoice_id: INVOICE_ID, amount: PAYMENT_AMOUNT, method: 'cash', reference: 'RCT-1' });
 
     expect(res.status).toBe(201);
     expect(res.body.data).toEqual(PAYMENT_RESULT);
     expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: 10000, method: 'cash', reference: 'RCT-1', paystack_reference: null, recorded_by: 'user-uuid-001',
+      amount: PAYMENT_AMOUNT, method: 'cash', reference: 'RCT-1', paystack_reference: null, recorded_by: 'user-uuid-001',
     });
     expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
       schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
     }));
+    expect(mockNotifier.notifyPaymentReceipt).toHaveBeenCalledWith(SCHOOL_ID, 'pay-1', STUDENT_ID);
   });
 
   it('returns 404 when the invoice does not exist', async () => {
@@ -726,20 +732,20 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
 describe('GET /api/schools/:schoolId/payments/paystack/callback', () => {
   const PAYMENT_RESULT = {
     payment: {
-      id: 'pay-1', invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: 10000,
+      id: 'pay-1', invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: PAYMENT_AMOUNT,
       payment_date: '', method: 'paystack', reference: null, paystack_reference: 'ref-xyz',
       recorded_by: 'user-uuid-001', created_at: '',
     },
     invoice: {
       id: INVOICE_ID, school_id: SCHOOL_ID, student_id: STUDENT_ID, term_id: TERM_ID,
-      total_amount: 15000, amount_paid: 15000, balance: 0, status: 'paid',
+      total_amount: INVOICE_TOTAL_AMOUNT, amount_paid: INVOICE_TOTAL_AMOUNT, balance: 0, status: 'paid',
       created_at: '', updated_at: '',
     },
   };
 
   const SUCCESS_VERIFICATION = {
     status: 'success',
-    amount: 10000,
+    amount: PAYMENT_AMOUNT,
     currency: 'NGN',
     reference: 'ref-xyz',
     metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID, recorded_by: 'user-uuid-001' },
@@ -754,11 +760,12 @@ describe('GET /api/schools/:schoolId/payments/paystack/callback', () => {
     expect(res.status).toBe(302);
     expect(res.headers.location).toContain('payment=success');
     expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: 10000, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
+      amount: PAYMENT_AMOUNT, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
     });
     expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
       schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
     }));
+    expect(mockNotifier.notifyPaymentReceipt).toHaveBeenCalledWith(SCHOOL_ID, 'pay-1', STUDENT_ID);
   });
 
   it('redirects with payment=error when reference is missing', async () => {
@@ -830,13 +837,13 @@ describe('GET /api/schools/:schoolId/payments/paystack/callback', () => {
 describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
   const PAYMENT_RESULT = {
     payment: {
-      id: 'pay-1', invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: 10000,
+      id: 'pay-1', invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: PAYMENT_AMOUNT,
       payment_date: '', method: 'paystack', reference: null, paystack_reference: 'ref-xyz',
       recorded_by: 'user-uuid-001', created_at: '',
     },
     invoice: {
       id: INVOICE_ID, school_id: SCHOOL_ID, student_id: STUDENT_ID, term_id: TERM_ID,
-      total_amount: 15000, amount_paid: 15000, balance: 0, status: 'paid',
+      total_amount: INVOICE_TOTAL_AMOUNT, amount_paid: INVOICE_TOTAL_AMOUNT, balance: 0, status: 'paid',
       created_at: '', updated_at: '',
     },
   };
@@ -845,7 +852,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
     event: 'charge.success',
     data: {
       reference: 'ref-xyz',
-      amount: 1000000,
+      amount: PAYMENT_AMOUNT * 100,
       metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID, recorded_by: 'user-uuid-001' },
     },
   };
@@ -897,11 +904,12 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.processed).toBe(true);
     expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: 10000, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
+      amount: PAYMENT_AMOUNT, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
     });
     expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
       schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
     }));
+    expect(mockNotifier.notifyPaymentReceipt).toHaveBeenCalledWith(SCHOOL_ID, 'pay-1', STUDENT_ID);
   });
 
   it('ignores events whose metadata school_id does not match the URL', async () => {
@@ -934,6 +942,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.processed).toBe(false);
     expect(res.body.data.duplicate).toBe(true);
+    expect(mockNotifier.notifyPaymentReceipt).not.toHaveBeenCalled();
   });
 
   it('returns processed:false when the invoice no longer exists', async () => {
