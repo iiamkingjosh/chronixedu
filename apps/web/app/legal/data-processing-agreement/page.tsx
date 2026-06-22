@@ -44,6 +44,7 @@ export default function DataProcessingAgreementPage() {
         <li>Assist the School, at the School&apos;s request, in responding to data subject access, correction, or deletion requests, and in regulatory inquiries</li>
         <li>Notify the School of a Personal Data Breach without undue delay, and in any case within 72 hours of becoming aware of it, including the nature of the breach, categories and approximate number of data subjects affected, and the measures taken or proposed to address it</li>
         <li>Not engage a new Sub-processor without giving the School prior notice and a reasonable opportunity to object (Section 6)</li>
+        <li>Register with the Nigeria Data Protection Commission (NDPC) as a Data Controller or Processor of Major Importance, and engage a licensed Data Protection Compliance Organisation to conduct any compliance audit required under the Nigeria Data Protection Act 2023, in each case where and to the extent applicable thresholds are met</li>
       </ul>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">5. School obligations</h2>
@@ -81,13 +82,13 @@ export default function DataProcessingAgreementPage() {
       <p>Chronix Edu will, taking into account the nature of the processing, provide reasonable assistance to the School in responding to requests from data subjects to exercise their rights (access, correction, deletion, portability) under applicable Data Protection Law. Where a data subject contacts Chronix Edu directly, we will refer the request to the relevant School without undue delay.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">10. Audits</h2>
-      <p>On reasonable written request, no more than once per year, Chronix Edu will provide the School with information reasonably necessary to demonstrate compliance with this DPA, including summaries of relevant security certifications or audit findings where available.</p>
+      <p>On reasonable written request, no more than once per year and on at least thirty (30) days&apos; notice, Chronix Edu will provide the School with information reasonably necessary to demonstrate compliance with this DPA, including summaries of relevant security certifications or audit findings where available. The School bears its own costs of conducting an audit; Chronix Edu may charge a reasonable fee for audits requiring more than the provision of existing documentation.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">11. Return or deletion of data</h2>
-      <p>On termination of the Service, the School has thirty (30) days to request a complete export of its data in a portable format (CSV or PDF). Chronix Edu will permanently delete the School&apos;s Personal Data from its systems and those of its Sub-processors within ninety (90) days of subscription termination, except where retention is required by applicable law.</p>
+      <p>On termination of the Service, the School has thirty (30) days to request a complete export of its data in a portable format (CSV or PDF). Chronix Edu will permanently delete the School&apos;s Personal Data from its systems and those of its Sub-processors within ninety (90) days of subscription termination, except where retention is required by applicable law. This mirrors the timelines set out in Section 22 of our Terms of Service.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">12. Liability</h2>
-      <p>Each party&apos;s liability arising under or in connection with this DPA is subject to the limitations and exclusions of liability set out in our Terms of Service.</p>
+      <p>Each party&apos;s liability arising under or in connection with this DPA is subject to the limitations and exclusions of liability set out in Section 17 of our Terms of Service, including the carve-outs from the liability cap for breach of this DPA, gross negligence, or wilful misconduct.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">13. Term</h2>
       <p>This DPA takes effect on the date the School begins using the Service and remains in force for as long as Chronix Edu processes Personal Data on the School&apos;s behalf, notwithstanding termination of the underlying subscription.</p>

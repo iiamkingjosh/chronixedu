@@ -92,6 +92,12 @@ export default function TermsOfServicePage() {
         <li>Use the Services to compete with us, or for any unauthorised revenue-generating purpose, advertising, or selling goods or services</li>
         <li>Sell or otherwise transfer your account</li>
       </ul>
+      <p>This section and Section 24 (Restrictions on Use) are supplemented by our{' '}
+        <a href="/legal/acceptable-use" className="text-[#2472B4] hover:underline">Acceptable Use Policy</a>,
+        which is incorporated into these Legal Terms by reference and governs the conduct of all users of
+        the Services, including staff, parents, and students who are not themselves a contracting party to
+        these Legal Terms.
+      </p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">7. User-generated contributions</h2>
       <p>The Services may allow you to create, submit, post, or transmit content such as messages, announcements, assignments, or files (&quot;Contributions&quot;). Contributions may be viewable by other users and are treated in accordance with our Privacy Policy. When you submit a Contribution, you represent and warrant that it: does not infringe any third party&apos;s intellectual property or privacy rights; is not false, misleading, unsolicited, or unlawful advertising; is not obscene, harassing, or otherwise objectionable; does not violate any law concerning the protection of minors; and does not otherwise violate these Legal Terms. Violation of this section may result in suspension or termination of your access.</p>
@@ -112,7 +118,7 @@ export default function TermsOfServicePage() {
       </p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">11. Term and termination</h2>
-      <p>These Legal Terms remain in effect while you use the Services. We reserve the right, in our sole discretion and without notice, to deny access to and use of the Services to any person for any reason, including breach of these Legal Terms, and to delete any content or information you posted at any time. If we terminate or suspend your account, you are prohibited from registering a new account under your name or any other name, and we reserve the right to pursue legal action.</p>
+      <p>These Legal Terms remain in effect while you use the Services. We reserve the right, in our sole discretion, to deny access to and use of the Services to any person for any reason, including breach of these Legal Terms. If we terminate or suspend a School&apos;s account, we will provide the data export window described in Section 22 (Student Data Ownership and Portability) before deleting that School&apos;s data — except where immediate suspension without a grace period is necessary to prevent harm to other users, comply with law, or address a security incident, in which case we will still preserve a copy of the School&apos;s data for the thirty (30) day export period described in Section 22 unless prohibited by law. If we terminate or suspend your account, you are prohibited from registering a new account under your name or any other name, and we reserve the right to pursue legal action.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">12. Modifications and interruptions</h2>
       <p>We reserve the right to change, modify, or remove the contents of the Services at any time without notice, and we have no obligation to update information on the Services. We cannot guarantee the Services will be available at all times and will have no liability for any loss caused by downtime, interruption, or discontinuance.</p>
@@ -133,10 +139,12 @@ export default function TermsOfServicePage() {
       <p>THE SERVICES ARE PROVIDED ON AN AS-IS AND AS-AVAILABLE BASIS. YOUR USE OF THE SERVICES IS AT YOUR SOLE RISK. TO THE FULLEST EXTENT PERMITTED BY LAW, WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. WE ASSUME NO LIABILITY FOR ERRORS OR INACCURACIES OF CONTENT, PERSONAL INJURY OR PROPERTY DAMAGE RESULTING FROM YOUR USE OF THE SERVICES, UNAUTHORISED ACCESS TO OUR SERVERS, INTERRUPTION OF TRANSMISSION, OR BUGS AND VIRUSES TRANSMITTED THROUGH THE SERVICES BY THIRD PARTIES.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">17. Limitations of liability</h2>
-      <p>IN NO EVENT WILL WE OR OUR DIRECTORS, EMPLOYEES, OR AGENTS BE LIABLE TO YOU FOR ANY DIRECT, INDIRECT, CONSEQUENTIAL, EXEMPLARY, INCIDENTAL, SPECIAL, OR PUNITIVE DAMAGES, INCLUDING LOST PROFIT, LOST REVENUE, OR LOSS OF DATA, ARISING FROM YOUR USE OF THE SERVICES. OUR TOTAL LIABILITY TO YOU FOR ANY CAUSE WHATSOEVER WILL AT ALL TIMES BE LIMITED TO THE AMOUNT YOU PAID US DURING THE SIX (6) MONTH PERIOD PRIOR TO THE CAUSE OF ACTION ARISING.</p>
+      <p>IN NO EVENT WILL WE OR OUR DIRECTORS, EMPLOYEES, OR AGENTS BE LIABLE TO YOU FOR ANY DIRECT, INDIRECT, CONSEQUENTIAL, EXEMPLARY, INCIDENTAL, SPECIAL, OR PUNITIVE DAMAGES, INCLUDING LOST PROFIT, LOST REVENUE, OR LOSS OF DATA, ARISING FROM YOUR USE OF THE SERVICES. SUBJECT TO THE EXCEPTIONS BELOW, OUR TOTAL LIABILITY TO YOU FOR ANY CAUSE WHATSOEVER WILL AT ALL TIMES BE LIMITED TO THE GREATER OF (A) THE AMOUNT YOU PAID US DURING THE SIX (6) MONTH PERIOD PRIOR TO THE CAUSE OF ACTION ARISING, OR (B) ₦500,000 (FIVE HUNDRED THOUSAND NAIRA).</p>
+      <p>The limitation in the preceding paragraph does not apply to, and there is no liability cap in respect of: (a) our breach of the Data Processing Agreement or confidentiality obligations relating to personal data; (b) our gross negligence or wilful misconduct; (c) our indemnification obligations under Section 18; or (d) our infringement of a third party&apos;s intellectual property rights. Nothing in these Legal Terms limits or excludes liability that cannot be limited or excluded under applicable law, including the Nigeria Data Protection Act 2023.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">18. Indemnification</h2>
       <p>You agree to defend, indemnify, and hold us harmless, including our officers, agents, and employees, from any loss, liability, claim, or demand arising from: your use of the Services; breach of these Legal Terms; breach of your representations and warranties; violation of a third party&apos;s rights; or any harmful act toward another user. We reserve the right, at your expense, to assume exclusive defence of any matter subject to indemnification.</p>
+      <p>We agree to defend, indemnify, and hold the School harmless from any loss, liability, claim, or demand arising from our gross negligence or wilful misconduct in processing the School&apos;s data under the Data Processing Agreement, subject to the limitations in Section 17.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">19. User data</h2>
       <p>We maintain certain data you transmit to the Services to manage their performance, and data relating to your use of the Services. Although we perform routine backups, you are solely responsible for all data you transmit, and we have no liability for any loss or corruption of such data.</p>
@@ -146,12 +154,14 @@ export default function TermsOfServicePage() {
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">21. Miscellaneous</h2>
       <p>These Legal Terms, together with any policies posted on the Services, constitute the entire agreement between you and us. Our failure to enforce any right or provision is not a waiver of it. If any provision is found unlawful or unenforceable, it is severable and does not affect the remaining provisions. No joint venture, partnership, employment, or agency relationship is created between you and us by these Legal Terms.</p>
+      <p>We may assign these Legal Terms in connection with a merger, acquisition, or sale of substantially all of our assets, provided the assignee agrees in writing to assume our obligations under the Data Processing Agreement with respect to any School data already collected. You may not assign these Legal Terms without our prior written consent.</p>
+      <p><strong>Force majeure.</strong> Neither party is liable for any failure or delay in performance (other than payment obligations) caused by circumstances beyond its reasonable control, including natural disasters, internet or power infrastructure failures, governmental action, or pandemic-related restrictions.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">22. Student data ownership and portability</h2>
       <p>All student, parent, staff, and academic data entered into the Chronix Edu platform remains the sole property of the subscribing school (&quot;School&quot;). Chronix Technology Limited acts solely as a data processor on behalf of the School and claims no ownership rights over any data entered, generated, or stored within the platform. Upon termination of a subscription, the School may request a complete export of its data in a portable format (CSV or PDF) within thirty (30) days of termination. Chronix Technology Limited will permanently delete all School data from its systems and those of its sub-processors within ninety (90) days of subscription termination, except where retention is required by applicable law.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">23. Service availability and maintenance</h2>
-      <p>Chronix Technology Limited will use commercially reasonable efforts to maintain the availability of the Chronix Edu platform but does not guarantee uninterrupted access. The platform relies on third-party infrastructure providers, including Supabase and Railway, and any outage, degradation, or interruption caused by these providers is outside our direct control. Scheduled maintenance will, where reasonably possible, be communicated to Schools at least forty-eight (48) hours in advance. We are not liable for any loss arising from service interruptions caused by third-party infrastructure failures, internet service provider outages, or force majeure events.</p>
+      <p>Chronix Technology Limited will use commercially reasonable efforts to maintain the availability of the Chronix Edu platform but does not guarantee uninterrupted access under the standard subscription tiers. The platform relies on third-party infrastructure providers, including Supabase and Railway, and any outage, degradation, or interruption caused by these providers is outside our direct control. Scheduled maintenance will, where reasonably possible, be communicated to Schools at least forty-eight (48) hours in advance. We are not liable for any loss arising from service interruptions caused by third-party infrastructure failures, internet service provider outages, or force majeure events. Schools on our Enterprise tier may be offered a separate, individually negotiated Service Level Agreement governing uptime commitments and service credits, as set out in their specific subscription agreement.</p>
 
       <h2 className="text-base font-semibold text-gray-900 mt-4">24. Restrictions on use</h2>
       <p>Schools and their authorised users (administrators, teachers, registrars, bursars) agree not to: (a) enter false, misleading, or fraudulent student or financial records into the platform; (b) attempt to access, view, or extract data belonging to any other school on the platform; (c) share login credentials between staff members; (d) use the platform&apos;s messaging or communication features to harass, intimidate, or send unsolicited commercial content to parents or students; or (e) attempt to reverse engineer, decompile, or extract the source code of the platform. Violation of this clause may result in immediate suspension of the School&apos;s account without refund.</p>
@@ -164,6 +174,11 @@ export default function TermsOfServicePage() {
       <p>
         Email:{' '}
         <a href="mailto:info@chronixtechnology.com" className="text-[#2472B4] hover:underline">info@chronixtechnology.com</a>
+      </p>
+
+      <p className="text-xs text-gray-400 italic mt-6">
+        These Terms of Service were drafted to reflect our current practices and have not yet been reviewed
+        by external legal counsel. They will be updated following that review.
       </p>
     </>
   );
