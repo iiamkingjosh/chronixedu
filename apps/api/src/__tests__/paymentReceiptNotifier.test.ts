@@ -91,4 +91,24 @@ describe('notifyPaymentReceipt', () => {
 
     await expect(notifyPaymentReceipt(SCHOOL_ID, PAYMENT_ID, STUDENT_ID)).resolves.toBeUndefined();
   });
+
+  it('still emails the second parent when the first parent email fails', async () => {
+    mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_ROW as never);
+    mockReceipt.generateReceipt.mockResolvedValueOnce('https://storage.example/receipts/pay-1.pdf');
+    mockParents.getParentsForStudent.mockResolvedValueOnce([
+      { parent_id: 'p1', email: 'parent1@example.com', phone: null },
+      { parent_id: 'p2', email: 'parent2@example.com', phone: null },
+    ] as never);
+    mockEmail.sendEmail.mockRejectedValueOnce(new Error('SMTP rejected'));
+    mockEmail.sendEmail.mockResolvedValueOnce(undefined as never);
+
+    await expect(notifyPaymentReceipt(SCHOOL_ID, PAYMENT_ID, STUDENT_ID)).resolves.toBeUndefined();
+
+    expect(mockEmail.sendEmail).toHaveBeenCalledTimes(2);
+    expect(mockEmail.sendEmail).toHaveBeenCalledWith(
+      'parent2@example.com',
+      'Payment receipt — Chronix Edu',
+      expect.stringContaining('https://storage.example/receipts/pay-1.pdf')
+    );
+  });
 });
