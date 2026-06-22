@@ -963,10 +963,11 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
 
 describe('GET /api/schools/:schoolId/payments/:paymentId/receipt', () => {
   const PAYMENT_RECEIPT_ROW = {
-    id: PAYMENT_ID, invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: 10000,
+    id: PAYMENT_ID, invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: PAYMENT_AMOUNT,
     payment_date: '2026-06-11', method: 'cash', reference: 'RCT-1', paystack_reference: null,
     recorded_by: 'user-uuid-001', created_at: '',
-    total_amount: 15000, amount_paid: 15000, balance: 0, invoice_status: 'paid',
+    student_id: STUDENT_ID,
+    total_amount: INVOICE_TOTAL_AMOUNT, amount_paid: INVOICE_TOTAL_AMOUNT, balance: 0, invoice_status: 'paid',
     first_name: 'Amina', last_name: 'Okonkwo', admission_no: 'CE/2026/001',
     class_name: 'JSS 1A', term_name: 'First Term', session_name: '2025/2026',
   };
@@ -997,13 +998,30 @@ describe('GET /api/schools/:schoolId/payments/:paymentId/receipt', () => {
     expect(mockReceipt.generateReceipt).not.toHaveBeenCalled();
   });
 
-  it('returns 403 for parent', async () => {
+  it('returns the receipt for a parent linked to the student', async () => {
+    mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_RECEIPT_ROW as never);
+    mockReceipt.generateReceipt.mockResolvedValueOnce('https://storage.example/receipts/pay-1.pdf');
+    mockParents.isParentLinkedToStudent.mockResolvedValueOnce(true);
+
+    const res = await request(app)
+      .get(`/api/schools/${SCHOOL_ID}/payments/${PAYMENT_ID}/receipt`)
+      .set('Authorization', `Bearer ${makeToken('parent', SCHOOL_ID)}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ url: 'https://storage.example/receipts/pay-1.pdf' });
+    expect(mockParents.isParentLinkedToStudent).toHaveBeenCalledWith('user-uuid-001', STUDENT_ID);
+  });
+
+  it('returns 403 for a parent not linked to the student', async () => {
+    mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_RECEIPT_ROW as never);
+    mockParents.isParentLinkedToStudent.mockResolvedValueOnce(false);
+
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/payments/${PAYMENT_ID}/receipt`)
       .set('Authorization', `Bearer ${makeToken('parent', SCHOOL_ID)}`);
 
     expect(res.status).toBe(403);
-    expect(mockFees.getPaymentById).not.toHaveBeenCalled();
+    expect(mockReceipt.generateReceipt).not.toHaveBeenCalled();
   });
 });
 
