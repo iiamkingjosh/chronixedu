@@ -6,7 +6,7 @@ import * as emailService from '../services/emailService';
 
 jest.mock('../db/queries/fees');
 jest.mock('../db/queries/parents');
-jest.mock('../services/receiptService');
+jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
 jest.mock('../services/emailService');
 jest.mock('../config/logger', () => ({ logger: { error: jest.fn() } }));
 
