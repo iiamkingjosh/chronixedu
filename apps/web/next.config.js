@@ -81,6 +81,8 @@ const nextConfig = {
         "wss://pgnpmqaowrnmsytpehwc.supabase.co",
         "https://*.ingest.us.sentry.io",
         "https://*.ingest.sentry.io",
+        // Local API dev server — never included in production builds
+        ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3001']),
       ].join(' '),
       "frame-ancestors 'self'",
       "object-src 'none'",
