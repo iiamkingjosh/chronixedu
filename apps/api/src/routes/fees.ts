@@ -396,7 +396,7 @@ router.get(
   '/:schoolId/payments/:paymentId/receipt',
   verifyToken,
   requireSchoolAccess,
-  requireRole('bursar', 'principal', 'super_admin'),
+  requireRole('bursar', 'principal', 'super_admin', 'parent'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, paymentId } = req.params;
@@ -404,6 +404,13 @@ router.get(
       const payment = await getPaymentById(schoolId, paymentId);
       if (!payment) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Payment not found' } });
+      }
+
+      if (req.user!.role === 'parent') {
+        const allowed = await canAccessInvoiceForStudent(req.user!, schoolId, payment.student_id);
+        if (!allowed) {
+          return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+        }
       }
 
       const url = await generateReceipt(schoolId, payment);
