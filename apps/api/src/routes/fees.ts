@@ -20,6 +20,7 @@ import {
   getPaymentById,
 } from '../db/queries/fees';
 import { generateReceipt } from '../services/receiptService';
+import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
 import {
   isPaystackConfigured,
   verifyPaystackTransaction,
@@ -368,6 +369,8 @@ router.post(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Invoice not found' } });
       }
 
+      notifyPaymentReceipt(req.params.schoolId, result.payment.id, result.invoice.student_id);
+
       await logAudit({
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -530,6 +533,8 @@ router.get(
           return res.redirect(`${redirectBase}?payment=error&reason=invoice_not_found`);
         }
 
+        notifyPaymentReceipt(schoolId, result.payment.id, result.invoice.student_id);
+
         if (metadata.recorded_by) {
           await logAudit({
             schoolId,
@@ -600,6 +605,8 @@ router.post(
         if (!result) {
           return res.status(200).json({ success: true, data: { processed: false } });
         }
+
+        notifyPaymentReceipt(req.params.schoolId, result.payment.id, result.invoice.student_id);
 
         if (metadata.recorded_by) {
           await logAudit({
