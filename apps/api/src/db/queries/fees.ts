@@ -232,6 +232,7 @@ export async function recordPayment(
 }
 
 export interface PaymentReceiptRow extends PaymentRow {
+  student_id: string;
   total_amount: number;
   amount_paid: number;
   balance: number;
@@ -251,6 +252,7 @@ export async function getPaymentById(schoolId: string, paymentId: string): Promi
     `SELECT
        p.id, p.invoice_id, p.school_id, p.amount, p.payment_date, p.method,
        p.reference, p.paystack_reference, p.recorded_by, p.created_at,
+       fi.student_id,
        fi.total_amount, fi.amount_paid, fi.balance, fi.status AS invoice_status,
        u.first_name, u.last_name, s.admission_no,
        c.name AS class_name,
