@@ -30,7 +30,17 @@ export async function notifyPaymentReceipt(schoolId: string, paymentId: string, 
       `Thank you,\nChronix Edu`;
 
     for (const parent of parents) {
-      await sendEmail(parent.email, subject, body);
+      try {
+        await sendEmail(parent.email, subject, body);
+      } catch (err) {
+        logger.error('payment_receipt_notify_email_failed', {
+          schoolId,
+          paymentId,
+          studentId,
+          parentId: parent.parent_id,
+          error: err instanceof Error ? err.message : err,
+        });
+      }
     }
   } catch (err) {
     logger.error('payment_receipt_notify_failed', {
