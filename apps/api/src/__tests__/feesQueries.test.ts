@@ -441,6 +441,7 @@ describe('getPaymentById', () => {
       id: 'pay-1', invoice_id: 'inv-1', school_id: 'school-1', amount: '10000.00',
       payment_date: '2026-06-11', method: 'cash', reference: 'RCT-2', paystack_reference: null,
       recorded_by: 'user-1', created_at: '',
+      student_id: 'student-1',
       total_amount: '15000.00', amount_paid: '15000.00', balance: '0.00', invoice_status: 'paid',
       first_name: 'Amina', last_name: 'Okonkwo', admission_no: 'CE/2026/001',
       class_name: 'JSS 1A', term_name: 'First Term', session_name: '2025/2026',
@@ -451,7 +452,7 @@ describe('getPaymentById', () => {
 
     expect(result).toEqual(row);
     expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining('FROM payments'),
+      expect.stringContaining('fi.student_id'),
       ['pay-1', 'school-1']
     );
   });
