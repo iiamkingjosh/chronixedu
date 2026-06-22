@@ -451,10 +451,10 @@ describe('getPaymentById', () => {
     const result = await getPaymentById('school-1', 'pay-1');
 
     expect(result).toEqual(row);
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining('fi.student_id'),
-      ['pay-1', 'school-1']
-    );
+    expect(mockQuery).toHaveBeenCalledWith(expect.any(String), ['pay-1', 'school-1']);
+    const [actualQuery] = mockQuery.mock.calls[0];
+    const selectClause = actualQuery.split(/\bFROM\b/)[0];
+    expect(selectClause).toContain('fi.student_id');
   });
 
   it('returns null when no payment exists for the school', async () => {
