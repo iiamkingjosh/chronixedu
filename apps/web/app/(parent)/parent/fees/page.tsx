@@ -51,6 +51,7 @@ export default function ParentFeesPage() {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState('');
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -119,6 +120,19 @@ export default function ParentFeesPage() {
     } catch (err) {
       setPayError(err instanceof Error ? err.message : 'Failed to start payment');
       setPaying(false);
+    }
+  }
+
+  async function downloadReceipt(paymentId: string) {
+    if (!schoolId) return;
+    setReceiptError('');
+    try {
+      const res = await apiFetch<{ success: boolean; data: { url: string } }>(
+        `/api/schools/${schoolId}/payments/${paymentId}/receipt`
+      );
+      window.open(res.data.url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setReceiptError(err instanceof Error ? err.message : 'Failed to generate receipt');
     }
   }
 
@@ -229,16 +243,28 @@ export default function ParentFeesPage() {
 
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
             <h2 className="text-sm font-semibold text-gray-900 mb-3">Payment History</h2>
+            {receiptError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5 text-sm text-red-700 mb-3">{receiptError}</div>
+            )}
             {invoice.payments.length === 0 ? (
               <p className="text-sm text-gray-500">No payments have been recorded yet.</p>
             ) : (
               <div className="divide-y divide-gray-100">
                 {invoice.payments.map(p => (
                   <div key={p.id} className="flex items-center justify-between py-2 text-sm">
-                    <p className="text-gray-900 font-medium">{formatCurrency(p.amount)}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(p.payment_date).toLocaleDateString()} · {p.method.replace('_', ' ')}
-                    </p>
+                    <div>
+                      <p className="text-gray-900 font-medium">{formatCurrency(p.amount)}</p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(p.payment_date).toLocaleDateString()} · {p.method.replace('_', ' ')}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => downloadReceipt(p.id)}
+                      className="text-xs font-medium text-[#2472B4] hover:underline"
+                    >
+                      Download Receipt
+                    </button>
                   </div>
                 ))}
               </div>
