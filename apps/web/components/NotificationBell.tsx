@@ -140,9 +140,10 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
   // If the notifications table has RLS enabled, add a SELECT policy:
   //   USING (user_id::text = current_setting('request.jwt.claims', true)::json->>'sub')
   useEffect(() => {
-    if (!user?.user_id || !schoolId) return;
+    const client = supabase;
+    if (!client || !user?.user_id || !schoolId) return;
 
-    const channel = supabase
+    const channel = client
       .channel(`notifications:${user.user_id}`)
       .on(
         'postgres_changes',
@@ -160,7 +161,7 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { client.removeChannel(channel); };
   }, [user?.user_id, schoolId]);
 
   useEffect(() => {

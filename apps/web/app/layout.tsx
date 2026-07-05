@@ -18,6 +18,8 @@ const poppins = Poppins({
   display: 'swap',
 });
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Chronix Edu',
   description: 'Multi-tenant school management SaaS',
