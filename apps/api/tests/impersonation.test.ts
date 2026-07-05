@@ -4,7 +4,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 
 import { randomUUID } from 'crypto';
 import request from 'supertest';
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 
 import pool from '../src/db/client';
@@ -15,8 +15,8 @@ import { errorHandler } from '../src/middleware/errorHandler';
 const app = express();
 app.use(express.json());
 app.use('/api/schools', detectSupportSession);
-app.get('/api/schools/:schoolId/whoami', (_req: Request, res: Response) => {
-  res.json({ user: (_req as Request).user ?? null });
+app.get('/api/schools/:schoolId/whoami', (req: Request, res: Response) => {
+  res.json({ user: req.user ?? null });
 });
 app.use(errorHandler);
 
