@@ -1,15 +1,18 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { isAdminRole } from '@/lib/auth';
 import { getMainNavForRole, SETTINGS_NAV, type NavItem } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
 
-function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
+const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
   const active = pathname === item.href || pathname.startsWith(item.href + '/');
   return (
     <Link
@@ -24,13 +27,14 @@ function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: stri
       {item.label}
     </Link>
   );
-}
+});
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
+  const mainNav = useMemo(() => user ? getMainNavForRole(user.role) : [], [user?.role]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -54,7 +58,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  const mainNav = getMainNavForRole(user.role);
   const showSettings = isAdminRole(user.role);
   const navSectionLabel = user.role === 'teacher' ? 'Teaching' : user.role === 'registrar' ? 'Registrar' : user.role === 'bursar' ? 'Bursar' : 'Principal';
 
@@ -96,8 +99,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-60 md:shrink-0 bg-gradient-to-b from-[#003366] to-[#002244] flex-col">
         <div className="px-5 py-5 border-b border-white/10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mb-1.5" />
+          <Image src="/icons/Chronix_Logo.png" alt="Chronix Edu" width={160} height={36} className="h-9 w-auto mb-1.5" priority />
           <p className="text-xs text-white/50 truncate">{user.email}</p>
         </div>
 

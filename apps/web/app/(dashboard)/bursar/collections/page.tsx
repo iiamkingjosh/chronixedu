@@ -1,20 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/app/providers';
+
+const BursarCollectionCharts = dynamic(
+  () => import('@/components/charts/BursarCollectionCharts'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="card p-4 h-[320px] animate-pulse bg-gray-100 rounded-xl" />
+        <div className="card p-4 h-[320px] animate-pulse bg-gray-100 rounded-xl" />
+      </div>
+    ),
+  }
+);
 import { apiFetch } from '@/lib/api';
 import {
   ToastBanner,
@@ -35,12 +36,6 @@ interface CollectionSummary {
     paid: number;
   };
 }
-
-const STATUS_COLORS: Record<'unpaid' | 'partial' | 'paid', string> = {
-  unpaid: '#ef4444',
-  partial: '#f59e0b',
-  paid: '#22c55e',
-};
 
 function classLabel(cls: ClassOption): string {
   return cls.stream ? `${cls.name} (${cls.stream})` : cls.name;
@@ -175,39 +170,7 @@ export default function CollectionSummaryPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="card p-4">
-              <h2 className="text-sm font-semibold text-gray-700 mb-4">Amounts (₦)</h2>
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={barData}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₦${Number(v).toLocaleString('en-NG')}`} width={80} />
-                  <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                  <Bar dataKey="amount" fill="#003366" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="card p-4">
-              <h2 className="text-sm font-semibold text-gray-700 mb-4">Invoices by Status</h2>
-              {pieData.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-16">No invoices for this term.</p>
-              ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                      {pieData.map((entry) => (
-                        <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </div>
+          <BursarCollectionCharts barData={barData} pieData={pieData} />
         </>
       )}
     </div>
