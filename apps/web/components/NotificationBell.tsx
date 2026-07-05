@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
-import { supabase } from '@/lib/supabaseClient';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -140,28 +139,36 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
   // If the notifications table has RLS enabled, add a SELECT policy:
   //   USING (user_id::text = current_setting('request.jwt.claims', true)::json->>'sub')
   useEffect(() => {
-    const client = supabase;
-    if (!client || !user?.user_id || !schoolId) return;
+    if (!user?.user_id || !schoolId) return;
+    let active = true;
+    let cleanupFn: (() => void) | null = null;
 
-    const channel = client
-      .channel(`notifications:${user.user_id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.user_id}`,
-        },
-        (payload) => {
-          const n = payload.new as NotificationItem;
-          setNotifications(prev => [n, ...prev]);
-          setUnreadCount(c => c + 1);
-        }
-      )
-      .subscribe();
+    import('@/lib/supabaseClient').then(({ supabase: client }) => {
+      if (!active || !client || !user?.user_id) return;
+      const channel = client
+        .channel(`notifications:${user.user_id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${user.user_id}`,
+          },
+          (payload) => {
+            const n = payload.new as NotificationItem;
+            setNotifications(prev => [n, ...prev]);
+            setUnreadCount(c => c + 1);
+          }
+        )
+        .subscribe();
+      cleanupFn = () => { client.removeChannel(channel); };
+    });
 
-    return () => { client.removeChannel(channel); };
+    return () => {
+      active = false;
+      cleanupFn?.();
+    };
   }, [user?.user_id, schoolId]);
 
   useEffect(() => {

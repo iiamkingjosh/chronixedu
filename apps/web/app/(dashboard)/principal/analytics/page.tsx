@@ -1,24 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-  ReferenceLine,
-} from 'recharts';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
 
-const PASS_MARK = 40;
+const PrincipalAnalyticsCharts = dynamic(
+  () => import('@/components/charts/PrincipalAnalyticsCharts'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white border border-gray-200 rounded-xl p-4 h-[320px] animate-pulse bg-gray-100" />
+          <div className="bg-white border border-gray-200 rounded-xl p-4 h-[320px] animate-pulse bg-gray-100" />
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 h-[280px] animate-pulse bg-gray-100" />
+      </div>
+    ),
+  }
+);
 
 interface OverallPerformance {
   total_students: number;
@@ -70,13 +71,6 @@ interface AnalyticsOverview {
     fee_outstanding: TrendItem;
   };
 }
-
-const ATTENDANCE_COLORS: Record<'Present' | 'Absent' | 'Late' | 'Excused', string> = {
-  Present: '#22c55e',
-  Absent: '#ef4444',
-  Late: '#f59e0b',
-  Excused: '#64748b',
-};
 
 function formatCurrency(amount: number): string {
   return `₦${Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -138,8 +132,22 @@ export default function PrincipalAnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="p-8">
-        <p className="text-sm text-gray-500">Loading analytics…</p>
+      <div className="max-w-5xl mx-auto p-8">
+        <div className="h-6 w-32 bg-gray-200 rounded animate-pulse mb-2" />
+        <div className="h-4 w-64 bg-gray-100 rounded animate-pulse mb-8" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl bg-white border border-gray-200 p-5 shadow-sm">
+              <div className="h-3 w-24 bg-gray-200 rounded animate-pulse mb-3" />
+              <div className="h-8 w-32 bg-gray-100 rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <div className="bg-white border border-gray-200 rounded-xl p-4 h-[320px] animate-pulse" />
+          <div className="bg-white border border-gray-200 rounded-xl p-4 h-[320px] animate-pulse" />
+        </div>
+        <div className="bg-white border border-gray-200 rounded-xl p-4 h-[280px] animate-pulse" />
       </div>
     );
   }
@@ -164,14 +172,12 @@ export default function PrincipalAnalyticsPage() {
 
   const subjectChartData = subject_performance.map((s) => ({ name: s.subject_name, average: s.average }));
 
-  const attendanceChartData = (
-    [
-      { name: 'Present', value: attendance_summary.present },
-      { name: 'Absent', value: attendance_summary.absent },
-      { name: 'Late', value: attendance_summary.late },
-      { name: 'Excused', value: attendance_summary.excused },
-    ] as const
-  ).filter((d) => d.value > 0);
+  const attendanceChartData = [
+    { name: 'Present', value: attendance_summary.present },
+    { name: 'Absent', value: attendance_summary.absent },
+    { name: 'Late', value: attendance_summary.late },
+    { name: 'Excused', value: attendance_summary.excused },
+  ].filter((d) => d.value > 0);
 
   return (
     <div className="max-w-5xl mx-auto p-8">
@@ -208,63 +214,15 @@ export default function PrincipalAnalyticsPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Subject Performance (Average %)</h2>
-          {subjectChartData.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-16">No scores recorded for this term yet.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={subjectChartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} domain={[0, 100]} />
-                <Tooltip formatter={(value) => `${value}%`} />
-                <ReferenceLine y={PASS_MARK} stroke="#94a3b8" strokeDasharray="3 3" label={{ value: 'Pass mark', fontSize: 11, position: 'insideTopLeft' }} />
-                <Bar dataKey="average" fill="#003366" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Attendance Breakdown</h2>
-          {attendanceChartData.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-16">No attendance recorded for this term yet.</p>
-          ) : (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie data={attendanceChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                  {attendanceChartData.map((entry) => (
-                    <Cell key={entry.name} fill={ATTENDANCE_COLORS[entry.name]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Fee Collection (₦)</h2>
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart
-            data={[
-              { name: 'Expected', amount: fee_collection.total_expected },
-              { name: 'Collected', amount: fee_collection.total_collected },
-              { name: 'Outstanding', amount: fee_collection.total_outstanding },
-            ]}
-          >
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₦${Number(v).toLocaleString('en-NG')}`} width={80} />
-            <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-            <Bar dataKey="amount" fill="#003366" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      <PrincipalAnalyticsCharts
+        subjectData={subjectChartData}
+        attendanceData={attendanceChartData}
+        feeData={[
+          { name: 'Expected', amount: fee_collection.total_expected },
+          { name: 'Collected', amount: fee_collection.total_collected },
+          { name: 'Outstanding', amount: fee_collection.total_outstanding },
+        ]}
+      />
     </div>
   );
 }

@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid } from 'recharts';
+import dynamic from 'next/dynamic';
+
+const SubscriptionMRRChart = dynamic(
+  () => import('@/components/charts/SubscriptionMRRChart'),
+  { ssr: false, loading: () => <div className="h-[200px] animate-pulse bg-gray-100 rounded-lg" /> }
+);
 import {
   getSubscriptions,
   getMRR,
@@ -132,15 +137,7 @@ export default function SuperAdminSubscriptionsPage() {
       {!loading && chartData.length > 0 && (
         <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
           <h2 className="text-base font-semibold text-gray-900 mb-4">MRR by Plan</h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="plan" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(value: number) => `₦${value.toLocaleString('en-NG')}`} />
-              <Tooltip formatter={(value) => formatNaira(Number(value))} />
-              <Bar dataKey="mrr" fill="#003366" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <SubscriptionMRRChart data={chartData} />
         </div>
       )}
 

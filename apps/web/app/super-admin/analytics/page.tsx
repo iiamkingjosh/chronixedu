@@ -1,7 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, Tooltip, CartesianGrid, Legend } from 'recharts';
+import dynamic from 'next/dynamic';
+
+const GrowthLineChart = dynamic(
+  () => import('@/components/charts/GrowthLineChart'),
+  { ssr: false, loading: () => <div className="h-[250px] animate-pulse bg-gray-100 rounded-lg" /> }
+);
 import {
   getSuperAdminOverview,
   getGrowthData,
@@ -72,17 +77,7 @@ export default function SuperAdminAnalyticsPage() {
 
       <div className="bg-white rounded-lg shadow-sm p-5 mb-4">
         <h2 className="text-base font-semibold text-gray-900 mb-4">Growth</h2>
-        <ResponsiveContainer width="100%" height={250}>
-          <LineChart data={growthChartData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} />
-            <Tooltip />
-            <Legend verticalAlign="top" height={36} />
-            <Line type="monotone" dataKey="schools" name="Schools" stroke="#003366" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="students" name="Students" stroke="#FF761B" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+        <GrowthLineChart data={growthChartData} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">

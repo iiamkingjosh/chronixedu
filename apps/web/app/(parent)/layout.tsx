@@ -1,8 +1,11 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { ParentProvider, useParentContext } from '@/lib/parentContext';
 import { PARENT_NAV, type NavItem } from '@/lib/navigation';
@@ -34,7 +37,7 @@ function ChildSelector() {
   );
 }
 
-function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
+const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
   const active = pathname === item.href || pathname.startsWith(item.href + '/');
   return (
     <Link
@@ -49,7 +52,7 @@ function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: stri
       {item.label}
     </Link>
   );
-}
+});
 
 function ParentChrome({ children }: { children: React.ReactNode }) {
   const { logout } = useAuth();
@@ -72,8 +75,7 @@ function ParentChrome({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex md:w-60 md:shrink-0 bg-gradient-to-b from-[#003366] to-[#002244] flex-col">
         <div className="px-5 py-5 border-b border-white/10 space-y-3">
           <div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mb-1" />
+              <Image src="/icons/Chronix_Logo.png" alt="Chronix Edu" width={160} height={36} className="h-9 w-auto mb-1" priority />
             <p className="text-xs text-white/50">Parent Portal</p>
           </div>
           <ChildSelector />
