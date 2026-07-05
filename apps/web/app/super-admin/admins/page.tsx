@@ -322,7 +322,7 @@ export default function PlatformAdminsPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8 max-w-6xl">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 font-heading">Platform Admins</h1>
@@ -344,8 +344,8 @@ export default function PlatformAdminsPage() {
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 mb-4">{error}</div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-xl shadow-sm overflow-x-auto">
+        <table className="w-full text-sm min-w-[800px]">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
               <th className="px-5 py-3">Name</th>
@@ -388,7 +388,7 @@ export default function PlatformAdminsPage() {
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 text-red-700 border border-red-200">Suspended</span>
                       )}
                     </td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3 whitespace-nowrap">
                       {isSelf ? (
                         <span className="text-xs text-gray-400">—</span>
                       ) : (
