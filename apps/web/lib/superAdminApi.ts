@@ -665,3 +665,10 @@ export async function deletePlatformAdmin(id: string, confirmationEmail: string)
   });
   return res.data;
 }
+
+export async function resendPlatformAdminWelcome(id: string): Promise<{ email: string }> {
+  const res = await apiFetch<ApiResponse<{ email: string }>>(`/api/super-admin/admins/${id}/resend-welcome`, {
+    method: 'POST',
+  });
+  return res.data;
+}
