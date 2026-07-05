@@ -11,10 +11,16 @@ export interface AuthUser {
   [key: string]: unknown;
 }
 
+export interface SupportSessionContext {
+  sessionId: string;
+  realAdminId: string;
+}
+
 declare module 'express-serve-static-core' {
   interface Request {
     user?: AuthUser;
     rawBody?: Buffer;
+    supportSession?: SupportSessionContext;
   }
 }
 

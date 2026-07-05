@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+﻿import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
 import { verifyToken, requireRole, AuthUser } from '../middleware/auth';
@@ -146,6 +146,7 @@ router.post(
       });
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'FEE_STRUCTURE_CREATED',
@@ -372,6 +373,7 @@ router.post(
       notifyPaymentReceipt(req.params.schoolId, result.payment.id, result.invoice.student_id);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'PAYMENT_RECORDED',
@@ -544,6 +546,7 @@ router.get(
 
         if (metadata.recorded_by) {
           await logAudit({
+            supportSession: req.supportSession,
             schoolId,
             userId: metadata.recorded_by,
             actionType: 'PAYMENT_RECORDED',
@@ -581,10 +584,13 @@ router.post(
   '/:schoolId/payments/paystack/webhook',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const signature = req.headers['x-paystack-signature'];
-      const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
+      if (!req.rawBody) {
+        console.error('Paystack webhook: rawBody missing — possible middleware misconfiguration');
+        return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Invalid webhook request' } });
+      }
 
-      if (typeof signature !== 'string' || !verifyPaystackWebhookSignature(rawBody, signature)) {
+      const signature = req.headers['x-paystack-signature'];
+      if (typeof signature !== 'string' || !verifyPaystackWebhookSignature(req.rawBody, signature)) {
         return res.status(401).json({ success: false, error: { code: 'INVALID_SIGNATURE', message: 'Invalid Paystack signature' } });
       }
 
@@ -617,6 +623,7 @@ router.post(
 
         if (metadata.recorded_by) {
           await logAudit({
+            supportSession: req.supportSession,
             schoolId: req.params.schoolId,
             userId: metadata.recorded_by,
             actionType: 'PAYMENT_RECORDED',

@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+﻿import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { verifyToken, requireRole } from '../middleware/auth';
@@ -158,6 +158,7 @@ router.post(
       await batchUpsertStatuses(studentIds, schoolId, term_id, 'submitted', userId, ['draft']);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId,
         actionType: 'RESULTS_SUBMITTED',
@@ -264,6 +265,7 @@ router.post(
       await batchUpsertStatuses(studentIds, schoolId, term_id, 'approved', userId, ['submitted']);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId,
         actionType: 'RESULTS_APPROVED',
@@ -336,6 +338,7 @@ router.post(
       await batchUpsertStatuses(studentIds, schoolId, term_id, 'published', userId, ['approved']);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId,
         actionType: 'RESULTS_PUBLISHED',
@@ -347,6 +350,7 @@ router.post(
       // Fire-and-forget: queue parent notification job via audit_log
       // A background worker reads PARENT_NOTIFICATION_QUEUED entries and dispatches messages
       logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId,
         actionType: 'PARENT_NOTIFICATION_QUEUED',
@@ -441,6 +445,7 @@ router.post(
       const teachers = await getTeachersForClass(class_id, term_id, schoolId);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId,
         actionType: 'RESULTS_RETURNED',
@@ -459,6 +464,7 @@ router.post(
 
       // Fire-and-forget teacher notification job
       logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId,
         actionType: 'TEACHER_NOTIFICATION_QUEUED',

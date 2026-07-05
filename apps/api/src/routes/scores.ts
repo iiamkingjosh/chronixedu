@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+﻿import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { logAudit } from '../db/queries/auditLog';
@@ -114,6 +114,7 @@ router.post(
       const saved = await upsertScore(req.params.schoolId, student_id, subject_id, term_id, component_id, score, teacherId);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId:   req.params.schoolId,
         userId:     teacherId,
         actionType: previous ? 'SCORE_UPDATED' : 'SCORE_ENTERED',

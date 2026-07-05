@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db/client';
-import type { AuthUser } from './auth';
+import type { AuthUser, SupportSessionContext } from './auth';
 
 export interface SupportSessionClaims {
   support_session_id: string;
@@ -48,8 +48,8 @@ export async function detectSupportSession(
   }
 
   try {
-    const result = await pool.query<{ id: string; ended_at: string | null }>(
-      `SELECT id, ended_at FROM support_sessions WHERE id = $1`,
+    const result = await pool.query<{ id: string; ended_at: string | null; platform_admin_id: string }>(
+      `SELECT id, ended_at, platform_admin_id FROM support_sessions WHERE id = $1`,
       [claims.support_session_id]
     );
     const session = result.rows[0];
@@ -65,7 +65,11 @@ export async function detectSupportSession(
       title: claims.impersonated_title ?? undefined,
     } as AuthUser;
 
-    (req as Request & { support_session_id?: string }).support_session_id = claims.support_session_id;
+    const ctx: SupportSessionContext = {
+      sessionId: session.id,
+      realAdminId: session.platform_admin_id,
+    };
+    req.supportSession = ctx;
 
     return next();
   } catch (err) {
