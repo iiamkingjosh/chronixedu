@@ -2039,6 +2039,7 @@ router.get(
         `SELECT id, email, first_name, last_name, created_at, last_login_at, is_active
          FROM users
          WHERE role = 'super_admin'
+           AND email NOT LIKE 'deleted-admin-%@deleted.chronixedu.local'
          ORDER BY created_at ASC`
       );
       return res.json({ success: true, data: result.rows });
