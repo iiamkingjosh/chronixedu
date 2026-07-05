@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import * as Sentry from '@sentry/node';
 
 export interface AuthUser {
   user_id: string;
@@ -17,7 +18,19 @@ declare module 'express-serve-static-core' {
   }
 }
 
+function tagSentry(user: AuthUser) {
+  Sentry.setTag('school_id', user.school_id ?? 'none');
+  Sentry.setTag('user_role', user.role ?? 'anonymous');
+  Sentry.setUser({ id: user.user_id, email: user.email });
+}
+
 export function verifyToken(req: Request, res: Response, next: NextFunction) {
+  // detectSupportSession (or an upstream verifyToken call) already authenticated
+  // this request — skip re-verification and just tag Sentry with what we have.
+  if (req.user) {
+    tagSentry(req.user);
+    return next();
+  }
   const auth = req.headers.authorization;
   if (!auth) {
     return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing Authorization header' } });
@@ -31,6 +44,7 @@ export function verifyToken(req: Request, res: Response, next: NextFunction) {
     const secret = process.env.JWT_SECRET || '';
     const payload = jwt.verify(token, secret) as AuthUser;
     req.user = payload;
+    tagSentry(payload);
     return next();
   } catch (err) {
     return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });

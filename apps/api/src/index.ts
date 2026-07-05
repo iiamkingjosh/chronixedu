@@ -31,6 +31,8 @@ import timetableRoutes from './routes/timetable';
 import classCommentsRoutes from './routes/classComments';
 import superAdminRoutes from './routes/superAdmin';
 import { detectSupportSession } from './middleware/detectSupportSession';
+import { verifyToken } from './middleware/auth';
+import { requireActiveSchool } from './middleware/requireActiveSchool';
 import { closeReportCardBrowser } from './services/reportCardService';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationWorker';
 import { startAnalyticsCron, stopAnalyticsCron } from './services/analyticsService';
@@ -96,6 +98,11 @@ logger.info('auth_router_mounted');
 
 // Support session impersonation — must be before school-level routes
 app.use('/api/schools', detectSupportSession);
+// Authenticate once for all school routes; verifyToken is a no-op for
+// requests already authenticated by detectSupportSession (fix #4).
+app.use('/api/schools', verifyToken);
+// Block non-super_admin access to any suspended school before any handler runs.
+app.use('/api/schools', requireActiveSchool);
 
 app.use('/api/schools', schoolsRoutes);
 app.use('/api/schools', sessionsRoutes);
