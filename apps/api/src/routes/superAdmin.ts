@@ -7,6 +7,7 @@ import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { insertSchoolSettings, updateIdentityConfig, updateAcademicConfig } from '../db/queries/schools';
+import { cache, schoolCacheKey } from '../services/cacheService';
 import { NIGERIAN_DEFAULTS } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
 import { getRecentErrorCount } from '../services/platformAnalyticsService';
@@ -199,7 +200,7 @@ const completeOnboardingSchema = z.object({
   accepted_legal_terms: z.literal(true),
 });
 
-const ONBOARDING_TOTAL_STEPS = 7;
+const ONBOARDING_TOTAL_STEPS = 6;
 
 // ── Announcement schemas ─────────────────────────────────────────────────────
 
@@ -601,6 +602,7 @@ router.patch(
       }
 
       await pool.query(`UPDATE schools SET is_active = false WHERE id = $1`, [req.params.schoolId]);
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
@@ -642,6 +644,7 @@ router.patch(
       }
 
       await pool.query(`UPDATE schools SET is_active = true WHERE id = $1`, [req.params.schoolId]);
+      cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
@@ -1270,7 +1273,7 @@ router.patch(
     try {
       const stepNumber = Number(req.params.stepNumber);
       if (!Number.isInteger(stepNumber) || stepNumber < 1 || stepNumber > ONBOARDING_TOTAL_STEPS) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_STEP', message: 'Step number must be between 1 and 7' } });
+        return res.status(400).json({ success: false, error: { code: 'INVALID_STEP', message: 'Step number must be between 1 and 6' } });
       }
 
       const sessionResult = await pool.query(`SELECT * FROM onboarding_sessions WHERE id = $1`, [req.params.sessionId]);

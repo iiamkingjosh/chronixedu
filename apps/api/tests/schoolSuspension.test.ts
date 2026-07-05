@@ -11,12 +11,16 @@ import pool from '../src/db/client';
 import superAdminRouter from '../src/routes/superAdmin';
 import schoolsRouter from '../src/routes/schools';
 import { detectSupportSession } from '../src/middleware/detectSupportSession';
+import { verifyToken } from '../src/middleware/auth';
+import { requireActiveSchool } from '../src/middleware/requireActiveSchool';
 import { errorHandler } from '../src/middleware/errorHandler';
 
 const app = express();
 app.use(express.json());
 app.use('/api/super-admin', superAdminRouter);
 app.use('/api/schools', detectSupportSession);
+app.use('/api/schools', verifyToken);
+app.use('/api/schools', requireActiveSchool);
 app.use('/api/schools', schoolsRouter);
 app.use(errorHandler);
 

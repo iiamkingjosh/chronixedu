@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,7 +23,6 @@ interface NotificationItem {
   created_at: string;
 }
 
-const POLL_INTERVAL_MS = 30_000;
 
 const MESSAGES_PATH_BY_ROLE: Record<string, string> = {
   parent: '/parent/messages',
@@ -131,11 +131,37 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
       .catch(() => {});
   }, [schoolId]);
 
+  // Initial load
+  useEffect(() => { load(); }, [load]);
+
+  // Supabase Realtime — subscribe to new notifications for this user.
+  // Requires NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  // in apps/web/.env.local (values from Supabase project settings → API).
+  // If the notifications table has RLS enabled, add a SELECT policy:
+  //   USING (user_id::text = current_setting('request.jwt.claims', true)::json->>'sub')
   useEffect(() => {
-    load();
-    const interval = setInterval(load, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [load]);
+    if (!user?.user_id || !schoolId) return;
+
+    const channel = supabase
+      .channel(`notifications:${user.user_id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${user.user_id}`,
+        },
+        (payload) => {
+          const n = payload.new as NotificationItem;
+          setNotifications(prev => [n, ...prev]);
+          setUnreadCount(c => c + 1);
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.user_id, schoolId]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
