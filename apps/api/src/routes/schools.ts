@@ -86,14 +86,30 @@ const updateReportConfigSchema = reportConfigFieldsSchema
 
 // ── Middleware: allow super_admin or the school's own principal ────────────────
 
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
+async function requireSchoolAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
   const user = req.user;
   if (!user) {
     res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
     return;
   }
   if (user.role === 'super_admin') { next(); return; }
-  if (user.role === 'principal' && user.school_id === req.params.schoolId) { next(); return; }
+  if (user.role === 'principal' && user.school_id === req.params.schoolId) {
+    try {
+      const school = await findSchoolById(req.params.schoolId);
+      if (!school) {
+        res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'School not found' } });
+        return;
+      }
+      if (!school.is_active) {
+        res.status(403).json({ success: false, error: { code: 'SCHOOL_SUSPENDED', message: 'This school has been suspended' } });
+        return;
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+    return;
+  }
   res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
 }
 
