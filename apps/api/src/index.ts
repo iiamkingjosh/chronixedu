@@ -86,7 +86,8 @@ app.use('/api/auth', authRateLimiter);
 app.use('/api',      generalRateLimiter);
 
 // Routes
-app.use('/api/auth',    authRoutes);
+app.use('/api/auth', authRoutes);
+logger.info('auth_router_mounted');
 
 // Support session impersonation — must be before school-level routes
 app.use('/api/schools', detectSupportSession);
