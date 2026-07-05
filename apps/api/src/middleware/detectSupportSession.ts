@@ -36,7 +36,9 @@ export async function detectSupportSession(
 
   let claims: SupportSessionClaims;
   try {
-    claims = jwt.verify(token, process.env.JWT_SECRET || '') as unknown as SupportSessionClaims;
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET environment variable is not set');
+    claims = jwt.verify(token, secret) as unknown as SupportSessionClaims;
   } catch (err) {
     return res.status(401).json({ success: false, error: { code: 'INVALID_SUPPORT_TOKEN', message: 'Invalid or expired support session token' } });
   }
