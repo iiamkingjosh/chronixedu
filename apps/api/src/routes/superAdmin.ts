@@ -2100,7 +2100,81 @@ router.post(
         ]
       );
 
+      const welcomeBody = [
+        `Hi ${first_name},`,
+        ``,
+        `You have been added as a platform administrator on Chronix Edu.`,
+        ``,
+        `Your login details:`,
+        `  Email:    ${email}`,
+        `  Password: ${password}`,
+        ``,
+        `Log in at: ${process.env.APP_URL ?? 'https://edu.chronixtechnology.com'}/login`,
+        ``,
+        `Please change your password after your first login.`,
+        ``,
+        `Chronix Technology Limited`,
+      ].join('\n');
+
+      await sendEmail(email, 'You have been added as a Chronix Edu platform admin', welcomeBody);
+
       return res.status(201).json({ success: true, data: { user_id: userId, email } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /admins/:id/resend-welcome ──────────────────────────────────────────
+// Generates a Supabase recovery link and emails it to an existing platform admin.
+// Used when the original welcome email was missed or needs to be re-triggered.
+
+router.post(
+  '/admins/:id/resend-welcome',
+  ...guard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const admin = await pool.query<{ id: string; email: string; first_name: string; is_active: boolean }>(
+        `SELECT id, email, first_name, is_active FROM users WHERE id = $1 AND role = 'super_admin' AND school_id IS NULL`,
+        [req.params.id]
+      );
+      if (!admin.rows[0]) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Platform admin not found' } });
+      }
+
+      const { email, first_name } = admin.rows[0];
+
+      const { data, error } = await supabaseAdmin.auth.admin.generateLink({ type: 'recovery', email });
+      if (error) {
+        return res.status(500).json({ success: false, error: { code: 'RESET_LINK_FAILED', message: error.message } });
+      }
+
+      const resetLink = data?.properties?.action_link ?? `${process.env.APP_URL ?? 'https://edu.chronixtechnology.com'}/login`;
+
+      const emailBody = [
+        `Hi ${first_name},`,
+        ``,
+        `You have been added as a platform administrator on Chronix Edu.`,
+        ``,
+        `Use the link below to set your password and access the platform:`,
+        ``,
+        `  ${resetLink}`,
+        ``,
+        `This link expires in 24 hours. After setting your password, log in at:`,
+        `  ${process.env.APP_URL ?? 'https://edu.chronixtechnology.com'}/login`,
+        ``,
+        `Chronix Technology Limited`,
+      ].join('\n');
+
+      await sendEmail(email, 'You have been added as a Chronix Edu platform admin', emailBody);
+
+      await pool.query(
+        `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
+         VALUES ($1, 'PLATFORM_ADMIN_WELCOME_RESENT', $2, $3, $4)`,
+        [req.user!.user_id, req.params.id, JSON.stringify({ email }), req.ip ?? null]
+      );
+
+      return res.json({ success: true, data: { email } });
     } catch (err) {
       return next(err);
     }

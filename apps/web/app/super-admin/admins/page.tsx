@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
 import { useToast } from '@/components/Toast';
-import { suspendPlatformAdmin, reactivatePlatformAdmin, deletePlatformAdmin } from '@/lib/superAdminApi';
+import { suspendPlatformAdmin, reactivatePlatformAdmin, deletePlatformAdmin, resendPlatformAdminWelcome } from '@/lib/superAdminApi';
 
 interface PlatformAdmin {
   id: string;
@@ -292,7 +292,20 @@ export default function PlatformAdminsPage() {
   const [suspendTarget, setSuspendTarget] = useState<PlatformAdmin | null>(null);
   const [reactivateTarget, setReactivateTarget] = useState<PlatformAdmin | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PlatformAdmin | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const { show } = useToast();
+
+  async function handleResendWelcome(admin: PlatformAdmin) {
+    setResendingId(admin.id);
+    try {
+      await resendPlatformAdminWelcome(admin.id);
+      show(`Welcome email sent to ${admin.email}`, 'success');
+    } catch (err) {
+      show(err instanceof Error ? err.message : 'Failed to send email', 'error');
+    } finally {
+      setResendingId(null);
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -376,16 +389,27 @@ export default function PlatformAdminsPage() {
                       )}
                     </td>
                     <td className="px-5 py-3">
-                      {isSelf || !isRootAdmin ? (
+                      {isSelf ? (
                         <span className="text-xs text-gray-400">—</span>
                       ) : (
                         <div className="flex items-center gap-3">
-                          {admin.is_active ? (
-                            <button onClick={() => setSuspendTarget(admin)} className="text-red-600 hover:text-red-700 font-medium text-sm">Suspend</button>
-                          ) : (
-                            <button onClick={() => setReactivateTarget(admin)} className="text-green-600 hover:text-green-700 font-medium text-sm">Reactivate</button>
+                          <button
+                            onClick={() => handleResendWelcome(admin)}
+                            disabled={resendingId === admin.id}
+                            className="text-[#2472B4] hover:text-[#1a5a9a] font-medium text-sm disabled:opacity-50"
+                          >
+                            {resendingId === admin.id ? 'Sending…' : 'Resend welcome'}
+                          </button>
+                          {isRootAdmin && (
+                            <>
+                              {admin.is_active ? (
+                                <button onClick={() => setSuspendTarget(admin)} className="text-red-600 hover:text-red-700 font-medium text-sm">Suspend</button>
+                              ) : (
+                                <button onClick={() => setReactivateTarget(admin)} className="text-green-600 hover:text-green-700 font-medium text-sm">Reactivate</button>
+                              )}
+                              <button onClick={() => setDeleteTarget(admin)} className="text-red-700 hover:text-red-800 font-medium text-sm">Delete</button>
+                            </>
                           )}
-                          <button onClick={() => setDeleteTarget(admin)} className="text-red-700 hover:text-red-800 font-medium text-sm">Delete</button>
                         </div>
                       )}
                     </td>
