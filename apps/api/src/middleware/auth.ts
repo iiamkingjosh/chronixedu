@@ -41,7 +41,8 @@ export function verifyToken(req: Request, res: Response, next: NextFunction) {
   }
   const token = parts[1];
   try {
-    const secret = process.env.JWT_SECRET || '';
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new Error('JWT_SECRET environment variable is not set');
     const payload = jwt.verify(token, secret) as AuthUser;
     req.user = payload;
     tagSentry(payload);

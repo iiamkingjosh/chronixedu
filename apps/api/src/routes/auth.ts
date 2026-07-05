@@ -207,6 +207,9 @@ router.post('/login', async (req, res) => {
 
 if (process.env.NODE_ENV === 'development') {
   router.post('/seed-test-user', async (req, res) => {
+    if (req.headers['x-seed-secret'] !== process.env.SEED_SECRET) {
+      return res.status(404).json({ success: false });
+    }
     const { email, password, role, first_name, last_name, title, school_id } = req.body;
     if (!email || !password || !role || !first_name || !last_name) {
       return res.status(400).json({
@@ -276,6 +279,12 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
+const ALLOWED_REDIRECT_ORIGINS = [
+  'https://chronixeduweb-production.up.railway.app',
+  'https://edu.chronixtechnology.com',
+  'http://localhost:3000',
+];
+
 const forgotPasswordSchema = z.object({
   email: z.string().email(),
   redirect_to: z.string().url().optional(),
@@ -309,6 +318,18 @@ async function handleForgotPassword(req: Request, res: Response, next: NextFunct
     }
 
     const { email, redirect_to } = parsed.data;
+
+    if (redirect_to) {
+      const parsed_url = new URL(redirect_to);
+      const isAllowed = ALLOWED_REDIRECT_ORIGINS.some(origin => parsed_url.origin === origin);
+      if (!isAllowed) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_REDIRECT', message: 'Redirect URL not allowed' },
+        });
+      }
+    }
+
     const redirectTo = redirect_to ?? defaultResetRedirect();
 
     const local = await findUserByEmail(email);
