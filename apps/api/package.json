@@ -16,7 +16,9 @@
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^4.19.4",
-    "node-cache": "^5.1.2"
+    "ioredis": "^5.11.1",
+    "node-cache": "^5.1.2",
+    "rate-limit-redis": "^5.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.13",

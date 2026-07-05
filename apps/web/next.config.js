@@ -66,8 +66,8 @@ const nextConfig = {
   async headers() {
     const csp = [
       "default-src 'self'",
-      // Next.js requires unsafe-inline + unsafe-eval for hydration in production
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      // unsafe-inline and unsafe-eval removed — XSS fix (H-02)
+      "script-src 'self' https://js.paystack.co",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https:",
       "font-src 'self' data:",
@@ -77,6 +77,7 @@ const nextConfig = {
       [
         "connect-src 'self'",
         "https://api.chronixtechnology.com",
+        "https://chronixeduapi-production.up.railway.app",
         "https://pgnpmqaowrnmsytpehwc.supabase.co",
         "wss://pgnpmqaowrnmsytpehwc.supabase.co",
         "https://*.ingest.us.sentry.io",
@@ -85,6 +86,7 @@ const nextConfig = {
         ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3001']),
       ].join(' '),
       "frame-ancestors 'self'",
+      "frame-src 'none'",
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",

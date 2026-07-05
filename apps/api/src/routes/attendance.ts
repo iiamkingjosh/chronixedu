@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+﻿import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { logAudit } from '../db/queries/auditLog';
@@ -97,6 +97,7 @@ router.post(
       const saved = await bulkUpsertAttendance(schoolId, class_id, term.id, date, entries, markedBy);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId: markedBy,
         actionType: 'ATTENDANCE_MARKED',
@@ -121,6 +122,7 @@ router.post(
 
         // Fire-and-forget: queue parent notification job via audit_log (background worker dispatches)
         logAudit({
+          supportSession: req.supportSession,
           schoolId,
           userId: markedBy,
           actionType: 'PARENT_NOTIFICATION_QUEUED',

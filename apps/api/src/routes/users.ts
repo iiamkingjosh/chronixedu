@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+﻿import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -141,6 +141,7 @@ router.post(
       });
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'USER_CREATE',
@@ -216,6 +217,7 @@ router.patch(
       const updated = await setUserActive(req.params.userId, req.params.schoolId, parsed.data.is_active);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: parsed.data.is_active ? 'USER_REACTIVATED' : 'USER_SUSPENDED',
@@ -258,6 +260,7 @@ router.post(
       const actionLink = data?.properties?.action_link ?? null;
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'USER_PASSWORD_RESET_LINK',
@@ -322,6 +325,7 @@ router.post(
       await updateUserSignature(req.params.userId, req.params.schoolId, signatureUrl);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'TEACHER_SIGNATURE_UPLOAD',

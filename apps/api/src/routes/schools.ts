@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+﻿import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
@@ -177,6 +177,7 @@ router.patch(
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'IDENTITY_UPDATE',
@@ -459,6 +460,7 @@ router.post(
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'LOGO_UPLOAD',
@@ -517,6 +519,7 @@ router.post(
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'SIGNATURE_UPLOAD',
@@ -575,6 +578,7 @@ router.post(
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'STAMP_UPLOAD',

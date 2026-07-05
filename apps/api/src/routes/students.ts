@@ -1,4 +1,4 @@
-import { Router, Request, Response, NextFunction } from 'express';
+﻿import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { randomBytes } from 'crypto';
@@ -462,6 +462,7 @@ router.patch(
       await updateEnrollmentClass(enrollment.id, class_id);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId:     req.user!.user_id,
         actionType: 'STUDENT_CLASS_CORRECTED',
@@ -534,6 +535,7 @@ router.post(
       }
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId:     req.user!.user_id,
         actionType: 'BULK_PROMOTION',
