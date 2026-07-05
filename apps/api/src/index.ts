@@ -48,6 +48,11 @@ const env = validateEnv();
 const app = express();
 const port = env.PORT;
 
+// Railway (and any cloud reverse proxy) sets X-Forwarded-For.
+// Without this, express-rate-limit v8 throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+// on every request, crashing the process for all rate-limited routes.
+app.set('trust proxy', 1);
+
 const allowedOrigins = ['http://localhost:3000', ...(env.CORS_ORIGIN ? [env.CORS_ORIGIN] : [])];
 
 app.use(helmet({
