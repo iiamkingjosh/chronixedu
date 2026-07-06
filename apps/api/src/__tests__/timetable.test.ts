@@ -5,12 +5,15 @@ import timetableRouter from '../routes/timetable';
 import { errorHandler } from '../middleware/errorHandler';
 import * as timetableQueries from '../db/queries/timetable';
 import * as rosterQueries from '../db/queries/roster';
+import * as userQueries from '../db/queries/users';
 
 jest.mock('../db/queries/timetable');
 jest.mock('../db/queries/roster');
+jest.mock('../db/queries/users');
 
 const mockTimetable = timetableQueries as jest.Mocked<typeof timetableQueries>;
 const mockRoster = rosterQueries as jest.Mocked<typeof rosterQueries>;
+const mockUsers = userQueries as jest.Mocked<typeof userQueries>;
 
 process.env.JWT_SECRET = 'test-secret';
 
@@ -53,6 +56,7 @@ beforeEach(() => jest.clearAllMocks());
 
 describe('POST /api/schools/:schoolId/timetable', () => {
   it('creates a slot when there is no clash', async () => {
+    mockUsers.findUserById.mockResolvedValueOnce({ id: TEACHER_ID, role: 'teacher', school_id: SCHOOL_ID } as never);
     mockTimetable.findClassClash.mockResolvedValueOnce(null);
     mockTimetable.findTeacherClash.mockResolvedValueOnce(null);
     mockTimetable.insertSlot.mockResolvedValueOnce(CREATED_SLOT as never);

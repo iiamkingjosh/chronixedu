@@ -44,7 +44,12 @@ function makeToken(role: string, schoolId?: string, userId = 'user-uuid-001') {
 }
 
 const app = express();
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (req as any).rawBody = buf;
+  },
+}));
 app.use('/api/schools', feesRouter);
 app.use(errorHandler);
 

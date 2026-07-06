@@ -48,12 +48,21 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid Authorization format' } });
   }
   const token = parts[1];
+
+  // Step 1: verify the JWT signature. Only auth errors live in this catch block.
+  let payload: AuthUser;
   try {
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET environment variable is not set');
-    const payload = jwt.verify(token, secret) as AuthUser;
+    payload = jwt.verify(token, secret) as AuthUser;
+  } catch {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
+  }
 
-    // Check if the user is still active — suspended users are blocked even with a valid JWT.
+  // Step 2: check if the user is still active. Separate try/catch so a DB or
+  // Redis outage never converts a valid JWT into a spurious 401 — fail open and
+  // let the request through; the JWT itself is the primary gate.
+  try {
     const cacheKey = `user_active:${payload.user_id}`;
     let isActive = true;
     if (redis) {
@@ -73,13 +82,13 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
     if (!isActive) {
       return res.status(403).json({ success: false, error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended' } });
     }
-
-    req.user = payload;
-    tagSentry(payload);
-    return next();
-  } catch (err) {
-    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
+  } catch {
+    // DB/Redis transient failure — fail open; the JWT is still valid.
   }
+
+  req.user = payload;
+  tagSentry(payload);
+  return next();
 }
 
 export function requireRole(...roles: string[]) {
