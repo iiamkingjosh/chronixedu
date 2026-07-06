@@ -25,7 +25,8 @@ const guard = [verifyToken, requireRole('super_admin')];
 // platform admins. This stops any other super_admin from acting against a peer —
 // e.g. during a dispute between platform admins — since none of them can touch
 // each other's access, only the company-owned root account can.
-const ROOT_ADMIN_EMAIL = (process.env.ROOT_ADMIN_EMAIL || 'info@chronixtechnology.com').toLowerCase();
+if (!process.env.ROOT_ADMIN_EMAIL) throw new Error('ROOT_ADMIN_EMAIL is not set');
+const ROOT_ADMIN_EMAIL = process.env.ROOT_ADMIN_EMAIL.toLowerCase();
 
 function requireRootAdmin(req: Request, res: Response, next: NextFunction) {
   if (req.user?.email?.toLowerCase() !== ROOT_ADMIN_EMAIL) {
@@ -305,6 +306,9 @@ router.post(
         ? `${process.env.SUPPORT_SESSION_MAX_DURATION_HOURS}h`
         : '2h';
 
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) throw new Error('JWT_SECRET is not set');
+
       const scopedToken = jwt.sign(
         {
           // AuthUser-compatible fields: school-scoped routes call verifyToken
@@ -323,7 +327,7 @@ router.post(
           impersonated_email: target.email,
           impersonated_title: target.title,
         },
-        process.env.JWT_SECRET || '',
+        jwtSecret,
         { expiresIn: expiresIn as SignOptions['expiresIn'] }
       );
 

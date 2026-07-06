@@ -38,14 +38,41 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
   }
   const { email, password, role, school_id, first_name, last_name, title, teacher_mode } = parsed.data;
 
+  // A school-level super_admin can only create users within their own school.
+  if (req.user!.role === 'super_admin' && school_id && school_id !== req.user!.school_id) {
+    return res.status(403).json({
+      success: false,
+      error: { code: 'CROSS_TENANT_FORBIDDEN', message: 'Cannot create users in another school' },
+    });
+  }
+
+  const effectiveSchoolId = school_id ?? req.user!.school_id;
+
   try {
+    const pg = getPgClient();
+    await pg.connect();
+
+    // Check for duplicate email scoped to this school only — prevents cross-school enumeration.
+    const existing = await pg.query(
+      'SELECT id FROM users WHERE email = $1 AND school_id = $2 LIMIT 1',
+      [email, effectiveSchoolId]
+    );
+    if (existing.rows.length > 0) {
+      await pg.end();
+      return res.status(409).json({
+        success: false,
+        error: { code: 'DUPLICATE_EMAIL', message: `A user with email "${email}" already exists in this school` },
+      });
+    }
+
     // create user in Supabase Auth using service role
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      user_metadata: { first_name, last_name, role, school_id, title, teacher_mode }
+      user_metadata: { first_name, last_name, role, school_id: effectiveSchoolId, title, teacher_mode }
     });
     if (error) {
+      await pg.end();
       return res.status(500).json({
         success: false,
         error: { code: 'AUTH_CREATE_FAILED', message: error.message },
@@ -55,13 +82,11 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
     const userId = data?.user?.id ?? null;
 
     // insert into local users table
-    const pg = getPgClient();
-    await pg.connect();
     const hashed = bcrypt.hashSync(password, 12);
     await pg.query(
       `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title, teacher_mode)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [userId, school_id || null, email, hashed, role, first_name || '', last_name || '', title || null, teacher_mode || 'subject']
+      [userId, effectiveSchoolId, email, hashed, role, first_name || '', last_name || '', title || null, teacher_mode || 'subject']
     );
     await pg.end();
 
@@ -195,7 +220,9 @@ router.post('/login', async (req, res) => {
       last_name: local.last_name,
     };
 
-    const token = jwt.sign(payload, process.env.JWT_SECRET || '', { expiresIn: '1h' });
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) throw new Error('JWT_SECRET is not set');
+    const token = jwt.sign(payload, jwtSecret, { expiresIn: '1h' });
     return res.json({ success: true, data: { access_token: token, user: payload } });
   } catch (err: unknown) {
     return res.status(500).json({
