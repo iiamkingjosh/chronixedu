@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
+import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../supabaseClient';
 import { getActiveTerm } from '../db/queries/roster';
@@ -19,7 +20,7 @@ import {
 import pool from '../db/client';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const ALLOWED_FILE_TYPES: Record<string, string> = {
   'application/pdf': 'pdf',
@@ -62,10 +63,10 @@ function bucketName(): string {
   return process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
 }
 
-async function uploadFile(storagePath: string, file: Express.Multer.File): Promise<string | null> {
+async function uploadFile(storagePath: string, file: Express.Multer.File, contentType: string): Promise<string | null> {
   const { error } = await supabaseAdmin.storage
     .from(bucketName())
-    .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+    .upload(storagePath, file.buffer, { contentType, upsert: true });
   if (error) return null;
   const { data } = supabaseAdmin.storage.from(bucketName()).getPublicUrl(storagePath);
   return data.publicUrl;
@@ -92,14 +93,17 @@ router.post(
 
       const file = req.file;
       let ext: string | null = null;
+      let detectedMime: string | null = null;
       if (file) {
-        ext = ALLOWED_FILE_TYPES[file.mimetype] ?? null;
-        if (!ext) {
+        const detected = await fileTypeFromBuffer(file.buffer);
+        ext = detected ? (ALLOWED_FILE_TYPES[detected.mime] ?? null) : null;
+        if (!detected || !ext) {
           return res.status(400).json({
             success: false,
             error: { code: 'INVALID_FILE_TYPE', message: 'Allowed attachment types: PDF, DOC, DOCX, JPG, PNG.' },
           });
         }
+        detectedMime = detected.mime;
       }
 
       const term = await getActiveTerm(schoolId);
@@ -128,9 +132,9 @@ router.post(
         due_date,
       });
 
-      if (file && ext) {
+      if (file && ext && detectedMime) {
         const storagePath = `schools/${schoolId}/assignments/${assignment.id}/attachment.${ext}`;
-        const publicUrl = await uploadFile(storagePath, file);
+        const publicUrl = await uploadFile(storagePath, file, detectedMime);
         if (!publicUrl) {
           return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: 'Failed to upload attachment.' } });
         }
@@ -251,8 +255,9 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "file".' } });
       }
 
-      const ext = ALLOWED_FILE_TYPES[file.mimetype];
-      if (!ext) {
+      const detectedSub = await fileTypeFromBuffer(file.buffer);
+      const ext = detectedSub ? (ALLOWED_FILE_TYPES[detectedSub.mime] ?? null) : null;
+      if (!detectedSub || !ext) {
         return res.status(400).json({
           success: false,
           error: { code: 'INVALID_FILE_TYPE', message: 'Allowed file types: PDF, DOC, DOCX, JPG, PNG.' },
@@ -260,7 +265,7 @@ router.post(
       }
 
       const storagePath = `schools/${schoolId}/assignments/${assignmentId}/submissions/${student.id}.${ext}`;
-      const publicUrl = await uploadFile(storagePath, file);
+      const publicUrl = await uploadFile(storagePath, file, detectedSub.mime);
       if (!publicUrl) {
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: 'Failed to upload submission.' } });
       }

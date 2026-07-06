@@ -9,6 +9,7 @@ import { verifyToken, requireRole } from '../middleware/auth';
 import { findUserByEmail, updatePasswordHash } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
 import { logger } from '../config/logger';
+import { redis } from '../middleware/rateLimit';
 
 const router = express.Router();
 
@@ -105,7 +106,7 @@ const loginSchema = z.object({
 });
 
 const MAX_ATTEMPTS = 5;
-const LOCK_MINUTES = 15;
+const LOCK_WINDOW_SECONDS = 15 * 60; // 15 minutes
 
 router.post('/login', async (req, res) => {
   const parsed = loginSchema.safeParse(req.body);
@@ -118,50 +119,31 @@ router.post('/login', async (req, res) => {
   const { email, password } = parsed.data;
 
   try {
-    // Check account lockout before touching Supabase Auth
-    const pg = getPgClient();
-    await pg.connect();
-    const lockRow = await pg.query<{
-      id: string;
-      failed_login_attempts: number;
-      locked_until: Date | null;
-    }>(
-      `SELECT id, failed_login_attempts, locked_until FROM users WHERE email = $1 LIMIT 1`,
-      [email]
-    );
-    await pg.end();
+    const lockoutKey = `login_attempts:${email.toLowerCase()}`;
 
-    const lockRecord = lockRow.rows[0];
-    if (lockRecord?.locked_until && lockRecord.locked_until > new Date()) {
-      const until = lockRecord.locked_until.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-      return res.status(423).json({
-        success: false,
-        error: { code: 'ACCOUNT_LOCKED', message: `Account locked until ${until}. Reset your password or try again later.` },
-      });
+    // Atomic Redis-based lockout — immune to concurrent-request race conditions.
+    // Falls back to no lockout in dev when Redis is unavailable.
+    if (redis) {
+      const current = await redis.get(lockoutKey);
+      if (current !== null && parseInt(current, 10) >= MAX_ATTEMPTS) {
+        return res.status(429).json({
+          success: false,
+          error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
+        });
+      }
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     logger.debug('login_auth_result', { error: error?.message ?? null, userId: data?.user?.id ?? null });
 
     if (error) {
-      // Increment failed attempt counter on the local user record
-      if (lockRecord) {
-        const attempts = (lockRecord.failed_login_attempts ?? 0) + 1;
-        const lockedUntil = attempts >= MAX_ATTEMPTS
-          ? new Date(Date.now() + LOCK_MINUTES * 60 * 1000)
-          : null;
-        const pg2 = getPgClient();
-        await pg2.connect();
-        await pg2.query(
-          `UPDATE users SET failed_login_attempts = $1, locked_until = $2 WHERE id = $3`,
-          [attempts, lockedUntil, lockRecord.id]
-        );
-        await pg2.end();
-
-        if (lockedUntil) {
-          return res.status(423).json({
+      if (redis) {
+        const attempts = await redis.incr(lockoutKey);
+        if (attempts === 1) await redis.expire(lockoutKey, LOCK_WINDOW_SECONDS);
+        if (attempts >= MAX_ATTEMPTS) {
+          return res.status(429).json({
             success: false,
-            error: { code: 'ACCOUNT_LOCKED', message: `Too many failed attempts. Account locked for ${LOCK_MINUTES} minutes.` },
+            error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
           });
         }
         const remaining = MAX_ATTEMPTS - attempts;
@@ -178,37 +160,34 @@ router.post('/login', async (req, res) => {
 
     const userId = data.user.id;
 
-    // fetch local user record by Supabase UUID — not by email, which may be shared across roles
-    const pg3 = getPgClient();
-    await pg3.connect();
-    const r = await pg3.query(
+    // Fetch user profile and update last_login_at in a single connection.
+    const pg = getPgClient();
+    await pg.connect();
+    const r = await pg.query(
       `SELECT id, school_id, role, title, email, first_name, last_name, is_active FROM users WHERE id = $1`,
       [userId]
     );
-    await pg3.end();
     const local = r.rows[0];
     logger.debug('login_local_user_lookup', { found: !!local, userId });
     if (!local) {
+      await pg.end();
       return res.status(500).json({
         success: false,
         error: { code: 'USER_RECORD_MISSING', message: 'Local user record missing. Contact support.' },
       });
     }
     if (!local.is_active) {
+      await pg.end();
       return res.status(403).json({
         success: false,
         error: { code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Contact your administrator.' },
       });
     }
+    await pg.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [local.id]);
+    await pg.end();
 
-    // Successful login — reset lockout counter and update last login
-    const pg4 = getPgClient();
-    await pg4.connect();
-    await pg4.query(
-      `UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = now() WHERE id = $1`,
-      [local.id]
-    );
-    await pg4.end();
+    // Clear lockout counter on successful login.
+    if (redis) await redis.del(lockoutKey);
 
     const payload = {
       user_id: local.id,

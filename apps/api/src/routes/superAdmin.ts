@@ -304,7 +304,7 @@ router.post(
 
       const expiresIn = process.env.SUPPORT_SESSION_MAX_DURATION_HOURS
         ? `${process.env.SUPPORT_SESSION_MAX_DURATION_HOURS}h`
-        : '2h';
+        : '30m';
 
       const jwtSecret = process.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET is not set');
