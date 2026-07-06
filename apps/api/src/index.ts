@@ -51,6 +51,10 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.trim() === '') {
   console.error('FATAL: JWT_SECRET is not set. Refusing to start.');
   process.exit(1);
 }
+if (!process.env.ROOT_ADMIN_EMAIL) {
+  console.error('FATAL: ROOT_ADMIN_EMAIL is not set. Refusing to start.');
+  process.exit(1);
+}
 
 const app = express();
 const port = env.PORT;
