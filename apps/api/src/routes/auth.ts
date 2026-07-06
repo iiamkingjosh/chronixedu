@@ -57,7 +57,7 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
     // insert into local users table
     const pg = getPgClient();
     await pg.connect();
-    const hashed = bcrypt.hashSync(password, 10);
+    const hashed = bcrypt.hashSync(password, 12);
     await pg.query(
       `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title, teacher_mode)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
@@ -248,7 +248,7 @@ if (process.env.NODE_ENV === 'development') {
       }
 
       // Upsert the local users row — safe to run whether the row exists or not
-      const hashed = bcrypt.hashSync(password, 10);
+      const hashed = bcrypt.hashSync(password, 12);
       await pg.query(
         `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -402,7 +402,7 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
       });
     }
 
-    const passwordHash = bcrypt.hashSync(password, 10);
+    const passwordHash = bcrypt.hashSync(password, 12);
     await updatePasswordHash(email, passwordHash);
 
     if (local.school_id) {

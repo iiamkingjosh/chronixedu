@@ -128,7 +128,7 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'AUTH_CREATE_FAILED', message: authError?.message ?? 'Failed to create authentication account' } });
       }
 
-      const passwordHash = bcrypt.hashSync(tempPassword, 10);
+      const passwordHash = bcrypt.hashSync(tempPassword, 12);
       const user = await insertUser(authData.user.id, req.params.schoolId, {
         email,
         passwordHash,
