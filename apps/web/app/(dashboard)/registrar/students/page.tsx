@@ -50,6 +50,15 @@ interface RegistrationResult {
   new_parents: NewParentRow[];
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 function printCredentialsSlip({
   studentName,
   admissionNo,
@@ -66,10 +75,10 @@ function printCredentialsSlip({
   const w = window.open('', '_blank', 'width=640,height=720');
   if (!w) return;
   const parentRows = parents
-    .map(p => `<tr><td>Parent / Guardian</td><td style="font-family:monospace">${p.email}</td><td style="font-family:monospace">${p.temp_password}</td></tr>`)
+    .map(p => `<tr><td>Parent / Guardian</td><td style="font-family:monospace">${escapeHtml(p.email)}</td><td style="font-family:monospace">${escapeHtml(p.temp_password)}</td></tr>`)
     .join('');
   w.document.write(`<!DOCTYPE html>
-<html><head><title>Credentials — ${studentName}</title>
+<html><head><title>Credentials — ${escapeHtml(studentName)}</title>
 <style>
   body{font-family:Arial,sans-serif;font-size:13px;padding:32px;color:#111}
   h1{font-size:18px;color:#003366;margin-bottom:2px}
@@ -90,9 +99,9 @@ function printCredentialsSlip({
   <thead><tr><th>Account</th><th>Email</th><th>Temporary Password</th></tr></thead>
   <tbody>
     <tr>
-      <td><strong>${studentName}</strong><br/><span style="font-size:11px;color:#666">Student · Adm. ${admissionNo}</span></td>
-      <td style="font-family:monospace">${email || '—'}</td>
-      <td style="font-family:monospace">${password}</td>
+      <td><strong>${escapeHtml(studentName)}</strong><br/><span style="font-size:11px;color:#666">Student · Adm. ${escapeHtml(admissionNo)}</span></td>
+      <td style="font-family:monospace">${email ? escapeHtml(email) : '—'}</td>
+      <td style="font-family:monospace">${escapeHtml(password)}</td>
     </tr>
     ${parentRows}
   </tbody>

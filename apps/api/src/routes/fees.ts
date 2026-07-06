@@ -341,7 +341,8 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
 
-      const { invoice_id, amount, method, reference, paystack_reference } = parsed.data;
+      const { invoice_id, method, reference, paystack_reference } = parsed.data;
+      let amount = parsed.data.amount;
 
       if (method === 'paystack') {
         if (!isPaystackConfigured()) {
@@ -356,6 +357,10 @@ router.post(
         if (verification.status !== 'success') {
           return res.status(400).json({ success: false, error: { code: 'PAYMENT_NOT_VERIFIED', message: `Paystack transaction status is '${verification.status}', not 'success'` } });
         }
+
+        // Always use Paystack's verified amount — never trust the client-supplied value.
+        // verifyPaystackTransaction already converts kobo → naira.
+        amount = verification.amount;
       }
 
       const result = await recordPayment(req.params.schoolId, invoice_id, {

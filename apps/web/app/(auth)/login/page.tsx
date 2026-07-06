@@ -9,6 +9,9 @@ import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { getDefaultDashboardPath } from '@/lib/auth';
 
+if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
+  throw new Error('NEXT_PUBLIC_API_URL is required in production');
+}
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 const schema = z.object({

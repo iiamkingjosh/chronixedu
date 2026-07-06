@@ -1,9 +1,12 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
 import { verifyToken } from '../middleware/auth';
 import { findUserById } from '../db/queries/users';
 import { createNotification } from '../db/queries/notifications';
 import { sendEmail } from '../services/emailService';
+import { redis } from '../middleware/rateLimit';
 import {
   getMessageContacts,
   createMessage,
@@ -14,6 +17,26 @@ import {
 } from '../db/queries/messages';
 
 const router = Router();
+
+// 10 messages per user per minute — prevents spam flooding and SendGrid exhaustion.
+const messageLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  keyGenerator: (req: Request) => `msg:${req.user?.user_id ?? req.ip}`,
+  store: redis
+    ? new RedisStore({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sendCommand: (...args: string[]) => (redis as any).call(...args),
+      })
+    : undefined,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res, _next, options) =>
+    res.status(options.statusCode).json({
+      success: false,
+      error: { code: 'RATE_LIMITED', message: 'Message limit reached. Try again in a minute.' },
+    }),
+});
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 
@@ -61,6 +84,7 @@ router.post(
   '/:schoolId/messages',
   verifyToken,
   requireSchoolAccess,
+  messageLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = sendSchema.safeParse(req.body);
