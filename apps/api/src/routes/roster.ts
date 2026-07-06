@@ -327,6 +327,11 @@ router.post(
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_ASSIGNMENT', message: 'This teacher is already assigned to this class and subject for the current term' } });
       }
 
+      const teacher = await findUserById(teacher_id, req.params.schoolId);
+      if (!teacher || teacher.role !== 'teacher') {
+        return res.status(404).json({ success: false, error: { code: 'TEACHER_NOT_FOUND', message: 'Teacher not found in this school' } });
+      }
+
       const assignment = await insertTeacherAssignment(teacher_id, class_id, subject_id, term.id, req.params.schoolId);
       cache.del(`roster:${req.params.schoolId}:assignments:${teacher_id}`);
       return res.status(201).json({ success: true, data: assignment });

@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import * as Sentry from '@sentry/node';
+import { redis } from './rateLimit';
+import pool from '../db/client';
 
 export interface AuthUser {
   user_id: string;
@@ -30,7 +32,7 @@ function tagSentry(user: AuthUser) {
   Sentry.setUser({ id: user.user_id, email: user.email });
 }
 
-export function verifyToken(req: Request, res: Response, next: NextFunction) {
+export async function verifyToken(req: Request, res: Response, next: NextFunction) {
   // detectSupportSession (or an upstream verifyToken call) already authenticated
   // this request — skip re-verification and just tag Sentry with what we have.
   if (req.user) {
@@ -50,6 +52,28 @@ export function verifyToken(req: Request, res: Response, next: NextFunction) {
     const secret = process.env.JWT_SECRET;
     if (!secret) throw new Error('JWT_SECRET environment variable is not set');
     const payload = jwt.verify(token, secret) as AuthUser;
+
+    // Check if the user is still active — suspended users are blocked even with a valid JWT.
+    const cacheKey = `user_active:${payload.user_id}`;
+    let isActive = true;
+    if (redis) {
+      const cached = await redis.get(cacheKey);
+      if (cached !== null) {
+        isActive = cached === '1';
+      } else {
+        const result = await pool.query('SELECT is_active FROM users WHERE id = $1', [payload.user_id]);
+        isActive = result.rows[0]?.is_active !== false;
+        await redis.set(cacheKey, isActive ? '1' : '0', 'EX', 300);
+      }
+    } else {
+      const result = await pool.query('SELECT is_active FROM users WHERE id = $1', [payload.user_id]);
+      isActive = result.rows[0]?.is_active !== false;
+    }
+
+    if (!isActive) {
+      return res.status(403).json({ success: false, error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended' } });
+    }
+
     req.user = payload;
     tagSentry(payload);
     return next();

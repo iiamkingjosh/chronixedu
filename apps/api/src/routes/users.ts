@@ -6,6 +6,8 @@ import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../supabaseClient';
+import { redis } from '../middleware/rateLimit';
+import { sendEmail } from '../services/emailService';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
 import {
   listUsers,
@@ -217,6 +219,11 @@ router.patch(
 
       const updated = await setUserActive(req.params.userId, req.params.schoolId, parsed.data.is_active);
 
+      // Immediately update the is_active cache so verifyToken blocks the user on the next request
+      if (redis) {
+        await redis.set(`user_active:${req.params.userId}`, parsed.data.is_active ? '1' : '0', 'EX', 300);
+      }
+
       await logAudit({
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
@@ -258,7 +265,17 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'RESET_LINK_FAILED', message: error.message } });
       }
 
-      const actionLink = data?.properties?.action_link ?? null;
+      const actionLink = data?.properties?.action_link;
+      if (!actionLink) {
+        return res.status(500).json({ success: false, error: { code: 'RESET_LINK_FAILED', message: 'Failed to generate reset link' } });
+      }
+
+      // Email the link directly — never return it in the response body.
+      sendEmail(
+        existing.email,
+        'Password Reset Request',
+        `A password reset has been requested for your Chronix Edu account.\n\nClick the link below to reset your password:\n\n${actionLink}\n\nThis link expires shortly. If you did not request this, you can safely ignore this email.`
+      ).catch(() => {});
 
       await logAudit({
         supportSession: req.supportSession,
@@ -269,7 +286,7 @@ router.post(
         entityId: existing.id,
       });
 
-      return res.json({ success: true, data: { reset_link: actionLink } });
+      return res.json({ success: true, data: { sent: true } });
     } catch (err) {
       return next(err);
     }

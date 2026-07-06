@@ -55,6 +55,18 @@ if (!process.env.ROOT_ADMIN_EMAIL) {
   console.error('FATAL: ROOT_ADMIN_EMAIL is not set. Refusing to start.');
   process.exit(1);
 }
+if (!process.env.SUPABASE_URL) {
+  console.error('FATAL: SUPABASE_URL is not set. Refusing to start.');
+  process.exit(1);
+}
+if (!process.env.SUPABASE_PUBLISHABLE_KEY) {
+  console.error('FATAL: SUPABASE_PUBLISHABLE_KEY is not set. Refusing to start.');
+  process.exit(1);
+}
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('FATAL: SUPABASE_SERVICE_ROLE_KEY is not set. Refusing to start.');
+  process.exit(1);
+}
 
 const app = express();
 const port = env.PORT;

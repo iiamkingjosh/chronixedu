@@ -1,11 +1,35 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
+import { RedisStore } from 'rate-limit-redis';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { redis } from '../middleware/rateLimit';
 import { createNotificationsBulk } from '../db/queries/notifications';
 import { sendEmail } from '../services/emailService';
 import { createAnnouncement, listAnnouncementsForRole, getTargetUsers } from '../db/queries/announcements';
 
 const router = Router();
+
+const BATCH_SIZE = 50;
+
+const announcementLimiter = rateLimit({
+  windowMs: 60 * 60_000,
+  max: 5,
+  keyGenerator: (req: Request) => `ann:${req.user?.user_id ?? req.ip}`,
+  store: redis
+    ? new RedisStore({
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        sendCommand: (...args: string[]) => (redis as any).call(...args),
+      })
+    : undefined,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res, _next, options) =>
+    res.status(options.statusCode).json({
+      success: false,
+      error: { code: 'RATE_LIMITED', message: 'Announcement limit reached. Try again later.' },
+    }),
+});
 
 // ── Middleware ─────────────────────────────────────────────────────────────────
 
@@ -33,6 +57,7 @@ const createSchema = z.object({
 router.post(
   '/:schoolId/announcements',
   verifyToken,
+  announcementLimiter,
   requireSchoolAccess,
   requireRole('principal', 'super_admin'),
   async (req: Request, res: Response, next: NextFunction) => {
@@ -53,15 +78,21 @@ router.post(
         target_role,
       });
 
-      // Fan out in-app notifications + emails to everyone targeted (non-blocking).
+      // Fan out in-app notifications + batched emails to everyone targeted (non-blocking).
       getTargetUsers(schoolId, target_role)
         .then(async targets => {
           await createNotificationsBulk(
             targets.map(t => t.id),
             { type: 'announcement', title: `Announcement: ${title}`, body }
           );
-          for (const target of targets) {
-            sendEmail(target.email, `Announcement: ${title}`, body).catch(() => {});
+          for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+            const batch = targets.slice(i, i + BATCH_SIZE);
+            await Promise.all(
+              batch.map(t => sendEmail(t.email, `Announcement: ${title}`, body).catch(() => {}))
+            );
+            if (i + BATCH_SIZE < targets.length) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
           }
         })
         .catch(() => {
