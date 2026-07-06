@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { getActiveTerm } from '../db/queries/roster';
+import { findUserById } from '../db/queries/users';
 import {
   insertSlot,
   findClassClash,
@@ -87,6 +88,11 @@ router.post(
             message: `${teacherClash.teacher_name} is already teaching ${teacherClash.class_name} at this time`,
           },
         });
+      }
+
+      const teacher = await findUserById(teacher_id, schoolId);
+      if (!teacher || teacher.role !== 'teacher') {
+        return res.status(404).json({ success: false, error: { code: 'TEACHER_NOT_FOUND', message: 'Teacher not found in this school' } });
       }
 
       const slot = await insertSlot(schoolId, { class_id, term_id, day_of_week, period_number, subject_id, teacher_id });

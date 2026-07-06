@@ -22,9 +22,14 @@ async function main() {
     return;
   }
 
+  if (!process.env.SUPER_ADMIN_PASSWORD) {
+    throw new Error('SUPER_ADMIN_PASSWORD is required to run this script');
+  }
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+
   const { data, error } = await supabaseAdmin.auth.admin.createUser({
     email: SUPER_ADMIN_EMAIL,
-    password: process.env.SUPER_ADMIN_PASSWORD || 'ChangeMe@2026!',
+    password,
     email_confirm: true,
   });
   if (error || !data?.user) {

@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import NodeCache from 'node-cache';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { redis } from '../middleware/rateLimit';
 import { logAudit } from '../db/queries/auditLog';
 import {
   insertSession,
@@ -14,8 +14,6 @@ import {
 
 const router = Router();
 
-// 60-second TTL cache shared across all current-context requests
-const contextCache = new NodeCache({ stdTTL: 60, checkperiod: 120 });
 
 // ── Validation schemas ─────────────────────────────────────────────────────────
 
@@ -137,7 +135,7 @@ router.patch(
       await activateSession(req.params.schoolId, req.params.sessionId);
 
       // Bust the cache so the next current-context request is fresh
-      contextCache.del(`ctx:${req.params.schoolId}`);
+      if (redis) await redis.del(`ctx:${req.params.schoolId}`);
 
       await logAudit({
         schoolId:   req.params.schoolId,
@@ -164,13 +162,15 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const cacheKey = `ctx:${req.params.schoolId}`;
-      const hit = contextCache.get(cacheKey);
-      if (hit !== undefined) {
-        return res.json({ success: true, data: hit });
+      if (redis) {
+        const hit = await redis.get(cacheKey);
+        if (hit !== null) {
+          return res.json({ success: true, data: JSON.parse(hit) });
+        }
       }
 
       const context = await getCurrentContext(req.params.schoolId);
-      contextCache.set(cacheKey, context);
+      if (redis) await redis.set(cacheKey, JSON.stringify(context), 'EX', 60);
       return res.json({ success: true, data: context });
     } catch (err) {
       return next(err);
