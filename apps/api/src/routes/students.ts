@@ -3,6 +3,7 @@ import { z } from 'zod';
 import multer from 'multer';
 import { randomBytes } from 'crypto';
 import { hashSync } from 'bcryptjs';
+import * as Sentry from '@sentry/node';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../supabaseClient';
 import {
@@ -151,12 +152,12 @@ router.post(
 
       // Generate student password upfront — plaintext returned to admin, hash stored
       const tempPassword = randomBytes(8).toString('hex');
-      const passwordHash = hashSync(tempPassword, 10);
+      const passwordHash = hashSync(tempPassword, 12);
 
       // Pre-hash parent passwords so the transaction doesn't do heavy crypto inside DB round-trips
       const parentsWithHashes = parents.map(p => {
         const tp = randomBytes(8).toString('hex');
-        return { ...p, passwordHash: hashSync(tp, 10), tempPassword: tp };
+        return { ...p, passwordHash: hashSync(tp, 12), tempPassword: tp };
       });
 
       const result = await registerStudent(
@@ -180,6 +181,13 @@ router.post(
           }
         }).catch(() => {});
       }
+
+      Sentry.getCurrentScope().addEventProcessor(event => {
+        if (event.request?.url?.includes('/students') || event.request?.url?.includes('/parents')) {
+          if (event.request.data) event.request.data = '[Filtered — contains credentials]';
+        }
+        return event;
+      });
 
       return res.status(201).json({
         success: true,
@@ -600,7 +608,7 @@ router.post(
         isNewAccount = true;
         const rawPassword = randomBytes(8).toString('hex');
         tempPassword = rawPassword;
-        const passwordHash = hashSync(rawPassword, 10);
+        const passwordHash = hashSync(rawPassword, 12);
 
         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email,
@@ -647,6 +655,13 @@ router.post(
           ).catch(() => {});
         }).catch(() => {});
       }
+
+      Sentry.getCurrentScope().addEventProcessor(event => {
+        if (event.request?.url?.includes('/students') || event.request?.url?.includes('/parents')) {
+          if (event.request.data) event.request.data = '[Filtered — contains credentials]';
+        }
+        return event;
+      });
 
       return res.status(201).json({
         success: true,

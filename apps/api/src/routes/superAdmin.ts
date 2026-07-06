@@ -2082,7 +2082,7 @@ router.post(
 
       const userId = authData.user.id;
       const bcrypt = await import('bcryptjs');
-      const hashed = bcrypt.hashSync(password, 10);
+      const hashed = bcrypt.hashSync(password, 12);
 
       await pool.query(
         `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
