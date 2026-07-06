@@ -1,5 +1,6 @@
 ﻿import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
+import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import {
@@ -436,18 +437,19 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "logo".' } });
       }
 
-      const allowed = ['image/jpeg', 'image/png'];
-      if (!allowed.includes(file.mimetype)) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'Only JPEG and PNG files are allowed.' } });
+      const detected = await fileTypeFromBuffer(file.buffer);
+      const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!detected || !allowedMimes.includes(detected.mime)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'File must be JPEG, PNG, or WebP.' } });
       }
-
-      const ext = file.mimetype === 'image/png' ? 'png' : 'jpg';
+      const extMap: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const ext = extMap[detected.mime] ?? 'jpg';
       const storagePath = `schools/${req.params.schoolId}/logo.${ext}`;
       const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from(bucket)
-        .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+        .upload(storagePath, file.buffer, { contentType: detected.mime, upsert: true });
 
       if (uploadError) {
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
@@ -495,18 +497,19 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "signature".' } });
       }
 
-      const allowed = ['image/jpeg', 'image/png'];
-      if (!allowed.includes(file.mimetype)) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'Only JPEG and PNG files are allowed.' } });
+      const detected = await fileTypeFromBuffer(file.buffer);
+      const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!detected || !allowedMimes.includes(detected.mime)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'File must be JPEG, PNG, or WebP.' } });
       }
-
-      const ext = file.mimetype === 'image/png' ? 'png' : 'jpg';
+      const extMap: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const ext = extMap[detected.mime] ?? 'jpg';
       const storagePath = `schools/${req.params.schoolId}/signature.${ext}`;
       const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from(bucket)
-        .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+        .upload(storagePath, file.buffer, { contentType: detected.mime, upsert: true });
 
       if (uploadError) {
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
@@ -554,18 +557,19 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "stamp".' } });
       }
 
-      const allowed = ['image/jpeg', 'image/png'];
-      if (!allowed.includes(file.mimetype)) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'Only JPEG and PNG files are allowed.' } });
+      const detected = await fileTypeFromBuffer(file.buffer);
+      const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!detected || !allowedMimes.includes(detected.mime)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'File must be JPEG, PNG, or WebP.' } });
       }
-
-      const ext = file.mimetype === 'image/png' ? 'png' : 'jpg';
+      const extMap: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const ext = extMap[detected.mime] ?? 'jpg';
       const storagePath = `schools/${req.params.schoolId}/stamp.${ext}`;
       const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from(bucket)
-        .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+        .upload(storagePath, file.buffer, { contentType: detected.mime, upsert: true });
 
       if (uploadError) {
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });

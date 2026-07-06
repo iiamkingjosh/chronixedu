@@ -13,6 +13,9 @@ function rateLimitHandler(_req: Request, res: Response, _next: unknown, options:
 // Connect to Redis when REDIS_URL is set; fall back to in-memory store in dev.
 const redisClient = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : null;
 
+/** Shared Redis client — null in dev when REDIS_URL is unset. Used by auth lockout and rate limiting. */
+export const redis = redisClient;
+
 if (redisClient) {
   redisClient.on('error', (err) => {
     console.error('Redis rate-limit client error:', err);
