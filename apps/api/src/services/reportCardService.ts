@@ -527,9 +527,11 @@ async function runBatch(
     job.status = 'error';
     job.errors.push(`Batch failed: ${err instanceof Error ? err.message : String(err)}`);
     job.finishedAt = new Date();
+    setTimeout(() => jobs.delete(job.jobId), 5 * 60_000);
     return;
   }
 
   job.status    = job.failed === 0 ? 'done' : 'error';
   job.finishedAt = new Date();
+  setTimeout(() => jobs.delete(job.jobId), 5 * 60_000);
 }
