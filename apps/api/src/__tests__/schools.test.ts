@@ -21,6 +21,14 @@ jest.mock('../services/cacheService', () => ({
 jest.mock('../services/reportCardService', () => ({
   generateReportCardPreview: jest.fn(),
 }));
+jest.mock('file-type', () => ({
+  fromBuffer: jest.fn().mockImplementation((buf: Buffer) => {
+    const str = buf.toString();
+    if (str.includes('gif')) return Promise.resolve({ mime: 'image/gif', ext: 'gif' });
+    return Promise.resolve({ mime: 'image/png', ext: 'png' });
+  }),
+}));
+
 jest.mock('../supabaseClient', () => ({
   supabaseAdmin: {
     storage: {

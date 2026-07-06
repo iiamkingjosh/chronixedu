@@ -70,6 +70,9 @@ function makeToken(role: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // clearAllMocks does not flush mockResolvedValueOnce queues — reset just the
+  // pg.Client.query queue so stale values from one test cannot bleed into the next.
+  mockQuery.mockReset();
 });
 
 describe('auth middleware error envelope', () => {
@@ -128,8 +131,6 @@ describe('POST /api/auth/login', () => {
   });
 
   it('returns a 401 envelope for invalid credentials', async () => {
-    // Lock-check SELECT finds no existing user record for this email
-    mockQuery.mockResolvedValueOnce({ rows: [] });
     mockSignIn.mockResolvedValueOnce({
       data: { user: null },
       error: { message: 'Invalid login credentials' },
@@ -150,11 +151,7 @@ describe('POST /api/auth/login', () => {
     mockSignIn.mockResolvedValueOnce({ data: { user: { id: 'auth-uuid-1' } }, error: null });
     const passwordHash = bcrypt.hashSync('password123', 10);
     mockQuery
-      // 1. lock-check SELECT by email — no lockout in place
-      .mockResolvedValueOnce({
-        rows: [{ id: 'local-uuid-1', failed_login_attempts: 0, locked_until: null }],
-      })
-      // 2. local user SELECT by Supabase auth UUID
+      // 1. local user SELECT by Supabase auth UUID
       .mockResolvedValueOnce({
         rows: [{
           id: 'local-uuid-1',
@@ -168,7 +165,7 @@ describe('POST /api/auth/login', () => {
           is_active: true,
         }],
       })
-      // 3. UPDATE resetting failed_login_attempts on success
+      // 2. UPDATE last_login_at
       .mockResolvedValueOnce({ rows: [] });
 
     const res = await request(app)
@@ -191,20 +188,18 @@ describe('POST /api/auth/login', () => {
 
   it('returns a 403 envelope for a suspended account', async () => {
     mockSignIn.mockResolvedValueOnce({ data: { user: { id: 'auth-uuid-1' } }, error: null });
-    mockQuery
-      .mockResolvedValueOnce({ rows: [{ id: 'local-uuid-1', failed_login_attempts: 0, locked_until: null }] })
-      .mockResolvedValueOnce({
-        rows: [{
-          id: 'local-uuid-1',
-          school_id: 'school-1',
-          role: 'teacher',
-          title: null,
-          email: 'a@b.com',
-          first_name: 'A',
-          last_name: 'B',
-          is_active: false,
-        }],
-      });
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        id: 'local-uuid-1',
+        school_id: 'school-1',
+        role: 'teacher',
+        title: null,
+        email: 'a@b.com',
+        first_name: 'A',
+        last_name: 'B',
+        is_active: false,
+      }],
+    });
 
     const res = await request(app)
       .post('/api/auth/login')
