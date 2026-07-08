@@ -436,33 +436,23 @@ function StatusConfirmModal({ user, onClose, onConfirm }: {
 
 // ── Reset password link modal ─────────────────────────────────────────────────
 
-function ResetLinkModal({ user, link, onClose }: { user: UserRow; link: string | null; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-
-  function copy() {
-    if (!link) return;
-    navigator.clipboard.writeText(link).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
+function ResetLinkModal({ user, onClose }: { user: UserRow; onClose: () => void }) {
   return (
-    <Modal title="Password Reset Link" onClose={onClose}>
+    <Modal title="Password Reset Email Sent" onClose={onClose}>
       <div className="space-y-4">
-        <p className="text-sm text-gray-700">
-          A password reset link has been generated for <span className="font-medium">{fullName(user)}</span> ({user.email}). Share it with them securely — it will let them set a new password.
-        </p>
-        {link ? (
-          <div className="space-y-2">
-            <textarea readOnly value={link} rows={3} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs font-mono text-gray-600 bg-gray-50" />
-            <button type="button" onClick={copy} className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors">
-              {copied ? 'Copied!' : 'Copy Link'}
-            </button>
+        <div className="flex items-start gap-3">
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+            <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
           </div>
-        ) : (
-          <p className="text-sm text-amber-700">The link could not be retrieved. Try again, or ask the user to use &quot;Forgot password&quot; on the login page.</p>
-        )}
+          <div>
+            <p className="text-sm font-medium text-gray-900">Email sent to {user.email}</p>
+            <p className="mt-1 text-sm text-gray-600">
+              <span className="font-medium">{fullName(user)}</span> will receive a password reset link shortly. The link expires after a short time.
+            </p>
+          </div>
+        </div>
         <div className="flex justify-end pt-2">
           <button type="button" onClick={onClose} className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors">Done</button>
         </div>
@@ -487,7 +477,7 @@ export default function UsersPage() {
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [statusTarget, setStatusTarget] = useState<UserRow | null>(null);
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
-  const [resetLink, setResetLink] = useState<{ user: UserRow; link: string | null } | null>(null);
+  const [resetLink, setResetLink] = useState<{ user: UserRow } | null>(null);
   const [credentials, setCredentials] = useState<{ user: UserRow; temp_password: string } | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
@@ -551,13 +541,13 @@ export default function UsersPage() {
   async function handleResetPassword(user: UserRow) {
     setResetTarget(user);
     try {
-      const res = await apiFetch<{ success: boolean; data: { reset_link: string | null } }>(
+      await apiFetch<{ success: boolean; data: { sent: boolean } }>(
         `/api/schools/${schoolId}/users/${user.id}/reset-password`,
         { method: 'POST' }
       );
-      setResetLink({ user, link: res.data.reset_link });
+      setResetLink({ user });
     } catch (err: unknown) {
-      show(err instanceof Error ? err.message : 'Failed to generate reset link', 'error');
+      show(err instanceof Error ? err.message : 'Failed to send reset email', 'error');
     } finally {
       setResetTarget(null);
     }
@@ -697,7 +687,7 @@ export default function UsersPage() {
       )}
 
       {resetLink && (
-        <ResetLinkModal user={resetLink.user} link={resetLink.link} onClose={() => setResetLink(null)} />
+        <ResetLinkModal user={resetLink.user} onClose={() => setResetLink(null)} />
       )}
     </div>
   );
