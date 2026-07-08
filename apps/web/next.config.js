@@ -64,47 +64,10 @@ const nextConfig = {
   poweredByHeader: false,
 
   async headers() {
-    const csp = [
-      "default-src 'self'",
-      // unsafe-inline and unsafe-eval removed — XSS fix (H-02)
-      "script-src 'self' https://js.paystack.co",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob: https:",
-      "font-src 'self' data:",
-      // Service worker (PWA) needs blob: in worker-src
-      "worker-src 'self' blob:",
-      // API, Supabase realtime, Sentry error reporting
-      [
-        "connect-src 'self'",
-        "https://api.chronixtechnology.com",
-        "https://chronixeduapi-production.up.railway.app",
-        "https://pgnpmqaowrnmsytpehwc.supabase.co",
-        "wss://pgnpmqaowrnmsytpehwc.supabase.co",
-        "https://*.ingest.us.sentry.io",
-        "https://*.ingest.sentry.io",
-        // Local API dev server — never included in production builds
-        ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3001']),
-      ].join(' '),
-      "frame-ancestors 'self'",
-      "frame-src 'none'",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join('; ');
-
+    // Security headers (CSP, X-Frame-Options, etc.) are set per-request in
+    // middleware.ts so a fresh nonce can be generated for each request.
+    // Only static-asset cache-control headers live here.
     return [
-      {
-        source: '/(.*)',
-        headers: [
-          { key: 'X-Frame-Options',        value: 'SAMEORIGIN' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy',         value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy',      value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
-          { key: 'X-XSS-Protection',        value: '1; mode=block' },
-          { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
-          { key: 'Content-Security-Policy', value: csp },
-        ],
-      },
       {
         source: '/_next/static/(.*)',
         headers: [
