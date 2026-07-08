@@ -56,7 +56,7 @@ const patchUserSchema = z.object({
 
 const statusSchema = z.object({
   is_active: z.boolean(),
-  reason: z.string().min(10, 'Reason must be at least 10 characters'),
+  reason: z.string().min(10, 'Reason must be at least 10 characters').optional(),
 });
 
 // ── Middleware: super_admin or the school's own principal ──────────────────────
