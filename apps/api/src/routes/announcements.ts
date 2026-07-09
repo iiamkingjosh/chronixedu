@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
+import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { redis } from '../middleware/rateLimit';
 import { createNotificationsBulk } from '../db/queries/notifications';
@@ -57,8 +58,8 @@ const createSchema = z.object({
 router.post(
   '/:schoolId/announcements',
   verifyToken,
-  announcementLimiter,
   requireSchoolAccess,
+  announcementLimiter,
   requireRole('principal', 'super_admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -88,7 +89,7 @@ router.post(
           for (let i = 0; i < targets.length; i += BATCH_SIZE) {
             const batch = targets.slice(i, i + BATCH_SIZE);
             await Promise.all(
-              batch.map(t => sendEmail(t.email, `Announcement: ${title}`, body).catch(() => {}))
+              batch.map(t => sendEmail(t.email, `Announcement: ${title}`, sanitizeHtml(body, { allowedTags: [], allowedAttributes: {} })).catch(() => {}))
             );
             if (i + BATCH_SIZE < targets.length) {
               await new Promise(resolve => setTimeout(resolve, 1000));

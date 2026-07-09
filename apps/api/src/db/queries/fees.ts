@@ -1,5 +1,12 @@
 import pool from '../client';
 
+export class DuplicatePaymentError extends Error {
+  code = 'DUPLICATE_PAYMENT';
+  constructor() {
+    super('A duplicate cash/bank-transfer payment for this invoice was recorded within the last 5 minutes');
+  }
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface FeeStructureRow {
@@ -190,6 +197,19 @@ export async function recordPayment(
     if (!invoiceRow) {
       await client.query('ROLLBACK');
       return null;
+    }
+
+    // Idempotency guard: reject duplicate cash/bank_transfer payments within 5 minutes.
+    if (input.method === 'cash' || input.method === 'bank_transfer') {
+      const dupeResult = await client.query(
+        `SELECT id FROM payments WHERE invoice_id = $1 AND method = $2 AND amount = $3
+         AND created_at > NOW() - INTERVAL '5 minutes'`,
+        [invoiceId, input.method, input.amount]
+      );
+      if (dupeResult.rows.length > 0) {
+        await client.query('ROLLBACK');
+        throw new DuplicatePaymentError();
+      }
     }
 
     const paymentResult = await client.query<PaymentRow>(

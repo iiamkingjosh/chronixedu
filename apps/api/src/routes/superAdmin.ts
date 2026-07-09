@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
+import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
 import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
@@ -566,7 +567,11 @@ router.get(
   ...guard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const schoolResult = await pool.query(`SELECT * FROM schools WHERE id = $1`, [req.params.schoolId]);
+      const schoolResult = await pool.query(
+        `SELECT id, name, slug, email, address, phone, is_active, subscription_tier, legal_terms_accepted_at, created_at
+         FROM schools WHERE id = $1`,
+        [req.params.schoolId]
+      );
       const school = schoolResult.rows[0];
       if (!school) {
         return res.status(404).json({ success: false, error: { code: 'SCHOOL_NOT_FOUND', message: 'School not found' } });
@@ -986,11 +991,14 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'SUBSCRIPTION_NOT_FOUND', message: 'Subscription not found' } });
       }
 
+      const SUBSCRIPTION_FIELDS = ['plan', 'subscription_status', 'billing_cycle', 'amount_naira', 'next_billing_date', 'trial_ends_at'] as const;
       const params: unknown[] = [];
       const fields: string[] = [];
-      for (const [key, value] of Object.entries(parsed.data)) {
-        params.push(value);
-        fields.push(`${key} = $${params.length}`);
+      for (const field of SUBSCRIPTION_FIELDS) {
+        if (parsed.data[field] !== undefined) {
+          params.push(parsed.data[field]);
+          fields.push(`${field} = $${params.length}`);
+        }
       }
       fields.push(`updated_at = NOW()`);
       params.push(req.params.id);
@@ -1943,11 +1951,14 @@ router.patch(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
 
+      const ANNOUNCEMENT_FIELDS = ['title', 'body', 'type', 'target_plans', 'scheduled_at', 'expires_at'] as const;
       const params: unknown[] = [];
       const fields: string[] = [];
-      for (const [key, value] of Object.entries(parsed.data)) {
-        params.push(value);
-        fields.push(`${key} = $${params.length}`);
+      for (const field of ANNOUNCEMENT_FIELDS) {
+        if (parsed.data[field] !== undefined) {
+          params.push(parsed.data[field]);
+          fields.push(`${field} = $${params.length}`);
+        }
       }
       fields.push(`updated_at = NOW()`);
       params.push(req.params.id);
@@ -2026,9 +2037,10 @@ router.post(
       );
 
       const subject = `[Chronix Edu] [${String(announcement.type).toUpperCase()}] — ${announcement.title}`;
+      const safeBody = sanitizeHtml(announcement.body, { allowedTags: [], allowedAttributes: {} });
       for (const recipient of recipientsResult.rows) {
         if (isEmailConfigured()) {
-          await sendEmail(recipient.email, subject, announcement.body);
+          await sendEmail(recipient.email, subject, safeBody);
         } else {
           console.log(`[announcements] SendGrid not configured. Announcement email for ${recipient.email}:\n${subject}\n${announcement.body}`);
         }

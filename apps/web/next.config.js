@@ -42,6 +42,11 @@ const withPWA = require('@ducanh2912/next-pwa').default({
           networkTimeoutSeconds: 5,
         },
       },
+      // Authenticated API responses must never be served from cache.
+      {
+        urlPattern: /\/api\//,
+        handler: 'NetworkOnly',
+      },
       // Default app-shell / Next.js asset caching
       {
         urlPattern: /^https?.*/,
@@ -66,8 +71,15 @@ const nextConfig = {
   async headers() {
     // Security headers (CSP, X-Frame-Options, etc.) are set per-request in
     // middleware.ts so a fresh nonce can be generated for each request.
-    // Only static-asset cache-control headers live here.
+    // Permissions-Policy and Referrer-Policy are static and live here.
     return [
+      {
+        source: '/(.*)',
+        headers: [
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), interest-cohort=()' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+        ],
+      },
       {
         source: '/_next/static/(.*)',
         headers: [
