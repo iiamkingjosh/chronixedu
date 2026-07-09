@@ -8,7 +8,6 @@ import { Client } from 'pg';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { findUserByEmail, updatePasswordHash } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
-import { logger } from '../config/logger';
 import { redis } from '../middleware/rateLimit';
 
 const router = express.Router();
