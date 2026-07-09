@@ -59,10 +59,31 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
     return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid token' } });
   }
 
-  // Step 2: check if the user is still active. Separate try/catch so a DB or
-  // Redis outage never converts a valid JWT into a spurious 401 — fail open and
-  // let the request through; the JWT itself is the primary gate.
+  // Step 1b: support session tokens must always include the matching header.
+  // This prevents a scoped token from being replayed as a regular JWT.
+  if (payload.is_support_session) {
+    const headerSessionId = req.headers['x-support-session-id'];
+    const headerStr = Array.isArray(headerSessionId) ? headerSessionId[0] : headerSessionId;
+    if (!headerStr || headerStr !== (payload.support_session_id as string)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'MISSING_SESSION_HEADER', message: 'Support session header required' },
+      });
+    }
+  }
+
+  // Step 2: check if the user is still active and whether the token has been revoked.
+  // Separate try/catch so a DB or Redis outage never converts a valid JWT into a
+  // spurious 401 — fail open and let the request through; the JWT itself is the primary gate.
   try {
+    // Check the token blacklist (revoked support session tokens).
+    if (redis) {
+      const isBlacklisted = await redis.get(`blacklisted_token:${token}`);
+      if (isBlacklisted) {
+        return res.status(401).json({ success: false, error: { code: 'TOKEN_REVOKED', message: 'Token has been revoked' } });
+      }
+    }
+
     const cacheKey = `user_active:${payload.user_id}`;
     let isActive = true;
     if (redis) {

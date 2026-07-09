@@ -39,6 +39,17 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
   }
   const { email, password, role, school_id, first_name, last_name, title, teacher_mode } = parsed.data;
 
+  // H-07: only the root admin may create another super_admin account.
+  if (role === 'super_admin') {
+    const rootEmail = process.env.ROOT_ADMIN_EMAIL?.toLowerCase();
+    if (!rootEmail || req.user!.email?.toLowerCase() !== rootEmail) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'ROOT_ADMIN_REQUIRED', message: 'Only the root platform admin can create super_admin accounts' },
+      });
+    }
+  }
+
   // A school-level super_admin can only create users within their own school.
   if (req.user!.role === 'super_admin' && school_id && school_id !== req.user!.school_id) {
     return res.status(403).json({
@@ -49,8 +60,9 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
 
   const effectiveSchoolId = school_id ?? req.user!.school_id;
 
+  // H-08: always release the pg client, even when an early return or exception occurs.
+  const pg = getPgClient();
   try {
-    const pg = getPgClient();
     await pg.connect();
 
     // Check for duplicate email scoped to this school only — prevents cross-school enumeration.
@@ -59,7 +71,6 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
       [email, effectiveSchoolId]
     );
     if (existing.rows.length > 0) {
-      await pg.end();
       return res.status(409).json({
         success: false,
         error: { code: 'DUPLICATE_EMAIL', message: `A user with email "${email}" already exists in this school` },
@@ -73,7 +84,6 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
       user_metadata: { first_name, last_name, role, school_id: effectiveSchoolId, title, teacher_mode }
     });
     if (error) {
-      await pg.end();
       return res.status(500).json({
         success: false,
         error: { code: 'AUTH_CREATE_FAILED', message: error.message },
@@ -89,14 +99,15 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [userId, effectiveSchoolId, email, hashed, role, first_name || '', last_name || '', title || null, teacher_mode || 'subject']
     );
-    await pg.end();
 
     return res.json({ success: true, data: { user_id: userId } });
   } catch (err: unknown) {
     return res.status(500).json({
       success: false,
-      error: { code: 'INTERNAL_ERROR', message: err instanceof Error ? err.message : 'Internal server error' },
+      error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
     });
+  } finally {
+    await pg.end();
   }
 });
 
@@ -160,31 +171,33 @@ router.post('/login', async (req, res) => {
 
     const userId = data.user.id;
 
-    // Fetch user profile and update last_login_at in a single connection.
+    // H-08: always release the pg client, even when an early return or exception occurs.
     const pg = getPgClient();
-    await pg.connect();
-    const r = await pg.query(
-      `SELECT id, school_id, role, title, email, first_name, last_name, is_active FROM users WHERE id = $1`,
-      [userId]
-    );
-    const local = r.rows[0];
-    logger.debug('login_local_user_lookup', { found: !!local, userId });
-    if (!local) {
+    let local: { id: string; school_id: string; role: string; title: string; email: string; first_name: string; last_name: string; is_active: boolean } | undefined;
+    try {
+      await pg.connect();
+      const r = await pg.query(
+        `SELECT id, school_id, role, title, email, first_name, last_name, is_active FROM users WHERE id = $1`,
+        [userId]
+      );
+      local = r.rows[0];
+      logger.debug('login_local_user_lookup', { found: !!local, userId });
+      if (!local) {
+        return res.status(500).json({
+          success: false,
+          error: { code: 'USER_RECORD_MISSING', message: 'Local user record missing. Contact support.' },
+        });
+      }
+      if (!local.is_active) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Contact your administrator.' },
+        });
+      }
+      await pg.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [local.id]);
+    } finally {
       await pg.end();
-      return res.status(500).json({
-        success: false,
-        error: { code: 'USER_RECORD_MISSING', message: 'Local user record missing. Contact support.' },
-      });
     }
-    if (!local.is_active) {
-      await pg.end();
-      return res.status(403).json({
-        success: false,
-        error: { code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Contact your administrator.' },
-      });
-    }
-    await pg.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [local.id]);
-    await pg.end();
 
     // Clear lockout counter on successful login.
     if (redis) await redis.del(lockoutKey);
