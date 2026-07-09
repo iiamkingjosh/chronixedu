@@ -15,12 +15,13 @@ export function errorHandler(
     method: req.method,
     path: req.originalUrl,
   });
+  const isProduction = process.env.NODE_ENV === 'production';
   const isDev = process.env.NODE_ENV === 'development';
   res.status(status).json({
     success: false,
     error: {
       code: (err as { code?: string })?.code ?? 'INTERNAL_ERROR',
-      message: isDev ? message : 'An unexpected error occurred',
+      message: isProduction ? 'An unexpected error occurred' : message,
       ...(isDev && { stack: err instanceof Error ? err.stack : undefined }),
     },
   });

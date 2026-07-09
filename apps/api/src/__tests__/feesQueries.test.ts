@@ -377,6 +377,7 @@ describe('recordPayment', () => {
     client.query
       .mockResolvedValueOnce({ rows: [] }) // BEGIN
       .mockResolvedValueOnce({ rows: [{ total_amount: '15000.00', amount_paid: '5000.00' }] }) // SELECT FOR UPDATE
+      .mockResolvedValueOnce({ rows: [] }) // duplicate check (no prior payment)
       .mockResolvedValueOnce({ rows: [paymentRow] }) // INSERT payment
       .mockResolvedValueOnce({ rows: [updatedInvoice] }) // UPDATE invoice
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
@@ -396,7 +397,7 @@ describe('recordPayment', () => {
       ['inv-1', 'school-1']
     );
     expect(client.query).toHaveBeenNthCalledWith(
-      4,
+      5,
       expect.stringContaining('UPDATE fee_invoices'),
       [15000, 0, 'paid', 'inv-1']
     );

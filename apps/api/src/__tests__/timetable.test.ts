@@ -7,6 +7,10 @@ import * as timetableQueries from '../db/queries/timetable';
 import * as rosterQueries from '../db/queries/roster';
 import * as userQueries from '../db/queries/users';
 
+jest.mock('../db/client', () => ({
+  __esModule: true,
+  default: { query: jest.fn().mockResolvedValue({ rows: [{ is_active: true }] }), end: jest.fn() },
+}));
 jest.mock('../db/queries/timetable');
 jest.mock('../db/queries/roster');
 jest.mock('../db/queries/users');

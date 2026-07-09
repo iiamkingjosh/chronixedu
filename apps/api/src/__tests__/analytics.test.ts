@@ -7,6 +7,10 @@ import * as analyticsQueries from '../db/queries/analytics';
 import * as rosterQueries from '../db/queries/roster';
 import * as analyticsService from '../services/analyticsService';
 
+jest.mock('../db/client', () => ({
+  __esModule: true,
+  default: { query: jest.fn().mockResolvedValue({ rows: [{ is_active: true }] }), end: jest.fn() },
+}));
 jest.mock('../db/queries/analytics');
 jest.mock('../db/queries/roster');
 jest.mock('../services/analyticsService');

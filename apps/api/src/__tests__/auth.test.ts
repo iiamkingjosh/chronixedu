@@ -44,7 +44,7 @@ jest.mock('pg', () => ({
     end: mockEnd,
   })),
   Pool: jest.fn().mockImplementation(() => ({
-    query: jest.fn(),
+    query: jest.fn().mockResolvedValue({ rows: [{ is_active: true }] }),
     connect: jest.fn(),
     end: jest.fn(),
   })),
