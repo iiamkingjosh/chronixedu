@@ -3,6 +3,7 @@ import { z } from 'zod';
 import multer from 'multer';
 import { randomBytes } from 'crypto';
 import { hashSync } from 'bcryptjs';
+import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import * as Sentry from '@sentry/node';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../supabaseClient';
@@ -56,6 +57,17 @@ function welcomeEmailBody(
     '',
     '— Chronix Edu',
   ].join('\n');
+}
+
+async function checkParentStudentLink(parentId: string, studentId: string, schoolId: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1 FROM parent_students ps
+     JOIN students s ON s.id = ps.student_id
+     WHERE ps.parent_id = $1 AND ps.student_id = $2 AND s.school_id = $3
+     LIMIT 1`,
+    [parentId, studentId, schoolId]
+  );
+  return result.rows.length > 0;
 }
 
 const router = Router();
@@ -215,6 +227,7 @@ router.get(
   '/:schoolId/students',
   verifyToken,
   requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'registrar', 'teacher'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const page  = Math.max(1, parseInt(String(req.query.page  ?? '1'),  10) || 1);
@@ -250,9 +263,32 @@ router.get(
   '/:schoolId/students/:studentId',
   verifyToken,
   requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'registrar', 'teacher', 'parent', 'student'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const profile = await getStudentProfile(req.params.studentId, req.params.schoolId);
+      const { schoolId, studentId } = req.params;
+      const role = req.user!.role;
+
+      // Parents may only view students linked to them within this school.
+      if (role === 'parent') {
+        const linked = await checkParentStudentLink(req.user!.user_id, studentId, schoolId);
+        if (!linked) {
+          return res.status(403).json({ success: false, error: { code: 'FORBIDDEN' } });
+        }
+      }
+
+      // Students may only view their own record.
+      if (role === 'student') {
+        const own = await pool.query(
+          `SELECT id FROM students WHERE user_id = $1 AND id = $2 AND school_id = $3`,
+          [req.user!.user_id, studentId, schoolId]
+        );
+        if (!own.rows[0]) {
+          return res.status(403).json({ success: false, error: { code: 'FORBIDDEN' } });
+        }
+      }
+
+      const profile = await getStudentProfile(studentId, schoolId);
       if (!profile) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
       }
@@ -310,18 +346,21 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "photo".' } });
       }
 
-      const allowed = ['image/jpeg', 'image/png'];
-      if (!allowed.includes(file.mimetype)) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'Only JPEG and PNG files are allowed.' } });
+      // H-04: verify actual file content via magic bytes, not the client-supplied Content-Type.
+      const detected = await fileTypeFromBuffer(file.buffer);
+      const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!detected || !allowedMimes.includes(detected.mime)) {
+        return res.status(400).json({ success: false, error: { code: 'INVALID_FILE_TYPE', message: 'File must be JPEG, PNG, or WebP.' } });
       }
 
-      const ext = file.mimetype === 'image/png' ? 'png' : 'jpg';
+      const extMap: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const ext = extMap[detected.mime];
       const storagePath = `schools/${req.params.schoolId}/students/${req.params.studentId}/photo.${ext}`;
       const bucket = process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from(bucket)
-        .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: true });
+        .upload(storagePath, file.buffer, { contentType: detected.mime, upsert: true });
 
       if (uploadError) {
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
@@ -393,8 +432,20 @@ router.post(
 router.get(
   '/:schoolId/students/:studentId/report-card',
   verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'registrar', 'parent'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const { schoolId, studentId } = req.params;
+
+      // Parents may only access report cards for their own linked children.
+      if (req.user!.role === 'parent') {
+        const linked = await checkParentStudentLink(req.user!.user_id, studentId, schoolId);
+        if (!linked) {
+          return res.status(403).json({ success: false, error: { code: 'FORBIDDEN' } });
+        }
+      }
+
       const termId = req.query.term_id as string | undefined;
       if (!termId || !/^[0-9a-f-]{36}$/.test(termId)) {
         return res.status(400).json({
@@ -402,8 +453,6 @@ router.get(
           error: { code: 'VALIDATION_ERROR', message: 'Required query param: term_id (UUID)' },
         });
       }
-
-      const { schoolId, studentId } = req.params;
 
       const result = await pool.query<{
         pdf_url: string | null;
@@ -590,8 +639,9 @@ router.post(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
       }
 
+      // H-06: scope the lookup to this school to prevent cross-school parent linking.
       const existingUser = await pool.query<{ id: string; role: string }>(
-        `SELECT id, role FROM users WHERE email = $1`, [email]
+        `SELECT id, role FROM users WHERE email = $1 AND school_id = $2`, [email, schoolId]
       );
 
       let parentUserId: string;

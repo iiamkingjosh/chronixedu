@@ -11,6 +11,7 @@ import { cache, schoolCacheKey } from '../services/cacheService';
 import { NIGERIAN_DEFAULTS } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
 import { getRecentErrorCount } from '../services/platformAnalyticsService';
+import { redis } from '../middleware/rateLimit';
 // Imported for their module-level registerCron() side effects, so GET /health/crons
 // reflects every scheduled job even before the crons have started running.
 import '../services/analyticsService';
@@ -321,6 +322,8 @@ router.post(
           email: target.email,
           title: target.title,
           support_session_id: sessionId,
+          is_support_session: true,
+          real_admin_id: req.user!.user_id,
           impersonated_user_id: target.id,
           impersonated_school_id: target.school_id,
           impersonated_role: target.role,
@@ -330,6 +333,14 @@ router.post(
         jwtSecret,
         { expiresIn: expiresIn as SignOptions['expiresIn'] }
       );
+
+      // Store scoped token in Redis so it can be revoked when the session ends.
+      const tokenTtlSeconds = process.env.SUPPORT_SESSION_MAX_DURATION_HOURS
+        ? parseInt(process.env.SUPPORT_SESSION_MAX_DURATION_HOURS, 10) * 3600
+        : 30 * 60;
+      if (redis) {
+        await redis.set(`support_session_token:${sessionId}`, scopedToken, 'EX', tokenTtlSeconds + 60);
+      }
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, target_user_id, metadata, ip_address, support_session_id)
@@ -367,6 +378,15 @@ router.patch(
       const durationMinutes = Math.round(
         (new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 60000
       );
+
+      // Revoke the scoped token so it cannot be used after the session ends.
+      if (redis) {
+        const storedToken = await redis.get(`support_session_token:${session.id}`);
+        if (storedToken) {
+          await redis.set(`blacklisted_token:${storedToken}`, '1', 'EX', 30 * 60);
+          await redis.del(`support_session_token:${session.id}`);
+        }
+      }
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, support_session_id, metadata)
@@ -1423,7 +1443,8 @@ router.patch(
             [userId, school.id, email, first_name, last_name, phone ?? null]
           );
 
-          stepData = { first_name, last_name, email, phone: phone ?? null, temp_password: tempPassword };
+          // Never persist the raw password — store a flag so the DB row is safe if read.
+          stepData = { first_name, last_name, email, phone: phone ?? null, temp_password: '[cleared after email sent]' };
           extraResponseData = { principal_created: true, temp_password: tempPassword };
           break;
         }
@@ -1506,16 +1527,20 @@ router.post(
 
       if (principalEmail) {
         const firstName = (step6Data.first_name as string | undefined) ?? '';
-        const tempPassword = (step6Data.temp_password as string | undefined) ?? '';
+        const storedPassword = (step6Data.temp_password as string | undefined) ?? '';
+        const passwordCleared = storedPassword === '[cleared after email sent]';
         const appUrl = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
         const loginUrl = `${appUrl}/login`;
+        const passwordLine = passwordCleared
+          ? 'Temporary Password: [provided at account creation — please check with your Chronix administrator]'
+          : `Temporary Password: ${storedPassword}`;
         const emailBody =
           `Hi ${firstName},\n\n` +
           `Welcome to Chronix Edu! Your school's account has been successfully set up and is now live and ready to use.\n\n` +
           `Here are your login details:\n\n` +
           `Login Portal: ${loginUrl}\n` +
           `Email: ${principalEmail}\n` +
-          `Temporary Password: ${tempPassword}\n\n` +
+          `${passwordLine}\n\n` +
           `For your security, you will be asked to set a new password the first time you log in.\n\n` +
           `GETTING STARTED\n\n` +
           `Here is a quick path to get your school fully set up:\n\n` +
@@ -2065,7 +2090,7 @@ const createPlatformAdminSchema = z.object({
 
 router.post(
   '/admins',
-  ...guard,
+  ...rootGuard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = createPlatformAdminSchema.safeParse(req.body);

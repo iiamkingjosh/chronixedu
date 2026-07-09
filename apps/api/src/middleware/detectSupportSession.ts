@@ -2,10 +2,13 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db/client';
+import { redis } from './rateLimit';
 import type { AuthUser, SupportSessionContext } from './auth';
 
 export interface SupportSessionClaims {
   support_session_id: string;
+  is_support_session: boolean;
+  real_admin_id: string;
   impersonated_user_id: string;
   impersonated_school_id: string;
   impersonated_role: string;
@@ -41,6 +44,18 @@ export async function detectSupportSession(
     claims = jwt.verify(token, secret) as unknown as SupportSessionClaims;
   } catch (err) {
     return res.status(401).json({ success: false, error: { code: 'INVALID_SUPPORT_TOKEN', message: 'Invalid or expired support session token' } });
+  }
+
+  // Check if this token has been explicitly revoked (e.g. the session was ended early).
+  if (redis) {
+    try {
+      const isBlacklisted = await redis.get(`blacklisted_token:${token}`);
+      if (isBlacklisted) {
+        return res.status(401).json({ success: false, error: { code: 'TOKEN_REVOKED', message: 'Token has been revoked' } });
+      }
+    } catch {
+      // Redis unavailable — fail open; the DB ended_at check below still gates access.
+    }
   }
 
   if (claims.support_session_id !== supportSessionId) {

@@ -137,6 +137,7 @@ router.get(
   '/:schoolId/scores/class-sheet',
   verifyToken,
   requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'teacher'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = sheetQuerySchema.safeParse(req.query);
@@ -148,6 +149,17 @@ router.get(
       }
 
       const { class_id, subject_id, term_id } = parsed.data;
+
+      // H-02: teachers may only view sheets for classes they are assigned to.
+      if (req.user!.role === 'teacher') {
+        const assigned = await checkTeacherAssigned(req.user!.user_id, subject_id, class_id, term_id, req.params.schoolId);
+        if (!assigned) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'NOT_ASSIGNED', message: 'You are not assigned to this subject and class' },
+          });
+        }
+      }
 
       const sheet = await getClassSheet(req.params.schoolId, class_id, subject_id, term_id);
       if (!sheet) {

@@ -64,6 +64,8 @@ describe('Support Session Impersonation', () => {
 
     const claims: SupportSessionClaims = {
       support_session_id: supportSessionId,
+      is_support_session: true,
+      real_admin_id: platformAdminId,
       impersonated_user_id: targetUserId,
       impersonated_school_id: targetSchoolId,
       impersonated_role: 'principal',
@@ -138,6 +140,8 @@ describe('Support Session Impersonation', () => {
 
     const claims: SupportSessionClaims = {
       support_session_id: endedSessionId,
+      is_support_session: true,
+      real_admin_id: platformAdminId,
       impersonated_user_id: targetUserId,
       impersonated_school_id: targetSchoolId,
       impersonated_role: 'principal',
@@ -160,6 +164,8 @@ describe('Support Session Impersonation', () => {
     const fakeSessionId = randomUUID();
     const claims: SupportSessionClaims = {
       support_session_id: fakeSessionId,
+      is_support_session: true,
+      real_admin_id: platformAdminId,
       impersonated_user_id: targetUserId,
       impersonated_school_id: targetSchoolId,
       impersonated_role: 'principal',
