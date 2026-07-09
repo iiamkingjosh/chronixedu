@@ -13,6 +13,10 @@ import * as paymentReceiptNotifier from '../services/paymentReceiptNotifier';
 import * as rosterQueries from '../db/queries/roster';
 import * as feeReminderService from '../services/feeReminderService';
 
+jest.mock('../db/client', () => ({
+  __esModule: true,
+  default: { query: jest.fn().mockResolvedValue({ rows: [{ is_active: true }] }), end: jest.fn() },
+}));
 jest.mock('../db/queries/fees');
 jest.mock('../db/queries/auditLog');
 jest.mock('../db/queries/parents');

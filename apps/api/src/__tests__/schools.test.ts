@@ -8,6 +8,10 @@ import * as auditLog from '../db/queries/auditLog';
 import * as reportCardService from '../services/reportCardService';
 import { supabaseAdmin } from '../supabaseClient';
 
+jest.mock('../db/client', () => ({
+  __esModule: true,
+  default: { query: jest.fn().mockResolvedValue({ rows: [{ is_active: true }] }), end: jest.fn() },
+}));
 jest.mock('../db/queries/schools');
 jest.mock('../db/queries/auditLog');
 jest.mock('../services/cacheService', () => ({
