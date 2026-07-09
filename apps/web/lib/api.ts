@@ -3,6 +3,8 @@ if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
 }
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
+// TODO post-launch: implement JWT refresh tokens so sessions can be silently renewed
+// without re-login. Tracked as a planned improvement alongside the cookie-auth migration.
 function getToken(): string | null {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('chronixedu_token');

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import * as Sentry from '@sentry/node';
 import { redis } from './rateLimit';
 import pool from '../db/client';
+import { logger } from '../config/logger';
 
 export interface AuthUser {
   user_id: string;
@@ -103,8 +104,9 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
     if (!isActive) {
       return res.status(403).json({ success: false, error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended' } });
     }
-  } catch {
-    // DB/Redis transient failure — fail open; the JWT is still valid.
+  } catch (err) {
+    logger.error('auth_suspension_check_failed', { error: err instanceof Error ? err.message : String(err) });
+    return res.status(503).json({ success: false, error: { code: 'SERVICE_UNAVAILABLE', message: 'Authentication service temporarily unavailable. Please try again.' } });
   }
 
   req.user = payload;

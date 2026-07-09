@@ -18,6 +18,7 @@ import {
   getCollectionSummary,
   recordPayment,
   getPaymentById,
+  DuplicatePaymentError,
 } from '../db/queries/fees';
 import { generateReceipt } from '../services/receiptService';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
@@ -389,6 +390,9 @@ router.post(
 
       return res.status(201).json({ success: true, data: result });
     } catch (err) {
+      if (err instanceof DuplicatePaymentError) {
+        return res.status(409).json({ success: false, error: { code: 'DUPLICATE_PAYMENT', message: 'A duplicate payment for this invoice was already recorded within the last 5 minutes' } });
+      }
       if ((err as { code?: string }).code === '23505') {
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_PAYSTACK_REFERENCE', message: 'This Paystack transaction has already been recorded' } });
       }

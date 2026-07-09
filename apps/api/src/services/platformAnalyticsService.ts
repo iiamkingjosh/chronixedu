@@ -1,5 +1,6 @@
 import * as cron from 'node-cron';
 import fs from 'fs';
+import path from 'path';
 import pool from '../db/client';
 import { logger } from '../config/logger';
 import { registerCron, markCronRun } from './cronTracker';
@@ -17,8 +18,8 @@ function todayDateString(): string {
  * Returns null with a note if the log file isn't accessible (e.g. logging to console only).
  */
 export function getRecentErrorCount(): { error_count_24h: number | null; log_note: string | null } {
-  const logFilePath = process.env.LOG_FILE_PATH;
-  if (!logFilePath || !fs.existsSync(logFilePath)) {
+  const logFilePath = path.join(process.cwd(), 'logs', 'combined.log');
+  if (!fs.existsSync(logFilePath)) {
     return { error_count_24h: null, log_note: 'Log file not accessible' };
   }
   try {

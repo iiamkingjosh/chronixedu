@@ -4,6 +4,7 @@ import { verifyToken, requireRole } from '../middleware/auth';
 import { logAudit } from '../db/queries/auditLog';
 import { findClassById } from '../db/queries/roster';
 import { findStudentById } from '../db/queries/students';
+import { isParentLinkedToStudent } from '../db/queries/parents';
 import {
   findTermForDate,
   bulkUpsertAttendance,
@@ -154,6 +155,7 @@ router.get(
   '/:schoolId/attendance/class',
   verifyToken,
   requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'teacher'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = classQuerySchema.safeParse(req.query);
@@ -198,10 +200,28 @@ router.get(
 
       const { term_id } = parsed.data;
       const schoolId = req.params.schoolId;
+      const user = req.user!;
 
       const student = await findStudentById(req.params.studentId, schoolId);
       if (!student) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
+      }
+
+      // Staff roles can view any student's attendance within their school.
+      const isStaff = ['super_admin', 'principal', 'teacher'].includes(user.role ?? '');
+      if (!isStaff) {
+        if (user.role === 'parent') {
+          const linked = await isParentLinkedToStudent(user.user_id, student.id);
+          if (!linked) {
+            return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+          }
+        } else if (user.role === 'student') {
+          if (student.user_id !== user.user_id) {
+            return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+          }
+        } else {
+          return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+        }
       }
 
       const history = await getStudentAttendanceHistory(req.params.studentId, schoolId, term_id);

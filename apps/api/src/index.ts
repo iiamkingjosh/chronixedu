@@ -67,6 +67,10 @@ if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.error('FATAL: SUPABASE_SERVICE_ROLE_KEY is not set. Refusing to start.');
   process.exit(1);
 }
+if (process.env.SENDGRID_API_KEY && !process.env.SENDGRID_FROM_EMAIL) {
+  console.error('FATAL: SENDGRID_FROM_EMAIL is required when SENDGRID_API_KEY is set. Refusing to start.');
+  process.exit(1);
+}
 
 const app = express();
 const port = env.PORT;
@@ -152,11 +156,18 @@ app.use('/api/schools', classCommentsRoutes);
 // must NOT have detectSupportSession applied.
 app.use('/api/super-admin', superAdminRoutes);
 
-app.get('/health', async (_req, res) => {
+app.get('/health', async (req, res) => {
+  const healthToken = process.env.HEALTH_CHECK_TOKEN;
+  if (healthToken) {
+    const provided = req.headers['x-health-token'];
+    if (provided !== healthToken) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Missing or invalid health check token' } });
+    }
+  }
   const dbStart = Date.now();
   try {
     await pool.query('SELECT 1');
-    res.json({
+    return res.json({
       success: true,
       status: 'ok',
       db: 'ok',
@@ -164,7 +175,7 @@ app.get('/health', async (_req, res) => {
       uptimeSeconds: Math.floor(process.uptime()),
     });
   } catch {
-    res.status(503).json({
+    return res.status(503).json({
       success: false,
       status: 'degraded',
       db: 'error',

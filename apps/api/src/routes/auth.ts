@@ -50,8 +50,9 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
     }
   }
 
-  // A school-level super_admin can only create users within their own school.
-  if (req.user!.role === 'super_admin' && school_id && school_id !== req.user!.school_id) {
+  // Platform super_admins (school_id === null) can create users in any school.
+  // School-scoped super_admins (school_id !== null) are restricted to their own school.
+  if (req.user!.role === 'super_admin' && req.user!.school_id != null && school_id && school_id !== req.user!.school_id) {
     return res.status(403).json({
       success: false,
       error: { code: 'CROSS_TENANT_FORBIDDEN', message: 'Cannot create users in another school' },
@@ -130,7 +131,9 @@ router.post('/login', async (req, res) => {
   const { email, password } = parsed.data;
 
   try {
-    const lockoutKey = `login_attempts:${email.toLowerCase()}`;
+    // TODO post-launch: extend lockout to per-IP or per-IP-per-email to
+  // block distributed brute-force that cycles through many email accounts from the same IP.
+  const lockoutKey = `login_attempts:${email.toLowerCase()}`;
 
     // Atomic Redis-based lockout — immune to concurrent-request race conditions.
     // Falls back to no lockout in dev when Redis is unavailable.
@@ -145,7 +148,6 @@ router.post('/login', async (req, res) => {
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    logger.debug('login_auth_result', { error: error?.message ?? null, userId: data?.user?.id ?? null });
 
     if (error) {
       if (redis) {
@@ -157,10 +159,9 @@ router.post('/login', async (req, res) => {
             error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
           });
         }
-        const remaining = MAX_ATTEMPTS - attempts;
         return res.status(401).json({
           success: false,
-          error: { code: 'INVALID_CREDENTIALS', message: `Invalid credentials. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.` },
+          error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect email or password' },
         });
       }
       return res.status(401).json({
@@ -181,7 +182,6 @@ router.post('/login', async (req, res) => {
         [userId]
       );
       local = r.rows[0];
-      logger.debug('login_local_user_lookup', { found: !!local, userId });
       if (!local) {
         return res.status(500).json({
           success: false,
@@ -404,9 +404,9 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
     const email = userData.user.email;
     const local = await findUserByEmail(email);
     if (!local) {
-      return res.status(404).json({
+      return res.status(401).json({
         success: false,
-        error: { code: 'USER_NOT_FOUND', message: 'No account found for this reset link.' },
+        error: { code: 'INVALID_OR_EXPIRED_TOKEN', message: 'This reset link is invalid or has expired. Please request a new one.' },
       });
     }
 
