@@ -164,10 +164,10 @@
 **File:** `apps/web/lib/api.ts`  
 **Status:** Documented. A `TODO` comment in `api.ts` tracks the planned post-launch implementation of JWT refresh tokens alongside the cookie-based auth migration.
 
-### I-02 — Lockout per-email only ⚠️ Accepted risk / 🔜 Post-launch
+### I-02 — Lockout per-email only ✅ Fixed
 
 **File:** `apps/api/src/routes/auth.ts`  
-**Status:** Documented. A `TODO` comment tracks the planned per-IP lockout enhancement to block distributed brute-force across many email accounts from the same IP address.
+**Fix:** Login now tracks two independent Redis counters: `login_attempts:{email}` (threshold 5) and `login_attempts_ip:{ip}` (threshold 20). Either counter reaching its limit triggers a 429. The higher IP threshold avoids false positives from shared corporate NAT. Both counters are cleared on successful login.
 
 ### I-03 — Missing Permissions-Policy and Referrer-Policy headers ✅ Fixed
 
