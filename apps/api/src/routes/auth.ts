@@ -117,6 +117,7 @@ const loginSchema = z.object({
 });
 
 const MAX_ATTEMPTS = 5;
+const MAX_IP_ATTEMPTS = 20; // higher threshold to avoid blocking shared NAT addresses
 const LOCK_WINDOW_SECONDS = 15 * 60; // 15 minutes
 
 router.post('/login', async (req, res) => {
@@ -130,15 +131,24 @@ router.post('/login', async (req, res) => {
   const { email, password } = parsed.data;
 
   try {
-    // TODO post-launch: extend lockout to per-IP or per-IP-per-email to
-  // block distributed brute-force that cycles through many email accounts from the same IP.
-  const lockoutKey = `login_attempts:${email.toLowerCase()}`;
+    const emailKey = `login_attempts:${email.toLowerCase()}`;
+    const ip = req.ip ?? 'unknown';
+    const ipKey = `login_attempts_ip:${ip}`;
 
     // Atomic Redis-based lockout — immune to concurrent-request race conditions.
     // Falls back to no lockout in dev when Redis is unavailable.
     if (redis) {
-      const current = await redis.get(lockoutKey);
-      if (current !== null && parseInt(current, 10) >= MAX_ATTEMPTS) {
+      const [emailCount, ipCount] = await Promise.all([
+        redis.get(emailKey),
+        redis.get(ipKey),
+      ]);
+      if (emailCount !== null && parseInt(emailCount, 10) >= MAX_ATTEMPTS) {
+        return res.status(429).json({
+          success: false,
+          error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
+        });
+      }
+      if (ipCount !== null && parseInt(ipCount, 10) >= MAX_IP_ATTEMPTS) {
         return res.status(429).json({
           success: false,
           error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
@@ -150,9 +160,13 @@ router.post('/login', async (req, res) => {
 
     if (error) {
       if (redis) {
-        const attempts = await redis.incr(lockoutKey);
-        if (attempts === 1) await redis.expire(lockoutKey, LOCK_WINDOW_SECONDS);
-        if (attempts >= MAX_ATTEMPTS) {
+        const [emailAttempts, ipAttempts] = await Promise.all([
+          redis.incr(emailKey),
+          redis.incr(ipKey),
+        ]);
+        if (emailAttempts === 1) await redis.expire(emailKey, LOCK_WINDOW_SECONDS);
+        if (ipAttempts === 1) await redis.expire(ipKey, LOCK_WINDOW_SECONDS);
+        if (emailAttempts >= MAX_ATTEMPTS || ipAttempts >= MAX_IP_ATTEMPTS) {
           return res.status(429).json({
             success: false,
             error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
@@ -198,8 +212,8 @@ router.post('/login', async (req, res) => {
       await pg.end();
     }
 
-    // Clear lockout counter on successful login.
-    if (redis) await redis.del(lockoutKey);
+    // Clear lockout counters on successful login.
+    if (redis) await Promise.all([redis.del(emailKey), redis.del(ipKey)]);
 
     const payload = {
       user_id: local.id,
