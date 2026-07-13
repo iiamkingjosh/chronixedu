@@ -34,6 +34,9 @@ dist/
 .vscode/
 *.swp
 
+# One-off admin scripts — never commit
+apps/api/src/scripts/repairAuthUser.ts
+
 # Sensitive local docs — never commit
 chronixedu-test-credentials.html
 chronixedu-setup-instructions.html

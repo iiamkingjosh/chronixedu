@@ -120,7 +120,7 @@ const MAX_ATTEMPTS = 5;
 const MAX_IP_ATTEMPTS = 20; // higher threshold to avoid blocking shared NAT addresses
 const LOCK_WINDOW_SECONDS = 15 * 60; // 15 minutes
 
-router.post('/login', async (req, res) => {
+router.post('/login', async (req, res, next) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({
@@ -230,10 +230,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(payload, jwtSecret, { expiresIn: '1h' });
     return res.json({ success: true, data: { access_token: token, user: payload } });
   } catch (err: unknown) {
-    return res.status(500).json({
-      success: false,
-      error: { code: 'INTERNAL_ERROR', message: err instanceof Error ? err.message : 'Internal server error' },
-    });
+    return next(err);
   }
 });
 

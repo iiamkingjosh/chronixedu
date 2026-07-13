@@ -615,12 +615,23 @@ router.post(
       }
       const invoiceId = metadata.invoice_id;
 
+      // Re-verify the transaction via Paystack API — never trust the webhook payload amount.
+      // This mirrors what the manual POST /payments route does and prevents amount tampering
+      // if a webhook payload is replayed or Paystack's schema ever changes.
+      if (!data.reference) {
+        return res.status(200).json({ success: true, data: { processed: false } });
+      }
+      const verification = await verifyPaystackTransaction(data.reference);
+      if (!verification || verification.status !== 'success') {
+        return res.status(200).json({ success: true, data: { processed: false } });
+      }
+
       try {
         const result = await recordPayment(req.params.schoolId, invoiceId, {
-          amount: (data.amount ?? 0) / 100,
+          amount: verification.amount,
           method: 'paystack',
           reference: null,
-          paystack_reference: data.reference ?? null,
+          paystack_reference: data.reference,
           recorded_by: metadata.recorded_by ?? null,
         });
 
