@@ -11,6 +11,10 @@ function rateLimitHandler(_req: Request, res: Response, _next: unknown, options:
 }
 
 // Connect to Redis when REDIS_URL is set; fall back to in-memory store in dev.
+// NOTE: MemoryStore fallback is per-process. In a multi-replica deployment each instance
+// maintains independent counters. The per-email Redis lockout in the login route is the
+// stronger control and remains effective. If horizontal scaling is enabled, ensure
+// REDIS_URL is always set so counters are shared across all instances.
 const redisClient = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : null;
 
 /** Shared Redis client — null in dev when REDIS_URL is unset. Used by auth lockout and rate limiting. */

@@ -74,8 +74,8 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
   }
 
   // Step 2: check if the user is still active and whether the token has been revoked.
-  // Separate try/catch so a DB or Redis outage never converts a valid JWT into a
-  // spurious 401 — fail open and let the request through; the JWT itself is the primary gate.
+  // Separate try/catch so DB or Redis errors return 503 rather than a misleading 401 —
+  // the request is rejected, not passed through.
   try {
     // Check the token blacklist (revoked support session tokens).
     if (redis) {

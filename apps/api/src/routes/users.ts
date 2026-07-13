@@ -23,6 +23,8 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 const ROLES = ['super_admin', 'principal', 'teacher', 'parent', 'student', 'registrar', 'bursar'] as const;
+// super_admin is intentionally excluded — creating platform admins must go through /auth/create-user
+const CREATABLE_ROLES = ['principal', 'teacher', 'parent', 'student', 'registrar', 'bursar'] as const;
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ const createUserSchema = z.object({
   email:        z.string().email('Enter a valid email address'),
   first_name:   z.string().min(1).max(255),
   last_name:    z.string().min(1).max(255),
-  role:         z.enum(ROLES),
+  role:         z.enum(CREATABLE_ROLES),
   title:        z.string().max(20).optional().nullable(),
   phone:        z.string().max(50).optional().nullable(),
   teacher_mode: z.enum(['class', 'subject']).optional(),
@@ -107,6 +109,14 @@ router.post(
   requireRole('super_admin', 'principal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // Defense-in-depth: block super_admin creation before schema parsing.
+      if (req.body?.role === 'super_admin') {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'FORBIDDEN', message: 'super_admin accounts must be created by the platform root admin' },
+        });
+      }
+
       const parsed = createUserSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });

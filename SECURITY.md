@@ -1,8 +1,56 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 5 — 2026-07-09  
-**Scope:** API routes, authentication middleware, CSP headers, rate limiting, Paystack webhook, impersonation system, support session handling, attendance/score/student access, fees, announcements, PWA caching, platform analytics  
-**Round 5 total findings:** 19 (2 Critical · 8 High · 9 Medium · 6 Low · 4 Info)
+**Latest audit:** Round 6 — 2026-07-13  
+**Scope:** Privilege escalation via role assignment, error message leakage, Paystack webhook amount handling, misleading fail-open comment, rate-limiter multi-replica behaviour, sensitive script in repo  
+**Round 6 total findings:** 6 (0 Critical · 1 High · 2 Medium · 2 Low · 1 Info)
+
+---
+
+## Round 6 — High
+
+### H-01 — Principal can create `super_admin` users via school users endpoint ✅ Fixed
+
+**File:** `apps/api/src/routes/users.ts`  
+**Fix:** Removed `'super_admin'` from `CREATABLE_ROLES` (the enum used by `createUserSchema`). A pre-parse runtime guard returns `403 FORBIDDEN` if `req.body.role === 'super_admin'` before Zod even runs. Creating platform admins must go through `POST /auth/create-user`, which enforces `ROOT_ADMIN_EMAIL` ownership.
+
+---
+
+## Round 6 — Medium
+
+### M-01 — Sensitive admin recovery script with hardcoded production email committed ✅ Fixed
+
+**File:** `apps/api/src/scripts/repairAuthUser.ts`  
+**Fix:** Deleted the script and added `apps/api/src/scripts/repairAuthUser.ts` to `.gitignore`. The script had a hardcoded root admin email and reset super_admin credentials — unsuitable for source control.
+
+### M-02 — Login catch block returns raw `err.message` to clients in production ✅ Fixed
+
+**File:** `apps/api/src/routes/auth.ts`  
+**Fix:** Replaced the manual `res.status(500).json({ message: err.message })` with `return next(err)`. All errors now flow through the global `errorHandler`, which sanitises messages to `'An unexpected error occurred'` in production. Also added `next: NextFunction` to the login handler signature.
+
+---
+
+## Round 6 — Low
+
+### L-01 — Paystack webhook records payment amount from webhook body instead of re-verifying via API ✅ Fixed
+
+**File:** `apps/api/src/routes/fees.ts`  
+**Fix:** After HMAC signature verification, the webhook handler now calls `verifyPaystackTransaction(data.reference)` and uses `verification.amount`. This matches the behaviour of `POST /payments`. Webhook events with missing references or non-`success` verification status are acknowledged (200) but not recorded.
+
+### L-02 — Misleading "fail open" comment in `verifyToken` ✅ Fixed
+
+**File:** `apps/api/src/middleware/auth.ts`  
+**Fix:** Updated comment to accurately describe the fail-closed (503) behaviour instead of the old fail-open design that was removed in Round 5.
+
+---
+
+## Round 6 — Info
+
+### I-01 — Rate limiter MemoryStore fallback is per-process ⚠️ Accepted risk
+
+**File:** `apps/api/src/middleware/rateLimit.ts`  
+**Status:** Documented with a comment. In a multi-replica deployment each instance has independent MemoryStore counters. The per-email Redis lockout in the login route (`MAX_ATTEMPTS = 5`) is the stronger control and is Redis-backed. No change required for Railway single-replica deployment; ensure `REDIS_URL` is set if horizontal scaling is enabled.
+
+---
 
 ---
 
