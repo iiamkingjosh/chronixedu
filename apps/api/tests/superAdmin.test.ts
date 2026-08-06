@@ -464,7 +464,7 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post(`/api/super-admin/onboarding/${sessionId}/complete`)
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({});
+        .send({ accepted_legal_terms: true });
       expect(res.status).toBe(400);
       expect(res.body.error.code).toBe('INCOMPLETE_WIZARD');
     });
@@ -506,7 +506,7 @@ describe('superAdmin — platform school management', () => {
       const completeRes = await request(app)
         .post(`/api/super-admin/onboarding/${sessionId}/complete`)
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({});
+        .send({ accepted_legal_terms: true });
       expect(completeRes.status).toBe(200);
       expect(completeRes.body.success).toBe(true);
       expect(completeRes.body.data.is_active).toBe(true);
