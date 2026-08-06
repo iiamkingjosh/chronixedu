@@ -198,10 +198,10 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Field label="Plan" error={errors.plan?.message}>
           <select {...register('plan')} className={inputClass}>
-            <option value="basic">Basic</option>
-            <option value="professional">Professional</option>
-            <option value="enterprise">Enterprise</option>
             <option value="trial">Trial</option>
+            <option value="basic">Basic</option>
+            <option value="premium">Premium</option>
+            <option value="enterprise">Enterprise</option>
           </select>
         </Field>
         <Field label="Billing Cycle" error={errors.billing_cycle?.message}>
@@ -269,10 +269,10 @@ function ChangePlanModal({ subscriptionId, currentPlan, onClose, onDone }: {
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <Field label="Plan" error={errors.plan?.message}>
           <select {...register('plan')} className={inputClass}>
-            <option value="basic">Basic</option>
-            <option value="professional">Professional</option>
-            <option value="enterprise">Enterprise</option>
             <option value="trial">Trial</option>
+            <option value="basic">Basic</option>
+            <option value="premium">Premium</option>
+            <option value="enterprise">Enterprise</option>
           </select>
         </Field>
         {apiError && (

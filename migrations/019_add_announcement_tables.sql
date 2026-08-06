@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS platform_announcements (
   body TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'info'
     CHECK (type IN ('info', 'warning', 'critical', 'maintenance')),
-  target_plans TEXT[] NOT NULL DEFAULT ARRAY['basic', 'professional', 'enterprise', 'trial'],
+  target_plans TEXT[] NOT NULL DEFAULT ARRAY['trial', 'basic', 'premium', 'enterprise'],
   scheduled_at TIMESTAMPTZ,
   expires_at TIMESTAMPTZ,
   published_at TIMESTAMPTZ,
