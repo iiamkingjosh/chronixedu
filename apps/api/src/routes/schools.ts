@@ -13,13 +13,20 @@ import {
   updateReportConfig,
   checkPublishedResultsExist,
   checkSubmittedResultsExist,
+  getSchoolPayoutConfig,
+  updateSchoolPayoutConfig,
+  getSchoolNameAndEmail,
+  type PayoutConfig,
 } from '../db/queries/schools';
+import { findPrincipalsBySchool } from '../db/queries/users';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
 import { NIGERIAN_DEFAULTS, slugify, validateGradeBands } from '../services/schoolService';
 import { cache, schoolCacheKey } from '../services/cacheService';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { generateReportCardPreview } from '../services/reportCardService';
+import { listBanks, resolveBankAccount, createPaystackSubaccount } from '../services/paystackService';
+import { sendTermiiSms } from '../services/termiiService';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -42,6 +49,17 @@ const updateIdentitySchema = z.object({
   secondary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
   admission_prefix: z.string().trim().min(1).max(10).regex(/^[A-Za-z0-9]+$/, 'Must be alphanumeric').optional(),
 }).refine(obj => Object.keys(obj).length > 0, { message: 'At least one field is required' });
+
+const resolvePayoutBankSchema = z.object({
+  bank_code: z.string().min(1, 'Bank is required'),
+  account_number: z.string().regex(/^\d{10}$/, 'Account number must be 10 digits'),
+});
+
+const savePayoutSchema = z.object({
+  bank_code: z.string().min(1, 'Bank is required'),
+  account_number: z.string().regex(/^\d{10}$/, 'Account number must be 10 digits'),
+  account_name: z.string().min(1, 'Account name is required'),
+});
 
 const gradeBandSchema = z.object({
   grade: z.string().min(1),
@@ -96,6 +114,43 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
   if (user.role === 'super_admin') { next(); return; }
   if (user.role === 'principal' && user.school_id === req.params.schoolId) { next(); return; }
   res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+}
+
+// ── Middleware: allow super_admin, or the school's own principal/bursar ────────
+
+function requirePayoutAccess(req: Request, res: Response, next: NextFunction): void {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
+    return;
+  }
+  if (user.role === 'super_admin') { next(); return; }
+  if ((user.role === 'principal' || user.role === 'bursar') && user.school_id === req.params.schoolId) { next(); return; }
+  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+}
+
+function maskAccountNumber(accountNumber: string | undefined): string | undefined {
+  if (!accountNumber || accountNumber.length < 4) return accountNumber;
+  return `••••${accountNumber.slice(-4)}`;
+}
+
+async function sendPayoutChangeAlerts(schoolId: string, changedByEmail: string, maskedAccount: string, bankCode: string): Promise<void> {
+  const [school, principals] = await Promise.all([
+    getSchoolNameAndEmail(schoolId),
+    findPrincipalsBySchool(schoolId),
+  ]);
+  const message = `Payout bank details for ${school?.name ?? 'your school'} were changed by ${changedByEmail}. New account ends in ${maskedAccount.slice(-4)} (bank code ${bankCode}). If this wasn't authorised, contact Chronix support immediately.`;
+
+  const alerts: Promise<unknown>[] = [];
+  for (const principal of principals) {
+    alerts.push(sendEmail(principal.email, 'Payout bank details changed', message));
+    if (principal.phone) alerts.push(sendTermiiSms(schoolId, principal.phone, message));
+  }
+  if (school?.email) alerts.push(sendEmail(school.email, 'Payout bank details changed', message));
+  const rootAdminEmail = process.env.ROOT_ADMIN_EMAIL;
+  if (rootAdminEmail) alerts.push(sendEmail(rootAdminEmail, `Payout change — ${school?.name ?? schoolId}`, message));
+
+  await Promise.allSettled(alerts);
 }
 
 // ── POST /api/schools ──────────────────────────────────────────────────────────
@@ -592,6 +647,153 @@ router.post(
       });
 
       return res.json({ success: true, data: { stamp_url: stampUrl } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── GET /api/schools/:schoolId/settings/payout ────────────────────────────────
+
+router.get(
+  '/:schoolId/settings/payout',
+  verifyToken,
+  requirePayoutAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const config = await getSchoolPayoutConfig(req.params.schoolId);
+      if (!config) {
+        return res.json({ success: true, data: { settlement_status: 'pending' } });
+      }
+      return res.json({
+        success: true,
+        data: {
+          settlement_status: config.settlement_status,
+          bank_code: config.bank_code,
+          account_number: maskAccountNumber(config.account_number),
+          account_name: config.account_name,
+          failure_reason: config.failure_reason,
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── GET /api/schools/:schoolId/settings/payout/banks ──────────────────────────
+
+router.get(
+  '/:schoolId/settings/payout/banks',
+  verifyToken,
+  requirePayoutAccess,
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const banks = await listBanks();
+      return res.json({ success: true, data: banks });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /api/schools/:schoolId/settings/payout/resolve ───────────────────────
+
+router.post(
+  '/:schoolId/settings/payout/resolve',
+  verifyToken,
+  requirePayoutAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = resolvePayoutBankSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const resolved = await resolveBankAccount(parsed.data.bank_code, parsed.data.account_number);
+      if (!resolved) {
+        return res.status(422).json({ success: false, error: { code: 'ACCOUNT_RESOLVE_FAILED', message: "Couldn't verify this account — check the details and try again." } });
+      }
+      return res.json({ success: true, data: resolved });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── PUT /api/schools/:schoolId/settings/payout ─────────────────────────────────
+
+router.put(
+  '/:schoolId/settings/payout',
+  verifyToken,
+  requirePayoutAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = savePayoutSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const { bank_code, account_number, account_name } = parsed.data;
+      const schoolId = req.params.schoolId;
+
+      // Never trust the client-confirmed name alone — re-resolve server-side.
+      const reResolved = await resolveBankAccount(bank_code, account_number);
+      if (!reResolved || reResolved.account_name !== account_name) {
+        return res.status(422).json({ success: false, error: { code: 'ACCOUNT_MISMATCH', message: 'Account details could not be re-verified. Please resolve the account again.' } });
+      }
+
+      const school = await getSchoolNameAndEmail(schoolId);
+      if (!school) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'School not found' } });
+      }
+
+      const previousConfig = await getSchoolPayoutConfig(schoolId);
+      const subaccount = await createPaystackSubaccount({
+        businessName: school.name,
+        bankCode: bank_code,
+        accountNumber: account_number,
+      });
+
+      const now = new Date().toISOString();
+      if (!subaccount) {
+        const failedConfig: PayoutConfig = {
+          bank_code,
+          account_number,
+          account_name,
+          settlement_status: 'failed',
+          failure_reason: 'Paystack could not create a subaccount for this bank account.',
+          updated_at: now,
+          updated_by: req.user!.user_id,
+        };
+        await updateSchoolPayoutConfig(schoolId, failedConfig);
+        return res.status(502).json({ success: false, error: { code: 'SUBACCOUNT_CREATE_FAILED', message: 'Paystack could not create a subaccount for this bank account.' } });
+      }
+
+      const newConfig: PayoutConfig = {
+        paystack_subaccount_code: subaccount.subaccount_code,
+        bank_code,
+        account_number,
+        account_name,
+        settlement_status: 'active',
+        updated_at: now,
+        updated_by: req.user!.user_id,
+      };
+      await updateSchoolPayoutConfig(schoolId, newConfig);
+
+      await logAudit({
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'PAYOUT_CONFIG_CHANGE',
+        entity: 'schools',
+        entityId: schoolId,
+        oldValue: previousConfig
+          ? { bank_code: previousConfig.bank_code, account_number: maskAccountNumber(previousConfig.account_number) }
+          : null,
+        newValue: { bank_code, account_number: maskAccountNumber(account_number), account_name },
+      });
+
+      await sendPayoutChangeAlerts(schoolId, req.user!.email ?? 'unknown', maskAccountNumber(account_number) ?? '', bank_code);
+
+      return res.json({ success: true, data: { message: 'Payout account saved', settlement_status: 'active' } });
     } catch (err) {
       return next(err);
     }
