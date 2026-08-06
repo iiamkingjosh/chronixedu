@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
+import { canAccessPayoutSettings, getDefaultDashboardPath } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -43,7 +45,9 @@ function useToast() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PayoutSettingsPage() {
-  const { schoolId } = useAuth();
+  const { user, loading: authLoading, schoolId } = useAuth();
+  const router = useRouter();
+  const allowed = !!user && canAccessPayoutSettings(user.role);
   const { toast, show } = useToast();
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<PayoutStatus | null>(null);
@@ -59,8 +63,16 @@ export default function PayoutSettingsPage() {
     defaultValues: { bank_code: '', account_number: '' },
   });
 
+  // Client-side role guard (defence in depth — the API is the real boundary).
+  // Redirect away rather than rendering a page that only fires 403s.
+  useEffect(() => {
+    if (!authLoading && user && !canAccessPayoutSettings(user.role)) {
+      router.replace(getDefaultDashboardPath(user.role));
+    }
+  }, [authLoading, user, router]);
+
   const loadStatus = useCallback(() => {
-    if (!schoolId) return;
+    if (!schoolId || !allowed) return;
     setLoading(true);
     Promise.all([
       apiFetch<{ success: boolean; data: PayoutStatus }>(`/api/schools/${schoolId}/settings/payout`),
@@ -73,9 +85,13 @@ export default function PayoutSettingsPage() {
       .catch(err => show(err instanceof Error ? err.message : 'Failed to load payout settings', 'error'))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schoolId]);
+  }, [schoolId, allowed]);
 
   useEffect(() => { loadStatus(); }, [loadStatus]);
+
+  if (authLoading || !user || !allowed) {
+    return null;
+  }
 
   async function handleResolve(values: FormValues) {
     if (!schoolId) return;

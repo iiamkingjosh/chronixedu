@@ -47,6 +47,9 @@ describe('Payout settings', () => {
   let bursarToken: string;
   let teacherToken: string;
   let principalEmail: string;
+  // Second tenant — used to prove a bursar can't reach another school's payout routes.
+  let otherSchoolId: string;
+  let otherBursarToken: string;
   const principalPhone = '+2348012345678';
   const schoolEmail = 'school-office@test.com';
 
@@ -88,12 +91,28 @@ describe('Payout settings', () => {
       [schoolId, `principal-${randomUUID()}@test.com`, principalPhone]
     );
     principalEmail = principalResult.rows[0].email;
+
+    // A completely separate school with its own bursar. Its token carries the
+    // right ROLE but the wrong school_id — the exact cross-tenant case.
+    const otherSchoolResult = await pool.query<{ id: string }>(
+      `INSERT INTO schools (name, slug, is_active, email) VALUES ($1, $2, true, $3) RETURNING id`,
+      ['Other Payout Test School', `test-payout-other-${randomUUID()}`, 'other-office@test.com']
+    );
+    otherSchoolId = otherSchoolResult.rows[0].id;
+
+    const otherBursarResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'bursar', 'Other', 'Bursar', 'subject')
+       RETURNING id, email`,
+      [otherSchoolId, `other-bursar-${randomUUID()}@test.com`]
+    );
+    otherBursarToken = makeToken(otherBursarResult.rows[0].id, 'bursar', otherSchoolId, otherBursarResult.rows[0].email);
   });
 
   afterAll(async () => {
-    await pool.query(`DELETE FROM audit_logs WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM audit_logs WHERE school_id = ANY($1::uuid[])`, [[schoolId, otherSchoolId]]);
+    await pool.query(`DELETE FROM users WHERE school_id = ANY($1::uuid[])`, [[schoolId, otherSchoolId]]);
+    await pool.query(`DELETE FROM schools WHERE id = ANY($1::uuid[])`, [[schoolId, otherSchoolId]]);
     await pool.end();
   });
 
@@ -104,6 +123,28 @@ describe('Payout settings', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.success).toBe(false);
+  });
+
+  it("rejects a bursar from a different school with 403 on every payout route", async () => {
+    const getRes = await request(app)
+      .get(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${otherBursarToken}`);
+    expect(getRes.status).toBe(403);
+    expect(getRes.body.success).toBe(false);
+
+    const resolveRes = await request(app)
+      .post(`/api/schools/${schoolId}/settings/payout/resolve`)
+      .set('Authorization', `Bearer ${otherBursarToken}`)
+      .send({ bank_code: '058', account_number: '0123456789' });
+    expect(resolveRes.status).toBe(403);
+    expect(resolveRes.body.success).toBe(false);
+
+    const putRes = await request(app)
+      .put(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${otherBursarToken}`)
+      .send({ bank_code: '058', account_number: '0123456789', account_name: 'PAYOUT TEST SCHOOL' });
+    expect(putRes.status).toBe(403);
+    expect(putRes.body.success).toBe(false);
   });
 
   it('returns settlement_status pending with no config saved yet', async () => {
@@ -193,7 +234,7 @@ describe('Payout settings', () => {
     );
   });
 
-  it('returns 502 and sets settlement_status failed when subaccount creation fails', async () => {
+  it('returns 502 and sets settlement_status failed when subaccount creation fails with no active config to protect', async () => {
     global.fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('/bank/resolve')) {
         return Promise.resolve({
@@ -203,16 +244,66 @@ describe('Payout settings', () => {
       return Promise.resolve({ json: async () => ({ status: false, message: 'Invalid account' }) });
     });
 
+    // The second school has never configured payouts, so there is nothing to
+    // preserve — the failed state is written.
     const res = await request(app)
-      .put(`/api/schools/${schoolId}/settings/payout`)
-      .set('Authorization', `Bearer ${bursarToken}`)
+      .put(`/api/schools/${otherSchoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${otherBursarToken}`)
       .send({ bank_code: '058', account_number: '0000000000', account_name: 'FAIL SCHOOL' });
 
     expect(res.status).toBe(502);
 
     const getRes = await request(app)
+      .get(`/api/schools/${otherSchoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${otherBursarToken}`);
+    expect(getRes.body.data.settlement_status).toBe('failed');
+
+    // The failed attempt must not be invisible.
+    const auditResult = await pool.query(
+      `SELECT * FROM audit_logs WHERE school_id = $1 AND action_type = 'PAYOUT_CONFIG_CHANGE_FAILED' ORDER BY created_at DESC LIMIT 1`,
+      [otherSchoolId]
+    );
+    expect(auditResult.rows.length).toBe(1);
+    expect(auditResult.rows[0].new_value.existing_config_preserved).toBe(false);
+  });
+
+  it('preserves an ACTIVE payout config when subaccount creation fails, and audits the failed attempt', async () => {
+    // The first school already has an active config from the save test above.
+    const beforeRes = await request(app)
       .get(`/api/schools/${schoolId}/settings/payout`)
       .set('Authorization', `Bearer ${bursarToken}`);
-    expect(getRes.body.data.settlement_status).toBe('failed');
+    expect(beforeRes.body.data.settlement_status).toBe('active');
+
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/bank/resolve')) {
+        return Promise.resolve({
+          json: async () => ({ status: true, data: { account_number: '9999999999', account_name: 'NEW BANK ACCOUNT' } }),
+        });
+      }
+      return Promise.resolve({ json: async () => ({ status: false, message: 'Paystack is down' }) });
+    });
+
+    const res = await request(app)
+      .put(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${bursarToken}`)
+      .send({ bank_code: '058', account_number: '9999999999', account_name: 'NEW BANK ACCOUNT' });
+
+    expect(res.status).toBe(502);
+
+    // The working config — and therefore the school's ability to collect fees —
+    // must survive a transient Paystack failure untouched.
+    const afterRes = await request(app)
+      .get(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${bursarToken}`);
+    expect(afterRes.body.data.settlement_status).toBe('active');
+    expect(afterRes.body.data.account_number).toBe('••••6789');
+    expect(afterRes.body.data.account_name).toBe('PAYOUT TEST SCHOOL');
+
+    const auditResult = await pool.query(
+      `SELECT * FROM audit_logs WHERE school_id = $1 AND action_type = 'PAYOUT_CONFIG_CHANGE_FAILED' ORDER BY created_at DESC LIMIT 1`,
+      [schoolId]
+    );
+    expect(auditResult.rows.length).toBe(1);
+    expect(auditResult.rows[0].new_value.existing_config_preserved).toBe(true);
   });
 });

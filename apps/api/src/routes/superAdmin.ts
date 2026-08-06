@@ -1277,7 +1277,13 @@ router.get(
         return res.status(404).json({ success: false, error: { code: 'SESSION_NOT_FOUND', message: 'Onboarding session not found' } });
       }
 
-      const schoolResult = await pool.query(`SELECT * FROM schools WHERE id = $1`, [session.school_id]);
+      // Explicit column list (not SELECT *) — schools.payout_config holds an
+      // unmasked bank account number and must never be returned to the client.
+      const schoolResult = await pool.query(
+        `SELECT id, name, slug, email, address, phone, is_active, subscription_tier, legal_terms_accepted_at, created_at
+         FROM schools WHERE id = $1`,
+        [session.school_id]
+      );
       const school = schoolResult.rows[0] ?? null;
 
       const completedSteps = Object.keys(session.steps_completed ?? {});
