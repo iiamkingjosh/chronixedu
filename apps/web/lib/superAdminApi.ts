@@ -20,6 +20,7 @@ export interface SchoolListItem {
   name: string;
   slug: string;
   is_active: boolean;
+  payout_status: 'pending' | 'active' | 'failed' | null;
   plan: SchoolPlan | null;
   subscription_status: SubscriptionStatus | null;
   amount_naira: number | null;

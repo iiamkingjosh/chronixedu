@@ -537,6 +537,7 @@ router.get(
            schools.name,
            schools.slug,
            schools.is_active,
+           schools.payout_config->>'settlement_status' AS payout_status,
            platform_subscriptions.plan,
            platform_subscriptions.subscription_status,
            platform_subscriptions.amount_naira,

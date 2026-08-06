@@ -64,6 +64,16 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
   );
 }
 
+function PayoutBadge({ status }: { status: 'pending' | 'active' | 'failed' | null }) {
+  if (status === 'active') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-green-50 text-green-700 border-green-200">Active</span>;
+  }
+  if (status === 'failed') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-red-50 text-red-700 border-red-200">Failed</span>;
+  }
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200">Pending</span>;
+}
+
 // ── Modal wrapper ─────────────────────────────────────────────────────────────
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
@@ -283,6 +293,7 @@ export default function SuperAdminSchoolsPage() {
               <th className="py-3 px-4">School Name</th>
               <th className="py-3 px-4">Plan</th>
               <th className="py-3 px-4">Status</th>
+              <th className="py-3 px-4">Payout</th>
               <th className="py-3 px-4">Students</th>
               <th className="py-3 px-4">MRR</th>
               <th className="py-3 px-4">Next Billing</th>
@@ -292,12 +303,12 @@ export default function SuperAdminSchoolsPage() {
           <tbody className="divide-y divide-gray-100">
             {loading && (
               <tr>
-                <td colSpan={7} className="py-10 text-center text-gray-400">Loading…</td>
+                <td colSpan={8} className="py-10 text-center text-gray-400">Loading…</td>
               </tr>
             )}
             {!loading && schools.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-10 text-center text-gray-400">No schools found.</td>
+                <td colSpan={8} className="py-10 text-center text-gray-400">No schools found.</td>
               </tr>
             )}
             {!loading && schools.map((school) => (
@@ -309,6 +320,7 @@ export default function SuperAdminSchoolsPage() {
                 </td>
                 <td className="py-3 px-4"><PlanBadge plan={school.plan} /></td>
                 <td className="py-3 px-4"><StatusBadge isActive={school.is_active} /></td>
+                <td className="py-3 px-4"><PayoutBadge status={school.payout_status} /></td>
                 <td className="py-3 px-4 text-gray-700">{school.student_count}</td>
                 <td className="py-3 px-4 text-gray-700">{formatNaira(school.amount_naira)}</td>
                 <td className="py-3 px-4 text-gray-700">{formatDate(school.next_billing_date)}</td>
