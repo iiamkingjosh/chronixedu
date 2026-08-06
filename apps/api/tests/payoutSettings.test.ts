@@ -23,6 +23,13 @@ import pool from '../src/db/client';
 import schoolsRouter from '../src/routes/schools';
 import { verifyToken } from '../src/middleware/auth';
 import { errorHandler } from '../src/middleware/errorHandler';
+import { sendEmail } from '../src/services/emailService';
+import { sendTermiiSms } from '../src/services/termiiService';
+
+const mockSendEmail = sendEmail as jest.Mock;
+const mockSendTermiiSms = sendTermiiSms as jest.Mock;
+
+const ROOT_ADMIN_EMAIL = 'root-admin-test@chronixedu-test.com';
 
 const app = express();
 app.use(express.json());
@@ -39,13 +46,19 @@ describe('Payout settings', () => {
   let bursarUserId: string;
   let bursarToken: string;
   let teacherToken: string;
+  let principalEmail: string;
+  const principalPhone = '+2348012345678';
+  const schoolEmail = 'school-office@test.com';
 
   beforeAll(async () => {
     process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    // Fixed, test-owned value so the ROOT_ADMIN_EMAIL alert leg is deterministic
+    // regardless of what (if anything) is set in the real .env.
+    process.env.ROOT_ADMIN_EMAIL = ROOT_ADMIN_EMAIL;
 
     const schoolResult = await pool.query<{ id: string }>(
       `INSERT INTO schools (name, slug, is_active, email) VALUES ($1, $2, true, $3) RETURNING id`,
-      ['Payout Test School', `test-payout-${randomUUID()}`, 'school-office@test.com']
+      ['Payout Test School', `test-payout-${randomUUID()}`, schoolEmail]
     );
     schoolId = schoolResult.rows[0].id;
 
@@ -65,6 +78,16 @@ describe('Payout settings', () => {
       [schoolId, `teacher-${randomUUID()}@test.com`]
     );
     teacherToken = makeToken(teacherResult.rows[0].id, 'teacher', schoolId, teacherResult.rows[0].email);
+
+    // Principal — target of the fraud-alert fan-out (email + SMS). Needs a real
+    // email/phone so the alert assertions in the PUT test can check real recipients.
+    const principalResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, phone, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', $3, 'subject')
+       RETURNING id, email`,
+      [schoolId, `principal-${randomUUID()}@test.com`, principalPhone]
+    );
+    principalEmail = principalResult.rows[0].email;
   });
 
   afterAll(async () => {
@@ -107,7 +130,10 @@ describe('Payout settings', () => {
     expect(res.body.data.account_name).toBe('PAYOUT TEST SCHOOL');
   });
 
-  it('saves payout config, creates a subaccount, masks the account number on re-fetch, and logs an audit entry', async () => {
+  it('saves payout config, creates a subaccount, masks the account number on re-fetch, logs an audit entry, and fires the 3-way fraud alert', async () => {
+    mockSendEmail.mockClear();
+    mockSendTermiiSms.mockClear();
+
     global.fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('/bank/resolve')) {
         return Promise.resolve({
@@ -138,6 +164,33 @@ describe('Payout settings', () => {
       [schoolId]
     );
     expect(auditResult.rows.length).toBe(1);
+
+    // 3-way fraud alert: principal (email + SMS), the school's own office email,
+    // and the platform root admin — each must actually fire, to the right
+    // recipient, with content that identifies the changed account.
+    expect(mockSendEmail).toHaveBeenCalledTimes(3);
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      principalEmail,
+      'Payout bank details changed',
+      expect.stringContaining('6789')
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      schoolEmail,
+      'Payout bank details changed',
+      expect.stringContaining('6789')
+    );
+    expect(mockSendEmail).toHaveBeenCalledWith(
+      ROOT_ADMIN_EMAIL,
+      expect.stringContaining('Payout change'),
+      expect.stringContaining('6789')
+    );
+
+    expect(mockSendTermiiSms).toHaveBeenCalledTimes(1);
+    expect(mockSendTermiiSms).toHaveBeenCalledWith(
+      schoolId,
+      principalPhone,
+      expect.stringContaining('6789')
+    );
   });
 
   it('returns 502 and sets settlement_status failed when subaccount creation fails', async () => {
