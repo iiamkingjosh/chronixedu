@@ -167,7 +167,9 @@ describe('POST /api/auth/login', () => {
         }],
       })
       // 2. UPDATE last_login_at
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [] })
+      // 3. schools.subscription_tier lookup
+      .mockResolvedValueOnce({ rows: [{ subscription_tier: 'premium' }] });
 
     const res = await request(app)
       .post('/api/auth/login')
@@ -184,7 +186,11 @@ describe('POST /api/auth/login', () => {
       title: null,
       first_name: 'A',
       last_name: 'B',
+      subscription_tier: 'premium',
     });
+
+    const decoded = jwt.decode(res.body.data.access_token) as { subscription_tier?: string };
+    expect(decoded.subscription_tier).toBe('premium');
   });
 
   it('returns a 403 envelope for a suspended account', async () => {
