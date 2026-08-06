@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import crypto from 'crypto';
 import { verifyToken, requireRole, AuthUser } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../db/queries/auditLog';
 import { isParentLinkedToStudent } from '../db/queries/parents';
 import { findStudentByUserId } from '../db/queries/students';
@@ -460,6 +461,7 @@ router.post(
   verifyToken,
   requireSchoolAccess,
   requireRole('parent', 'student'),
+  requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = paystackInitiateSchema.safeParse(req.body);
