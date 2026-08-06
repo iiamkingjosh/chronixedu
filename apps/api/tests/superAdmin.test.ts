@@ -231,6 +231,31 @@ describe('superAdmin — platform school management', () => {
       expect(res.body.error.code).toBe('SUBSCRIPTION_EXISTS');
     });
 
+    it('POST /subscriptions syncs schools.subscription_tier to the new plan', async () => {
+      const newSchoolResult = await pool.query<{ id: string }>(
+        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+        ['Subscription Sync Test School', `test-sync-post-${randomUUID()}`]
+      );
+      const syncTestSchoolId = newSchoolResult.rows[0].id;
+
+      const res = await request(app)
+        .post('/api/super-admin/subscriptions')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ school_id: syncTestSchoolId, plan: 'premium', billing_cycle: 'monthly', amount_naira: 60000 });
+
+      expect(res.status).toBe(201);
+
+      const schoolResult = await pool.query<{ subscription_tier: string }>(
+        `SELECT subscription_tier FROM schools WHERE id = $1`,
+        [syncTestSchoolId]
+      );
+      expect(schoolResult.rows[0].subscription_tier).toBe('premium');
+
+      await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [syncTestSchoolId]);
+      await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [syncTestSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1`, [syncTestSchoolId]);
+    });
+
     // ── GET /subscriptions ────────────────────────────────────────────────
 
     it('GET /subscriptions — super_admin token → 200, has subscriptions array and summary', async () => {
@@ -254,6 +279,21 @@ describe('superAdmin — platform school management', () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.plan).toBe('premium');
+    });
+
+    it('PATCH /subscriptions/:id syncs schools.subscription_tier when plan changes', async () => {
+      const res = await request(app)
+        .patch(`/api/super-admin/subscriptions/${subscriptionId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ plan: 'enterprise' });
+
+      expect(res.status).toBe(200);
+
+      const schoolResult = await pool.query<{ subscription_tier: string }>(
+        `SELECT subscription_tier FROM schools WHERE id = $1`,
+        [subSchoolId]
+      );
+      expect(schoolResult.rows[0].subscription_tier).toBe('enterprise');
     });
 
     // ── POST /subscriptions/:id/extend-trial ──────────────────────────────
