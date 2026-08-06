@@ -12,6 +12,7 @@ import * as receiptService from '../services/receiptService';
 import * as paymentReceiptNotifier from '../services/paymentReceiptNotifier';
 import * as rosterQueries from '../db/queries/roster';
 import * as feeReminderService from '../services/feeReminderService';
+import * as schoolQueries from '../db/queries/schools';
 
 jest.mock('../db/client', () => ({
   __esModule: true,
@@ -26,6 +27,7 @@ jest.mock('../services/paystackService');
 jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
 jest.mock('../services/paymentReceiptNotifier');
 jest.mock('../services/feeReminderService');
+jest.mock('../db/queries/schools');
 
 const mockFees = feesQueries as jest.Mocked<typeof feesQueries>;
 const mockAudit = auditLog as jest.Mocked<typeof auditLog>;
@@ -36,6 +38,9 @@ const mockReceipt = receiptService as jest.Mocked<typeof receiptService>;
 const mockNotifier = paymentReceiptNotifier as jest.Mocked<typeof paymentReceiptNotifier>;
 const mockRoster = rosterQueries as jest.Mocked<typeof rosterQueries>;
 const mockFeeReminder = feeReminderService as jest.Mocked<typeof feeReminderService>;
+const mockSchools = schoolQueries as jest.Mocked<typeof schoolQueries>;
+
+const ACTIVE_PAYOUT_CONFIG = { settlement_status: 'active' as const, paystack_subaccount_code: 'ACCT_test123' };
 
 process.env.JWT_SECRET = 'test-secret';
 
@@ -584,6 +589,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
     mockFees.getInvoiceById.mockResolvedValueOnce(INVOICE_ROW as never);
     mockParents.isParentLinkedToStudent.mockResolvedValueOnce(true);
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
+    mockSchools.getSchoolPayoutConfig.mockResolvedValueOnce(ACTIVE_PAYOUT_CONFIG);
     mockPaystack.initializePaystackTransaction.mockResolvedValueOnce(PAYSTACK_INIT_RESULT);
 
     const res = await request(app)
@@ -599,6 +605,8 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
         amountKobo: 1000000,
         callbackUrl: expect.stringContaining(`/api/schools/${SCHOOL_ID}/payments/paystack/callback`),
         metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID, recorded_by: 'user-uuid-001' },
+        subaccountCode: ACTIVE_PAYOUT_CONFIG.paystack_subaccount_code,
+        bearer: 'subaccount',
       })
     );
   });
@@ -607,6 +615,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
     mockFees.getInvoiceById.mockResolvedValueOnce(INVOICE_ROW as never);
     mockParents.isParentLinkedToStudent.mockResolvedValueOnce(true);
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
+    mockSchools.getSchoolPayoutConfig.mockResolvedValueOnce(ACTIVE_PAYOUT_CONFIG);
     mockPaystack.initializePaystackTransaction.mockResolvedValueOnce(PAYSTACK_INIT_RESULT);
 
     const res = await request(app)
@@ -624,6 +633,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
     mockFees.getInvoiceById.mockResolvedValueOnce(INVOICE_ROW as never);
     mockStudents.findStudentByUserId.mockResolvedValueOnce({ id: STUDENT_ID } as never);
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
+    mockSchools.getSchoolPayoutConfig.mockResolvedValueOnce(ACTIVE_PAYOUT_CONFIG);
     mockPaystack.initializePaystackTransaction.mockResolvedValueOnce(PAYSTACK_INIT_RESULT);
 
     const res = await request(app)
@@ -632,6 +642,22 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
       .send({ invoice_id: INVOICE_ID });
 
     expect(res.status).toBe(200);
+  });
+
+  it('returns 503 PAYOUT_NOT_CONFIGURED when the school has no active payout config', async () => {
+    mockFees.getInvoiceById.mockResolvedValueOnce(INVOICE_ROW as never);
+    mockParents.isParentLinkedToStudent.mockResolvedValueOnce(true);
+    mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
+    mockSchools.getSchoolPayoutConfig.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/initiate`)
+      .set('Authorization', `Bearer ${makeToken('parent', SCHOOL_ID)}`)
+      .send({ invoice_id: INVOICE_ID });
+
+    expect(res.status).toBe(503);
+    expect(res.body.error.code).toBe('PAYOUT_NOT_CONFIGURED');
+    expect(mockPaystack.initializePaystackTransaction).not.toHaveBeenCalled();
   });
 
   it('returns 400 VALIDATION_ERROR when invoice_id is missing', async () => {
@@ -724,6 +750,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
     mockFees.getInvoiceById.mockResolvedValueOnce(INVOICE_ROW as never);
     mockParents.isParentLinkedToStudent.mockResolvedValueOnce(true);
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
+    mockSchools.getSchoolPayoutConfig.mockResolvedValueOnce(ACTIVE_PAYOUT_CONFIG);
     mockPaystack.initializePaystackTransaction.mockResolvedValueOnce(null);
 
     const res = await request(app)
