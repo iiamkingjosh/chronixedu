@@ -2,7 +2,7 @@
   "name": "Chronix Edu",
   "short_name": "Chronix Edu",
   "description": "Multi-tenant school management platform",
-  "start_url": "/",
+  "start_url": "/login",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#003366",

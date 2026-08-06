@@ -56,6 +56,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
     <div className="w-full max-w-md">
       <div className="rounded-2xl bg-white shadow-lg border border-gray-100 overflow-hidden">
         <div className="px-8 pt-8 pb-6 text-center border-b border-gray-100 bg-[#003366]">
@@ -127,6 +128,7 @@ export default function ForgotPasswordPage() {
           </form>
         )}
       </div>
+    </div>
     </div>
   );
 }

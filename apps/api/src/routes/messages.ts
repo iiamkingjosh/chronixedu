@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { verifyToken } from '../middleware/auth';
 import { findUserById } from '../db/queries/users';
@@ -22,7 +22,7 @@ const router = Router();
 const messageLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
-  keyGenerator: (req: Request) => `msg:${req.user?.user_id ?? req.ip}`,
+  keyGenerator: (req: Request) => (req.user?.user_id ? `msg:${req.user.user_id}` : `msg:${ipKeyGenerator(req.ip ?? '')}`),
   store: redis
     ? new RedisStore({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

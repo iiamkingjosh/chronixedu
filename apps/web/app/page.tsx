@@ -1,12 +1,20 @@
-export default function HomePage() {
-  return (
-    <main className="min-h-screen bg-slate-50 text-slate-900 p-8">
-      <div className="mx-auto max-w-4xl rounded-3xl border border-slate-200 bg-white p-10 shadow-sm">
-        <h1 className="text-4xl font-bold">Chronix Edu</h1>
-        <p className="mt-4 text-lg text-slate-700">
-          Full-stack multi-tenant school management SaaS scaffolding.
-        </p>
-      </div>
-    </main>
-  );
+import type { Metadata } from 'next';
+import HomePage from './home-page';
+
+export const metadata: Metadata = {
+  title: 'Chronix Edu — School Management for Nigerian Schools',
+  description:
+    'Results, attendance, fees, and parent communication — one login. Built for Nigerian private schools. Try Chronix Edu free.',
+  openGraph: {
+    title: 'Chronix Edu — Run your school smarter, not harder.',
+    description:
+      'The all-in-one school management platform built for Nigerian schools. Attendance, results, fees, and parent messaging in one place.',
+    url: 'https://edu.chronixtechnology.com',
+    siteName: 'Chronix Edu',
+    type: 'website',
+  },
+};
+
+export default function Page() {
+  return <HomePage />;
 }
