@@ -55,7 +55,7 @@ CREATE INDEX IF NOT EXISTS idx_schools_payout_settlement_status
 - **Existing live schools:** Fee collection is **blocked** (not silently pooled) until a school completes payout setup — forces the migration, zero risk of new money landing in the old pooled account by accident.
 - **Paystack fee bearer:** The school (subaccount) absorbs Paystack's own transaction fee.
 - **Platform fee:** 0% — no `platform_fee_percent` field; Chronix's subaccount `percentage_charge` is `0` at creation.
-- **Change protection:** Bursar can change bank details directly (no approval gate), but the principal is emailed **and** SMS'd immediately on every change, as a fast-detection fraud control.
+- **Change protection:** Bursar can change bank details directly (no approval gate), but three independent parties are notified immediately on every change, as a fast-detection fraud control and an evidentiary paper trail if the school ever needs to file a fraud report: the principal (email **and** SMS), the school's own official contact address (`schools.email` — a record independent of any one staff member's personal inbox), and Chronix's root admin (`ROOT_ADMIN_EMAIL`, email only) as a platform-side backup in case the principal doesn't see it in time.
 - **Parent-facing error:** A clear message ("Online payment isn't set up yet for this school — please contact the school office"), not a generic Paystack error.
 - **Bursar's settings access:** Narrow carve-out — bursar gets access to only the new payout page, not the rest of `/settings/*` (which stays principal/super_admin-only via the existing `isAdminRole()` gate, left unchanged).
 
@@ -93,7 +93,7 @@ New route, school-scoped, `verifyToken` + `requireRole(['bursar', 'principal'])`
 - `PUT /:schoolId/settings/payout` — body `{ bank_code, account_number, account_name }` (the confirmed values from the resolve step), validated with Zod (rule C7). Flow:
   1. Re-resolve server-side (never trust the client-confirmed name alone) and verify it matches what was confirmed.
   2. Call `createPaystackSubaccount()`.
-  3. On success: write `payout_config` with `settlement_status: 'active'`, `logAudit()` with masked account details (rule C11), and fire-and-forget the principal email + SMS alert.
+  3. On success: write `payout_config` with `settlement_status: 'active'`, `logAudit()` with masked account details (rule C11), and fire-and-forget three alerts: principal (email + SMS via `sendTermiiSms()`), `schools.email` (email), and `ROOT_ADMIN_EMAIL` (email) — each alert includes who made the change, when, and the masked new account details, so any of the three has an independent, timestamped record if a fraud report is ever needed.
   4. On Paystack failure: write `settlement_status: 'failed'` with the error reason, return `502`.
 
 ### 3. Backend — `fees.ts` payment-initialize gate
@@ -142,7 +142,10 @@ Bursar/principal → Settings → Payout Setup
                           ├─ Paystack POST /subaccount (percentage_charge: 0)
                           ├─ payout_config written, settlement_status: 'active'
                           ├─ logAudit() — masked account details
-                          └─ (fire-and-forget) email + SMS to principal
+                          └─ (fire-and-forget) 3 independent alerts:
+                                   ├─ principal — email + SMS
+                                   ├─ schools.email — email (institutional record)
+                                   └─ ROOT_ADMIN_EMAIL — email (platform backup)
 
 
 Parent → Pay Now (fees.ts initialize route)
@@ -162,7 +165,7 @@ Parent → Pay Now (fees.ts initialize route)
 - **Bank resolve fails** (bad account number, Paystack downtime): resolve endpoint returns `null` → frontend shows "Couldn't verify this account — check the details and try again," no partial state saved.
 - **Subaccount creation fails** after a successful resolve: `payout_config.settlement_status` set to `'failed'` with reason stored; settings page shows the failure with a retry option; fee collection stays blocked (no partial/ambiguous state).
 - **Parent attempts payment, school not configured**: `503 PAYOUT_NOT_CONFIGURED`, clear contact-the-school message, no Paystack call attempted.
-- **Bank details changed on an already-active school**: treated identically to first-time setup (re-resolve, re-verify, new subaccount or update existing one via Paystack's `PUT /subaccount/:code`), plus the principal alert fires every time, including this case.
+- **Bank details changed on an already-active school**: treated identically to first-time setup (re-resolve, re-verify, new subaccount or update existing one via Paystack's `PUT /subaccount/:code`), plus all three alerts (principal, `schools.email`, root admin) fire every time, including this case.
 
 ## Testing
 
