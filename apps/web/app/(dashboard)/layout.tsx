@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
-import { isAdminRole } from '@/lib/auth';
+import { isAdminRole, canAccessPayoutSettings } from '@/lib/auth';
 import { getMainNavForRole, SETTINGS_NAV, type NavItem } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
@@ -59,6 +59,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const showSettings = isAdminRole(user.role);
+  const showPayoutSettings = canAccessPayoutSettings(user.role);
   const navSectionLabel = user.role === 'teacher' ? 'Teaching' : user.role === 'registrar' ? 'Registrar' : user.role === 'bursar' ? 'Bursar' : 'Principal';
 
   function handleLogout() {
@@ -88,6 +89,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {SETTINGS_NAV.map((item) => (
               <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
             ))}
+          </div>
+        )}
+
+        {showPayoutSettings && !showSettings && (
+          <div>
+            <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
+              Settings
+            </p>
+            <NavLink item={{ label: 'Payout Setup', href: '/settings/payout' }} pathname={pathname} onNavigate={onNavigate} />
           </div>
         )}
       </>
