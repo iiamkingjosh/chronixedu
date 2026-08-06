@@ -3,6 +3,9 @@ import {
   verifyPaystackTransaction,
   initializePaystackTransaction,
   verifyPaystackWebhookSignature,
+  listBanks,
+  resolveBankAccount,
+  createPaystackSubaccount,
 } from '../services/paystackService';
 import crypto from 'crypto';
 
@@ -225,5 +228,218 @@ describe('verifyPaystackWebhookSignature', () => {
     const result = verifyPaystackWebhookSignature(body, 'wrong-signature');
 
     expect(result).toBe(false);
+  });
+});
+
+describe('listBanks', () => {
+  it('returns empty array without calling fetch when not configured', async () => {
+    delete process.env.PAYSTACK_SECRET_KEY;
+    global.fetch = jest.fn();
+
+    const result = await listBanks();
+
+    expect(result).toEqual([]);
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns the bank list from Paystack', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({
+        status: true,
+        data: [
+          { name: 'Access Bank', code: '044' },
+          { name: 'Zenith Bank', code: '057' },
+        ],
+      }),
+    });
+
+    const result = await listBanks();
+
+    expect(result).toEqual([
+      { name: 'Access Bank', code: '044' },
+      { name: 'Zenith Bank', code: '057' },
+    ]);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.paystack.co/bank?country=nigeria',
+      expect.objectContaining({ headers: { Authorization: 'Bearer sk_test_123' } })
+    );
+  });
+
+  it('returns empty array when fetch throws', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockRejectedValue(new Error('network error'));
+
+    const result = await listBanks();
+
+    expect(result).toEqual([]);
+  });
+});
+
+describe('resolveBankAccount', () => {
+  it('returns null without calling fetch when not configured', async () => {
+    delete process.env.PAYSTACK_SECRET_KEY;
+    global.fetch = jest.fn();
+
+    const result = await resolveBankAccount('058', '0123456789');
+
+    expect(result).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns the resolved account name', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({
+        status: true,
+        data: { account_number: '0123456789', account_name: 'GREENFIELD SECONDARY SCHOOL' },
+      }),
+    });
+
+    const result = await resolveBankAccount('058', '0123456789');
+
+    expect(result).toEqual({ account_name: 'GREENFIELD SECONDARY SCHOOL' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.paystack.co/bank/resolve?account_number=0123456789&bank_code=058',
+      expect.objectContaining({ headers: { Authorization: 'Bearer sk_test_123' } })
+    );
+  });
+
+  it('returns null when Paystack reports status: false', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({ status: false, message: 'Could not resolve account name' }),
+    });
+
+    const result = await resolveBankAccount('058', '0000000000');
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when fetch throws', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockRejectedValue(new Error('network error'));
+
+    const result = await resolveBankAccount('058', '0123456789');
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('createPaystackSubaccount', () => {
+  it('returns null without calling fetch when not configured', async () => {
+    delete process.env.PAYSTACK_SECRET_KEY;
+    global.fetch = jest.fn();
+
+    const result = await createPaystackSubaccount({
+      businessName: 'Greenfield Secondary School',
+      bankCode: '058',
+      accountNumber: '0123456789',
+    });
+
+    expect(result).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('creates a subaccount with percentage_charge 0 and returns the subaccount code', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({
+        status: true,
+        data: { subaccount_code: 'ACCT_xxx' },
+      }),
+    });
+
+    const result = await createPaystackSubaccount({
+      businessName: 'Greenfield Secondary School',
+      bankCode: '058',
+      accountNumber: '0123456789',
+    });
+
+    expect(result).toEqual({ subaccount_code: 'ACCT_xxx' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.paystack.co/subaccount',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer sk_test_123',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          business_name: 'Greenfield Secondary School',
+          settlement_bank: '058',
+          account_number: '0123456789',
+          percentage_charge: 0,
+        }),
+      })
+    );
+  });
+
+  it('returns null when Paystack reports status: false', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({ status: false, message: 'Invalid account' }),
+    });
+
+    const result = await createPaystackSubaccount({
+      businessName: 'Greenfield Secondary School',
+      bankCode: '058',
+      accountNumber: '0000000000',
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('returns null when fetch throws', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockRejectedValue(new Error('network error'));
+
+    const result = await createPaystackSubaccount({
+      businessName: 'Greenfield Secondary School',
+      bankCode: '058',
+      accountNumber: '0123456789',
+    });
+
+    expect(result).toBeNull();
+  });
+});
+
+describe('initializePaystackTransaction with subaccount', () => {
+  it('passes subaccount and bearer through to Paystack when provided', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockResolvedValue({
+      json: async () => ({
+        status: true,
+        data: {
+          authorization_url: 'https://checkout.paystack.com/abc123',
+          access_code: 'abc123',
+          reference: 'ref-123',
+        },
+      }),
+    });
+
+    await initializePaystackTransaction({
+      email: 'parent@example.com',
+      amountKobo: 500000,
+      reference: 'ref-123',
+      callbackUrl: 'https://api.example.com/callback',
+      subaccountCode: 'ACCT_xxx',
+      bearer: 'subaccount',
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://api.paystack.co/transaction/initialize',
+      expect.objectContaining({
+        body: JSON.stringify({
+          email: 'parent@example.com',
+          amount: 500000,
+          reference: 'ref-123',
+          callback_url: 'https://api.example.com/callback',
+          metadata: undefined,
+          subaccount: 'ACCT_xxx',
+          bearer: 'subaccount',
+        }),
+      })
+    );
   });
 });

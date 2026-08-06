@@ -34,6 +34,8 @@ export interface InitializePaystackTransactionInput {
   reference: string;
   callbackUrl: string;
   metadata?: Record<string, unknown>;
+  subaccountCode?: string;
+  bearer?: 'subaccount';
 }
 
 interface PaystackInitializeResponse {
@@ -48,6 +50,76 @@ interface PaystackInitializeResponse {
 
 export function isPaystackConfigured(): boolean {
   return !!process.env.PAYSTACK_SECRET_KEY;
+}
+
+export async function listBanks(): Promise<{ name: string; code: string }[]> {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY;
+  if (!secretKey) return [];
+
+  try {
+    const response = await fetch(`${PAYSTACK_BASE_URL}/bank?country=nigeria`, {
+      headers: { Authorization: `Bearer ${secretKey}` },
+    });
+    const json = (await response.json()) as { status: boolean; data?: { name: string; code: string }[] };
+    if (!json.status || !json.data) return [];
+    return json.data.map(b => ({ name: b.name, code: b.code }));
+  } catch {
+    return [];
+  }
+}
+
+export async function resolveBankAccount(
+  bankCode: string,
+  accountNumber: string
+): Promise<{ account_name: string } | null> {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY;
+  if (!secretKey) return null;
+
+  try {
+    const response = await fetch(
+      `${PAYSTACK_BASE_URL}/bank/resolve?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`,
+      { headers: { Authorization: `Bearer ${secretKey}` } }
+    );
+    const json = (await response.json()) as { status: boolean; data?: { account_name: string } };
+    if (!json.status || !json.data) return null;
+    return { account_name: json.data.account_name };
+  } catch {
+    return null;
+  }
+}
+
+export interface CreatePaystackSubaccountInput {
+  businessName: string;
+  bankCode: string;
+  accountNumber: string;
+}
+
+export async function createPaystackSubaccount(
+  input: CreatePaystackSubaccountInput
+): Promise<{ subaccount_code: string } | null> {
+  const secretKey = process.env.PAYSTACK_SECRET_KEY;
+  if (!secretKey) return null;
+
+  try {
+    const response = await fetch(`${PAYSTACK_BASE_URL}/subaccount`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        business_name: input.businessName,
+        settlement_bank: input.bankCode,
+        account_number: input.accountNumber,
+        percentage_charge: 0,
+      }),
+    });
+    const json = (await response.json()) as { status: boolean; data?: { subaccount_code: string } };
+    if (!json.status || !json.data) return null;
+    return { subaccount_code: json.data.subaccount_code };
+  } catch {
+    return null;
+  }
 }
 
 export async function verifyPaystackTransaction(reference: string): Promise<PaystackVerification | null> {
@@ -92,6 +164,8 @@ export async function initializePaystackTransaction(
         reference: input.reference,
         callback_url: input.callbackUrl,
         metadata: input.metadata,
+        subaccount: input.subaccountCode,
+        bearer: input.bearer,
       }),
     });
     const json = (await response.json()) as PaystackInitializeResponse;
