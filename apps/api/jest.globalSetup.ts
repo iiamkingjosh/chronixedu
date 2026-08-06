@@ -23,8 +23,8 @@ export default async function globalSetup(): Promise<void> {
   try {
     // 1. School
     await client.query(
-      `INSERT INTO schools (id, name, slug, is_active, subscription_tier)
-       VALUES ($1, 'Integration Test School', 'integration-test-school', true, 'premium')
+      `INSERT INTO schools (id, name, slug, is_active)
+       VALUES ($1, 'Integration Test School', 'integration-test-school', true)
        ON CONFLICT DO NOTHING`,
       [SCHOOL_ID]
     );
