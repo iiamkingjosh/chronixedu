@@ -13,10 +13,10 @@
     "lint:web": "npm --workspace=@chronixedu/web run lint",
     "lint:api": "npm --workspace=@chronixedu/api run lint",
     "lint": "npm run lint:web && npm run lint:api",
-    "test": "jest --passWithNoTests",
-    "test:unit": "jest --testPathPattern=apps/api/src/__tests__ --passWithNoTests",
+    "test": "npm --workspace=@chronixedu/api run test",
+    "test:unit": "npm --workspace=@chronixedu/api run test -- --testPathPattern=src/__tests__",
     "migrate": "npm --workspace=@chronixedu/api run migrate",
-    "test:isolation": "jest --testPathPattern=apps/api/tests/ --passWithNoTests",
+    "test:isolation": "npm --workspace=@chronixedu/api run test -- --testPathPattern=tests/",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "node -e \"if(!process.env.CI && require('fs').existsSync('.git')) process.exit(1)\" || husky install"
   },
@@ -40,21 +40,6 @@
     "sanitize-html": "^2.17.5",
     "winston": "^3.19.0",
     "zod": "^4.4.3"
-  },
-  "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
-    "roots": [
-      "<rootDir>/apps/api/src",
-      "<rootDir>/apps/api/tests"
-    ],
-    "testMatch": [
-      "**/__tests__/**/*.test.ts",
-      "**/tests/**/*.test.ts"
-    ],
-    "moduleNameMapper": {
-      "^@/(.*)$": "<rootDir>/apps/api/$1"
-    }
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
