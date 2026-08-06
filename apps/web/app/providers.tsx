@@ -14,12 +14,14 @@ export interface AuthUser {
   title?: string;
   first_name?: string;
   last_name?: string;
+  subscription_tier?: string | null;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   token: string | null;
   schoolId: string | null;
+  subscriptionTier: string | null;
   loading: boolean;
   setAuth: (user: AuthUser, token: string) => void;
   logout: () => void;
@@ -89,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, schoolId: user?.school_id ?? null, loading, setAuth, logout }}
+      value={{ user, token, schoolId: user?.school_id ?? null, subscriptionTier: user?.subscription_tier ?? null, loading, setAuth, logout }}
     >
       {children}
     </AuthContext.Provider>

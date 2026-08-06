@@ -30,7 +30,7 @@ const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: Na
 });
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, subscriptionTier } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
@@ -59,8 +59,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const showSettings = isAdminRole(user.role);
-  const showPayoutSettings = canAccessPayoutSettings(user.role);
+  const showPayoutSettings = canAccessPayoutSettings(user.role) && subscriptionTier !== 'basic';
   const navSectionLabel = user.role === 'teacher' ? 'Teaching' : user.role === 'registrar' ? 'Registrar' : user.role === 'bursar' ? 'Bursar' : 'Principal';
+  const visibleMainNav = subscriptionTier === 'basic' ? mainNav.filter((item) => item.href !== '/principal/analytics') : mainNav;
+  const visibleSettingsNav = subscriptionTier === 'basic' ? SETTINGS_NAV.filter((item) => item.href !== '/settings/payout') : SETTINGS_NAV;
 
   function handleLogout() {
     logout();
@@ -70,12 +72,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   function renderNav(onNavigate?: () => void) {
     return (
       <>
-        {mainNav.length > 0 && (
+        {visibleMainNav.length > 0 && (
           <div className="mb-4">
             <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
               {navSectionLabel}
             </p>
-            {mainNav.map((item) => (
+            {visibleMainNav.map((item) => (
               <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
             ))}
           </div>
@@ -86,7 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
               Settings
             </p>
-            {SETTINGS_NAV.map((item) => (
+            {visibleSettingsNav.map((item) => (
               <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
             ))}
           </div>
