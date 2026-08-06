@@ -4,6 +4,7 @@ import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notific
 import { sendEmail } from './emailService';
 import { sendTermiiSms } from './termiiService';
 import { logger } from '../config/logger';
+import { schoolAllowsFeature } from './planFeatures';
 
 const POLL_INTERVAL_MS = 30_000;
 const BATCH_SIZE = 50;
@@ -72,7 +73,7 @@ async function processRow(row: QueuedAuditRow): Promise<void> {
     });
     await sendEmail(parent.email, title, body);
 
-    if (parent.phone) {
+    if (parent.phone && (await schoolAllowsFeature(row.school_id, 'sms'))) {
       if (await hasReachedSmsLimit(parent.parent_id)) {
         await insertNotificationLog({
           school_id: row.school_id,

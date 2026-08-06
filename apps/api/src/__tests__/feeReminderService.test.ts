@@ -12,6 +12,7 @@ import {
   startFeeReminderCron,
   stopFeeReminderCron,
 } from '../services/feeReminderService';
+import { schoolAllowsFeature } from '../services/planFeatures';
 
 jest.mock('node-cron');
 jest.mock('../db/queries/analytics');
@@ -21,6 +22,7 @@ jest.mock('../db/queries/notifications');
 jest.mock('../db/queries/notificationLogs');
 jest.mock('../services/emailService');
 jest.mock('../services/termiiService');
+jest.mock('../services/planFeatures');
 
 const mockCron = cron as jest.Mocked<typeof cron>;
 const mockAnalytics = analyticsQueries as jest.Mocked<typeof analyticsQueries>;
@@ -31,6 +33,7 @@ const mockInsertLog = insertNotificationLog as jest.Mock;
 const mockHasReachedLimit = hasReachedSmsLimit as jest.Mock;
 const mockSendEmail = sendEmail as jest.Mock;
 const mockSendTermiiSms = sendTermiiSms as jest.Mock;
+const mockSchoolAllowsFeature = schoolAllowsFeature as jest.Mock;
 
 const SCHOOL_ID = 'school-1';
 const TERM_ID = 'term-1';
@@ -56,6 +59,7 @@ beforeEach(() => {
   mockHasReachedLimit.mockResolvedValue(false);
   mockSendEmail.mockResolvedValue(undefined);
   mockSendTermiiSms.mockResolvedValue(true);
+  mockSchoolAllowsFeature.mockResolvedValue(true);
 });
 
 describe('sendFeeRemindersForSchool', () => {
@@ -102,6 +106,22 @@ describe('sendFeeRemindersForSchool', () => {
 
     await sendFeeRemindersForSchool(SCHOOL_ID, TERM_ID);
 
+    expect(mockCreateNotification).toHaveBeenCalled();
+    expect(mockSendEmail).toHaveBeenCalled();
+    expect(mockSendTermiiSms).not.toHaveBeenCalled();
+    expect(mockInsertLog).not.toHaveBeenCalled();
+  });
+
+  it('skips SMS but still sends in-app and email when the school is on basic', async () => {
+    mockFees.getOutstandingBalances.mockResolvedValueOnce([OUTSTANDING_ROW as never]);
+    mockParents.getParentsForStudent.mockResolvedValueOnce([
+      { parent_id: PARENT_ID, email: 'parent@test.com', phone: '+2348011111111' },
+    ]);
+    mockSchoolAllowsFeature.mockResolvedValueOnce(false);
+
+    await sendFeeRemindersForSchool(SCHOOL_ID, TERM_ID);
+
+    expect(mockSchoolAllowsFeature).toHaveBeenCalledWith(SCHOOL_ID, 'sms');
     expect(mockCreateNotification).toHaveBeenCalled();
     expect(mockSendEmail).toHaveBeenCalled();
     expect(mockSendTermiiSms).not.toHaveBeenCalled();
