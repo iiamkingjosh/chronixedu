@@ -960,6 +960,8 @@ router.post(
       );
       const subscription = result.rows[0];
 
+      await pool.query(`UPDATE schools SET subscription_tier = $1 WHERE id = $2`, [plan, school_id]);
+
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
@@ -1009,6 +1011,10 @@ router.patch(
         params
       );
       const updated = result.rows[0];
+
+      if (parsed.data.plan !== undefined) {
+        await pool.query(`UPDATE schools SET subscription_tier = $1 WHERE id = $2`, [parsed.data.plan, existing.school_id]);
+      }
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
