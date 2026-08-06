@@ -2,7 +2,7 @@
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken, requireRole, type SupportSessionContext } from '../middleware/auth';
 import {
   insertSchool,
   insertSchoolSettings,
@@ -27,6 +27,7 @@ import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { generateReportCardPreview } from '../services/reportCardService';
 import { listBanks, resolveBankAccount, createPaystackSubaccount } from '../services/paystackService';
 import { sendTermiiSms } from '../services/termiiService';
+import { logger } from '../config/logger';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -134,23 +135,57 @@ function maskAccountNumber(accountNumber: string | undefined): string | undefine
   return `••••${accountNumber.slice(-4)}`;
 }
 
-async function sendPayoutChangeAlerts(schoolId: string, changedByEmail: string, maskedAccount: string, bankCode: string): Promise<void> {
-  const [school, principals] = await Promise.all([
-    getSchoolNameAndEmail(schoolId),
-    findPrincipalsBySchool(schoolId),
-  ]);
-  const message = `Payout bank details for ${school?.name ?? 'your school'} were changed by ${changedByEmail}. New account ends in ${maskedAccount.slice(-4)} (bank code ${bankCode}). If this wasn't authorised, contact Chronix support immediately.`;
+// The payout config is already saved by the time this runs — alert delivery must
+// never fail the caller's response, so every failure path here is swallowed and
+// logged rather than thrown.
+async function sendPayoutChangeAlerts(
+  schoolId: string,
+  changedByEmail: string,
+  maskedAccount: string,
+  bankCode: string,
+  supportSession?: SupportSessionContext
+): Promise<void> {
+  try {
+    const [school, principals] = await Promise.all([
+      getSchoolNameAndEmail(schoolId),
+      findPrincipalsBySchool(schoolId),
+    ]);
 
-  const alerts: Promise<unknown>[] = [];
-  for (const principal of principals) {
-    alerts.push(sendEmail(principal.email, 'Payout bank details changed', message));
-    if (principal.phone) alerts.push(sendTermiiSms(schoolId, principal.phone, message));
+    // During a support session req.user is the impersonated school user, so
+    // naming them would falsely accuse the school's own staff. Attribute the
+    // change to the Chronix platform admin who actually made it.
+    const changedBy = supportSession
+      ? `a Chronix Edu platform administrator during a support session (signed in as ${changedByEmail})`
+      : changedByEmail;
+    const message = `Payout bank details for ${school?.name ?? 'your school'} were changed by ${changedBy}. New account ends in ${maskedAccount.slice(-4)} (bank code ${bankCode}). If this wasn't authorised, contact Chronix support immediately.`;
+
+    const alerts: Promise<unknown>[] = [];
+    for (const principal of principals) {
+      alerts.push(sendEmail(principal.email, 'Payout bank details changed', message));
+      if (principal.phone) alerts.push(sendTermiiSms(schoolId, principal.phone, message));
+    }
+    if (principals.length === 0) {
+      logger.warn('payout_change_alert_no_principals', { schoolId });
+    }
+    if (school?.email) alerts.push(sendEmail(school.email, 'Payout bank details changed', message));
+    const rootAdminEmail = process.env.ROOT_ADMIN_EMAIL;
+    if (rootAdminEmail) alerts.push(sendEmail(rootAdminEmail, `Payout change — ${school?.name ?? schoolId}`, message));
+
+    const results = await Promise.allSettled(alerts);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.error('payout_change_alert_failed', {
+          schoolId,
+          error: result.reason instanceof Error ? result.reason.message : result.reason,
+        });
+      }
+    }
+  } catch (err) {
+    logger.error('payout_change_alerts_aborted', {
+      schoolId,
+      error: err instanceof Error ? err.message : err,
+    });
   }
-  if (school?.email) alerts.push(sendEmail(school.email, 'Payout bank details changed', message));
-  const rootAdminEmail = process.env.ROOT_ADMIN_EMAIL;
-  if (rootAdminEmail) alerts.push(sendEmail(rootAdminEmail, `Payout change — ${school?.name ?? schoolId}`, message));
-
-  await Promise.allSettled(alerts);
 }
 
 // ── POST /api/schools ──────────────────────────────────────────────────────────
@@ -755,17 +790,55 @@ router.put(
 
       const now = new Date().toISOString();
       if (!subaccount) {
-        const failedConfig: PayoutConfig = {
-          bank_code,
-          account_number,
-          account_name,
-          settlement_status: 'failed',
-          failure_reason: 'Paystack could not create a subaccount for this bank account.',
-          updated_at: now,
-          updated_by: req.user!.user_id,
-        };
-        await updateSchoolPayoutConfig(schoolId, failedConfig);
-        return res.status(502).json({ success: false, error: { code: 'SUBACCOUNT_CREATE_FAILED', message: 'Paystack could not create a subaccount for this bank account.' } });
+        // A transient Paystack failure must never destroy a working config: the
+        // fees gate requires settlement_status === 'active', so overwriting a
+        // live subaccount with a 'failed' row would take the school's fee
+        // collection offline platform-wide. Only persist the failed state when
+        // there is no active config to protect.
+        const hadActiveConfig = previousConfig?.settlement_status === 'active';
+        const failureReason = 'Paystack could not create a subaccount for this bank account.';
+
+        if (!hadActiveConfig) {
+          const failedConfig: PayoutConfig = {
+            bank_code,
+            account_number,
+            account_name,
+            settlement_status: 'failed',
+            failure_reason: failureReason,
+            updated_at: now,
+            updated_by: req.user!.user_id,
+          };
+          await updateSchoolPayoutConfig(schoolId, failedConfig);
+        }
+
+        await logAudit({
+          supportSession: req.supportSession,
+          schoolId,
+          userId: req.user!.user_id,
+          actionType: 'PAYOUT_CONFIG_CHANGE_FAILED',
+          entity: 'schools',
+          entityId: schoolId,
+          oldValue: previousConfig
+            ? { bank_code: previousConfig.bank_code, account_number: maskAccountNumber(previousConfig.account_number), settlement_status: previousConfig.settlement_status }
+            : null,
+          newValue: {
+            bank_code,
+            account_number: maskAccountNumber(account_number),
+            account_name,
+            failure_reason: failureReason,
+            existing_config_preserved: hadActiveConfig,
+          },
+        });
+
+        return res.status(502).json({
+          success: false,
+          error: {
+            code: 'SUBACCOUNT_CREATE_FAILED',
+            message: hadActiveConfig
+              ? `${failureReason} Your existing payout account is unchanged and still active.`
+              : failureReason,
+          },
+        });
       }
 
       const newConfig: PayoutConfig = {
@@ -780,6 +853,7 @@ router.put(
       await updateSchoolPayoutConfig(schoolId, newConfig);
 
       await logAudit({
+        supportSession: req.supportSession,
         schoolId,
         userId: req.user!.user_id,
         actionType: 'PAYOUT_CONFIG_CHANGE',
@@ -791,7 +865,7 @@ router.put(
         newValue: { bank_code, account_number: maskAccountNumber(account_number), account_name },
       });
 
-      await sendPayoutChangeAlerts(schoolId, req.user!.email ?? 'unknown', maskAccountNumber(account_number) ?? '', bank_code);
+      await sendPayoutChangeAlerts(schoolId, req.user!.email ?? 'unknown', maskAccountNumber(account_number) ?? '', bank_code, req.supportSession);
 
       return res.json({ success: true, data: { message: 'Payout account saved', settlement_status: 'active' } });
     } catch (err) {
