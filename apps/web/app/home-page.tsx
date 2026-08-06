@@ -12,14 +12,6 @@ const CheckIcon = () => (
 
 export default function HomePage() {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isAnnual, setIsAnnual] = useState(false);
-
-  const prices = {
-    monthly: { starter: '₦15k', growth: '₦35k', pro: '₦65k' },
-    annual:  { starter: '₦162k', growth: '₦378k', pro: '₦702k' },
-  };
-  const p = isAnnual ? prices.annual : prices.monthly;
-  const period = isAnnual ? '/year' : '/month';
 
   useEffect(() => {
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -504,67 +496,39 @@ export default function HomePage() {
             <h2>Priced for Nigerian private schools, not Silicon Valley startups</h2>
             <p>Monthly pricing in Naira. No setup fees, no per-teacher charges, no surprise invoices at the end of term.</p>
           </div>
-          <div className="toggle-wrap reveal">
-            <span className="toggle-lbl" style={{ fontWeight: isAnnual ? 400 : 700 }}>Monthly</span>
-            <div className={`toggle-switch${isAnnual ? ' annual' : ''}`} role="switch" aria-checked={isAnnual} onClick={() => setIsAnnual(v => !v)} />
-            <span className="toggle-lbl" style={{ fontWeight: isAnnual ? 700 : 400 }}>Annual</span>
-            <span className="toggle-badge">Save 10% annually</span>
-          </div>
           <div className="pricing-grid">
             <div className="price-card reveal">
-              <div className="price-name">Starter</div>
-              <div className="price-desc">Small schools getting started</div>
-              <div className="price-amount"><span className="price-num">{p.starter}</span><span className="price-per">{period}</span></div>
-              <div className="price-students">Up to 150 students</div>
+              <div className="price-name">Basic</div>
+              <div className="price-desc">Everything a school needs to run day to day</div>
+              <div className="price-amount"><span className="price-num">₦400</span><span className="price-per">/student/term</span></div>
               <ul className="price-feats">
                 <li><CheckIcon /> Results &amp; report cards</li>
-                <li><CheckIcon /> Attendance tracking</li>
+                <li><CheckIcon /> Attendance &amp; behaviour tracking</li>
+                <li><CheckIcon /> Timetable</li>
                 <li><CheckIcon /> Parent &amp; student portals</li>
-                <li><CheckIcon /> Email notifications</li>
+                <li><CheckIcon /> Fee invoicing &amp; manual payment recording</li>
+                <li><CheckIcon /> In-app messaging &amp; announcements</li>
               </ul>
               <a href="mailto:support@chronixtechnology.com" className="lp-btn lp-btn-ghost">Get Started</a>
             </div>
             <div className="price-card featured reveal stagger-1">
-              <span className="price-featured-badge">Most Popular</span>
-              <div className="price-name">Growth</div>
-              <div className="price-desc">Established schools, full toolkit</div>
-              <div className="price-amount"><span className="price-num">{p.growth}</span><span className="price-per">{period}</span></div>
-              <div className="price-students">Up to 500 students</div>
+              <span className="price-featured-badge">Recommended</span>
+              <div className="price-name">Premium</div>
+              <div className="price-desc">Everything in Basic, plus SMS and online payments</div>
+              <div className="price-amount"><span className="price-num">₦600</span><span className="price-per">/student/term</span></div>
               <ul className="price-feats">
-                <li><CheckIcon /> Everything in Starter</li>
-                <li><CheckIcon /> Fee management &amp; Paystack</li>
-                <li><CheckIcon /> SMS reminders via Termii</li>
-                <li><CheckIcon /> Messaging &amp; announcements</li>
+                <li><CheckIcon /> Everything in Basic</li>
+                <li><CheckIcon /> SMS reminders for attendance &amp; fees</li>
+                <li><CheckIcon /> Online fee collection via Paystack — settles directly to your school&apos;s bank account</li>
                 <li><CheckIcon /> Analytics dashboard</li>
               </ul>
               <a href="mailto:support@chronixtechnology.com" className="lp-btn lp-btn-primary">Get Started</a>
             </div>
-            <div className="price-card reveal stagger-2">
-              <div className="price-name">Pro</div>
-              <div className="price-desc">Larger or multi-campus schools</div>
-              <div className="price-amount"><span className="price-num">{p.pro}</span><span className="price-per">{period}</span></div>
-              <div className="price-students">Up to 1,000+ students</div>
-              <ul className="price-feats">
-                <li><CheckIcon /> Everything in Growth</li>
-                <li><CheckIcon /> Timetable management</li>
-                <li><CheckIcon /> Advanced analytics &amp; exports</li>
-                <li><CheckIcon /> Priority email support</li>
-              </ul>
-              <a href="mailto:support@chronixtechnology.com" className="lp-btn lp-btn-ghost">Get Started</a>
-            </div>
-            <div className="price-card reveal stagger-3">
-              <div className="price-name">Enterprise</div>
-              <div className="price-desc">School groups &amp; custom needs</div>
-              <div className="price-amount"><span className="price-num" style={{ fontSize: 22 }}>Custom</span></div>
-              <div className="price-students">Unlimited students</div>
-              <ul className="price-feats">
-                <li><CheckIcon /> Everything in Pro</li>
-                <li><CheckIcon /> Dedicated onboarding session</li>
-                <li><CheckIcon /> SLA &amp; uptime guarantee</li>
-                <li><CheckIcon /> Custom feature requests</li>
-              </ul>
-              <a href="mailto:edu@chronixtechnology.com" className="lp-btn lp-btn-ghost">Talk to Sales</a>
-            </div>
+          </div>
+          <div className="price-card reveal stagger-2" style={{ maxWidth: 640, margin: '32px auto 0' }}>
+            <div className="price-name">Enterprise</div>
+            <div className="price-desc">Boarding schools &amp; multi-campus groups — custom pricing</div>
+            <a href="mailto:edu@chronixtechnology.com" className="lp-btn lp-btn-ghost">Talk to Sales</a>
           </div>
         </div>
       </section>
