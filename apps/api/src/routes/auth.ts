@@ -234,7 +234,11 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-if (process.env.NODE_ENV !== 'production') {
+// Requires SEED_SECRET to be explicitly configured — if it's unset, the route
+// isn't registered at all, so there's no fail-open path where a missing secret
+// makes `req.headers['x-seed-secret'] !== process.env.SEED_SECRET` pass by
+// both sides being undefined.
+if (process.env.NODE_ENV !== 'production' && process.env.SEED_SECRET) {
   router.post('/seed-test-user', async (req, res) => {
     if (req.headers['x-seed-secret'] !== process.env.SEED_SECRET) {
       return res.status(404).json({ success: false });
