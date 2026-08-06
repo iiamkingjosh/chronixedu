@@ -169,3 +169,11 @@ export async function setUserActive(userId: string, schoolId: string, isActive: 
   );
   return result.rows[0];
 }
+
+export async function findPrincipalsBySchool(schoolId: string): Promise<{ email: string; phone: string | null }[]> {
+  const result = await pool.query<{ email: string; phone: string | null }>(
+    `SELECT email, phone FROM users WHERE school_id = $1 AND role = 'principal' AND is_active = true`,
+    [schoolId]
+  );
+  return result.rows;
+}
