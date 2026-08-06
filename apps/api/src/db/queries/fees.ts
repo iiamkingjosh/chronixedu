@@ -7,6 +7,13 @@ export class DuplicatePaymentError extends Error {
   }
 }
 
+export class OverpaymentError extends Error {
+  code = 'AMOUNT_EXCEEDS_BALANCE';
+  constructor() {
+    super('Amount exceeds the outstanding balance');
+  }
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 export interface FeeStructureRow {
@@ -197,6 +204,12 @@ export async function recordPayment(
     if (!invoiceRow) {
       await client.query('ROLLBACK');
       return null;
+    }
+
+    const outstandingBalance = Number(invoiceRow.total_amount) - Number(invoiceRow.amount_paid);
+    if (input.amount > outstandingBalance) {
+      await client.query('ROLLBACK');
+      throw new OverpaymentError();
     }
 
     // Idempotency guard: reject duplicate cash/bank_transfer payments within 5 minutes.

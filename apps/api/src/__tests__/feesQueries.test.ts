@@ -11,6 +11,7 @@ import {
   recordPayment,
   getPaymentById,
   deriveStatus,
+  OverpaymentError,
 } from '../db/queries/fees';
 
 jest.mock('../db/client', () => ({
@@ -433,6 +434,26 @@ describe('recordPayment', () => {
 
     expect(client.query).toHaveBeenCalledWith('ROLLBACK');
     expect(client.release).toHaveBeenCalled();
+  });
+
+  it('rolls back and throws OverpaymentError when the amount exceeds the outstanding balance', async () => {
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+
+    client.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ total_amount: '15000.00', amount_paid: '5000.00' }] }) // SELECT FOR UPDATE — balance is 10000
+      .mockResolvedValueOnce({ rows: [] }); // ROLLBACK
+
+    await expect(
+      recordPayment('school-1', 'inv-1', { amount: 10000.01, method: 'cash' })
+    ).rejects.toThrow(OverpaymentError);
+
+    expect(client.query).toHaveBeenLastCalledWith('ROLLBACK');
+    expect(client.release).toHaveBeenCalled();
+    // Bails out before ever inserting a payment or updating the invoice.
+    expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO payments'), expect.anything());
+    expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('UPDATE fee_invoices'), expect.anything());
   });
 });
 
