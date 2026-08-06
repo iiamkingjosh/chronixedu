@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import { getActiveTerm } from '../db/queries/roster';
 import { getLatestSnapshot, getPreviousSnapshot, AnalyticsSnapshotRow } from '../db/queries/analytics';
 import { generateSnapshot } from '../services/analyticsService';
@@ -17,7 +18,7 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
   res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
 }
 
-const guard = [verifyToken, requireSchoolAccess, requireRole('principal', 'super_admin')];
+const guard = [verifyToken, requireSchoolAccess, requireRole('principal', 'super_admin'), requireFeature('analytics')];
 
 interface TrendItem {
   current: number | null;

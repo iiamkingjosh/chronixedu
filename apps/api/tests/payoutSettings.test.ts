@@ -22,9 +22,11 @@ import jwt from 'jsonwebtoken';
 import pool from '../src/db/client';
 import schoolsRouter from '../src/routes/schools';
 import { verifyToken } from '../src/middleware/auth';
+import { requireActiveSchool } from '../src/middleware/requireActiveSchool';
 import { errorHandler } from '../src/middleware/errorHandler';
 import { sendEmail } from '../src/services/emailService';
 import { sendTermiiSms } from '../src/services/termiiService';
+import { cache, schoolCacheKey } from '../src/services/cacheService';
 
 const mockSendEmail = sendEmail as jest.Mock;
 const mockSendTermiiSms = sendTermiiSms as jest.Mock;
@@ -34,6 +36,12 @@ const ROOT_ADMIN_EMAIL = 'root-admin-test@chronixedu-test.com';
 const app = express();
 app.use(express.json());
 app.use('/api/schools', verifyToken);
+// requireFeature (inserted into the payout route chains) reads
+// res.locals.school.subscription_tier, which only requireActiveSchool
+// populates — mount it here too, matching production's app-level wiring
+// (apps/api/src/index.ts), so the plan-gating tests below exercise the same
+// path a real request takes.
+app.use('/api/schools', requireActiveSchool);
 app.use('/api/schools', schoolsRouter);
 app.use(errorHandler);
 
@@ -145,6 +153,31 @@ describe('Payout settings', () => {
       .send({ bank_code: '058', account_number: '0123456789', account_name: 'PAYOUT TEST SCHOOL' });
     expect(putRes.status).toBe(403);
     expect(putRes.body.success).toBe(false);
+  });
+
+  it('returns 403 FEATURE_NOT_IN_PLAN for a basic-tier school on all four payout routes', async () => {
+    await pool.query(`UPDATE schools SET subscription_tier = 'basic' WHERE id = $1`, [schoolId]);
+    // requireActiveSchool caches the school row for 5 minutes; earlier requests
+    // in this suite already primed that cache, so bust it or the stale
+    // (pre-update) row would make requireFeature fail open.
+    cache.del(schoolCacheKey(schoolId, 'data'));
+
+    const getRes = await request(app).get(`/api/schools/${schoolId}/settings/payout`).set('Authorization', `Bearer ${bursarToken}`);
+    expect(getRes.status).toBe(403);
+    expect(getRes.body.error.code).toBe('FEATURE_NOT_IN_PLAN');
+
+    const banksRes = await request(app).get(`/api/schools/${schoolId}/settings/payout/banks`).set('Authorization', `Bearer ${bursarToken}`);
+    expect(banksRes.status).toBe(403);
+
+    const resolveRes = await request(app).post(`/api/schools/${schoolId}/settings/payout/resolve`).set('Authorization', `Bearer ${bursarToken}`).send({ bank_code: '058', account_number: '0123456789' });
+    expect(resolveRes.status).toBe(403);
+
+    const putRes = await request(app).put(`/api/schools/${schoolId}/settings/payout`).set('Authorization', `Bearer ${bursarToken}`).send({ bank_code: '058', account_number: '0123456789', account_name: 'X' });
+    expect(putRes.status).toBe(403);
+
+    // Restore for any tests that run after this one in the same file.
+    await pool.query(`UPDATE schools SET subscription_tier = 'premium' WHERE id = $1`, [schoolId]);
+    cache.del(schoolCacheKey(schoolId, 'data'));
   });
 
   it('returns settlement_status pending with no config saved yet', async () => {

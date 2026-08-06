@@ -10,11 +10,19 @@ import jwt from 'jsonwebtoken';
 import pool from '../src/db/client';
 import feesRouter from '../src/routes/fees';
 import { verifyToken } from '../src/middleware/auth';
+import { requireActiveSchool } from '../src/middleware/requireActiveSchool';
 import { errorHandler } from '../src/middleware/errorHandler';
+import { cache, schoolCacheKey } from '../src/services/cacheService';
 
 const app = express();
 app.use(express.json());
 app.use('/api/schools', verifyToken);
+// requireFeature (inserted into the Paystack-initiate chain) reads
+// res.locals.school.subscription_tier, which only requireActiveSchool
+// populates — mount it here too, matching production's app-level wiring
+// (apps/api/src/index.ts), so the plan-gating test below exercises the same
+// path a real request takes.
+app.use('/api/schools', requireActiveSchool);
 app.use('/api/schools', feesRouter);
 app.use(errorHandler);
 
@@ -133,5 +141,24 @@ describe('Fee payment initiate — payout gate', () => {
         body: expect.stringContaining('"subaccount":"ACCT_test123"'),
       })
     );
+  });
+
+  it('returns 403 FEATURE_NOT_IN_PLAN when the school is on basic, even with an active payout config', async () => {
+    await pool.query(`UPDATE schools SET subscription_tier = 'basic' WHERE id = $1`, [schoolId]);
+    // requireActiveSchool caches the school row for 5 minutes; the earlier
+    // requests in this suite already primed that cache, so bust it or the
+    // stale (pre-update) row would make requireFeature fail open.
+    cache.del(schoolCacheKey(schoolId, 'data'));
+
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/payments/paystack/initiate`)
+      .set('Authorization', `Bearer ${parentToken}`)
+      .send({ invoice_id: invoiceId });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FEATURE_NOT_IN_PLAN');
+
+    await pool.query(`UPDATE schools SET subscription_tier = 'premium' WHERE id = $1`, [schoolId]);
+    cache.del(schoolCacheKey(schoolId, 'data'));
   });
 });

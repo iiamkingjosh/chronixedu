@@ -3,6 +3,7 @@ import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { z } from 'zod';
 import { verifyToken, requireRole, type SupportSessionContext } from '../middleware/auth';
+import { requireFeature } from '../middleware/requireFeature';
 import {
   insertSchool,
   insertSchoolSettings,
@@ -694,6 +695,7 @@ router.get(
   '/:schoolId/settings/payout',
   verifyToken,
   requirePayoutAccess,
+  requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const config = await getSchoolPayoutConfig(req.params.schoolId);
@@ -722,6 +724,7 @@ router.get(
   '/:schoolId/settings/payout/banks',
   verifyToken,
   requirePayoutAccess,
+  requireFeature('online_payments'),
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const banks = await listBanks();
@@ -738,6 +741,7 @@ router.post(
   '/:schoolId/settings/payout/resolve',
   verifyToken,
   requirePayoutAccess,
+  requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = resolvePayoutBankSchema.safeParse(req.body);
@@ -761,6 +765,7 @@ router.put(
   '/:schoolId/settings/payout',
   verifyToken,
   requirePayoutAccess,
+  requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = savePayoutSchema.safeParse(req.body);

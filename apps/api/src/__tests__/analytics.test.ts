@@ -29,8 +29,25 @@ function makeToken(role: string, schoolId?: string) {
   );
 }
 
+// This suite never runs requireActiveSchool (it mocks db/client wholesale and
+// hits the router directly), so res.locals.school — which requireFeature
+// reads — is never populated by production wiring. Mirror that same
+// mocked-request style: a header-driven test-only middleware lets the one
+// plan-gating test below populate res.locals.school without dragging in a
+// real DB-backed school fixture; every other test leaves the header unset,
+// so res.locals.school stays undefined and requireFeature's fail-open-on-
+// missing-tier behavior keeps their expectations unchanged.
+function injectTestSchool(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const tier = req.header('x-test-subscription-tier');
+  if (tier) {
+    res.locals.school = { subscription_tier: tier };
+  }
+  next();
+}
+
 const app = express();
 app.use(express.json());
+app.use('/api/schools', injectTestSchool);
 app.use('/api/schools', analyticsRouter);
 app.use(errorHandler);
 
@@ -141,6 +158,17 @@ describe('GET /api/schools/:schoolId/analytics/overview', () => {
       .set('Authorization', `Bearer ${makeToken('teacher', SCHOOL_ID)}`);
 
     expect(res.status).toBe(403);
+  });
+
+  it('returns 403 FEATURE_NOT_IN_PLAN for a basic-tier school', async () => {
+    const res = await request(app)
+      .get(`/api/schools/${SCHOOL_ID}/analytics/overview?term_id=${TERM_ID}`)
+      .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`)
+      .set('x-test-subscription-tier', 'basic');
+
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('FEATURE_NOT_IN_PLAN');
+    expect(mockAnalytics.getLatestSnapshot).not.toHaveBeenCalled();
   });
 
   it('allows super_admin to access any school', async () => {
