@@ -8,6 +8,7 @@ import { sendEmail } from './emailService';
 import { sendTermiiSms } from './termiiService';
 import { logger } from '../config/logger';
 import { registerCron, markCronRun } from './cronTracker';
+import { schoolAllowsFeature } from './planFeatures';
 
 const CRON_NAME = 'weekly-fee-reminders';
 
@@ -45,7 +46,7 @@ export async function sendFeeRemindersForSchool(schoolId: string, termId: string
 
       await sendEmail(parent.email, title, body);
 
-      if (parent.phone) {
+      if (parent.phone && (await schoolAllowsFeature(schoolId, 'sms'))) {
         if (await hasReachedSmsLimit(parent.parent_id)) {
           await insertNotificationLog({ school_id: schoolId, user_id: parent.parent_id, channel: 'sms', type: REMINDER_TYPE, status: 'throttled' });
         } else {

@@ -118,4 +118,29 @@ describe('processNotificationQueue — SMS delivery', () => {
     expect(mockSendTermiiSms).not.toHaveBeenCalled();
     expect(mockInsertLog).not.toHaveBeenCalled();
   });
+
+  it('skips SMS but still creates the notification and sends email when the school is on basic', async () => {
+    mockQuery.mockImplementation((sql: string) => {
+      if (sql.includes('FROM audit_logs') && sql.includes('SELECT id')) {
+        return Promise.resolve({ rows: [AUDIT_ROW] });
+      }
+      if (sql.includes('FROM parent_students')) {
+        return Promise.resolve({ rows: [{ parent_id: PARENT_ID, email: 'p@test.com', phone: '+2348011111111' }] });
+      }
+      if (sql.includes('FROM schools')) {
+        return Promise.resolve({ rows: [{ subscription_tier: 'basic' }] });
+      }
+      if (sql.includes('UPDATE audit_logs')) {
+        return Promise.resolve({ rows: [] });
+      }
+      return Promise.resolve({ rows: [] });
+    });
+
+    await processNotificationQueue();
+
+    expect(mockCreateNotification).toHaveBeenCalled();
+    expect(mockSendEmail).toHaveBeenCalled();
+    expect(mockSendTermiiSms).not.toHaveBeenCalled();
+    expect(mockInsertLog).not.toHaveBeenCalled();
+  });
 });
