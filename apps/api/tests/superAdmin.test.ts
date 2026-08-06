@@ -246,14 +246,14 @@ describe('superAdmin — platform school management', () => {
 
     // ── PATCH /subscriptions/:id ──────────────────────────────────────────
 
-    it("PATCH /subscriptions/:id — update plan to 'professional' → 200, plan updated", async () => {
+    it("PATCH /subscriptions/:id — update plan to 'premium' → 200, plan updated", async () => {
       const res = await request(app)
         .patch(`/api/super-admin/subscriptions/${subscriptionId}`)
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ plan: 'professional' });
+        .send({ plan: 'premium' });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.plan).toBe('professional');
+      expect(res.body.data.plan).toBe('premium');
     });
 
     // ── POST /subscriptions/:id/extend-trial ──────────────────────────────
@@ -616,7 +616,7 @@ describe('superAdmin — platform school management', () => {
           title: 'Scheduled Maintenance',
           body: 'The platform will be undergoing scheduled maintenance this weekend.',
           type: 'maintenance',
-          target_plans: ['basic', 'professional'],
+          target_plans: ['basic', 'premium'],
         });
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);

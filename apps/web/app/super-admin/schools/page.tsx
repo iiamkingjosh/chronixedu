@@ -275,10 +275,10 @@ export default function SuperAdminSchoolsPage() {
           className={`${inputClass} sm:max-w-[160px]`}
         >
           <option value="">All Plans</option>
-          <option value="basic">Basic</option>
-          <option value="professional">Professional</option>
-          <option value="enterprise">Enterprise</option>
           <option value="trial">Trial</option>
+          <option value="basic">Basic</option>
+          <option value="premium">Premium</option>
+          <option value="enterprise">Enterprise</option>
         </select>
       </div>
 

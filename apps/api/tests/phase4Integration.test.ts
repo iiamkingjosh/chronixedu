@@ -342,7 +342,7 @@ describe('Phase 4 Integration', () => {
           title: 'Phase4 Integration Announcement',
           body: 'This announcement is part of the Phase 4 integration test suite.',
           type: 'info',
-          target_plans: ['basic', 'professional', 'enterprise', 'trial'],
+          target_plans: ['trial', 'basic', 'premium', 'enterprise'],
         });
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
