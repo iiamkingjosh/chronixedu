@@ -5,6 +5,13 @@ export function isAdminRole(role: string): boolean {
   return (ADMIN_ROLES as readonly string[]).includes(role);
 }
 
+/** Roles that can access the payout settings page specifically (narrower than full settings access). */
+export const PAYOUT_SETTINGS_ROLES = ['principal', 'bursar', 'super_admin'] as const;
+
+export function canAccessPayoutSettings(role: string): boolean {
+  return (PAYOUT_SETTINGS_ROLES as readonly string[]).includes(role);
+}
+
 /** Default landing path after login, by role. */
 export function getDefaultDashboardPath(role: string): string {
   switch (role) {
