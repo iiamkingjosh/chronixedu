@@ -15,17 +15,17 @@ import {
 import { useToast } from '@/components/Toast';
 
 const PLAN_LABELS: Record<SchoolPlan, string> = {
-  basic: 'Basic',
-  professional: 'Professional',
-  enterprise: 'Enterprise',
   trial: 'Trial',
+  basic: 'Basic',
+  premium: 'Premium',
+  enterprise: 'Enterprise',
 };
 
 const PLAN_BADGE_CLASSES: Record<SchoolPlan, string> = {
-  basic: 'bg-gray-100 text-gray-600 border-gray-200',
-  professional: 'bg-blue-50 text-blue-700 border-blue-200',
-  enterprise: 'bg-purple-50 text-purple-700 border-purple-200',
   trial: 'bg-[#FF761B]/10 text-[#FF761B] border-[#FF761B]/30',
+  basic: 'bg-gray-100 text-gray-600 border-gray-200',
+  premium: 'bg-blue-50 text-blue-700 border-blue-200',
+  enterprise: 'bg-purple-50 text-purple-700 border-purple-200',
 };
 
 const LIMIT = 25;

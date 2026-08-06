@@ -40,13 +40,13 @@ const TYPE_BADGE: Record<AnnouncementType, string> = {
 };
 
 const PLAN_LABELS: Record<SchoolPlan, string> = {
-  basic: 'Basic',
-  professional: 'Professional',
-  enterprise: 'Enterprise',
   trial: 'Trial',
+  basic: 'Basic',
+  premium: 'Premium',
+  enterprise: 'Enterprise',
 };
 
-const ALL_PLANS: SchoolPlan[] = ['basic', 'professional', 'enterprise', 'trial'];
+const ALL_PLANS: SchoolPlan[] = ['trial', 'basic', 'premium', 'enterprise'];
 
 function formatDateTime(value: string | null): string {
   if (!value) return '—';
@@ -92,7 +92,7 @@ const announcementSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters'),
   body: z.string().min(10, 'Body must be at least 10 characters'),
   type: z.enum(['info', 'warning', 'critical', 'maintenance']),
-  target_plans: z.array(z.enum(['basic', 'professional', 'enterprise', 'trial'])).min(1, 'Select at least one plan'),
+  target_plans: z.array(z.enum(['trial', 'basic', 'premium', 'enterprise'])).min(1, 'Select at least one plan'),
   scheduled_at: z.string().optional(),
   expires_at: z.string().optional(),
 });

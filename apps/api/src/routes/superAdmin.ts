@@ -63,7 +63,7 @@ const listSchoolsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   search: z.string().optional(),
   status: z.enum(['active', 'inactive']).optional(),
-  plan: z.enum(['basic', 'professional', 'enterprise', 'trial']).optional(),
+  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']).optional(),
 });
 
 const schoolActionSchema = z.object({
@@ -86,7 +86,7 @@ const listSubscriptionsQuerySchema = z.object({
 const createSubscriptionSchema = z
   .object({
     school_id: z.string().uuid(),
-    plan: z.enum(['basic', 'professional', 'enterprise', 'trial']),
+    plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
     billing_cycle: z.enum(['monthly', 'annual']),
     amount_naira: z.number().positive(),
     trial_ends_at: z.string().optional(),
@@ -103,7 +103,7 @@ const createSubscriptionSchema = z
 
 const updateSubscriptionSchema = z
   .object({
-    plan: z.enum(['basic', 'professional', 'enterprise', 'trial']).optional(),
+    plan: z.enum(['trial', 'basic', 'premium', 'enterprise']).optional(),
     subscription_status: z.enum(['active', 'suspended', 'cancelled', 'trial']).optional(),
     billing_cycle: z.enum(['monthly', 'annual']).optional(),
     amount_naira: z.number().positive().optional(),
@@ -208,7 +208,7 @@ const ONBOARDING_TOTAL_STEPS = 6;
 // ── Announcement schemas ─────────────────────────────────────────────────────
 
 const announcementTypeEnum = z.enum(['info', 'warning', 'critical', 'maintenance']);
-const announcementPlanEnum = z.enum(['basic', 'professional', 'enterprise', 'trial']);
+const announcementPlanEnum = z.enum(['trial', 'basic', 'premium', 'enterprise']);
 
 function validateAnnouncementDates(data: { scheduled_at?: string; expires_at?: string }, ctx: z.RefinementCtx): void {
   if (data.scheduled_at !== undefined) {
@@ -904,7 +904,7 @@ router.get(
          GROUP BY plan, billing_cycle`
       );
 
-      const PLANS = ['basic', 'professional', 'enterprise'] as const;
+      const PLANS = ['basic', 'premium', 'enterprise'] as const;
       const byPlan = new Map<string, { mrr: number; count: number }>(PLANS.map(plan => [plan, { mrr: 0, count: 0 }]));
 
       for (const row of result.rows) {
