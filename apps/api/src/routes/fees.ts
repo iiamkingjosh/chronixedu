@@ -6,6 +6,7 @@ import { logAudit } from '../db/queries/auditLog';
 import { isParentLinkedToStudent } from '../db/queries/parents';
 import { findStudentByUserId } from '../db/queries/students';
 import { getActiveTerm } from '../db/queries/roster';
+import { getSchoolPayoutConfig } from '../db/queries/schools';
 import { sendFeeRemindersForSchool } from '../services/feeReminderService';
 import {
   insertFeeStructure,
@@ -489,6 +490,11 @@ router.post(
         return res.status(503).json({ success: false, error: { code: 'PAYSTACK_NOT_CONFIGURED', message: 'Paystack is not configured for this server' } });
       }
 
+      const payoutConfig = await getSchoolPayoutConfig(schoolId);
+      if (payoutConfig?.settlement_status !== 'active') {
+        return res.status(503).json({ success: false, error: { code: 'PAYOUT_NOT_CONFIGURED', message: "Online payment isn't set up yet for this school — please contact the school office." } });
+      }
+
       const reference = crypto.randomUUID();
       const initialization = await initializePaystackTransaction({
         email: req.user!.email!,
@@ -496,6 +502,8 @@ router.post(
         reference,
         callbackUrl: `${getApiBaseUrl()}/api/schools/${schoolId}/payments/paystack/callback`,
         metadata: { school_id: schoolId, invoice_id, recorded_by: req.user!.user_id },
+        subaccountCode: payoutConfig.paystack_subaccount_code,
+        bearer: 'subaccount',
       });
 
       if (!initialization) {
