@@ -7,6 +7,7 @@ import { errorHandler } from '../middleware/errorHandler';
 process.env.JWT_SECRET = 'test-secret';
 (process.env as Record<string, string>).NODE_ENV = 'development';
 process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test';
+process.env.SEED_SECRET = 'test-seed-secret';
 
 const mockSignIn = jest.fn();
 const mockAdminCreateUser = jest.fn();
@@ -245,7 +246,10 @@ describe('POST /api/auth/create-user', () => {
 
 describe('POST /api/auth/seed-test-user', () => {
   it('returns a 400 envelope for missing required fields', async () => {
-    const res = await request(app).post('/api/auth/seed-test-user').send({ email: 'a@b.com' });
+    const res = await request(app)
+      .post('/api/auth/seed-test-user')
+      .set('x-seed-secret', 'test-seed-secret')
+      .send({ email: 'a@b.com' });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({
       success: false,
@@ -261,13 +265,16 @@ describe('POST /api/auth/seed-test-user', () => {
     mockAdminCreateUser.mockResolvedValueOnce({ data: { user: { id: 'seeded-uuid-1' } }, error: null });
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
-    const res = await request(app).post('/api/auth/seed-test-user').send({
-      email: 'seed@test.com',
-      password: 'password123',
-      role: 'teacher',
-      first_name: 'Seed',
-      last_name: 'User',
-    });
+    const res = await request(app)
+      .post('/api/auth/seed-test-user')
+      .set('x-seed-secret', 'test-seed-secret')
+      .send({
+        email: 'seed@test.com',
+        password: 'password123',
+        role: 'teacher',
+        first_name: 'Seed',
+        last_name: 'User',
+      });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({

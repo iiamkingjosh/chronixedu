@@ -234,7 +234,7 @@ router.post('/login', async (req, res, next) => {
   }
 });
 
-if (process.env.NODE_ENV === 'development') {
+if (process.env.NODE_ENV !== 'production') {
   router.post('/seed-test-user', async (req, res) => {
     if (req.headers['x-seed-secret'] !== process.env.SEED_SECRET) {
       return res.status(404).json({ success: false });
