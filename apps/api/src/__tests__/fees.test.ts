@@ -930,6 +930,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
 
   it('records the payment on charge.success and logs audit', async () => {
     mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amount: PAYMENT_AMOUNT, currency: 'NGN' });
     mockFees.recordPayment.mockResolvedValueOnce(PAYMENT_RESULT as never);
 
     const res = await request(app)
@@ -966,6 +967,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
 
   it('returns processed:false (duplicate) for an already-recorded paystack reference', async () => {
     mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amount: PAYMENT_AMOUNT, currency: 'NGN' });
     const dbError = new Error('duplicate key value violates unique constraint "payments_paystack_reference_key"') as Error & { code: string };
     dbError.code = '23505';
     mockFees.recordPayment.mockRejectedValueOnce(dbError);
