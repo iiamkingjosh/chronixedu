@@ -41,10 +41,10 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const PLAN_LABELS: Record<SchoolPlan, string> = {
-  basic: 'Basic',
-  professional: 'Professional',
-  enterprise: 'Enterprise',
   trial: 'Trial',
+  basic: 'Basic',
+  premium: 'Premium',
+  enterprise: 'Enterprise',
 };
 
 const SUB_STATUS_BADGE: Record<SubscriptionStatus, string> = {
@@ -156,7 +156,7 @@ const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm f
 // ── Create Subscription Modal ───────────────────────────────────────────────────
 
 const createSubSchema = z.object({
-  plan: z.enum(['basic', 'professional', 'enterprise', 'trial']),
+  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
   billing_cycle: z.enum(['monthly', 'annual']),
   amount_naira: z.coerce.number().min(0, 'Amount must be 0 or greater'),
   trial_ends_at: z.string().optional(),
@@ -237,7 +237,7 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
 // ── Change Plan Modal ────────────────────────────────────────────────────────
 
 const changePlanSchema = z.object({
-  plan: z.enum(['basic', 'professional', 'enterprise', 'trial']),
+  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
 });
 
 type ChangePlanForm = z.infer<typeof changePlanSchema>;

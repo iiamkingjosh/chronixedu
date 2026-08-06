@@ -7,7 +7,7 @@ interface ApiResponse<T> {
 
 // ── Shared enums ──────────────────────────────────────────────────────────────
 
-export type SchoolPlan = 'basic' | 'professional' | 'enterprise' | 'trial';
+export type SchoolPlan = 'trial' | 'basic' | 'premium' | 'enterprise';
 export type SubscriptionStatus = 'active' | 'suspended' | 'cancelled' | 'trial';
 export type BillingCycle = 'monthly' | 'annual';
 export type AnnouncementType = 'info' | 'warning' | 'critical' | 'maintenance';
