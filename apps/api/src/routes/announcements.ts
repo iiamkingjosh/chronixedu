@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
@@ -16,7 +16,7 @@ const BATCH_SIZE = 50;
 const announcementLimiter = rateLimit({
   windowMs: 60 * 60_000,
   max: 5,
-  keyGenerator: (req: Request) => `ann:${req.user?.user_id ?? req.ip}`,
+  keyGenerator: (req: Request) => (req.user?.user_id ? `ann:${req.user.user_id}` : `ann:${ipKeyGenerator(req.ip ?? '')}`),
   store: redis
     ? new RedisStore({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

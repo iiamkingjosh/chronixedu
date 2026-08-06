@@ -24,7 +24,7 @@ export function middleware(request: NextRequest) {
   // 'unsafe-inline', so the nonce remains the effective gate in modern browsers.
   const csp = [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://js.paystack.co`,
+    `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://js.paystack.co${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
