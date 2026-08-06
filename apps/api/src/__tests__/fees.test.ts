@@ -453,6 +453,18 @@ describe('POST /api/schools/:schoolId/payments', () => {
     expect(mockNotifier.notifyPaymentReceipt).toHaveBeenCalledWith(SCHOOL_ID, 'pay-1', STUDENT_ID);
   });
 
+  it('returns 400 AMOUNT_EXCEEDS_BALANCE when the amount would overpay the invoice', async () => {
+    mockFees.recordPayment.mockRejectedValueOnce(new feesQueries.OverpaymentError());
+
+    const res = await request(app)
+      .post(`/api/schools/${SCHOOL_ID}/payments`)
+      .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
+      .send({ invoice_id: INVOICE_ID, amount: 999999, method: 'cash' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('AMOUNT_EXCEEDS_BALANCE');
+  });
+
   it('returns 404 when the invoice does not exist', async () => {
     mockFees.recordPayment.mockResolvedValueOnce(null);
 

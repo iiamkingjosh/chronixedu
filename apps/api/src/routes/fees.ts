@@ -20,6 +20,7 @@ import {
   recordPayment,
   getPaymentById,
   DuplicatePaymentError,
+  OverpaymentError,
 } from '../db/queries/fees';
 import { generateReceipt } from '../services/receiptService';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
@@ -393,6 +394,9 @@ router.post(
     } catch (err) {
       if (err instanceof DuplicatePaymentError) {
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_PAYMENT', message: 'A duplicate payment for this invoice was already recorded within the last 5 minutes' } });
+      }
+      if (err instanceof OverpaymentError) {
+        return res.status(400).json({ success: false, error: { code: 'AMOUNT_EXCEEDS_BALANCE', message: err.message } });
       }
       if ((err as { code?: string }).code === '23505') {
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_PAYSTACK_REFERENCE', message: 'This Paystack transaction has already been recorded' } });
