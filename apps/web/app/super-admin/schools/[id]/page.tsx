@@ -169,10 +169,18 @@ const createSubSchema = z.object({
 type CreateSubFormInput = z.input<typeof createSubSchema>;
 type CreateSubFormOutput = z.output<typeof createSubSchema>;
 
+const DEFAULT_TRIAL_LENGTH_DAYS = 30;
+
+function defaultTrialEndsAt(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + DEFAULT_TRIAL_LENGTH_DAYS);
+  return d.toISOString().slice(0, 10);
+}
+
 function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: string; onClose: () => void; onDone: () => void }) {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<CreateSubFormInput, unknown, CreateSubFormOutput>({
     resolver: zodResolver(createSubSchema),
-    defaultValues: { plan: 'basic', billing_cycle: 'monthly', amount_naira: 0 },
+    defaultValues: { plan: 'basic', billing_cycle: 'monthly', amount_naira: 0, trial_ends_at: defaultTrialEndsAt() },
   });
   const [apiError, setApiError] = useState('');
   const plan = watch('plan');
