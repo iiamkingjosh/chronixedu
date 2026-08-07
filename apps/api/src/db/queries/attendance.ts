@@ -65,6 +65,25 @@ export async function getClassRoster(classId: string, schoolId: string): Promise
   return result.rows;
 }
 
+// ── Teacher assignment check (mirrors scores.ts/assignments.ts/teacherDashboard.ts) ─
+// Attendance isn't subject-scoped, so this checks for ANY teacher_assignments row
+// tying the teacher to the class in the given term (not a specific subject).
+
+export async function isTeacherAssignedToClass(
+  teacherId: string,
+  classId: string,
+  schoolId: string,
+  termId: string
+): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT id FROM teacher_assignments
+     WHERE teacher_id = $1 AND class_id = $2 AND school_id = $3 AND term_id = $4
+     LIMIT 1`,
+    [teacherId, classId, schoolId, termId]
+  );
+  return result.rows.length > 0;
+}
+
 // ── Mark attendance (bulk upsert — same-day correction allowed) ───────────────
 
 export interface BulkAttendanceEntry {

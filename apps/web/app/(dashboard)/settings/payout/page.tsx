@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
-import { canAccessPayoutSettings, getDefaultDashboardPath } from '@/lib/auth';
+import { canAccessPayoutSettings, isAdminRole, getDefaultDashboardPath } from '@/lib/auth';
 import { apiFetch } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -48,6 +48,7 @@ export default function PayoutSettingsPage() {
   const { user, loading: authLoading, schoolId } = useAuth();
   const router = useRouter();
   const allowed = !!user && canAccessPayoutSettings(user.role);
+  const canEdit = !!user && isAdminRole(user.role);
   const { toast, show } = useToast();
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<PayoutStatus | null>(null);
@@ -57,6 +58,8 @@ export default function PayoutSettingsPage() {
   const [resolveError, setResolveError] = useState('');
   const [saving, setSaving] = useState(false);
   const [changingAccount, setChangingAccount] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
 
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -113,16 +116,22 @@ export default function PayoutSettingsPage() {
 
   async function handleConfirm() {
     if (!schoolId || !resolvedName) return;
+    if (!currentPassword) {
+      setPasswordError('Enter your password to confirm this change');
+      return;
+    }
+    setPasswordError('');
     const values = watch();
     setSaving(true);
     try {
       await apiFetch(`/api/schools/${schoolId}/settings/payout`, {
         method: 'PUT',
-        body: JSON.stringify({ ...values, account_name: resolvedName }),
+        body: JSON.stringify({ ...values, account_name: resolvedName, current_password: currentPassword }),
       });
       show('Payout account saved');
       setResolvedName(null);
       setChangingAccount(false);
+      setCurrentPassword('');
       reset();
       loadStatus();
     } catch (err) {
@@ -136,7 +145,8 @@ export default function PayoutSettingsPage() {
     return <div className="max-w-xl mx-auto p-4"><p className="text-sm text-gray-500">Loading…</p></div>;
   }
 
-  const showForm = !status || status.settlement_status !== 'active' || changingAccount;
+  const showForm = canEdit && (!status || status.settlement_status !== 'active' || changingAccount);
+  const needsSetupButCannotEdit = !canEdit && (!status || status.settlement_status !== 'active');
 
   return (
     <div className="max-w-xl mx-auto p-4 space-y-4">
@@ -155,19 +165,29 @@ export default function PayoutSettingsPage() {
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-3">
           <p className="text-sm text-green-700 font-medium">Payout is active.</p>
           <p className="text-sm text-gray-700">{status.account_name} — {status.account_number}</p>
-          <button
-            type="button"
-            onClick={() => setChangingAccount(true)}
-            className="text-sm font-medium text-[#2472B4] hover:underline"
-          >
-            Change bank account
-          </button>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => setChangingAccount(true)}
+              className="text-sm font-medium text-[#2472B4] hover:underline"
+            >
+              Change bank account
+            </button>
+          ) : (
+            <p className="text-xs text-gray-500">Only a principal or super admin can change the payout account.</p>
+          )}
         </div>
       )}
 
-      {status?.settlement_status === 'failed' && (
+      {status?.settlement_status === 'failed' && canEdit && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
           Last attempt failed: {status.failure_reason ?? 'Unknown error'}. Try again below.
+        </div>
+      )}
+
+      {needsSetupButCannotEdit && (
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+          <p className="text-sm text-gray-700">Payout isn&apos;t set up for this school yet. Ask a principal or super admin to add the school&apos;s bank account here.</p>
         </div>
       )}
 
@@ -211,6 +231,21 @@ export default function PayoutSettingsPage() {
             <div className="space-y-4">
               <p className="text-sm text-gray-700">Is this your school&apos;s account?</p>
               <p className="text-lg font-semibold text-gray-900">{resolvedName}</p>
+              <div>
+                <label htmlFor="current_password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Confirm your password to save this change
+                </label>
+                <input
+                  id="current_password"
+                  type="password"
+                  value={currentPassword}
+                  onChange={e => { setCurrentPassword(e.target.value); setPasswordError(''); }}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2472B4]"
+                  placeholder="Your account password"
+                  autoComplete="current-password"
+                />
+                {passwordError && <p className="mt-1 text-xs text-red-600">{passwordError}</p>}
+              </div>
               <div className="flex gap-3">
                 <button
                   type="button"
@@ -222,7 +257,7 @@ export default function PayoutSettingsPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setResolvedName(null)}
+                  onClick={() => { setResolvedName(null); setCurrentPassword(''); setPasswordError(''); }}
                   className="flex-1 rounded-lg border border-gray-300 text-gray-700 font-medium py-2.5 text-sm hover:bg-gray-50"
                 >
                   Cancel

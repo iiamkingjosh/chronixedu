@@ -52,11 +52,16 @@ export default async function globalSetup(): Promise<void> {
     );
 
     // 4. Class (needed as FK for attendance, assignments, student enrollment, etc.)
+    //    form_teacher_id = TEACHER_ID so the shared TEACHER_ID fixture is authorized
+    //    to mark attendance for CLASS_ID (attendance/mark requires the caller be the
+    //    class's form teacher or hold a teacher_assignments row for it).
+    //    ON CONFLICT DO UPDATE (not DO NOTHING) so this stays correct even if the row
+    //    already existed from a previous test run with form_teacher_id still null.
     await client.query(
       `INSERT INTO classes (id, school_id, name, level, stream, form_teacher_id)
-       VALUES ($1, $2, 'JSS 1A', 'Junior', null, null)
-       ON CONFLICT DO NOTHING`,
-      [CLASS_ID, SCHOOL_ID]
+       VALUES ($1, $2, 'JSS 1A', 'Junior', null, $3)
+       ON CONFLICT (id) DO UPDATE SET form_teacher_id = EXCLUDED.form_teacher_id`,
+      [CLASS_ID, SCHOOL_ID, TEACHER_ID]
     );
 
     // 5. Academic session (required by student_classes FK + active-term lookup)

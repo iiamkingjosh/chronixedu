@@ -121,15 +121,52 @@ export async function upsertReportCard(
   schoolId: string,
   pdfUrl: string
 ): Promise<string> {
+  // On first insert, a report card inherits is_published from the student's
+  // current result_status — this covers the case where generation happens
+  // *after* the term has already been published (generation and publish are
+  // decoupled workflow steps). On conflict (regeneration of an existing
+  // report card), is_published is left untouched: publishing is handled
+  // explicitly by publishReportCards() below, and re-generating a PDF should
+  // never silently unpublish (or publish) an existing report card.
   const result = await pool.query<{ id: string }>(
-    `INSERT INTO report_cards (student_id, term_id, school_id, pdf_url, generated_at)
-     VALUES ($1, $2, $3, $4, NOW())
+    `INSERT INTO report_cards (student_id, term_id, school_id, pdf_url, generated_at, is_published)
+     VALUES (
+       $1, $2, $3, $4, NOW(),
+       COALESCE(
+         (SELECT status = 'published' FROM result_status
+          WHERE student_id = $1 AND term_id = $2 AND school_id = $3),
+         FALSE
+       )
+     )
      ON CONFLICT (student_id, term_id)
      DO UPDATE SET pdf_url = EXCLUDED.pdf_url, generated_at = NOW()
      RETURNING id`,
     [studentId, termId, schoolId, pdfUrl]
   );
   return result.rows[0].id;
+}
+
+/**
+ * Marks the report_cards rows for the given students/term as published.
+ * Called when results are published (see routes/results.ts, the
+ * '/:schoolId/results/publish' handler) so that the parent- and
+ * student-facing routes — which gate on report_cards.is_published = TRUE —
+ * actually start returning data. A no-op for students whose report card
+ * hasn't been generated yet (there is no row to update); once it is
+ * generated, upsertReportCard() above picks up the published status itself.
+ */
+export async function publishReportCards(
+  schoolId: string,
+  termId: string,
+  studentIds: string[]
+): Promise<void> {
+  if (studentIds.length === 0) return;
+  await pool.query(
+    `UPDATE report_cards
+     SET is_published = TRUE
+     WHERE school_id = $1 AND term_id = $2 AND student_id = ANY($3::uuid[])`,
+    [schoolId, termId, studentIds]
+  );
 }
 
 export async function getReportCardsForClass(

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { toCsvCell } from '@/lib/csv';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -63,18 +64,18 @@ function percentageBarColor(pct: number): string {
 
 function downloadCsv(filename: string, rows: MonthlySummaryRow[]): void {
   const header = ['Admission No.', 'Name', 'Present', 'Absent', 'Late', 'Excused', 'Total', 'Percentage'];
-  const lines = [header.join(',')];
+  const lines = [header.map(toCsvCell).join(',')];
   for (const row of rows) {
     lines.push([
       row.admission_no,
-      `"${row.first_name} ${row.last_name}"`,
+      `${row.first_name} ${row.last_name}`,
       row.present,
       row.absent,
       row.late,
       row.excused,
       row.total,
       row.percentage,
-    ].join(','));
+    ].map(toCsvCell).join(','));
   }
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

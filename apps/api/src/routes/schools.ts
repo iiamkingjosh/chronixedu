@@ -23,7 +23,7 @@ import { findPrincipalsBySchool } from '../db/queries/users';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
 import { NIGERIAN_DEFAULTS, slugify, validateGradeBands } from '../services/schoolService';
 import { cache, schoolCacheKey } from '../services/cacheService';
-import { supabaseAdmin } from '../supabaseClient';
+import { supabase, supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { generateReportCardPreview } from '../services/reportCardService';
 import { listBanks, resolveBankAccount, createPaystackSubaccount } from '../services/paystackService';
@@ -61,6 +61,11 @@ const savePayoutSchema = z.object({
   bank_code: z.string().min(1, 'Bank is required'),
   account_number: z.string().regex(/^\d{10}$/, 'Account number must be 10 digits'),
   account_name: z.string().min(1, 'Account name is required'),
+  // Step-up confirmation: redirecting where a school's fee settlement lands is
+  // high-stakes enough that role membership (principal/super_admin) alone isn't
+  // sufficient — the caller must re-prove they are who their session claims by
+  // re-entering their own password, verified the same way login does.
+  current_password: z.string().min(1, 'Your current password is required to confirm this change'),
 });
 
 const gradeBandSchema = z.object({
@@ -760,11 +765,15 @@ router.post(
 );
 
 // ── PUT /api/schools/:schoolId/settings/payout ─────────────────────────────────
+// Redirecting where a school's fee settlement lands is high-stakes enough that
+// it's restricted to principal/super_admin (not bursar — bursar keeps read and
+// resolve access above) and gated behind a step-up re-authentication, on top of
+// the normal role check.
 
 router.put(
   '/:schoolId/settings/payout',
   verifyToken,
-  requirePayoutAccess,
+  requireSchoolAccess,
   requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -772,8 +781,27 @@ router.put(
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
-      const { bank_code, account_number, account_name } = parsed.data;
+      const { bank_code, account_number, account_name, current_password } = parsed.data;
       const schoolId = req.params.schoolId;
+
+      // Step-up confirmation: prove the caller knows their own password before
+      // this write can proceed, the same way login authenticates them. This is
+      // deliberately checked against the caller's real identity (req.user.email)
+      // rather than anything client-supplied, so a support-session token (which
+      // carries the impersonated school user's identity, not the real operator's)
+      // can never satisfy it — impersonation must never be enough to redirect a
+      // school's money.
+      const callerEmail = req.user!.email;
+      if (!callerEmail) {
+        return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
+      }
+      const { error: stepUpError } = await supabase.auth.signInWithPassword({ email: callerEmail, password: current_password });
+      if (stepUpError) {
+        return res.status(401).json({
+          success: false,
+          error: { code: 'STEP_UP_FAILED', message: 'Current password is incorrect. Re-enter your password to confirm this payout change.' },
+        });
+      }
 
       // Never trust the client-confirmed name alone — re-resolve server-side.
       const reResolved = await resolveBankAccount(bank_code, account_number);

@@ -3,7 +3,7 @@ import fs from 'fs';
 import Handlebars from 'handlebars';
 import { supabaseAdmin } from '../supabaseClient';
 import { findSchoolById } from '../db/queries/schools';
-import { getBrowser } from './reportCardService';
+import { getBrowser, REPORT_CARDS_BUCKET } from './reportCardService';
 import type { PaymentReceiptRow } from '../db/queries/fees';
 
 // ── Template compilation (lazy, once) ─────────────────────────────────────────
@@ -33,6 +33,11 @@ function formatMethod(method: string): string {
 
 // ── Core PDF generator ─────────────────────────────────────────────────────────
 
+/**
+ * Renders a payment receipt PDF and stores it. Returns the storage path (not a URL) —
+ * the object lives in a private bucket, so callers must mint a signed URL via
+ * `signReportCardAsset` at the point of serving it to a client.
+ */
 export async function generateReceipt(schoolId: string, payment: PaymentReceiptRow): Promise<string> {
   const school = await findSchoolById(schoolId);
   if (!school) throw new Error(`School not found: ${schoolId}`);
@@ -90,7 +95,7 @@ export async function generateReceipt(schoolId: string, payment: PaymentReceiptR
 
     const storagePath = `receipts/${schoolId}/${payment.id}.pdf`;
     const { error: uploadError } = await supabaseAdmin.storage
-      .from('report-cards')
+      .from(REPORT_CARDS_BUCKET)
       .upload(storagePath, Buffer.from(pdfBuffer), {
         contentType: 'application/pdf',
         upsert: true,
@@ -98,11 +103,7 @@ export async function generateReceipt(schoolId: string, payment: PaymentReceiptR
 
     if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
 
-    const { data: { publicUrl } } = supabaseAdmin.storage
-      .from('report-cards')
-      .getPublicUrl(storagePath);
-
-    return publicUrl;
+    return storagePath;
   } finally {
     await page.close();
   }

@@ -22,6 +22,7 @@ import {
 import { findClassById } from '../db/queries/roster';
 import { logAudit } from '../db/queries/auditLog';
 import { generateTranscript } from '../services/transcriptService';
+import { signReportCardAsset } from '../services/reportCardService';
 import { sendEmail } from '../services/emailService';
 import pool from '../db/client';
 
@@ -454,6 +455,11 @@ router.get(
         });
       }
 
+      // Staff (super_admin/principal/registrar) may review a report card before
+      // it is released — that's the point of a staff review step. Parents may
+      // only ever see a report card the school has explicitly published; this
+      // mirrors the gate in routes/parent.ts's report-card route.
+      const isParent = req.user!.role === 'parent';
       const result = await pool.query<{
         pdf_url: string | null;
         generated_at: string;
@@ -461,7 +467,7 @@ router.get(
       }>(
         `SELECT pdf_url, generated_at, is_published
          FROM report_cards
-         WHERE student_id = $1 AND term_id = $2 AND school_id = $3`,
+         WHERE student_id = $1 AND term_id = $2 AND school_id = $3${isParent ? ' AND is_published = TRUE' : ''}`,
         [studentId, termId, schoolId]
       );
 
@@ -472,7 +478,10 @@ router.get(
         });
       }
 
-      return res.json({ success: true, data: result.rows[0] });
+      const row = result.rows[0];
+      const pdfUrl = row.pdf_url ? await signReportCardAsset(row.pdf_url) : null;
+
+      return res.json({ success: true, data: { ...row, pdf_url: pdfUrl } });
     } catch (err) {
       return next(err);
     }
@@ -746,7 +755,12 @@ router.post(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
       }
 
-      const pdfUrl = await generateTranscript(studentId, schoolId);
+      const storagePath = await generateTranscript(studentId, schoolId);
+      const pdfUrl = await signReportCardAsset(storagePath);
+      if (!pdfUrl) {
+        return res.status(500).json({ success: false, error: { code: 'SIGNING_FAILED', message: 'Failed to generate a download link for the transcript.' } });
+      }
+
       return res.json({ success: true, data: { pdf_url: pdfUrl } });
     } catch (err) {
       return next(err);

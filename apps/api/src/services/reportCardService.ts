@@ -118,6 +118,45 @@ export async function closeReportCardBrowser(): Promise<void> {
   }
 }
 
+// ── Storage access (signed URLs) ────────────────────────────────────────────────
+// Report cards, transcripts, and receipts all live in the same private 'report-cards'
+// Supabase Storage bucket. Objects are addressed by storage path (never a public URL) —
+// a fresh, short-lived signed URL is minted at the point of serving to an authenticated
+// client, after the caller's role/ownership checks have already passed.
+
+export const REPORT_CARDS_BUCKET = 'report-cards';
+
+export const DEFAULT_SIGNED_URL_TTL_SECONDS = 15 * 60; // 15 minutes
+
+/**
+ * Extracts the bare storage object path from either a bare path (returned as-is) or a
+ * legacy Supabase public URL (e.g. rows persisted before this bucket was made private).
+ * Kept for backward compatibility with any already-stored public-URL values.
+ */
+export function extractStoragePath(pdfUrlOrPath: string, bucket: string = REPORT_CARDS_BUCKET): string {
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const idx = pdfUrlOrPath.indexOf(marker);
+  if (idx === -1) return pdfUrlOrPath;
+  return decodeURIComponent(pdfUrlOrPath.slice(idx + marker.length));
+}
+
+/**
+ * Mints a fresh, time-limited signed URL for an object in the report-cards bucket.
+ * Accepts either a bare storage path or a legacy full public URL. Returns null if the
+ * object cannot be signed (e.g. it no longer exists in storage).
+ */
+export async function signReportCardAsset(
+  pdfUrlOrPath: string,
+  ttlSeconds: number = DEFAULT_SIGNED_URL_TTL_SECONDS
+): Promise<string | null> {
+  const storagePath = extractStoragePath(pdfUrlOrPath);
+  const { data, error } = await supabaseAdmin.storage
+    .from(REPORT_CARDS_BUCKET)
+    .createSignedUrl(storagePath, ttlSeconds);
+  if (error || !data) return null;
+  return data.signedUrl;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 export function ordinal(n: number): string {
@@ -191,6 +230,11 @@ export function buildSubjectPositions(
 
 // ── Core PDF generator ─────────────────────────────────────────────────────────
 
+/**
+ * Renders and stores a student's report card PDF. Returns the storage path (not a URL) —
+ * the object lives in a private bucket, so callers must mint a signed URL via
+ * `signReportCardAsset` at the point of serving it to a client.
+ */
 export async function generateReportCard(
   studentId: string,
   termId: string,
@@ -362,7 +406,7 @@ export async function generateReportCard(
     // Upload to Supabase Storage: report-cards/{schoolId}/{termId}/{studentId}.pdf
     const storagePath = `${schoolId}/${termId}/${studentId}.pdf`;
     const { error: uploadError } = await supabaseAdmin.storage
-      .from('report-cards')
+      .from(REPORT_CARDS_BUCKET)
       .upload(storagePath, Buffer.from(pdfBuffer), {
         contentType: 'application/pdf',
         upsert:      true,
@@ -370,14 +414,11 @@ export async function generateReportCard(
 
     if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
 
-    const { data: { publicUrl } } = supabaseAdmin.storage
-      .from('report-cards')
-      .getPublicUrl(storagePath);
+    // Persist the storage path (not a public URL) — the bucket is private; a signed URL
+    // is minted on demand at the point of serving this to a client.
+    await upsertReportCard(studentId, termId, schoolId, storagePath);
 
-    // Persist record
-    await upsertReportCard(studentId, termId, schoolId, publicUrl);
-
-    return publicUrl;
+    return storagePath;
   } finally {
     await page.close();
   }

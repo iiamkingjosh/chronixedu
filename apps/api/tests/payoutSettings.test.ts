@@ -14,6 +14,22 @@ jest.mock('../src/services/emailService', () => ({
   sendEmail: jest.fn().mockResolvedValue(undefined),
 }));
 
+// The PUT route now step-up-verifies the caller's password via
+// supabase.auth.signInWithPassword (the exact mechanism login uses) before it
+// will touch payout config. Mock it the same way src/__tests__/auth.test.ts
+// does — default to "correct password", individual tests override to
+// simulate a wrong one. supabaseAdmin is unused by the payout routes under
+// test here, so it's left as an empty stub.
+const mockSignInWithPassword = jest.fn().mockResolvedValue({ data: {}, error: null });
+jest.mock('../src/supabaseClient', () => ({
+  supabase: {
+    auth: {
+      signInWithPassword: (...args: unknown[]) => mockSignInWithPassword(...args),
+    },
+  },
+  supabaseAdmin: {},
+}));
+
 import { randomUUID } from 'crypto';
 import request from 'supertest';
 import express from 'express';
@@ -55,11 +71,14 @@ describe('Payout settings', () => {
   let bursarToken: string;
   let teacherToken: string;
   let principalEmail: string;
+  let principalToken: string;
   // Second tenant — used to prove a bursar can't reach another school's payout routes.
   let otherSchoolId: string;
   let otherBursarToken: string;
+  let otherPrincipalToken: string;
   const principalPhone = '+2348012345678';
   const schoolEmail = 'school-office@test.com';
+  const CURRENT_PASSWORD = 'correct-horse-battery-staple';
 
   beforeAll(async () => {
     process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
@@ -99,6 +118,7 @@ describe('Payout settings', () => {
       [schoolId, `principal-${randomUUID()}@test.com`, principalPhone]
     );
     principalEmail = principalResult.rows[0].email;
+    principalToken = makeToken(principalResult.rows[0].id, 'principal', schoolId, principalEmail);
 
     // A completely separate school with its own bursar. Its token carries the
     // right ROLE but the wrong school_id — the exact cross-tenant case.
@@ -115,6 +135,19 @@ describe('Payout settings', () => {
       [otherSchoolId, `other-bursar-${randomUUID()}@test.com`]
     );
     otherBursarToken = makeToken(otherBursarResult.rows[0].id, 'bursar', otherSchoolId, otherBursarResult.rows[0].email);
+
+    const otherPrincipalResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Other', 'Principal', 'subject')
+       RETURNING id, email`,
+      [otherSchoolId, `other-principal-${randomUUID()}@test.com`]
+    );
+    otherPrincipalToken = makeToken(otherPrincipalResult.rows[0].id, 'principal', otherSchoolId, otherPrincipalResult.rows[0].email);
+  });
+
+  beforeEach(() => {
+    mockSignInWithPassword.mockClear();
+    mockSignInWithPassword.mockResolvedValue({ data: {}, error: null });
   });
 
   afterAll(async () => {
@@ -150,9 +183,27 @@ describe('Payout settings', () => {
     const putRes = await request(app)
       .put(`/api/schools/${schoolId}/settings/payout`)
       .set('Authorization', `Bearer ${otherBursarToken}`)
-      .send({ bank_code: '058', account_number: '0123456789', account_name: 'PAYOUT TEST SCHOOL' });
+      .send({ bank_code: '058', account_number: '0123456789', account_name: 'PAYOUT TEST SCHOOL', current_password: CURRENT_PASSWORD });
     expect(putRes.status).toBe(403);
     expect(putRes.body.success).toBe(false);
+  });
+
+  it('rejects a bursar from their OWN school with 403 on PUT — bursar can read/resolve but never redirect settlement themselves', async () => {
+    const putRes = await request(app)
+      .put(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${bursarToken}`)
+      .send({ bank_code: '058', account_number: '0123456789', account_name: 'PAYOUT TEST SCHOOL', current_password: CURRENT_PASSWORD });
+
+    expect(putRes.status).toBe(403);
+    expect(putRes.body.success).toBe(false);
+    // Never even reaches the step-up check — role is rejected first.
+    expect(mockSignInWithPassword).not.toHaveBeenCalled();
+
+    // Bursar retains read/resolve access on the other payout routes.
+    const getRes = await request(app)
+      .get(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${bursarToken}`);
+    expect(getRes.status).toBe(200);
   });
 
   it('returns 403 FEATURE_NOT_IN_PLAN for a basic-tier school on all four payout routes', async () => {
@@ -172,8 +223,12 @@ describe('Payout settings', () => {
     const resolveRes = await request(app).post(`/api/schools/${schoolId}/settings/payout/resolve`).set('Authorization', `Bearer ${bursarToken}`).send({ bank_code: '058', account_number: '0123456789' });
     expect(resolveRes.status).toBe(403);
 
-    const putRes = await request(app).put(`/api/schools/${schoolId}/settings/payout`).set('Authorization', `Bearer ${bursarToken}`).send({ bank_code: '058', account_number: '0123456789', account_name: 'X' });
+    // Use the principal token here — PUT is principal/super_admin-only now, so a
+    // bursar token would 403 on the role check before ever reaching the plan
+    // gate, which isn't what this test is verifying.
+    const putRes = await request(app).put(`/api/schools/${schoolId}/settings/payout`).set('Authorization', `Bearer ${principalToken}`).send({ bank_code: '058', account_number: '0123456789', account_name: 'X', current_password: CURRENT_PASSWORD });
     expect(putRes.status).toBe(403);
+    expect(putRes.body.error.code).toBe('FEATURE_NOT_IN_PLAN');
 
     // Restore for any tests that run after this one in the same file.
     await pool.query(`UPDATE schools SET subscription_tier = 'premium' WHERE id = $1`, [schoolId]);
@@ -221,10 +276,11 @@ describe('Payout settings', () => {
 
     const putRes = await request(app)
       .put(`/api/schools/${schoolId}/settings/payout`)
-      .set('Authorization', `Bearer ${bursarToken}`)
-      .send({ bank_code: '058', account_number: '0123456789', account_name: 'PAYOUT TEST SCHOOL' });
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ bank_code: '058', account_number: '0123456789', account_name: 'PAYOUT TEST SCHOOL', current_password: CURRENT_PASSWORD });
 
     expect(putRes.status).toBe(200);
+    expect(mockSignInWithPassword).toHaveBeenCalledWith({ email: principalEmail, password: CURRENT_PASSWORD });
 
     const getRes = await request(app)
       .get(`/api/schools/${schoolId}/settings/payout`)
@@ -267,6 +323,54 @@ describe('Payout settings', () => {
     );
   });
 
+  it('rejects the PUT with 401 when the step-up password is wrong, and never creates or activates a subaccount', async () => {
+    mockSendEmail.mockClear();
+    mockSignInWithPassword.mockResolvedValueOnce({ data: null, error: { message: 'Invalid login credentials' } });
+
+    const createSubaccountSpy = jest.fn().mockResolvedValue({
+      json: async () => ({ status: true, data: { subaccount_code: 'ACCT_should_not_be_created' } }),
+    });
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (url.includes('/bank/resolve')) {
+        return Promise.resolve({
+          json: async () => ({ status: true, data: { account_number: '5555555555', account_name: 'WRONG PASSWORD SCHOOL' } }),
+        });
+      }
+      return createSubaccountSpy(url);
+    });
+
+    const res = await request(app)
+      .put(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ bank_code: '058', account_number: '5555555555', account_name: 'WRONG PASSWORD SCHOOL', current_password: 'not-the-real-password' });
+
+    expect(res.status).toBe(401);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe('STEP_UP_FAILED');
+
+    // Fails before ever touching Paystack or sending the fraud alert — the
+    // account on file must be completely untouched.
+    expect(createSubaccountSpy).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+
+    const getRes = await request(app)
+      .get(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${bursarToken}`);
+    expect(getRes.body.data.settlement_status).toBe('active');
+    expect(getRes.body.data.account_number).toBe('••••6789');
+  });
+
+  it('rejects the PUT with 400 VALIDATION_ERROR when current_password is missing', async () => {
+    const res = await request(app)
+      .put(`/api/schools/${schoolId}/settings/payout`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ bank_code: '058', account_number: '0123456789', account_name: 'PAYOUT TEST SCHOOL' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(mockSignInWithPassword).not.toHaveBeenCalled();
+  });
+
   it('returns 502 and sets settlement_status failed when subaccount creation fails with no active config to protect', async () => {
     global.fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('/bank/resolve')) {
@@ -281,8 +385,8 @@ describe('Payout settings', () => {
     // preserve — the failed state is written.
     const res = await request(app)
       .put(`/api/schools/${otherSchoolId}/settings/payout`)
-      .set('Authorization', `Bearer ${otherBursarToken}`)
-      .send({ bank_code: '058', account_number: '0000000000', account_name: 'FAIL SCHOOL' });
+      .set('Authorization', `Bearer ${otherPrincipalToken}`)
+      .send({ bank_code: '058', account_number: '0000000000', account_name: 'FAIL SCHOOL', current_password: CURRENT_PASSWORD });
 
     expect(res.status).toBe(502);
 
@@ -318,8 +422,8 @@ describe('Payout settings', () => {
 
     const res = await request(app)
       .put(`/api/schools/${schoolId}/settings/payout`)
-      .set('Authorization', `Bearer ${bursarToken}`)
-      .send({ bank_code: '058', account_number: '9999999999', account_name: 'NEW BANK ACCOUNT' });
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ bank_code: '058', account_number: '9999999999', account_name: 'NEW BANK ACCOUNT', current_password: CURRENT_PASSWORD });
 
     expect(res.status).toBe(502);
 
