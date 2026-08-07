@@ -83,23 +83,23 @@ const listSubscriptionsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
 });
 
-const createSubscriptionSchema = z
-  .object({
-    school_id: z.string().uuid(),
-    plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
-    billing_cycle: z.enum(['monthly', 'annual']),
-    amount_naira: z.number().positive(),
-    trial_ends_at: z.string().optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.plan === 'trial' && !data.trial_ends_at) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'trial_ends_at is required for trial plan',
-        path: ['trial_ends_at'],
-      });
-    }
-  });
+const createSubscriptionSchema = z.object({
+  school_id: z.string().uuid(),
+  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
+  billing_cycle: z.enum(['monthly', 'annual']),
+  amount_naira: z.number().positive(),
+  trial_ends_at: z.string().optional(),
+});
+
+// If a trial subscription is created with no trial_ends_at, it runs for this
+// many days — keeps a caller-omitted date from meaning "never expires".
+const DEFAULT_TRIAL_LENGTH_DAYS = 30;
+
+function defaultTrialEndsAt(): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + DEFAULT_TRIAL_LENGTH_DAYS);
+  return d.toISOString();
+}
 
 const updateSubscriptionSchema = z
   .object({
@@ -947,7 +947,8 @@ router.post(
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
-      const { school_id, plan, billing_cycle, amount_naira, trial_ends_at } = parsed.data;
+      const { school_id, plan, billing_cycle, amount_naira } = parsed.data;
+      const trial_ends_at = plan === 'trial' ? (parsed.data.trial_ends_at ?? defaultTrialEndsAt()) : parsed.data.trial_ends_at;
 
       const schoolResult = await pool.query(`SELECT id FROM schools WHERE id = $1`, [school_id]);
       if (!schoolResult.rows[0]) {
