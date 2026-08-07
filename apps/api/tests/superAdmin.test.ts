@@ -232,6 +232,34 @@ describe('superAdmin — platform school management', () => {
       expect(res.body.error.code).toBe('SUBSCRIPTION_EXISTS');
     });
 
+    it('POST /subscriptions — trial plan with no trial_ends_at → 201, defaults to 30 days out', async () => {
+      const newSchoolResult = await pool.query<{ id: string }>(
+        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+        ['Trial Default Test School', `test-trial-default-${randomUUID()}`]
+      );
+      const newSchoolId = newSchoolResult.rows[0].id;
+
+      try {
+        const before = Date.now();
+        const res = await request(app)
+          .post('/api/super-admin/subscriptions')
+          .set('Authorization', `Bearer ${superAdminToken}`)
+          .send({ school_id: newSchoolId, plan: 'trial', billing_cycle: 'monthly', amount_naira: 50000 });
+
+        expect(res.status).toBe(201);
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.trial_ends_at).toBeTruthy();
+
+        const trialEndsAt = new Date(res.body.data.trial_ends_at).getTime();
+        const expected = before + 30 * 24 * 60 * 60 * 1000;
+        expect(Math.abs(trialEndsAt - expected)).toBeLessThan(60 * 1000);
+      } finally {
+        await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [newSchoolId]);
+        await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [newSchoolId]);
+        await pool.query(`DELETE FROM schools WHERE id = $1`, [newSchoolId]);
+      }
+    });
+
     it('POST /subscriptions syncs schools.subscription_tier to the new plan', async () => {
       const newSchoolResult = await pool.query<{ id: string }>(
         `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
