@@ -494,7 +494,7 @@ export default function HomePage() {
           <div className="s-head reveal">
             <span className="eyebrow" style={{ background: 'var(--green-l)', color: 'var(--green)' }}>Simple Pricing</span>
             <h2>Priced for Nigerian private schools, not Silicon Valley startups</h2>
-            <p>Monthly pricing in Naira. No setup fees, no per-teacher charges, no surprise invoices at the end of term.</p>
+            <p>Per-student, per-term pricing in Naira. No setup fees, no per-teacher charges, no surprise invoices at the end of term.</p>
           </div>
           <div className="pricing-grid">
             <div className="price-card reveal">
