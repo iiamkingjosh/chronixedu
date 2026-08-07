@@ -10,6 +10,7 @@ import * as studentQueries from '../db/queries/students';
 import * as paystackService from '../services/paystackService';
 import * as receiptService from '../services/receiptService';
 import * as paymentReceiptNotifier from '../services/paymentReceiptNotifier';
+import * as reportCardService from '../services/reportCardService';
 import * as rosterQueries from '../db/queries/roster';
 import * as feeReminderService from '../services/feeReminderService';
 import * as schoolQueries from '../db/queries/schools';
@@ -25,6 +26,7 @@ jest.mock('../db/queries/students');
 jest.mock('../db/queries/roster');
 jest.mock('../services/paystackService');
 jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
+jest.mock('../services/reportCardService', () => ({ signReportCardAsset: jest.fn() }));
 jest.mock('../services/paymentReceiptNotifier');
 jest.mock('../services/feeReminderService');
 jest.mock('../db/queries/schools');
@@ -35,6 +37,7 @@ const mockParents = parentQueries as jest.Mocked<typeof parentQueries>;
 const mockStudents = studentQueries as jest.Mocked<typeof studentQueries>;
 const mockPaystack = paystackService as jest.Mocked<typeof paystackService>;
 const mockReceipt = receiptService as jest.Mocked<typeof receiptService>;
+const mockReportCard = reportCardService as jest.Mocked<typeof reportCardService>;
 const mockNotifier = paymentReceiptNotifier as jest.Mocked<typeof paymentReceiptNotifier>;
 const mockRoster = rosterQueries as jest.Mocked<typeof rosterQueries>;
 const mockFeeReminder = feeReminderService as jest.Mocked<typeof feeReminderService>;
@@ -529,9 +532,12 @@ describe('POST /api/schools/:schoolId/payments', () => {
     expect(mockFees.recordPayment).not.toHaveBeenCalled();
   });
 
-  it('records a verified paystack payment', async () => {
+  it('records a verified paystack payment whose metadata matches the school/invoice', async () => {
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amount: 10000, currency: 'NGN' });
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
+      status: 'success', amount: 10000, currency: 'NGN',
+      metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID },
+    });
     mockFees.recordPayment.mockResolvedValueOnce(PAYMENT_RESULT as never);
 
     const res = await request(app)
@@ -545,9 +551,46 @@ describe('POST /api/schools/:schoolId/payments', () => {
     });
   });
 
+  it('returns 400 PAYMENT_MISMATCH when the paystack transaction belongs to a different school', async () => {
+    mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
+      status: 'success', amount: 10000, currency: 'NGN',
+      metadata: { school_id: 'other-school-id', invoice_id: INVOICE_ID },
+    });
+
+    const res = await request(app)
+      .post(`/api/schools/${SCHOOL_ID}/payments`)
+      .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
+      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PAYMENT_MISMATCH');
+    expect(mockFees.recordPayment).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 PAYMENT_MISMATCH when the paystack transaction belongs to a different invoice', async () => {
+    mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
+      status: 'success', amount: 10000, currency: 'NGN',
+      metadata: { school_id: SCHOOL_ID, invoice_id: 'other-invoice-id' },
+    });
+
+    const res = await request(app)
+      .post(`/api/schools/${SCHOOL_ID}/payments`)
+      .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
+      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PAYMENT_MISMATCH');
+    expect(mockFees.recordPayment).not.toHaveBeenCalled();
+  });
+
   it('returns 409 when the paystack reference has already been recorded', async () => {
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amount: 10000, currency: 'NGN' });
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
+      status: 'success', amount: 10000, currency: 'NGN',
+      metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID },
+    });
     const dbError = new Error('duplicate key value violates unique constraint "payments_paystack_reference_key"') as Error & { code: string };
     dbError.code = '23505';
     mockFees.recordPayment.mockRejectedValueOnce(dbError);
@@ -775,239 +818,9 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
   });
 });
 
-// ── GET /:schoolId/payments/paystack/callback ───────────────────────────────────
-
-describe('GET /api/schools/:schoolId/payments/paystack/callback', () => {
-  const PAYMENT_RESULT = {
-    payment: {
-      id: 'pay-1', invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: PAYMENT_AMOUNT,
-      payment_date: '', method: 'paystack', reference: null, paystack_reference: 'ref-xyz',
-      recorded_by: 'user-uuid-001', created_at: '',
-    },
-    invoice: {
-      id: INVOICE_ID, school_id: SCHOOL_ID, student_id: STUDENT_ID, term_id: TERM_ID,
-      total_amount: INVOICE_TOTAL_AMOUNT, amount_paid: INVOICE_TOTAL_AMOUNT, balance: 0, status: 'paid',
-      created_at: '', updated_at: '',
-    },
-  };
-
-  const SUCCESS_VERIFICATION = {
-    status: 'success',
-    amount: PAYMENT_AMOUNT,
-    currency: 'NGN',
-    reference: 'ref-xyz',
-    metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID, recorded_by: 'user-uuid-001' },
-  };
-
-  it('verifies the transaction, records the payment, and redirects with payment=success', async () => {
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce(SUCCESS_VERIFICATION);
-    mockFees.recordPayment.mockResolvedValueOnce(PAYMENT_RESULT as never);
-
-    const res = await request(app).get(`/api/schools/${SCHOOL_ID}/payments/paystack/callback?reference=ref-xyz`);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain('payment=success');
-    expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: PAYMENT_AMOUNT, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
-    });
-    expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
-      schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
-    }));
-    expect(mockNotifier.notifyPaymentReceipt).toHaveBeenCalledWith(SCHOOL_ID, 'pay-1', STUDENT_ID);
-  });
-
-  it('redirects with payment=error when reference is missing', async () => {
-    const res = await request(app).get(`/api/schools/${SCHOOL_ID}/payments/paystack/callback`);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain('payment=error');
-    expect(mockFees.recordPayment).not.toHaveBeenCalled();
-  });
-
-  it('redirects with payment=error when verification fails', async () => {
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce(null);
-
-    const res = await request(app).get(`/api/schools/${SCHOOL_ID}/payments/paystack/callback?reference=ref-xyz`);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain('payment=error');
-    expect(mockFees.recordPayment).not.toHaveBeenCalled();
-  });
-
-  it('redirects with payment=failed when the transaction was not successful', async () => {
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ ...SUCCESS_VERIFICATION, status: 'failed' });
-
-    const res = await request(app).get(`/api/schools/${SCHOOL_ID}/payments/paystack/callback?reference=ref-xyz`);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain('payment=failed');
-    expect(mockFees.recordPayment).not.toHaveBeenCalled();
-  });
-
-  it('redirects with payment=error when metadata does not match the school in the URL', async () => {
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
-      ...SUCCESS_VERIFICATION,
-      metadata: { ...SUCCESS_VERIFICATION.metadata, school_id: 'other-school' },
-    });
-
-    const res = await request(app).get(`/api/schools/${SCHOOL_ID}/payments/paystack/callback?reference=ref-xyz`);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain('payment=error');
-    expect(mockFees.recordPayment).not.toHaveBeenCalled();
-  });
-
-  it('redirects with payment=success when the paystack reference was already recorded (idempotent)', async () => {
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce(SUCCESS_VERIFICATION);
-    const dbError = new Error('duplicate key value violates unique constraint "payments_paystack_reference_key"') as Error & { code: string };
-    dbError.code = '23505';
-    mockFees.recordPayment.mockRejectedValueOnce(dbError);
-
-    const res = await request(app).get(`/api/schools/${SCHOOL_ID}/payments/paystack/callback?reference=ref-xyz`);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain('payment=success');
-  });
-
-  it('redirects with payment=error when the invoice no longer exists', async () => {
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce(SUCCESS_VERIFICATION);
-    mockFees.recordPayment.mockResolvedValueOnce(null);
-
-    const res = await request(app).get(`/api/schools/${SCHOOL_ID}/payments/paystack/callback?reference=ref-xyz`);
-
-    expect(res.status).toBe(302);
-    expect(res.headers.location).toContain('payment=error');
-  });
-});
-
-// ── POST /:schoolId/payments/paystack/webhook ───────────────────────────────────
-
-describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
-  const PAYMENT_RESULT = {
-    payment: {
-      id: 'pay-1', invoice_id: INVOICE_ID, school_id: SCHOOL_ID, amount: PAYMENT_AMOUNT,
-      payment_date: '', method: 'paystack', reference: null, paystack_reference: 'ref-xyz',
-      recorded_by: 'user-uuid-001', created_at: '',
-    },
-    invoice: {
-      id: INVOICE_ID, school_id: SCHOOL_ID, student_id: STUDENT_ID, term_id: TERM_ID,
-      total_amount: INVOICE_TOTAL_AMOUNT, amount_paid: INVOICE_TOTAL_AMOUNT, balance: 0, status: 'paid',
-      created_at: '', updated_at: '',
-    },
-  };
-
-  const CHARGE_SUCCESS_EVENT = {
-    event: 'charge.success',
-    data: {
-      reference: 'ref-xyz',
-      amount: PAYMENT_AMOUNT * 100,
-      metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID, recorded_by: 'user-uuid-001' },
-    },
-  };
-
-  it('returns 401 when the signature is invalid', async () => {
-    mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(false);
-
-    const res = await request(app)
-      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/webhook`)
-      .set('X-Paystack-Signature', 'bad-signature')
-      .send(CHARGE_SUCCESS_EVENT);
-
-    expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('INVALID_SIGNATURE');
-    expect(mockFees.recordPayment).not.toHaveBeenCalled();
-  });
-
-  it('returns 401 when the signature header is missing', async () => {
-    const res = await request(app)
-      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/webhook`)
-      .send(CHARGE_SUCCESS_EVENT);
-
-    expect(res.status).toBe(401);
-    expect(res.body.error.code).toBe('INVALID_SIGNATURE');
-  });
-
-  it('ignores events that are not charge.success', async () => {
-    mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
-
-    const res = await request(app)
-      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/webhook`)
-      .set('X-Paystack-Signature', 'good-signature')
-      .send({ event: 'transfer.success', data: {} });
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.ignored).toBe(true);
-    expect(mockFees.recordPayment).not.toHaveBeenCalled();
-  });
-
-  it('records the payment on charge.success and logs audit', async () => {
-    mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amount: PAYMENT_AMOUNT, currency: 'NGN' });
-    mockFees.recordPayment.mockResolvedValueOnce(PAYMENT_RESULT as never);
-
-    const res = await request(app)
-      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/webhook`)
-      .set('X-Paystack-Signature', 'good-signature')
-      .send(CHARGE_SUCCESS_EVENT);
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.processed).toBe(true);
-    expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: PAYMENT_AMOUNT, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
-    });
-    expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
-      schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
-    }));
-    expect(mockNotifier.notifyPaymentReceipt).toHaveBeenCalledWith(SCHOOL_ID, 'pay-1', STUDENT_ID);
-  });
-
-  it('ignores events whose metadata school_id does not match the URL', async () => {
-    mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
-
-    const res = await request(app)
-      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/webhook`)
-      .set('X-Paystack-Signature', 'good-signature')
-      .send({
-        event: 'charge.success',
-        data: { ...CHARGE_SUCCESS_EVENT.data, metadata: { ...CHARGE_SUCCESS_EVENT.data.metadata, school_id: 'other-school' } },
-      });
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.ignored).toBe(true);
-    expect(mockFees.recordPayment).not.toHaveBeenCalled();
-  });
-
-  it('returns processed:false (duplicate) for an already-recorded paystack reference', async () => {
-    mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amount: PAYMENT_AMOUNT, currency: 'NGN' });
-    const dbError = new Error('duplicate key value violates unique constraint "payments_paystack_reference_key"') as Error & { code: string };
-    dbError.code = '23505';
-    mockFees.recordPayment.mockRejectedValueOnce(dbError);
-
-    const res = await request(app)
-      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/webhook`)
-      .set('X-Paystack-Signature', 'good-signature')
-      .send(CHARGE_SUCCESS_EVENT);
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.processed).toBe(false);
-    expect(res.body.data.duplicate).toBe(true);
-    expect(mockNotifier.notifyPaymentReceipt).not.toHaveBeenCalled();
-  });
-
-  it('returns processed:false when the invoice no longer exists', async () => {
-    mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
-    mockFees.recordPayment.mockResolvedValueOnce(null);
-
-    const res = await request(app)
-      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/webhook`)
-      .set('X-Paystack-Signature', 'good-signature')
-      .send(CHARGE_SUCCESS_EVENT);
-
-    expect(res.status).toBe(200);
-    expect(res.body.data.processed).toBe(false);
-  });
-});
+// NOTE: the Paystack webhook and callback routes now live in ../routes/feesPublic
+// (they must be mounted before the auth middleware chain — see index.ts) — their
+// tests moved to feesPublic.test.ts.
 
 // ── GET /:schoolId/payments/:paymentId/receipt ──────────────────────────────────
 
@@ -1022,18 +835,20 @@ describe('GET /api/schools/:schoolId/payments/:paymentId/receipt', () => {
     class_name: 'JSS 1A', term_name: 'First Term', session_name: '2025/2026',
   };
 
-  it('generates and returns a receipt PDF url for bursar', async () => {
+  it('generates the receipt, signs it, and returns a time-limited signed url for bursar', async () => {
     mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_RECEIPT_ROW as never);
-    mockReceipt.generateReceipt.mockResolvedValueOnce('https://storage.example/receipts/pay-1.pdf');
+    mockReceipt.generateReceipt.mockResolvedValueOnce('receipts/school-1/pay-1.pdf');
+    mockReportCard.signReportCardAsset.mockResolvedValueOnce('https://signed.example.com/receipts/pay-1.pdf?token=abc');
 
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/payments/${PAYMENT_ID}/receipt`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ url: 'https://storage.example/receipts/pay-1.pdf' });
+    expect(res.body.data).toEqual({ url: 'https://signed.example.com/receipts/pay-1.pdf?token=abc' });
     expect(mockFees.getPaymentById).toHaveBeenCalledWith(SCHOOL_ID, PAYMENT_ID);
     expect(mockReceipt.generateReceipt).toHaveBeenCalledWith(SCHOOL_ID, PAYMENT_RECEIPT_ROW);
+    expect(mockReportCard.signReportCardAsset).toHaveBeenCalledWith('receipts/school-1/pay-1.pdf');
   });
 
   it('returns 404 when the payment does not exist for the school', async () => {
@@ -1048,9 +863,10 @@ describe('GET /api/schools/:schoolId/payments/:paymentId/receipt', () => {
     expect(mockReceipt.generateReceipt).not.toHaveBeenCalled();
   });
 
-  it('returns the receipt for a parent linked to the student', async () => {
+  it('returns the signed receipt url for a parent linked to the student', async () => {
     mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_RECEIPT_ROW as never);
-    mockReceipt.generateReceipt.mockResolvedValueOnce('https://storage.example/receipts/pay-1.pdf');
+    mockReceipt.generateReceipt.mockResolvedValueOnce('receipts/school-1/pay-1.pdf');
+    mockReportCard.signReportCardAsset.mockResolvedValueOnce('https://signed.example.com/receipts/pay-1.pdf?token=abc');
     mockParents.isParentLinkedToStudent.mockResolvedValueOnce(true);
 
     const res = await request(app)
@@ -1058,7 +874,7 @@ describe('GET /api/schools/:schoolId/payments/:paymentId/receipt', () => {
       .set('Authorization', `Bearer ${makeToken('parent', SCHOOL_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ url: 'https://storage.example/receipts/pay-1.pdf' });
+    expect(res.body.data).toEqual({ url: 'https://signed.example.com/receipts/pay-1.pdf?token=abc' });
     expect(mockParents.isParentLinkedToStudent).toHaveBeenCalledWith('user-uuid-001', STUDENT_ID);
   });
 
@@ -1072,6 +888,19 @@ describe('GET /api/schools/:schoolId/payments/:paymentId/receipt', () => {
 
     expect(res.status).toBe(403);
     expect(mockReceipt.generateReceipt).not.toHaveBeenCalled();
+  });
+
+  it('returns 500 when the storage layer fails to sign the receipt', async () => {
+    mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_RECEIPT_ROW as never);
+    mockReceipt.generateReceipt.mockResolvedValueOnce('receipts/school-1/pay-1.pdf');
+    mockReportCard.signReportCardAsset.mockResolvedValueOnce(null);
+
+    const res = await request(app)
+      .get(`/api/schools/${SCHOOL_ID}/payments/${PAYMENT_ID}/receipt`)
+      .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`);
+
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe('SIGNING_FAILED');
   });
 });
 

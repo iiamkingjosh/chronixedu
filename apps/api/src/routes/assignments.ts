@@ -17,6 +17,11 @@ import {
   upsertSubmission,
   gradeSubmission,
 } from '../db/queries/assignments';
+import type {
+  AssignmentRow,
+  StudentAssignmentListRow,
+  SubmissionGridRow,
+} from '../db/queries/assignments';
 import pool from '../db/client';
 
 const router = Router();
@@ -63,13 +68,45 @@ function bucketName(): string {
   return process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
 }
 
+const ASSET_SIGNED_URL_TTL_SECONDS = 15 * 60; // 15 minutes
+
+/**
+ * Extracts the bare storage path from either a bare path (returned as-is) or a legacy
+ * Supabase public URL, for backward compatibility with any rows persisted before
+ * assignment attachments/submissions were served via signed URLs.
+ */
+function extractAssetStoragePath(urlOrPath: string): string {
+  const marker = `/storage/v1/object/public/${bucketName()}/`;
+  const idx = urlOrPath.indexOf(marker);
+  if (idx === -1) return urlOrPath;
+  return decodeURIComponent(urlOrPath.slice(idx + marker.length));
+}
+
+/** Uploads a file and returns its storage path (not a URL) — the bucket holds private
+ *  submissions/attachments, so a signed URL must be minted at read time instead. */
 async function uploadFile(storagePath: string, file: Express.Multer.File, contentType: string): Promise<string | null> {
   const { error } = await supabaseAdmin.storage
     .from(bucketName())
     .upload(storagePath, file.buffer, { contentType, upsert: true });
   if (error) return null;
-  const { data } = supabaseAdmin.storage.from(bucketName()).getPublicUrl(storagePath);
-  return data.publicUrl;
+  return storagePath;
+}
+
+/** Mints a fresh, short-lived signed URL for an assignment attachment/submission object.
+ *  Returns null when there is nothing to sign, or the object cannot be signed. */
+async function signAssetUrl(storagePathOrUrl: string | null): Promise<string | null> {
+  if (!storagePathOrUrl) return null;
+  const storagePath = extractAssetStoragePath(storagePathOrUrl);
+  const { data, error } = await supabaseAdmin.storage
+    .from(bucketName())
+    .createSignedUrl(storagePath, ASSET_SIGNED_URL_TTL_SECONDS);
+  if (error || !data) return null;
+  return data.signedUrl;
+}
+
+/** Signs the attachment_url on any assignment-shaped row, leaving the rest untouched. */
+async function withSignedAttachment<T extends { attachment_url: string | null }>(row: T): Promise<T> {
+  return { ...row, attachment_url: await signAssetUrl(row.attachment_url) };
 }
 
 // ── POST /:schoolId/assignments ────────────────────────────────────────────────
@@ -134,14 +171,15 @@ router.post(
 
       if (file && ext && detectedMime) {
         const storagePath = `schools/${schoolId}/assignments/${assignment.id}/attachment.${ext}`;
-        const publicUrl = await uploadFile(storagePath, file, detectedMime);
-        if (!publicUrl) {
+        const uploadedPath = await uploadFile(storagePath, file, detectedMime);
+        if (!uploadedPath) {
           return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: 'Failed to upload attachment.' } });
         }
-        assignment = (await updateAssignmentAttachment(assignment.id, schoolId, publicUrl)) ?? assignment;
+        assignment = (await updateAssignmentAttachment(assignment.id, schoolId, uploadedPath)) ?? assignment;
       }
 
-      return res.status(201).json({ success: true, data: assignment });
+      const responseAssignment: AssignmentRow = await withSignedAttachment(assignment);
+      return res.status(201).json({ success: true, data: responseAssignment });
     } catch (err) {
       return next(err);
     }
@@ -161,12 +199,14 @@ router.get(
 
       if (req.user!.role === 'teacher') {
         const data = await listAssignmentsForTeacher(req.user!.user_id, schoolId);
-        return res.json({ success: true, data });
+        const signed = await Promise.all(data.map(withSignedAttachment));
+        return res.json({ success: true, data: signed });
       }
 
       if (req.user!.role === 'super_admin' || req.user!.role === 'principal') {
         const data = await listAssignmentsForSchool(schoolId);
-        return res.json({ success: true, data });
+        const signed = await Promise.all(data.map(withSignedAttachment));
+        return res.json({ success: true, data: signed });
       }
 
       const student = await findStudentByUserId(req.user!.user_id, schoolId);
@@ -181,7 +221,15 @@ router.get(
       }
 
       const data = await listAssignmentsForStudent(schoolId, classId, student.id);
-      return res.json({ success: true, data });
+      const signed: StudentAssignmentListRow[] = await Promise.all(
+        data.map(async row => {
+          const attachment_url = await signAssetUrl(row.attachment_url);
+          if (!row.submission) return { ...row, attachment_url, submission: null };
+          const file_url = (await signAssetUrl(row.submission.file_url)) ?? row.submission.file_url;
+          return { ...row, attachment_url, submission: { ...row.submission, file_url } };
+        })
+      );
+      return res.json({ success: true, data: signed });
     } catch (err) {
       return next(err);
     }
@@ -208,7 +256,15 @@ router.get(
       }
 
       const submissions = await listSubmissionsForAssignment(assignment.id, assignment.class_id);
-      return res.json({ success: true, data: { assignment, submissions } });
+      const signedSubmissions: SubmissionGridRow[] = await Promise.all(
+        submissions.map(async row => {
+          if (!row.submission) return row;
+          const file_url = (await signAssetUrl(row.submission.file_url)) ?? row.submission.file_url;
+          return { ...row, submission: { ...row.submission, file_url } };
+        })
+      );
+      const signedAssignment: AssignmentRow = await withSignedAttachment(assignment);
+      return res.json({ success: true, data: { assignment: signedAssignment, submissions: signedSubmissions } });
     } catch (err) {
       return next(err);
     }
@@ -265,13 +321,14 @@ router.post(
       }
 
       const storagePath = `schools/${schoolId}/assignments/${assignmentId}/submissions/${student.id}.${ext}`;
-      const publicUrl = await uploadFile(storagePath, file, detectedSub.mime);
-      if (!publicUrl) {
+      const uploadedPath = await uploadFile(storagePath, file, detectedSub.mime);
+      if (!uploadedPath) {
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: 'Failed to upload submission.' } });
       }
 
-      const submission = await upsertSubmission(assignmentId, student.id, publicUrl);
-      return res.json({ success: true, data: submission });
+      const submission = await upsertSubmission(assignmentId, student.id, uploadedPath);
+      const file_url = (await signAssetUrl(submission.file_url)) ?? submission.file_url;
+      return res.json({ success: true, data: { ...submission, file_url } });
     } catch (err) {
       return next(err);
     }
@@ -313,7 +370,8 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'This student has not submitted the assignment yet.' } });
       }
 
-      return res.json({ success: true, data: updated });
+      const file_url = (await signAssetUrl(updated.file_url)) ?? updated.file_url;
+      return res.json({ success: true, data: { ...updated, file_url } });
     } catch (err) {
       return next(err);
     }

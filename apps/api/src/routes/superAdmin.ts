@@ -262,9 +262,18 @@ function parseExpectedIntervalHours(schedule: string): number {
 }
 
 // Escapes a value for inclusion in a CSV cell.
-function csvCell(value: unknown): string {
-  const str = value === null || value === undefined ? '' : String(value);
-  if (/[",\n]/.test(str)) {
+// Exported so it can be unit-tested directly for formula-injection handling.
+export function csvCell(value: unknown): string {
+  let str = value === null || value === undefined ? '' : String(value);
+  // Prevent formula/DDE injection: a cell whose first character is =, +, -, @, tab, or
+  // CR can be interpreted as a formula by Excel/LibreOffice when the CSV is opened.
+  // Prefixing with a leading apostrophe forces it to be read back as literal text.
+  // This must run before the quote-escaping below so the apostrophe is included in
+  // whatever gets quoted.
+  if (/^[=+\-@\t\r]/.test(str)) {
+    str = `'${str}`;
+  }
+  if (/[",\n\r]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
@@ -2250,6 +2259,32 @@ async function countOtherActiveAdmins(excludeId: string): Promise<number> {
   return parseInt(result.rows[0]?.count ?? '0', 10);
 }
 
+// Ends any support sessions this platform admin currently has open and blacklists
+// their scoped impersonation tokens. Without this, suspending or deleting an admin
+// mid-impersonation would leave that session usable until it naturally expired.
+async function terminateActiveSupportSessions(adminId: string): Promise<void> {
+  const activeSessions = await pool.query<{ id: string }>(
+    `SELECT id FROM support_sessions WHERE platform_admin_id = $1 AND ended_at IS NULL`,
+    [adminId]
+  );
+  if (activeSessions.rows.length === 0) return;
+
+  if (redis) {
+    for (const { id } of activeSessions.rows) {
+      const storedToken = await redis.get(`support_session_token:${id}`);
+      if (storedToken) {
+        await redis.set(`blacklisted_token:${storedToken}`, '1', 'EX', 30 * 60);
+        await redis.del(`support_session_token:${id}`);
+      }
+    }
+  }
+
+  await pool.query(
+    `UPDATE support_sessions SET ended_at = NOW() WHERE platform_admin_id = $1 AND ended_at IS NULL`,
+    [adminId]
+  );
+}
+
 router.patch(
   '/admins/:id/suspend',
   ...rootGuard,
@@ -2282,6 +2317,15 @@ router.patch(
 
       await supabaseAdmin.auth.admin.updateUserById(req.params.id, { ban_duration: '87600h' });
       await pool.query(`UPDATE users SET is_active = false WHERE id = $1`, [req.params.id]);
+
+      // Immediately update the is_active cache so verifyToken blocks the admin on
+      // the next request instead of trusting the up-to-5-minute-stale cached value.
+      if (redis) {
+        await redis.set(`user_active:${req.params.id}`, '0', 'EX', 300);
+      }
+      // End any impersonation session this admin currently has open and blacklist
+      // its scoped token so it can't outlive the suspension.
+      await terminateActiveSupportSessions(req.params.id);
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
@@ -2396,6 +2440,15 @@ router.delete(
          WHERE id = $1`,
         [req.params.id, `deleted-admin-${req.params.id}@deleted.chronixedu.local`, randomUUID()]
       );
+
+      // Immediately update the is_active cache so verifyToken blocks the admin on
+      // the next request instead of trusting the up-to-5-minute-stale cached value.
+      if (redis) {
+        await redis.set(`user_active:${req.params.id}`, '0', 'EX', 300);
+      }
+      // End any impersonation session this admin currently has open and blacklist
+      // its scoped token so it can't outlive the deletion.
+      await terminateActiveSupportSessions(req.params.id);
 
       return res.json({ success: true, data: { admin_id: req.params.id, deleted: true } });
     } catch (err) {

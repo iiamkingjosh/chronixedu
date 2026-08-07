@@ -7,7 +7,7 @@ import { getStudentProfile } from '../db/queries/students';
 import { listSessionsWithTerms } from '../db/queries/sessions';
 import { computeClassResults } from './resultEngine';
 import type { ClassResult } from './resultEngine';
-import { getBrowser, ordinal, gradeClass, lookupGrade, buildSubjectPositions } from './reportCardService';
+import { getBrowser, ordinal, gradeClass, lookupGrade, buildSubjectPositions, REPORT_CARDS_BUCKET } from './reportCardService';
 
 // ── Template compilation (lazy, once) ─────────────────────────────────────────
 
@@ -26,6 +26,11 @@ function getTemplate(): CompiledTemplate {
 
 // ── Core PDF generator ─────────────────────────────────────────────────────────
 
+/**
+ * Renders a student's transcript PDF and stores it. Returns the storage path (not a URL) —
+ * the object lives in a private bucket, so callers must mint a signed URL via
+ * `signReportCardAsset` at the point of serving it to a client.
+ */
 export async function generateTranscript(studentId: string, schoolId: string): Promise<string> {
   const [profile, school, sessions] = await Promise.all([
     getStudentProfile(studentId, schoolId),
@@ -172,7 +177,7 @@ export async function generateTranscript(studentId: string, schoolId: string): P
 
     const storagePath = `transcripts/${schoolId}/${studentId}.pdf`;
     const { error: uploadError } = await supabaseAdmin.storage
-      .from('report-cards')
+      .from(REPORT_CARDS_BUCKET)
       .upload(storagePath, Buffer.from(pdfBuffer), {
         contentType: 'application/pdf',
         upsert:      true,
@@ -180,11 +185,7 @@ export async function generateTranscript(studentId: string, schoolId: string): P
 
     if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
 
-    const { data: { publicUrl } } = supabaseAdmin.storage
-      .from('report-cards')
-      .getPublicUrl(storagePath);
-
-    return publicUrl;
+    return storagePath;
   } finally {
     await page.close();
   }

@@ -11,8 +11,8 @@ import {
   getTeachersForClass,
   getApprovalDashboard,
 } from '../db/queries/results';
-import { startReportCardBatch, getJob } from '../services/reportCardService';
-import { getReportCardsForClass } from '../db/queries/reportCards';
+import { startReportCardBatch, getJob, signReportCardAsset } from '../services/reportCardService';
+import { getReportCardsForClass, publishReportCards } from '../db/queries/reportCards';
 import pool from '../db/client';
 
 const router = Router();
@@ -337,6 +337,12 @@ router.post(
       const studentIds = students.map(s => s.student_id);
       await batchUpsertStatuses(studentIds, schoolId, term_id, 'published', userId, ['approved']);
 
+      // Release any already-generated report cards for these students — this is
+      // the only place report_cards.is_published ever flips to TRUE. Without it,
+      // the parent- and student-facing routes (which gate on is_published = TRUE)
+      // would never return a report card, no matter what the result_status says.
+      await publishReportCards(schoolId, term_id, studentIds);
+
       await logAudit({
         supportSession: req.supportSession,
         schoolId,
@@ -608,7 +614,13 @@ router.get(
 
       const { class_id, term_id } = parsed.data;
       const cards = await getReportCardsForClass(class_id, term_id, req.params.schoolId);
-      return res.json({ success: true, data: cards });
+      const signedCards = await Promise.all(
+        cards.map(async card => ({
+          ...card,
+          pdf_url: card.pdf_url ? await signReportCardAsset(card.pdf_url) : null,
+        }))
+      );
+      return res.json({ success: true, data: signedCards });
     } catch (err) {
       return next(err);
     }

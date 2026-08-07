@@ -35,7 +35,7 @@ beforeEach(() => jest.clearAllMocks());
 describe('notifyPaymentReceipt', () => {
   it('generates the receipt and emails every linked parent a link', async () => {
     mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_ROW as never);
-    mockReceipt.generateReceipt.mockResolvedValueOnce('https://storage.example/receipts/pay-1.pdf');
+    mockReceipt.generateReceipt.mockResolvedValueOnce('receipts/school-1/pay-1.pdf');
     mockParents.getParentsForStudent.mockResolvedValueOnce([
       { parent_id: 'p1', email: 'parent1@example.com', phone: null },
       { parent_id: 'p2', email: 'parent2@example.com', phone: null },
@@ -50,13 +50,26 @@ describe('notifyPaymentReceipt', () => {
     expect(mockEmail.sendEmail).toHaveBeenCalledWith(
       'parent1@example.com',
       'Payment receipt — Chronix Edu',
-      expect.stringContaining('https://storage.example/receipts/pay-1.pdf')
+      expect.stringContaining('/parent/fees')
     );
     expect(mockEmail.sendEmail).toHaveBeenCalledWith(
       'parent2@example.com',
       'Payment receipt — Chronix Edu',
-      expect.stringContaining('https://storage.example/receipts/pay-1.pdf')
+      expect.stringContaining('/parent/fees')
     );
+  });
+
+  it('never embeds the raw storage path/URL in the email — only the authenticated in-app link', async () => {
+    mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_ROW as never);
+    mockReceipt.generateReceipt.mockResolvedValueOnce('receipts/school-1/pay-1.pdf');
+    mockParents.getParentsForStudent.mockResolvedValueOnce([
+      { parent_id: 'p1', email: 'parent1@example.com', phone: null },
+    ] as never);
+
+    await notifyPaymentReceipt(SCHOOL_ID, PAYMENT_ID, STUDENT_ID);
+
+    const body = mockEmail.sendEmail.mock.calls[0][2] as string;
+    expect(body).not.toContain('receipts/school-1/pay-1.pdf');
   });
 
   it('does nothing but log when the payment cannot be found', async () => {
@@ -70,7 +83,7 @@ describe('notifyPaymentReceipt', () => {
 
   it('sends nothing when no parents are linked to the student', async () => {
     mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_ROW as never);
-    mockReceipt.generateReceipt.mockResolvedValueOnce('https://storage.example/receipts/pay-1.pdf');
+    mockReceipt.generateReceipt.mockResolvedValueOnce('receipts/school-1/pay-1.pdf');
     mockParents.getParentsForStudent.mockResolvedValueOnce([]);
 
     await notifyPaymentReceipt(SCHOOL_ID, PAYMENT_ID, STUDENT_ID);
@@ -94,7 +107,7 @@ describe('notifyPaymentReceipt', () => {
 
   it('still emails the second parent when the first parent email fails', async () => {
     mockFees.getPaymentById.mockResolvedValueOnce(PAYMENT_ROW as never);
-    mockReceipt.generateReceipt.mockResolvedValueOnce('https://storage.example/receipts/pay-1.pdf');
+    mockReceipt.generateReceipt.mockResolvedValueOnce('receipts/school-1/pay-1.pdf');
     mockParents.getParentsForStudent.mockResolvedValueOnce([
       { parent_id: 'p1', email: 'parent1@example.com', phone: null },
       { parent_id: 'p2', email: 'parent2@example.com', phone: null },
@@ -108,7 +121,7 @@ describe('notifyPaymentReceipt', () => {
     expect(mockEmail.sendEmail).toHaveBeenCalledWith(
       'parent2@example.com',
       'Payment receipt — Chronix Edu',
-      expect.stringContaining('https://storage.example/receipts/pay-1.pdf')
+      expect.stringContaining('/parent/fees')
     );
   });
 });

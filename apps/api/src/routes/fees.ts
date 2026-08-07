@@ -25,11 +25,11 @@ import {
 } from '../db/queries/fees';
 import { generateReceipt } from '../services/receiptService';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
+import { signReportCardAsset } from '../services/reportCardService';
 import {
   isPaystackConfigured,
   verifyPaystackTransaction,
   initializePaystackTransaction,
-  verifyPaystackWebhookSignature,
 } from '../services/paystackService';
 
 const router = Router();
@@ -362,6 +362,15 @@ router.post(
           return res.status(400).json({ success: false, error: { code: 'PAYMENT_NOT_VERIFIED', message: `Paystack transaction status is '${verification.status}', not 'success'` } });
         }
 
+        // All schools share one Paystack merchant account, so a transaction reference
+        // is resolvable platform-wide — without this check, a reference belonging to
+        // one school's transaction could be recorded against a different school's
+        // invoice. Mirrors the binding check the webhook and callback already perform.
+        const metadata = (verification.metadata ?? {}) as PaystackPaymentMetadata;
+        if (metadata.school_id !== req.params.schoolId || metadata.invoice_id !== invoice_id) {
+          return res.status(400).json({ success: false, error: { code: 'PAYMENT_MISMATCH', message: 'This Paystack transaction does not belong to the specified school/invoice' } });
+        }
+
         // Always use Paystack's verified amount — never trust the client-supplied value.
         // verifyPaystackTransaction already converts kobo → naira.
         amount = verification.amount;
@@ -430,7 +439,12 @@ router.get(
         }
       }
 
-      const url = await generateReceipt(schoolId, payment);
+      const storagePath = await generateReceipt(schoolId, payment);
+      const url = await signReportCardAsset(storagePath);
+      if (!url) {
+        return res.status(500).json({ success: false, error: { code: 'SIGNING_FAILED', message: 'Failed to generate a download link for the receipt.' } });
+      }
+
       return res.json({ success: true, data: { url } });
     } catch (err) {
       return next(err);
@@ -448,10 +462,6 @@ interface PaystackPaymentMetadata {
 
 function getApiBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
-}
-
-function getAppBaseUrl(): string {
-  return (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 }
 
 // ── POST /:schoolId/payments/paystack/initiate ───────────────────────────────────
@@ -523,162 +533,10 @@ router.post(
   }
 );
 
-// ── GET /:schoolId/payments/paystack/callback ────────────────────────────────────
-
-router.get(
-  '/:schoolId/payments/paystack/callback',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const schoolId = req.params.schoolId;
-      const reference = typeof req.query.reference === 'string' ? req.query.reference : undefined;
-      const redirectBase = `${getAppBaseUrl()}/parent/fees`;
-
-      if (!reference) {
-        return res.redirect(`${redirectBase}?payment=error&reason=missing_reference`);
-      }
-
-      const verification = await verifyPaystackTransaction(reference);
-      if (!verification) {
-        return res.redirect(`${redirectBase}?payment=error&reason=verify_failed`);
-      }
-
-      if (verification.status !== 'success') {
-        return res.redirect(`${redirectBase}?payment=failed`);
-      }
-
-      const metadata = (verification.metadata ?? {}) as PaystackPaymentMetadata;
-      if (!metadata.invoice_id || metadata.school_id !== schoolId) {
-        return res.redirect(`${redirectBase}?payment=error&reason=invalid_metadata`);
-      }
-      const invoiceId = metadata.invoice_id;
-
-      try {
-        const result = await recordPayment(schoolId, invoiceId, {
-          amount: verification.amount,
-          method: 'paystack',
-          reference: null,
-          paystack_reference: reference,
-          recorded_by: metadata.recorded_by ?? null,
-        });
-
-        if (!result) {
-          return res.redirect(`${redirectBase}?payment=error&reason=invoice_not_found`);
-        }
-
-        notifyPaymentReceipt(schoolId, result.payment.id, result.invoice.student_id);
-
-        if (metadata.recorded_by) {
-          await logAudit({
-            supportSession: req.supportSession,
-            schoolId,
-            userId: metadata.recorded_by,
-            actionType: 'PAYMENT_RECORDED',
-            entity: 'payments',
-            entityId: result.payment.id,
-            newValue: result.payment,
-          });
-        }
-
-        return res.redirect(`${redirectBase}?payment=success`);
-      } catch (err) {
-        if ((err as { code?: string }).code === '23505') {
-          return res.redirect(`${redirectBase}?payment=success`);
-        }
-        throw err;
-      }
-    } catch (err) {
-      return next(err);
-    }
-  }
-);
-
-// ── POST /:schoolId/payments/paystack/webhook ────────────────────────────────────
-
-interface PaystackWebhookEvent {
-  event?: string;
-  data?: {
-    reference?: string;
-    amount?: number;
-    metadata?: PaystackPaymentMetadata;
-  };
-}
-
-router.post(
-  '/:schoolId/payments/paystack/webhook',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.rawBody) {
-        console.error('Paystack webhook: rawBody missing — possible middleware misconfiguration');
-        return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Invalid webhook request' } });
-      }
-
-      const signature = req.headers['x-paystack-signature'];
-      if (typeof signature !== 'string' || !verifyPaystackWebhookSignature(req.rawBody, signature)) {
-        return res.status(401).json({ success: false, error: { code: 'INVALID_SIGNATURE', message: 'Invalid Paystack signature' } });
-      }
-
-      const event = req.body as PaystackWebhookEvent;
-      if (event.event !== 'charge.success') {
-        return res.status(200).json({ success: true, data: { ignored: true } });
-      }
-
-      const data = event.data ?? {};
-      const metadata = data.metadata ?? {};
-      if (!metadata.invoice_id || metadata.school_id !== req.params.schoolId) {
-        return res.status(200).json({ success: true, data: { ignored: true } });
-      }
-      const invoiceId = metadata.invoice_id;
-
-      // Re-verify the transaction via Paystack API — never trust the webhook payload amount.
-      // This mirrors what the manual POST /payments route does and prevents amount tampering
-      // if a webhook payload is replayed or Paystack's schema ever changes.
-      if (!data.reference) {
-        return res.status(200).json({ success: true, data: { processed: false } });
-      }
-      const verification = await verifyPaystackTransaction(data.reference);
-      if (!verification || verification.status !== 'success') {
-        return res.status(200).json({ success: true, data: { processed: false } });
-      }
-
-      try {
-        const result = await recordPayment(req.params.schoolId, invoiceId, {
-          amount: verification.amount,
-          method: 'paystack',
-          reference: null,
-          paystack_reference: data.reference,
-          recorded_by: metadata.recorded_by ?? null,
-        });
-
-        if (!result) {
-          return res.status(200).json({ success: true, data: { processed: false } });
-        }
-
-        notifyPaymentReceipt(req.params.schoolId, result.payment.id, result.invoice.student_id);
-
-        if (metadata.recorded_by) {
-          await logAudit({
-            supportSession: req.supportSession,
-            schoolId: req.params.schoolId,
-            userId: metadata.recorded_by,
-            actionType: 'PAYMENT_RECORDED',
-            entity: 'payments',
-            entityId: result.payment.id,
-            newValue: result.payment,
-          });
-        }
-
-        return res.status(200).json({ success: true, data: { processed: true } });
-      } catch (err) {
-        if ((err as { code?: string }).code === '23505') {
-          return res.status(200).json({ success: true, data: { processed: false, duplicate: true } });
-        }
-        throw err;
-      }
-    } catch (err) {
-      return next(err);
-    }
-  }
-);
+// NOTE: the Paystack webhook (POST /:schoolId/payments/paystack/webhook) and
+// callback (GET /:schoolId/payments/paystack/callback) routes live in
+// ./feesPublic.ts, not here — they must be mounted before the auth middleware
+// chain in index.ts since Paystack cannot supply a bearer token for either.
 
 // ── POST /:schoolId/fee-reminders/run ───────────────────────────────────────────
 

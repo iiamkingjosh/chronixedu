@@ -7,6 +7,7 @@ import { getStudentAttendanceHistory } from '../db/queries/attendance';
 import { getNoticesForClass } from '../db/queries/notices';
 import { getCurrentContext } from '../db/queries/sessions';
 import { computeClassResults, getStudentClassId } from '../services/resultEngine';
+import { signReportCardAsset } from '../services/reportCardService';
 import pool from '../db/client';
 
 declare module 'express-serve-static-core' {
@@ -216,6 +217,8 @@ router.get(
         }
       }
 
+      const reportCardPdfUrl = reportCard?.pdf_url ? await signReportCardAsset(reportCard.pdf_url) : null;
+
       return res.json({
         success: true,
         data: {
@@ -228,7 +231,7 @@ router.get(
           result_status: resultStatus,
           report_card: {
             available: reportCard !== null,
-            pdf_url: reportCard?.pdf_url ?? null,
+            pdf_url: reportCardPdfUrl,
           },
         },
       });
@@ -268,7 +271,9 @@ router.get(
         });
       }
 
-      return res.json({ success: true, data: reportCard });
+      const pdfUrl = reportCard.pdf_url ? await signReportCardAsset(reportCard.pdf_url) : null;
+
+      return res.json({ success: true, data: { ...reportCard, pdf_url: pdfUrl } });
     } catch (err) {
       return next(err);
     }

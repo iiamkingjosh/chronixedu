@@ -16,6 +16,8 @@ import {
   getMonthlySummary,
   getClassTermSummary,
   listUnresolvedAlerts,
+  getClassRoster,
+  isTeacherAssignedToClass,
   LOW_ATTENDANCE_ALERT_TYPE,
   AttendanceAlertRow,
 } from '../db/queries/attendance';
@@ -95,7 +97,35 @@ router.post(
         return res.status(422).json({ success: false, error: { code: 'NO_TERM_FOR_DATE', message: 'No term covers this date for this school' } });
       }
 
-      const saved = await bulkUpsertAttendance(schoolId, class_id, term.id, date, entries, markedBy);
+      // Assignment check — super_admin and principal bypass. A teacher must either be
+      // the class's form teacher or hold a teacher_assignments row for this class in
+      // the resolved term; otherwise they could mark attendance (and trigger real
+      // alerts/notifications) for a class they have no relationship to.
+      const role = req.user!.role ?? '';
+      if (!['super_admin', 'principal'].includes(role)) {
+        const isFormTeacher = cls.form_teacher_id === markedBy;
+        const isAssigned = isFormTeacher || await isTeacherAssignedToClass(markedBy, class_id, schoolId, term.id);
+        if (!isAssigned) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'NOT_ASSIGNED', message: 'You are not assigned to this class for the selected term' },
+          });
+        }
+      }
+
+      // Only mark attendance for students actually enrolled in this class — never
+      // blindly trust client-supplied student_ids.
+      const roster = await getClassRoster(class_id, schoolId);
+      const enrolledIds = new Set(roster.map(r => r.student_id));
+      const validEntries = entries.filter(entry => enrolledIds.has(entry.student_id));
+      if (validEntries.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'NO_ENROLLED_STUDENTS', message: 'None of the submitted students are enrolled in this class' },
+        });
+      }
+
+      const saved = await bulkUpsertAttendance(schoolId, class_id, term.id, date, validEntries, markedBy);
 
       await logAudit({
         supportSession: req.supportSession,
@@ -109,7 +139,7 @@ router.post(
 
       // Low-attendance alert: 3+ absences in the trailing 7 days (inclusive of the marked date)
       const alerts: AttendanceAlertRow[] = [];
-      for (const entry of entries) {
+      for (const entry of validEntries) {
         if (entry.status !== 'absent') continue;
 
         const recentAbsences = await countRecentAbsences(entry.student_id, schoolId, date);
@@ -238,6 +268,7 @@ router.get(
   '/:schoolId/attendance/monthly-summary',
   verifyToken,
   requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'teacher'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = monthlyQuerySchema.safeParse(req.query);
@@ -270,6 +301,7 @@ router.get(
   '/:schoolId/attendance/class-summary',
   verifyToken,
   requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'teacher'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = termQuerySchema.safeParse(req.query);
@@ -297,6 +329,7 @@ router.get(
   '/:schoolId/attendance/alerts',
   verifyToken,
   requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'teacher'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const alerts = await listUnresolvedAlerts(req.params.schoolId);

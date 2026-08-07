@@ -19,6 +19,7 @@ import { errorHandler } from '../src/middleware/errorHandler';
 const SCHOOL_ID  = 'a8f70089-aef1-4f65-a226-4c68d0380285';
 const CLASS_ID   = '7a4dded1-ded1-4022-abde-a32d03cd359e';
 const TEACHER_ID = '37a19d2d-fa5d-45d3-9dc1-5ea1875ef3e0';
+const SESSION_ID = 'e3e62132-16e4-4c1c-ad8b-9118579323c5';
 
 // Date within the seeded "First Term" (2025-08-31 .. 2025-12-20), unused by other fixtures
 const QUEUED_DATE = '2025-11-03';
@@ -82,6 +83,12 @@ describe('Offline sync — Dexie queue → reconnect → database', () => {
       [SCHOOL_ID, studentUserId, `TEST-OFFLINE-${suffix}`]
     );
     studentId = studentResult.rows[0].id;
+
+    // attendance/mark now only accepts entries for students enrolled in the class.
+    await pool.query(
+      `INSERT INTO student_classes (student_id, class_id, session_id) VALUES ($1, $2, $3)`,
+      [studentId, CLASS_ID, SESSION_ID]
+    );
   }, 20000);
 
   afterAll(async () => {
@@ -89,6 +96,7 @@ describe('Offline sync — Dexie queue → reconnect → database', () => {
       `DELETE FROM attendance WHERE student_id = $1 AND class_id = $2 AND date = $3`,
       [studentId, CLASS_ID, QUEUED_DATE]
     );
+    await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [studentId]);
     await pool.query(`DELETE FROM students WHERE id = $1`, [studentId]);
     await pool.query(`DELETE FROM users WHERE id = $1`, [studentUserId]);
     await offlineDb.delete();

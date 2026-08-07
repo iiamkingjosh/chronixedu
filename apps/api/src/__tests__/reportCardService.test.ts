@@ -5,6 +5,8 @@ import {
   generateReportCard,
   generateReportCardPreview,
   computePromotionStatus,
+  extractStoragePath,
+  signReportCardAsset,
 } from '../services/reportCardService';
 import { findSchoolById } from '../db/queries/schools';
 import type { SchoolWithSettings } from '../db/queries/schools';
@@ -16,6 +18,7 @@ import {
   upsertReportCard,
 } from '../db/queries/reportCards';
 import type { ClassResult } from '../services/resultEngine';
+import { supabaseAdmin } from '../supabaseClient';
 
 jest.mock('../db/queries/schools');
 jest.mock('../db/queries/reportCards', () => ({
@@ -28,17 +31,27 @@ jest.mock('../db/queries/reportCards', () => ({
 jest.mock('../services/resultEngine', () => ({
   computeClassResults: jest.fn(),
 }));
-jest.mock('../supabaseClient', () => ({
-  supabaseAdmin: {
-    storage: {
-      from: jest.fn(() => ({
-        upload: jest.fn().mockResolvedValue({ error: null }),
-        getPublicUrl: jest.fn().mockReturnValue({ data: { publicUrl: 'https://example.com/report-card.pdf' } }),
-      })),
-    },
-  },
-  supabase: {},
-}));
+jest.mock('../supabaseClient', () => {
+  // `from()` always returns this same object so tests can grab a stable handle on the
+  // mock functions via `supabaseAdmin.storage.from('report-cards')`.
+  const storageApi = {
+    upload: jest.fn().mockResolvedValue({ error: null }),
+    getPublicUrl: jest.fn().mockReturnValue({ data: { publicUrl: 'https://example.com/report-card.pdf' } }),
+    createSignedUrl: jest.fn().mockResolvedValue({ data: { signedUrl: 'https://signed.example.com/report-card.pdf' }, error: null }),
+  };
+  return {
+    supabaseAdmin: { storage: { from: jest.fn(() => storageApi) } },
+    supabase: {},
+  };
+});
+
+function mockStorageApi(): { upload: jest.Mock; getPublicUrl: jest.Mock; createSignedUrl: jest.Mock } {
+  return supabaseAdmin.storage.from('report-cards') as unknown as {
+    upload: jest.Mock;
+    getPublicUrl: jest.Mock;
+    createSignedUrl: jest.Mock;
+  };
+}
 
 jest.mock('puppeteer', () => {
   const page = {
@@ -293,5 +306,69 @@ describe('generateReportCard', () => {
     const html = mockPuppeteer.__mockPage.setContent.mock.calls[0][0] as string;
     expect(html).not.toContain('<div class="section-title">Form Teacher\'s Remark</div>');
     expect(html).toContain("Class Teacher's Signature");
+  });
+
+  it('stores the storage path (not a public URL) and resolves with it — the bucket is private', async () => {
+    const result = await generateReportCard('student-1', 'term-1', 'school-1', CLASS_RESULT, new Map());
+
+    expect(result).toBe('school-1/term-1/student-1.pdf');
+    expect(mockUpsertReportCard).toHaveBeenCalledWith('student-1', 'term-1', 'school-1', 'school-1/term-1/student-1.pdf');
+  });
+
+  it('never calls getPublicUrl — signed URLs are minted at read time by callers instead', async () => {
+    await generateReportCard('student-1', 'term-1', 'school-1', CLASS_RESULT, new Map());
+
+    expect(mockStorageApi().getPublicUrl).not.toHaveBeenCalled();
+  });
+});
+
+describe('extractStoragePath', () => {
+  it('returns a bare storage path unchanged', () => {
+    expect(extractStoragePath('school-1/term-1/student-1.pdf')).toBe('school-1/term-1/student-1.pdf');
+  });
+
+  it('extracts the object path from a legacy Supabase public URL', () => {
+    const url = 'https://xyzcompany.supabase.co/storage/v1/object/public/report-cards/school-1/term-1/student-1.pdf';
+    expect(extractStoragePath(url)).toBe('school-1/term-1/student-1.pdf');
+  });
+
+  it('URL-decodes the extracted path', () => {
+    const url = 'https://xyzcompany.supabase.co/storage/v1/object/public/report-cards/school%201/term-1/student-1.pdf';
+    expect(extractStoragePath(url)).toBe('school 1/term-1/student-1.pdf');
+  });
+});
+
+describe('signReportCardAsset', () => {
+  it('mints a signed URL for a bare storage path using the default 15-minute TTL', async () => {
+    mockStorageApi().createSignedUrl.mockResolvedValueOnce({ data: { signedUrl: 'https://signed.example.com/x.pdf' }, error: null });
+
+    const url = await signReportCardAsset('school-1/term-1/student-1.pdf');
+
+    expect(url).toBe('https://signed.example.com/x.pdf');
+    expect(mockStorageApi().createSignedUrl).toHaveBeenCalledWith('school-1/term-1/student-1.pdf', 15 * 60);
+  });
+
+  it('extracts the storage path before signing when given a legacy public URL', async () => {
+    mockStorageApi().createSignedUrl.mockResolvedValueOnce({ data: { signedUrl: 'https://signed.example.com/x.pdf' }, error: null });
+
+    await signReportCardAsset('https://xyzcompany.supabase.co/storage/v1/object/public/report-cards/school-1/term-1/student-1.pdf');
+
+    expect(mockStorageApi().createSignedUrl).toHaveBeenCalledWith('school-1/term-1/student-1.pdf', 15 * 60);
+  });
+
+  it('honors a custom TTL', async () => {
+    mockStorageApi().createSignedUrl.mockResolvedValueOnce({ data: { signedUrl: 'https://signed.example.com/x.pdf' }, error: null });
+
+    await signReportCardAsset('school-1/term-1/student-1.pdf', 7 * 24 * 60 * 60);
+
+    expect(mockStorageApi().createSignedUrl).toHaveBeenCalledWith('school-1/term-1/student-1.pdf', 7 * 24 * 60 * 60);
+  });
+
+  it('returns null when the storage layer fails to sign the object', async () => {
+    mockStorageApi().createSignedUrl.mockResolvedValueOnce({ data: null, error: new Error('object not found') });
+
+    const url = await signReportCardAsset('school-1/term-1/student-1.pdf');
+
+    expect(url).toBeNull();
   });
 });

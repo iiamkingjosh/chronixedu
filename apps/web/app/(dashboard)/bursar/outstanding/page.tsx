@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { toCsvCell } from '@/lib/csv';
 import {
   ToastBanner,
   useToast,
@@ -28,14 +29,6 @@ interface OutstandingBalanceRow {
 
 function classLabel(cls: ClassOption): string {
   return cls.stream ? `${cls.name} (${cls.stream})` : cls.name;
-}
-
-function toCsvCell(value: string | number): string {
-  const str = String(value);
-  if (/[",\n]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
 }
 
 export default function OutstandingBalancesPage() {
