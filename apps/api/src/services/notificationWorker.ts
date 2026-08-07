@@ -62,6 +62,7 @@ async function processRow(row: QueuedAuditRow): Promise<void> {
   );
 
   const { type, title, body } = buildNotification(row);
+  const allowsSms = await schoolAllowsFeature(row.school_id, 'sms');
 
   for (const parent of parents) {
     await createNotification({
@@ -73,7 +74,7 @@ async function processRow(row: QueuedAuditRow): Promise<void> {
     });
     await sendEmail(parent.email, title, body);
 
-    if (parent.phone && (await schoolAllowsFeature(row.school_id, 'sms'))) {
+    if (parent.phone && allowsSms) {
       if (await hasReachedSmsLimit(parent.parent_id)) {
         await insertNotificationLog({
           school_id: row.school_id,

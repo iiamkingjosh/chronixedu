@@ -29,6 +29,7 @@ function buildReminderMessage(row: OutstandingBalanceRow): { title: string; body
 /** Sends fee reminders (in-app + email + SMS) for every outstanding invoice in a school/term. Returns the number of parents notified. */
 export async function sendFeeRemindersForSchool(schoolId: string, termId: string): Promise<number> {
   const balances = await getOutstandingBalances(schoolId, termId);
+  const allowsSms = await schoolAllowsFeature(schoolId, 'sms');
   let remindersSent = 0;
 
   for (const row of balances) {
@@ -46,7 +47,7 @@ export async function sendFeeRemindersForSchool(schoolId: string, termId: string
 
       await sendEmail(parent.email, title, body);
 
-      if (parent.phone && (await schoolAllowsFeature(schoolId, 'sms'))) {
+      if (parent.phone && allowsSms) {
         if (await hasReachedSmsLimit(parent.parent_id)) {
           await insertNotificationLog({ school_id: schoolId, user_id: parent.parent_id, channel: 'sms', type: REMINDER_TYPE, status: 'throttled' });
         } else {
