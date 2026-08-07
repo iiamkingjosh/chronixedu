@@ -961,6 +961,7 @@ router.post(
       const subscription = result.rows[0];
 
       await pool.query(`UPDATE schools SET subscription_tier = $1 WHERE id = $2`, [plan, school_id]);
+      cache.del(schoolCacheKey(school_id, 'data'));
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
@@ -1014,6 +1015,7 @@ router.patch(
 
       if (parsed.data.plan !== undefined) {
         await pool.query(`UPDATE schools SET subscription_tier = $1 WHERE id = $2`, [parsed.data.plan, existing.school_id]);
+        cache.del(schoolCacheKey(existing.school_id, 'data'));
       }
 
       await pool.query(

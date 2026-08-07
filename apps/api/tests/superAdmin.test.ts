@@ -15,6 +15,7 @@ import teacherDashboardRouter from '../src/routes/teacherDashboard';
 import { detectSupportSession } from '../src/middleware/detectSupportSession';
 import { errorHandler } from '../src/middleware/errorHandler';
 import { supabaseAdmin } from '../src/supabaseClient';
+import { cache, schoolCacheKey } from '../src/services/cacheService';
 
 const SCHOOL_ID = 'a8f70089-aef1-4f65-a226-4c68d0380285';
 
@@ -256,6 +257,29 @@ describe('superAdmin — platform school management', () => {
       await pool.query(`DELETE FROM schools WHERE id = $1`, [syncTestSchoolId]);
     });
 
+    it('POST /subscriptions invalidates school cache when subscription tier changes', async () => {
+      const newSchoolResult = await pool.query<{ id: string }>(
+        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+        ['Cache Invalidation Test School POST', `test-cache-post-${randomUUID()}`]
+      );
+      const cacheTestSchoolId = newSchoolResult.rows[0].id;
+
+      const cacheSpy = jest.spyOn(cache, 'del');
+
+      const res = await request(app)
+        .post('/api/super-admin/subscriptions')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ school_id: cacheTestSchoolId, plan: 'premium', billing_cycle: 'monthly', amount_naira: 60000 });
+
+      expect(res.status).toBe(201);
+      expect(cacheSpy).toHaveBeenCalledWith(schoolCacheKey(cacheTestSchoolId, 'data'));
+
+      cacheSpy.mockRestore();
+      await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [cacheTestSchoolId]);
+      await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [cacheTestSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1`, [cacheTestSchoolId]);
+    });
+
     // ── GET /subscriptions ────────────────────────────────────────────────
 
     it('GET /subscriptions — super_admin token → 200, has subscriptions array and summary', async () => {
@@ -294,6 +318,37 @@ describe('superAdmin — platform school management', () => {
         [subSchoolId]
       );
       expect(schoolResult.rows[0].subscription_tier).toBe('enterprise');
+    });
+
+    it('PATCH /subscriptions/:id invalidates school cache when subscription plan changes', async () => {
+      const newSchoolResult = await pool.query<{ id: string }>(
+        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+        ['Cache Invalidation Test School PATCH', `test-cache-patch-${randomUUID()}`]
+      );
+      const cacheTestSchoolId = newSchoolResult.rows[0].id;
+
+      const subResult = await pool.query<{ id: string }>(
+        `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, amount_naira, subscription_status)
+         VALUES ($1, 'basic', 'monthly', 50000, 'active')
+         RETURNING id`,
+        [cacheTestSchoolId]
+      );
+      const testSubscriptionId = subResult.rows[0].id;
+
+      const cacheSpy = jest.spyOn(cache, 'del');
+
+      const res = await request(app)
+        .patch(`/api/super-admin/subscriptions/${testSubscriptionId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ plan: 'premium' });
+
+      expect(res.status).toBe(200);
+      expect(cacheSpy).toHaveBeenCalledWith(schoolCacheKey(cacheTestSchoolId, 'data'));
+
+      cacheSpy.mockRestore();
+      await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [cacheTestSchoolId]);
+      await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [cacheTestSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1`, [cacheTestSchoolId]);
     });
 
     // ── POST /subscriptions/:id/extend-trial ──────────────────────────────
