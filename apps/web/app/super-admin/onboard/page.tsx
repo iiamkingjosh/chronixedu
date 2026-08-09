@@ -487,10 +487,11 @@ type Step5FormInput = z.input<typeof step5Schema>;
 type Step5FormOutput = z.output<typeof step5Schema>;
 
 function Step5Assessment({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
-  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<Step5FormInput, unknown, Step5FormOutput>({
+  const { register, handleSubmit, control, watch, formState: { errors, isSubmitting } } = useForm<Step5FormInput, unknown, Step5FormOutput>({
     resolver: zodResolver(step5Schema),
     defaultValues: { components: wizard.components },
   });
+  const { fields, append, remove } = useFieldArray({ control, name: 'components' });
   const [apiError, setApiError] = useState('');
   const components = watch('components');
   const total = components.reduce((sum, c) => sum + (Number(c.weight_percent) || 0), 0);
@@ -507,12 +508,12 @@ function Step5Assessment({ wizard, onNext, onBack }: { wizard: WizardState; onNe
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid grid-cols-3 gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
-        <span>Name</span><span>Max Score</span><span>Weight %</span>
+      <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
+        <span>Name</span><span>Max Score</span><span>Weight %</span><span />
       </div>
       <div className="space-y-2">
-        {wizard.components.map((_, i) => (
-          <div key={i} className="grid grid-cols-3 gap-2">
+        {fields.map((field, i) => (
+          <div key={field.id} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-start">
             <div>
               <input {...register(`components.${i}.name`)} className={inputClass} />
               {errors.components?.[i]?.name && <p className="mt-1 text-xs text-red-600">{errors.components[i]?.name?.message}</p>}
@@ -525,9 +526,25 @@ function Step5Assessment({ wizard, onNext, onBack }: { wizard: WizardState; onNe
               <input {...register(`components.${i}.weight_percent`)} type="number" min={0} max={100} className={inputClass} />
               {errors.components?.[i]?.weight_percent && <p className="mt-1 text-xs text-red-600">{errors.components[i]?.weight_percent?.message}</p>}
             </div>
+            <button
+              type="button"
+              onClick={() => remove(i)}
+              disabled={fields.length <= 1}
+              className="text-gray-400 hover:text-red-600 px-2 py-2 disabled:opacity-30 disabled:hover:text-gray-400"
+              aria-label="Remove component"
+            >
+              ✕
+            </button>
           </div>
         ))}
       </div>
+      <button
+        type="button"
+        onClick={() => append({ name: '', max_score: 0, weight_percent: 0 })}
+        className="text-sm font-medium text-[#003366] hover:underline"
+      >
+        + Add Component
+      </button>
       <p className={`text-sm font-medium ${total === 100 ? 'text-green-600' : 'text-red-600'}`}>Total: {total}%</p>
       {apiError && <ErrorBox message={apiError} />}
       <div className="flex justify-between pt-2">
