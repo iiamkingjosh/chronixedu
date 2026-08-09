@@ -6,6 +6,7 @@ const apiKey = process.env.SENDGRID_API_KEY;
 if (apiKey) sgMail.setApiKey(apiKey);
 
 const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'no-reply@chronixedu.com';
+const FROM_NAME = process.env.SENDGRID_FROM_NAME || 'Chronix Edu';
 
 /** Returns true if SENDGRID_API_KEY is configured and emails will actually be sent. */
 export function isEmailConfigured(): boolean {
@@ -17,7 +18,7 @@ export function isEmailConfigured(): boolean {
 export async function sendEmail(to: string, subject: string, text: string): Promise<void> {
   if (!apiKey) return;
   try {
-    await sgMail.send({ to, from: FROM_EMAIL, subject, text });
+    await sgMail.send({ to, from: { email: FROM_EMAIL, name: FROM_NAME }, subject, text });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('sendgrid_email_failed', { to, subject, error: message });
