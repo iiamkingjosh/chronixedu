@@ -11,6 +11,7 @@ import { isAdminRole, canAccessPayoutSettings } from '@/lib/auth';
 import { getMainNavForRole, SETTINGS_NAV, type NavItem } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
+import { endSupportSession } from '@/lib/superAdminApi';
 
 const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
   const active = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -30,7 +31,23 @@ const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: Na
 });
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout, subscriptionTier } = useAuth();
+  const { user, loading, logout, subscriptionTier, supportCode, isImpersonating, exitImpersonation } = useAuth();
+  const [exiting, setExiting] = useState(false);
+
+  async function handleExitImpersonation() {
+    setExiting(true);
+    const sessionId = exitImpersonation();
+    if (sessionId) {
+      try {
+        await endSupportSession(sessionId);
+      } catch {
+        // The session's local state is already restored either way — a
+        // failure here just means it'll expire on its own (max 2h) or an
+        // admin can end it from the Support Sessions page.
+      }
+    }
+    router.push('/super-admin/support');
+  }
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
@@ -113,6 +130,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="px-5 py-5 border-b border-white/10">
           <Image src="/icons/Chronix_Logo.png" alt="Chronix Edu" width={160} height={36} className="h-9 w-auto mb-1.5" priority />
           <p className="text-xs text-white/50 truncate">{user.email}</p>
+          {supportCode && <p className="text-[10px] text-white/40 truncate">Support code: {supportCode}</p>}
         </div>
 
         <nav className="flex-1 py-4 overflow-y-auto">{renderNav()}</nav>
@@ -142,6 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mb-1.5" />
                 <p className="text-xs text-white/50 truncate">{user.email}</p>
+                {supportCode && <p className="text-[10px] text-white/40 truncate">Support code: {supportCode}</p>}
               </div>
               <button
                 type="button"
@@ -190,6 +209,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <NotificationBell variant="dark" />
           </div>
         </header>
+        {isImpersonating && (
+          <div className="shrink-0 bg-amber-500 text-white text-sm px-4 py-2 flex items-center justify-between gap-3">
+            <span>
+              Viewing as <strong>{user.email}</strong> ({user.role.replace('_', ' ')}) — support session in progress.
+            </span>
+            <button
+              type="button"
+              onClick={handleExitImpersonation}
+              disabled={exiting}
+              className="shrink-0 rounded-md bg-white/20 hover:bg-white/30 px-3 py-1 text-xs font-semibold disabled:opacity-50"
+            >
+              {exiting ? 'Exiting…' : 'Exit Support Session'}
+            </button>
+          </div>
+        )}
         <main key={pathname} className="flex-1 min-w-0 overflow-y-auto page-transition">{children}</main>
       </div>
     </div>

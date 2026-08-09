@@ -46,7 +46,12 @@ const rootGuard = [...guard, requireRootAdmin];
 
 const createSupportSessionSchema = z.object({
   school_id: z.string().uuid(),
-  user_id: z.string().uuid(),
+  user_id: z
+    .string()
+    .regex(
+      /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{6})$/i,
+      'Enter a valid User ID (UUID) or 6-digit support code'
+    ),
   reason: z.string().min(10, 'Reason must be at least 10 characters'),
 });
 
@@ -299,7 +304,8 @@ router.post(
       const { school_id, user_id, reason } = parsed.data;
 
       const targetResult = await pool.query<{ id: string; school_id: string; role: string; email: string; title: string | null }>(
-        `SELECT id, school_id, role, email, title FROM users WHERE id = $1 AND school_id = $2 AND is_active = true`,
+        `SELECT id, school_id, role, email, title FROM users
+         WHERE (id::text = $1 OR support_code = $1) AND school_id = $2 AND is_active = true`,
         [user_id, school_id]
       );
       const target = targetResult.rows[0];
@@ -314,7 +320,7 @@ router.post(
         `INSERT INTO support_sessions (platform_admin_id, school_id, impersonated_user_id, reason, actions_taken)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id`,
-        [req.user!.user_id, school_id, user_id, reason, '[]']
+        [req.user!.user_id, school_id, target.id, reason, '[]']
       );
       const sessionId = sessionResult.rows[0].id;
 
@@ -360,7 +366,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, target_user_id, metadata, ip_address, support_session_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [req.user!.user_id, 'IMPERSONATION_START', school_id, user_id, JSON.stringify({ reason, target_role: target.role }), req.ip, sessionId]
+        [req.user!.user_id, 'IMPERSONATION_START', school_id, target.id, JSON.stringify({ reason, target_role: target.role }), req.ip, sessionId]
       );
 
       return res.json({ success: true, data: { session_id: sessionId, scoped_token: scopedToken } });

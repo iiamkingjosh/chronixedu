@@ -915,6 +915,28 @@ describe('superAdmin — platform school management', () => {
       scopedToken = res.body.data.scoped_token;
     });
 
+    it('POST /support-sessions — valid body with a 6-digit support code instead of a UUID → 200', async () => {
+      const codeResult = await pool.query<{ support_code: string }>(
+        `SELECT support_code FROM users WHERE id = $1`,
+        [TEACHER_ID]
+      );
+      const supportCode = codeResult.rows[0].support_code;
+
+      const res = await request(app)
+        .post('/api/super-admin/support-sessions')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ school_id: SCHOOL_ID, user_id: supportCode, reason: 'Investigating a support ticket' });
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.session_id).toBeDefined();
+      expect(res.body.data.scoped_token).toBeDefined();
+
+      // Clean up this extra session (and its audit trail) so it doesn't linger
+      // for later tests or block the outer afterAll's user/school deletion.
+      await pool.query(`DELETE FROM platform_audit_logs WHERE support_session_id = $1`, [res.body.data.session_id]);
+      await pool.query(`DELETE FROM support_sessions WHERE id = $1`, [res.body.data.session_id]);
+    });
+
     // ── Scoped token on a school-level route ──────────────────────────────
 
     it('GET /api/schools/:schoolId/dashboard/teacher/overview with scoped_token → 200', async () => {

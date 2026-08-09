@@ -10,6 +10,14 @@ function getToken(): string | null {
   return localStorage.getItem('chronixedu_token');
 }
 
+/** Support-session tokens (from "Start Support Session") are only accepted by the
+ *  API when paired with this header — see apps/api/src/middleware/auth.ts. */
+function getSupportSessionHeader(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  const sessionId = localStorage.getItem('chronixedu_support_session_id');
+  return sessionId ? { 'x-support-session-id': sessionId } : {};
+}
+
 /** Clears the stored session and sends the user back to login. Called whenever
  *  the API rejects a request with 401 — expired, invalid, or tampered token. */
 function handleUnauthorized() {
@@ -31,6 +39,7 @@ export async function apiFetch<T = unknown>(
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...getSupportSessionHeader(),
       ...(options.headers ?? {}),
     },
   });
@@ -52,7 +61,7 @@ export async function apiUpload<T = unknown>(
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     body: formData,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...getSupportSessionHeader() },
   });
   if (res.status === 401) handleUnauthorized();
   const json = await res.json();
@@ -74,6 +83,7 @@ export async function apiFetchBlob(
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...getSupportSessionHeader(),
       ...(options.headers ?? {}),
     },
   });
