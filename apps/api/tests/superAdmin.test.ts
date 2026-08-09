@@ -260,6 +260,38 @@ describe('superAdmin — platform school management', () => {
       }
     });
 
+    it('POST /subscriptions — trial plan with amount_naira 0 → 201 (trials can be free)', async () => {
+      const newSchoolResult = await pool.query<{ id: string }>(
+        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+        ['Free Trial Test School', `test-free-trial-${randomUUID()}`]
+      );
+      const newSchoolId = newSchoolResult.rows[0].id;
+
+      try {
+        const res = await request(app)
+          .post('/api/super-admin/subscriptions')
+          .set('Authorization', `Bearer ${superAdminToken}`)
+          .send({ school_id: newSchoolId, plan: 'trial', billing_cycle: 'monthly', amount_naira: 0 });
+
+        expect(res.status).toBe(201);
+        expect(res.body.success).toBe(true);
+        expect(res.body.data.amount_naira).toBe('0.00');
+      } finally {
+        await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [newSchoolId]);
+        await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [newSchoolId]);
+        await pool.query(`DELETE FROM schools WHERE id = $1`, [newSchoolId]);
+      }
+    });
+
+    it('POST /subscriptions — basic (paid) plan with amount_naira 0 → 400', async () => {
+      const res = await request(app)
+        .post('/api/super-admin/subscriptions')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly', amount_naira: 0 });
+      expect(res.status).toBe(400);
+      expect(res.body.error.message.fieldErrors.amount_naira).toBeTruthy();
+    });
+
     it('POST /subscriptions syncs schools.subscription_tier to the new plan', async () => {
       const newSchoolResult = await pool.query<{ id: string }>(
         `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
