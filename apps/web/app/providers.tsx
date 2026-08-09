@@ -15,6 +15,7 @@ export interface AuthUser {
   first_name?: string;
   last_name?: string;
   subscription_tier?: string | null;
+  support_code?: string;
 }
 
 interface AuthContextValue {
@@ -22,9 +23,13 @@ interface AuthContextValue {
   token: string | null;
   schoolId: string | null;
   subscriptionTier: string | null;
+  supportCode: string | null;
   loading: boolean;
   setAuth: (user: AuthUser, token: string) => void;
   logout: () => void;
+  isImpersonating: boolean;
+  startImpersonation: (user: AuthUser, token: string, sessionId: string) => void;
+  exitImpersonation: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -33,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isImpersonating, setIsImpersonating] = useState(false);
   const router = useRouter();
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -44,6 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(t);
         setUser(JSON.parse(u) as AuthUser);
       }
+      setIsImpersonating(!!localStorage.getItem('chronixedu_impersonator_token'));
     } catch {
       localStorage.removeItem('chronixedu_token');
       localStorage.removeItem('chronixedu_user');
@@ -62,9 +69,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     setToken(null);
+    setIsImpersonating(false);
     localStorage.removeItem('chronixedu_token');
     localStorage.removeItem('chronixedu_user');
+    localStorage.removeItem('chronixedu_impersonator_token');
+    localStorage.removeItem('chronixedu_impersonator_user');
+    localStorage.removeItem('chronixedu_support_session_id');
   }, []);
+
+  /** Backs up the current (real admin) session, then switches the active
+   *  session to the impersonated user's scoped token. */
+  function startImpersonation(impersonatedUser: AuthUser, scopedToken: string, sessionId: string) {
+    if (token && user) {
+      localStorage.setItem('chronixedu_impersonator_token', token);
+      localStorage.setItem('chronixedu_impersonator_user', JSON.stringify(user));
+    }
+    localStorage.setItem('chronixedu_support_session_id', sessionId);
+    setAuth(impersonatedUser, scopedToken);
+    setIsImpersonating(true);
+  }
+
+  /** Restores the real admin's session. Returns the support session ID that
+   *  was active, so the caller can tell the API to end it (using the
+   *  now-restored admin auth) — or null if nothing was being impersonated. */
+  function exitImpersonation(): string | null {
+    const adminToken = localStorage.getItem('chronixedu_impersonator_token');
+    const adminUser = localStorage.getItem('chronixedu_impersonator_user');
+    const sessionId = localStorage.getItem('chronixedu_support_session_id');
+    localStorage.removeItem('chronixedu_impersonator_token');
+    localStorage.removeItem('chronixedu_impersonator_user');
+    localStorage.removeItem('chronixedu_support_session_id');
+    setIsImpersonating(false);
+    if (adminToken && adminUser) {
+      setAuth(JSON.parse(adminUser) as AuthUser, adminToken);
+    } else {
+      logout();
+    }
+    return sessionId;
+  }
 
   // Auto-logout after 10 minutes with no mouse/keyboard/touch activity — protects
   // accounts left open on shared school computers. The 1h server JWT expiry is
@@ -91,7 +133,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, schoolId: user?.school_id ?? null, subscriptionTier: user?.subscription_tier ?? null, loading, setAuth, logout }}
+      value={{
+        user,
+        token,
+        schoolId: user?.school_id ?? null,
+        subscriptionTier: user?.subscription_tier ?? null,
+        supportCode: user?.support_code ?? null,
+        loading,
+        setAuth,
+        logout,
+        isImpersonating,
+        startImpersonation,
+        exitImpersonation,
+      }}
     >
       {children}
     </AuthContext.Provider>

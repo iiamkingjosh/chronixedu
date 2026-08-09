@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,6 +14,26 @@ import {
   type SchoolListItem,
 } from '@/lib/superAdminApi';
 import { useToast } from '@/components/Toast';
+import { useAuth, type AuthUser } from '@/app/providers';
+import { getDefaultDashboardPath } from '@/lib/auth';
+
+/** Decodes a JWT's payload without verifying its signature — safe here because
+ *  the token just arrived directly from our own authenticated API response. */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + c.charCodeAt(0).toString(16).padStart(2, '0'))
+        .join('')
+    );
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
 
 function formatRelative(value: string): string {
   const date = new Date(value);
@@ -75,7 +96,12 @@ const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm f
 
 const startSessionSchema = z.object({
   school_id: z.string().min(1, 'Select a school'),
-  user_id: z.string().uuid('Must be a valid user ID (UUID)'),
+  user_id: z
+    .string()
+    .regex(
+      /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|\d{6})$/i,
+      'Enter a valid User ID (UUID) or the 6-digit support code'
+    ),
   reason: z.string().min(10, 'Reason must be at least 10 characters'),
 });
 
@@ -91,31 +117,39 @@ function StartSessionModal({ schools, onClose, onDone }: {
     defaultValues: { school_id: '', user_id: '', reason: '' },
   });
   const [apiError, setApiError] = useState('');
-  const [scopedToken, setScopedToken] = useState<string | null>(null);
+  const [launching, setLaunching] = useState(false);
+  const { startImpersonation } = useAuth();
+  const router = useRouter();
 
   async function onSubmit(values: StartSessionForm) {
     setApiError('');
     try {
       const res = await startSupportSession(values);
-      setScopedToken(res.scoped_token);
+      const payload = decodeJwtPayload(res.scoped_token);
+      if (!payload || typeof payload.role !== 'string') {
+        setApiError('Session started, but the returned token could not be read. Try again.');
+        return;
+      }
+      const impersonatedUser: AuthUser = {
+        user_id: payload.user_id as string,
+        school_id: (payload.school_id as string) ?? null,
+        role: payload.role,
+        email: payload.email as string,
+        title: (payload.title as string | undefined) ?? undefined,
+      };
+      setLaunching(true);
+      startImpersonation(impersonatedUser, res.scoped_token, res.session_id);
+      onDone();
+      router.push(getDefaultDashboardPath(impersonatedUser.role));
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : 'Failed to start support session');
     }
   }
 
-  if (scopedToken) {
+  if (launching) {
     return (
-      <Modal title="Support Session Started" onClose={onDone}>
-        <div className="space-y-4">
-          <p className="text-sm text-gray-600">Use this scoped token to access the school&apos;s account.</p>
-          <code className="block bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-xs break-all text-gray-800">{scopedToken}</code>
-          <p className="text-sm text-gray-500">This token expires in 2 hours.</p>
-          <div className="flex justify-end pt-2">
-            <button onClick={onDone} className="px-5 py-2 bg-[#003366] text-white text-sm font-medium rounded-lg hover:bg-[#002244] transition-colors">
-              Done
-            </button>
-          </div>
-        </div>
+      <Modal title="Starting Support Session" onClose={onDone}>
+        <p className="text-sm text-gray-600">Signing you in as this user…</p>
       </Modal>
     );
   }
@@ -131,8 +165,8 @@ function StartSessionModal({ schools, onClose, onDone }: {
             ))}
           </select>
         </Field>
-        <Field label="User ID" error={errors.user_id?.message}>
-          <input {...register('user_id')} className={inputClass} placeholder="Paste the user's UUID" />
+        <Field label="User ID or Support Code" error={errors.user_id?.message}>
+          <input {...register('user_id')} className={inputClass} placeholder="6-digit support code, or the user's UUID" />
         </Field>
         <Field label="Reason" error={errors.reason?.message}>
           <textarea {...register('reason')} rows={3} className={inputClass} placeholder="Why are you starting this session?" />

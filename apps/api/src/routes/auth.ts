@@ -187,12 +187,12 @@ router.post('/login', async (req, res, next) => {
 
     // H-08: always release the pg client, even when an early return or exception occurs.
     const pg = getPgClient();
-    let local: { id: string; school_id: string; role: string; title: string; email: string; first_name: string; last_name: string; is_active: boolean } | undefined;
+    let local: { id: string; school_id: string; role: string; title: string; email: string; first_name: string; last_name: string; is_active: boolean; support_code: string } | undefined;
     let subscriptionTier: string | null = null;
     try {
       await pg.connect();
       const r = await pg.query(
-        `SELECT id, school_id, role, title, email, first_name, last_name, is_active FROM users WHERE id = $1`,
+        `SELECT id, school_id, role, title, email, first_name, last_name, is_active, support_code FROM users WHERE id = $1`,
         [userId]
       );
       local = r.rows[0];
@@ -232,6 +232,7 @@ router.post('/login', async (req, res, next) => {
       first_name: local.first_name,
       last_name: local.last_name,
       subscription_tier: subscriptionTier,
+      support_code: local.support_code,
     };
 
     const jwtSecret = process.env.JWT_SECRET;

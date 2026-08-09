@@ -164,6 +164,7 @@ describe('POST /api/auth/login', () => {
           last_name: 'B',
           password_hash: passwordHash,
           is_active: true,
+          support_code: '123456',
         }],
       })
       // 2. UPDATE last_login_at
@@ -187,6 +188,7 @@ describe('POST /api/auth/login', () => {
       first_name: 'A',
       last_name: 'B',
       subscription_tier: 'premium',
+      support_code: '123456',
     });
 
     const decoded = jwt.decode(res.body.data.access_token) as { subscription_tier?: string };

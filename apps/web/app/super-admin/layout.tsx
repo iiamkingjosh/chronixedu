@@ -45,7 +45,7 @@ const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: Na
 });
 
 export default function SuperAdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, supportCode } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
@@ -90,6 +90,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
             </span>
               <Image src="/icons/Chronix_Logo.png" alt="Chronix Edu" width={160} height={36} className="h-9 w-auto mt-2 mb-1" priority />
             <p className="text-xs text-white/50 truncate">{user.email}</p>
+            {supportCode && <p className="text-[10px] text-white/40 truncate">Support code: {supportCode}</p>}
           </div>
 
           <nav className="flex-1 py-4 overflow-y-auto">{renderNav()}</nav>
@@ -122,6 +123,7 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/icons/Chronix_Logo.png" alt="Chronix Edu" className="h-9 w-auto mt-2 mb-1" />
                   <p className="text-xs text-white/50 truncate">{user.email}</p>
+                  {supportCode && <p className="text-[10px] text-white/40 truncate">Support code: {supportCode}</p>}
                 </div>
                 <button
                   type="button"
