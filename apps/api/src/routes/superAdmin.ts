@@ -83,13 +83,18 @@ const listSubscriptionsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
 });
 
-const createSubscriptionSchema = z.object({
-  school_id: z.string().uuid(),
-  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
-  billing_cycle: z.enum(['monthly', 'annual']),
-  amount_naira: z.number().positive(),
-  trial_ends_at: z.string().optional(),
-});
+const createSubscriptionSchema = z
+  .object({
+    school_id: z.string().uuid(),
+    plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
+    billing_cycle: z.enum(['monthly', 'annual']),
+    amount_naira: z.number().nonnegative(),
+    trial_ends_at: z.string().optional(),
+  })
+  .refine(data => data.plan === 'trial' || data.amount_naira > 0, {
+    message: 'Amount must be greater than 0 for a paid plan',
+    path: ['amount_naira'],
+  });
 
 // If a trial subscription is created with no trial_ends_at, it runs for this
 // many days — keeps a caller-omitted date from meaning "never expires".
