@@ -26,6 +26,8 @@ jest.mock('../db/client', () => ({
 jest.mock('../db/queries/fees');
 jest.mock('../db/queries/auditLog');
 jest.mock('../services/paymentReceiptNotifier');
+jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
+jest.mock('../services/reportCardService', () => ({ signReportCardAsset: jest.fn() }));
 // Only stub verifyPaystackTransaction — keep verifyPaystackWebhookSignature real so
 // this test proves a genuinely-signed webhook request reaches the handler.
 jest.mock('../services/paystackService', () => ({

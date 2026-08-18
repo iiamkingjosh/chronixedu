@@ -11,6 +11,8 @@ jest.mock('../db/queries/fees');
 jest.mock('../db/queries/auditLog');
 jest.mock('../services/paystackService');
 jest.mock('../services/paymentReceiptNotifier');
+jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
+jest.mock('../services/reportCardService', () => ({ signReportCardAsset: jest.fn() }));
 
 const mockFees = feesQueries as jest.Mocked<typeof feesQueries>;
 const mockAudit = auditLog as jest.Mocked<typeof auditLog>;
