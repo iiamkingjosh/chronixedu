@@ -69,6 +69,7 @@ const SCHOOL_ROW = {
   name: 'Test School',
   slug: 'test-school',
   is_active: true,
+  subscription_tier: 'premium',
   created_at: '2025-01-01',
   updated_at: '2025-01-01',
   identity_config: { name: 'Test School', motto: '' },
@@ -83,7 +84,7 @@ describe('POST /api/schools', () => {
   it('creates school + seeds defaults, returns 201', async () => {
     mockQueries.insertSchool.mockResolvedValueOnce({
       id: 'school-uuid-001', name: 'Test School', slug: 'test-school',
-      is_active: true, created_at: '', updated_at: '',
+      is_active: true, subscription_tier: null, created_at: '', updated_at: '',
     });
     mockQueries.insertSchoolSettings.mockResolvedValueOnce({ id: 'settings-001', school_id: 'school-uuid-001' });
 

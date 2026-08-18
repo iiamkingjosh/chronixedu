@@ -176,6 +176,7 @@ describe('generateReportCardPreview', () => {
     name: 'Test School',
     slug: 'test-school',
     is_active: true,
+    subscription_tier: 'premium',
     created_at: '2025-01-01',
     updated_at: '2025-01-01',
     identity_config: {
@@ -229,6 +230,7 @@ describe('generateReportCard', () => {
     name: 'Test School',
     slug: 'test-school',
     is_active: true,
+    subscription_tier: 'premium',
     created_at: '2025-01-01',
     updated_at: '2025-01-01',
     identity_config: {},
