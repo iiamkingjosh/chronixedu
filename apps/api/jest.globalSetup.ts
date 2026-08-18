@@ -17,6 +17,15 @@ const FATIMA_ID   = '483dc14c-b865-45eb-99f9-fde8b2dbf16e';
 const FATIMA_USER = 'ffffffff-0000-0000-0000-000000000001';
 
 export default async function globalSetup(): Promise<void> {
+  // These fixtures are only consumed by the DB-backed apps/api/tests/**
+  // integration suite. src/__tests__/** mocks pg entirely and needs no real
+  // connection — so when DATABASE_URL isn't set (e.g. CI's unit-only job,
+  // which deliberately runs with no real credentials), skip seeding rather
+  // than fail the whole run trying to connect.
+  if (!process.env.DATABASE_URL) {
+    return;
+  }
+
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
 
