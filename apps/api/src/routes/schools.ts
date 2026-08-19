@@ -736,7 +736,10 @@ router.get(
       return res.json({ success: true, data: banks });
     } catch (err) {
       if (err instanceof PaystackServiceError) {
-        return res.status(502).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
+        // 424 (not 502/503) deliberately — Railway's edge replaces 5xx response
+        // bodies from the app with its own generic error page, which silently
+        // destroyed this exact error message before it ever reached the browser.
+        return res.status(424).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
       }
       return next(err);
     }
@@ -761,7 +764,10 @@ router.post(
         resolved = await resolveBankAccount(parsed.data.bank_code, parsed.data.account_number);
       } catch (err) {
         if (err instanceof PaystackServiceError) {
-          return res.status(502).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
+          // 424 (not 502/503) deliberately — Railway's edge replaces 5xx response
+        // bodies from the app with its own generic error page, which silently
+        // destroyed this exact error message before it ever reached the browser.
+        return res.status(424).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
         }
         throw err;
       }
@@ -820,7 +826,10 @@ router.put(
         reResolved = await resolveBankAccount(bank_code, account_number);
       } catch (err) {
         if (err instanceof PaystackServiceError) {
-          return res.status(502).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
+          // 424 (not 502/503) deliberately — Railway's edge replaces 5xx response
+        // bodies from the app with its own generic error page, which silently
+        // destroyed this exact error message before it ever reached the browser.
+        return res.status(424).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
         }
         throw err;
       }
@@ -882,7 +891,9 @@ router.put(
           },
         });
 
-        return res.status(502).json({
+        // 424 (not 502) — see the PAYSTACK_UNAVAILABLE routes above: Railway's
+        // edge replaces 5xx bodies from the app with its own generic page.
+        return res.status(424).json({
           success: false,
           error: {
             code: 'SUBACCOUNT_CREATE_FAILED',

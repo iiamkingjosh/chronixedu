@@ -371,7 +371,7 @@ describe('Payout settings', () => {
     expect(mockSignInWithPassword).not.toHaveBeenCalled();
   });
 
-  it('returns 502 and sets settlement_status failed when subaccount creation fails with no active config to protect', async () => {
+  it('returns 424 and sets settlement_status failed when subaccount creation fails with no active config to protect', async () => {
     global.fetch = jest.fn().mockImplementation((url: string) => {
       if (url.includes('/bank/resolve')) {
         return Promise.resolve({
@@ -388,7 +388,7 @@ describe('Payout settings', () => {
       .set('Authorization', `Bearer ${otherPrincipalToken}`)
       .send({ bank_code: '058', account_number: '0000000000', account_name: 'FAIL SCHOOL', current_password: CURRENT_PASSWORD });
 
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(424);
 
     const getRes = await request(app)
       .get(`/api/schools/${otherSchoolId}/settings/payout`)
@@ -425,7 +425,7 @@ describe('Payout settings', () => {
       .set('Authorization', `Bearer ${principalToken}`)
       .send({ bank_code: '058', account_number: '9999999999', account_name: 'NEW BANK ACCOUNT', current_password: CURRENT_PASSWORD });
 
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(424);
 
     // The working config — and therefore the school's ability to collect fees —
     // must survive a transient Paystack failure untouched.
