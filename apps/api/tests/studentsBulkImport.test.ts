@@ -9,6 +9,7 @@ import request from 'supertest';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import ExcelJS from 'exceljs';
+import bcrypt from 'bcryptjs';
 
 import pool from '../src/db/client';
 import studentsRouter from '../src/routes/students';
@@ -66,7 +67,6 @@ describe('POST /:schoolId/students/bulk-import/preview', () => {
   afterAll(async () => {
     await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
     await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
-    await pool.end();
   }, 30000);
 
   it('rejects a teacher with 403', async () => {
@@ -128,4 +128,145 @@ describe('POST /:schoolId/students/bulk-import/preview', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('TOO_MANY_ROWS');
   });
+});
+
+describe('POST /:schoolId/students/bulk-import/commit', () => {
+  let schoolId: string;
+  let registrarToken: string;
+  let teacherToken: string;
+
+  beforeAll(async () => {
+    const schoolResult = await pool.query<{ id: string }>(
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      ['Bulk Import Commit Test School', `test-bulk-commit-${randomUUID()}`]
+    );
+    schoolId = schoolResult.rows[0].id;
+
+    const registrarResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'registrar', 'Test', 'Registrar', 'subject') RETURNING id, email`,
+      [schoolId, `registrar-commit-${randomUUID()}@test.com`]
+    );
+    registrarToken = makeToken(registrarResult.rows[0].id, 'registrar', schoolId, registrarResult.rows[0].email);
+
+    const teacherResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Existing', 'Teacher', 'subject') RETURNING id, email`,
+      [schoolId, `teacher-commit-${randomUUID()}@test.com`]
+    );
+    teacherToken = makeToken(teacherResult.rows[0].id, 'teacher', schoolId, teacherResult.rows[0].email);
+  }, 30000);
+
+  afterAll(async () => {
+    await pool.query(`DELETE FROM parent_students WHERE student_id IN (SELECT id FROM students WHERE school_id = $1)`, [schoolId]);
+    await pool.query(`DELETE FROM audit_logs WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM students WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+  }, 30000);
+
+  async function preview(token: string, buffer: Buffer) {
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/students/bulk-import/preview`)
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', buffer, 'students.xlsx');
+    return res.body.data.rows;
+  }
+
+  it('rejects a teacher with 403', async () => {
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
+      .set('Authorization', `Bearer ${teacherToken}`)
+      .send({ rows: [] });
+    expect(res.status).toBe(403);
+  });
+
+  it('creates students and a new parent, sets the fixed password, and returns a downloadable results file', async () => {
+    const studentEmail = `commit-student-${randomUUID()}@test.com`;
+    const parentEmail = `commit-parent-${randomUUID()}@test.com`;
+    const buffer = await xlsxBuffer(
+      ['First Name', 'Last Name', 'Email', 'Parent 1 First Name', 'Parent 1 Last Name', 'Parent 1 Email', 'Parent 1 Relationship'],
+      [['Ada', 'Bello', studentEmail, 'Bisi', 'Bello', parentEmail, 'Mother']]
+    );
+    const rows = await preview(registrarToken, buffer);
+
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
+      .set('Authorization', `Bearer ${registrarToken}`)
+      .send({ rows });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.created).toBe(1);
+    expect(res.body.data.failed).toBe(0);
+    expect(typeof res.body.data.download_base64).toBe('string');
+
+    const studentRow = await pool.query<{ password_hash: string }>(`SELECT password_hash FROM users WHERE email = $1`, [studentEmail]);
+    expect(studentRow.rows).toHaveLength(1);
+
+    expect(bcrypt.compareSync('Password2$', studentRow.rows[0].password_hash)).toBe(true);
+
+    const parentRow = await pool.query(`SELECT id FROM users WHERE email = $1 AND role = 'parent'`, [parentEmail]);
+    expect(parentRow.rows).toHaveLength(1);
+  });
+
+  it('reuses an existing parent by email instead of creating a duplicate, for two siblings in the same file', async () => {
+    const sharedParentEmail = `shared-parent-${randomUUID()}@test.com`;
+    const buffer = await xlsxBuffer(
+      ['First Name', 'Last Name', 'Email', 'Parent 1 First Name', 'Parent 1 Last Name', 'Parent 1 Email', 'Parent 1 Relationship'],
+      [
+        ['Sibling', 'One', `sib1-${randomUUID()}@test.com`, 'Shared', 'Parent', sharedParentEmail, 'Father'],
+        ['Sibling', 'Two', `sib2-${randomUUID()}@test.com`, 'Shared', 'Parent', sharedParentEmail, 'Father'],
+      ]
+    );
+    const rows = await preview(registrarToken, buffer);
+
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
+      .set('Authorization', `Bearer ${registrarToken}`)
+      .send({ rows });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.created).toBe(2);
+
+    const parentRows = await pool.query(`SELECT id FROM users WHERE email = $1`, [sharedParentEmail]);
+    expect(parentRows.rows).toHaveLength(1); // one parent account, not two
+  });
+
+  it('does not roll back other rows when one row fails at commit time', async () => {
+    const goodEmail = `good-${randomUUID()}@test.com`;
+    const conflictEmail = `will-conflict-${randomUUID()}@test.com`;
+
+    // Pre-create a user with conflictEmail directly in the DB, AFTER preview
+    // would have run, to simulate a race between preview and commit.
+    const buffer = await xlsxBuffer(
+      ['First Name', 'Last Name', 'Email'],
+      [['Good', 'Row', goodEmail], ['Conflict', 'Row', conflictEmail]]
+    );
+    const rows = await preview(registrarToken, buffer);
+
+    await pool.query(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Snuck', 'In', 'subject')`,
+      [schoolId, conflictEmail]
+    );
+
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
+      .set('Authorization', `Bearer ${registrarToken}`)
+      .send({ rows });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.created).toBe(1);
+    expect(res.body.data.failed).toBe(1);
+
+    const goodRow = await pool.query(`SELECT id FROM users WHERE email = $1`, [goodEmail]);
+    expect(goodRow.rows).toHaveLength(1);
+  });
+});
+
+// Closes the shared pg pool once, after every describe block in this file has
+// finished — closing it inside an individual describe's afterAll would break
+// any sibling describe block that still needs to query the database.
+afterAll(async () => {
+  await pool.end();
 });

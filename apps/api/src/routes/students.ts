@@ -27,6 +27,7 @@ import { signReportCardAsset } from '../services/reportCardService';
 import { sendEmail } from '../services/emailService';
 import { parseBulkImportFile, BulkImportParseError } from '../services/bulkImportParser';
 import { runFullValidation } from '../services/bulkImportValidation';
+import { generateBulkImportResultsFile, type CreatedStudentRecord, type CreatedParentRecord } from '../services/bulkImportResults';
 import pool from '../db/client';
 
 async function getSchoolName(schoolId: string): Promise<string> {
@@ -274,6 +275,175 @@ router.post(
       };
 
       return res.json({ success: true, data: { rows: results, summary } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/students/bulk-import/commit ─────────────────────────────────
+// Re-validates every row from scratch — never trusts the client-supplied
+// "valid"/"error" status from preview. One registerStudent() transaction per
+// row, so a single bad row can't roll back the rest of the batch.
+
+const BULK_IMPORT_PASSWORD = 'Password2$';
+const BULK_IMPORT_EMAIL_BATCH_SIZE = 50;
+
+const bulkImportParentSchema = z.object({
+  first_name: z.string().nullable(),
+  last_name: z.string().nullable(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+  relationship_type: z.string().nullable(),
+  is_primary_contact: z.boolean(),
+});
+
+const bulkImportCommitSchema = z.object({
+  rows: z.array(z.object({
+    row_number: z.number(),
+    status: z.enum(['valid', 'error']),
+    errors: z.array(z.string()),
+    student: z.object({
+      row_number: z.number(),
+      first_name: z.string(),
+      last_name: z.string(),
+      email: z.string().nullable(),
+      phone: z.string().nullable(),
+      dob: z.string().nullable(),
+      gender: z.string().nullable(),
+      address: z.string().nullable(),
+      blood_group: z.string().nullable(),
+      emergency_contact_name: z.string().nullable(),
+      emergency_contact_phone: z.string().nullable(),
+      parent1: bulkImportParentSchema.nullable(),
+      parent2: bulkImportParentSchema.nullable(),
+    }),
+  })).min(1).max(MAX_BULK_IMPORT_ROWS),
+});
+
+router.post(
+  '/:schoolId/students/bulk-import/commit',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'registrar'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = bulkImportCommitSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const submittedRows = parsed.data.rows.map(r => r.student);
+      const revalidated = await runFullValidation(submittedRows, findUsersRolesByEmails);
+
+      const passwordHash = hashSync(BULK_IMPORT_PASSWORD, 12);
+      const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string; admission_no?: string }> = [];
+      const createdStudents: CreatedStudentRecord[] = [];
+      const allNewParents: CreatedParentRecord[] = [];
+
+      for (const row of revalidated) {
+        if (row.status === 'error') {
+          results.push({ row_number: row.row_number, status: 'failed', reason: row.errors.join(' ') });
+          continue;
+        }
+
+        const student = row.student;
+        const parentsInput = [student.parent1, student.parent2]
+          .filter((p): p is NonNullable<typeof p> => p !== null)
+          .map(p => ({
+            email: p.email!,
+            first_name: p.first_name ?? '',
+            last_name: p.last_name ?? '',
+            phone: p.phone ?? undefined,
+            relationship_type: p.relationship_type ?? '',
+            is_primary_contact: p.is_primary_contact,
+            passwordHash,
+            tempPassword: BULK_IMPORT_PASSWORD,
+          }));
+
+        try {
+          const result = await registerStudent(
+            req.params.schoolId,
+            {
+              first_name: student.first_name,
+              last_name: student.last_name,
+              email: student.email ?? undefined,
+              phone: student.phone ?? undefined,
+              dob: student.dob,
+              gender: student.gender,
+              address: student.address,
+              blood_group: student.blood_group,
+              emergency_contact_name: student.emergency_contact_name,
+              emergency_contact_phone: student.emergency_contact_phone,
+              passwordHash,
+            },
+            parentsInput
+          );
+
+          results.push({ row_number: row.row_number, status: 'created', admission_no: result.admission_no });
+          createdStudents.push({
+            row_number: row.row_number,
+            first_name: student.first_name,
+            last_name: student.last_name,
+            admission_no: result.admission_no,
+            email: result.student.email,
+          });
+          for (const p of result.new_parents) {
+            const source = parentsInput.find(pi => pi.email === p.email);
+            allNewParents.push({
+              first_name: source?.first_name ?? '',
+              last_name: source?.last_name ?? '',
+              email: p.email,
+            });
+          }
+        } catch (err: unknown) {
+          const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
+            ? 'An account with this email already exists.'
+            : 'Failed to create this record.';
+          results.push({ row_number: row.row_number, status: 'failed', reason });
+        }
+      }
+
+      if (allNewParents.length > 0) {
+        const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
+        getSchoolName(req.params.schoolId).then(async schoolName => {
+          for (let i = 0; i < allNewParents.length; i += BULK_IMPORT_EMAIL_BATCH_SIZE) {
+            const batch = allNewParents.slice(i, i + BULK_IMPORT_EMAIL_BATCH_SIZE);
+            await Promise.all(
+              batch.map(p => sendEmail(
+                p.email,
+                'Welcome to Chronix Edu — Your Parent Portal Access',
+                welcomeEmailBody('parent', `${p.first_name} ${p.last_name}`, p.email, BULK_IMPORT_PASSWORD, schoolName, appUrl)
+              ).catch(() => {}))
+            );
+            if (i + BULK_IMPORT_EMAIL_BATCH_SIZE < allNewParents.length) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        }).catch(() => {});
+      }
+
+      const resultsFile = await generateBulkImportResultsFile(createdStudents, allNewParents);
+
+      await logAudit({
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'STUDENTS_BULK_IMPORT',
+        entity: 'students',
+        entityId: req.params.schoolId,
+        newValue: { created: createdStudents.length, failed: results.filter(r => r.status === 'failed').length },
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          created: createdStudents.length,
+          failed: results.filter(r => r.status === 'failed').length,
+          results,
+          download_base64: resultsFile.toString('base64'),
+        },
+      });
     } catch (err) {
       return next(err);
     }
