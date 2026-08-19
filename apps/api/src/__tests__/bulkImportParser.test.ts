@@ -86,6 +86,26 @@ describe('parseBulkImportFile — .xlsx', () => {
     expect(rows[0].parent1).toBeNull();
     expect(rows[0].parent2).toMatchObject({ first_name: 'Femi', email: 'femi@example.com', is_primary_contact: true });
   });
+
+  it('handles Date objects in cells and formats as YYYY-MM-DD', async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Students');
+    sheet.addRow(['First Name', 'Last Name', 'Date of Birth (YYYY-MM-DD)']);
+    const dataRow = sheet.addRow(['Ada', 'Bello', null]);
+    // Set the DOB cell (column 3) to a JS Date object, as Excel auto-types date cells
+    dataRow.getCell(3).value = new Date(2015, 2, 12); // Month is 0-indexed in JS Date constructor
+    const arrayBuffer = await workbook.xlsx.writeBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    const rows = await parseBulkImportFile(buffer, 'students.xlsx');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      first_name: 'Ada',
+      last_name: 'Bello',
+      dob: '2015-03-12',
+    });
+  });
 });
 
 describe('parseBulkImportFile — .csv', () => {
