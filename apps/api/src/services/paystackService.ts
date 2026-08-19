@@ -52,40 +52,58 @@ export function isPaystackConfigured(): boolean {
   return !!process.env.PAYSTACK_SECRET_KEY;
 }
 
+/** Thrown by listBanks/resolveBankAccount so callers can tell "Paystack isn't
+ *  configured" / "Paystack rejected the request" apart from "no results" —
+ *  the old behavior silently returned [] / null for all three, which made a
+ *  broken PAYSTACK_SECRET_KEY look identical to an empty bank list in the UI. */
+export class PaystackServiceError extends Error {}
+
 export async function listBanks(): Promise<{ name: string; code: string }[]> {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
-  if (!secretKey) return [];
+  if (!secretKey) throw new PaystackServiceError('Online payments are not configured for this platform yet.');
 
+  let response: Response;
   try {
-    const response = await fetch(`${PAYSTACK_BASE_URL}/bank?country=nigeria`, {
+    response = await fetch(`${PAYSTACK_BASE_URL}/bank?country=nigeria`, {
       headers: { Authorization: `Bearer ${secretKey}` },
     });
-    const json = (await response.json()) as { status: boolean; data?: { name: string; code: string }[] };
-    if (!json.status || !json.data) return [];
-    return json.data.map(b => ({ name: b.name, code: b.code }));
-  } catch {
-    return [];
+  } catch (err) {
+    throw new PaystackServiceError(`Could not reach Paystack: ${err instanceof Error ? err.message : 'network error'}`);
   }
+  const json = (await response.json()) as { status: boolean; message?: string; data?: { name: string; code: string }[] };
+  if (!json.status || !json.data) {
+    throw new PaystackServiceError(json.message ?? 'Paystack could not return the bank list.');
+  }
+  return json.data.map(b => ({ name: b.name, code: b.code }));
 }
 
+/** Returns null for a legitimate "Paystack couldn't verify these account
+ *  details" result (bad account number/bank pairing — the caller's fault,
+ *  mapped to a 422). Throws PaystackServiceError for anything upstream of
+ *  that: missing/invalid API key, network failure, or an auth rejection —
+ *  those must never look identical to "wrong account number" in the UI. */
 export async function resolveBankAccount(
   bankCode: string,
   accountNumber: string
 ): Promise<{ account_name: string } | null> {
   const secretKey = process.env.PAYSTACK_SECRET_KEY;
-  if (!secretKey) return null;
+  if (!secretKey) throw new PaystackServiceError('Online payments are not configured for this platform yet.');
 
+  let response: Response;
   try {
-    const response = await fetch(
+    response = await fetch(
       `${PAYSTACK_BASE_URL}/bank/resolve?account_number=${encodeURIComponent(accountNumber)}&bank_code=${encodeURIComponent(bankCode)}`,
       { headers: { Authorization: `Bearer ${secretKey}` } }
     );
-    const json = (await response.json()) as { status: boolean; data?: { account_name: string } };
-    if (!json.status || !json.data) return null;
-    return { account_name: json.data.account_name };
-  } catch {
-    return null;
+  } catch (err) {
+    throw new PaystackServiceError(`Could not reach Paystack: ${err instanceof Error ? err.message : 'network error'}`);
   }
+  if (response.status === 401 || response.status === 403) {
+    throw new PaystackServiceError('Paystack rejected the request — check the configured API key.');
+  }
+  const json = (await response.json()) as { status: boolean; data?: { account_name: string } };
+  if (!json.status || !json.data) return null;
+  return { account_name: json.data.account_name };
 }
 
 export interface CreatePaystackSubaccountInput {

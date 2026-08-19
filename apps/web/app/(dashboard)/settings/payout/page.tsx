@@ -53,6 +53,7 @@ export default function PayoutSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<PayoutStatus | null>(null);
   const [banks, setBanks] = useState<Bank[]>([]);
+  const [banksError, setBanksError] = useState('');
   const [resolvedName, setResolvedName] = useState<string | null>(null);
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState('');
@@ -77,16 +78,14 @@ export default function PayoutSettingsPage() {
   const loadStatus = useCallback(() => {
     if (!schoolId || !allowed) return;
     setLoading(true);
-    Promise.all([
-      apiFetch<{ success: boolean; data: PayoutStatus }>(`/api/schools/${schoolId}/settings/payout`),
-      apiFetch<{ success: boolean; data: Bank[] }>(`/api/schools/${schoolId}/settings/payout/banks`),
-    ])
-      .then(([statusRes, banksRes]) => {
-        setStatus(statusRes.data);
-        setBanks(banksRes.data);
-      })
+    setBanksError('');
+    apiFetch<{ success: boolean; data: PayoutStatus }>(`/api/schools/${schoolId}/settings/payout`)
+      .then(res => setStatus(res.data))
       .catch(err => show(err instanceof Error ? err.message : 'Failed to load payout settings', 'error'))
       .finally(() => setLoading(false));
+    apiFetch<{ success: boolean; data: Bank[] }>(`/api/schools/${schoolId}/settings/payout/banks`)
+      .then(res => setBanks(res.data))
+      .catch(err => setBanksError(err instanceof Error ? err.message : 'Failed to load the list of banks.'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId, allowed]);
 
@@ -197,14 +196,22 @@ export default function PayoutSettingsPage() {
             <form onSubmit={handleSubmit(handleResolve)} className="space-y-4">
               <div>
                 <label htmlFor="bank_code" className="block text-sm font-medium text-gray-700 mb-1.5">Bank</label>
-                <select
-                  id="bank_code"
-                  {...register('bank_code')}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2472B4]"
-                >
-                  <option value="">Select a bank</option>
-                  {banks.map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
-                </select>
+                {banksError ? (
+                  <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 flex items-center justify-between gap-3">
+                    <span>{banksError}</span>
+                    <button type="button" onClick={loadStatus} className="shrink-0 font-medium underline">Retry</button>
+                  </div>
+                ) : (
+                  <select
+                    id="bank_code"
+                    {...register('bank_code')}
+                    disabled={banks.length === 0}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2472B4] disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">{banks.length === 0 ? 'Loading banks…' : 'Select a bank'}</option>
+                    {banks.map(b => <option key={b.code} value={b.code}>{b.name}</option>)}
+                  </select>
+                )}
                 {errors.bank_code && <p className="mt-1 text-xs text-red-600">{errors.bank_code.message}</p>}
               </div>
               <div>

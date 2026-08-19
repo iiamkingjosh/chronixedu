@@ -93,10 +93,60 @@ export async function findUserByEmail(email: string): Promise<UserRow | null> {
 
 export async function updatePasswordHash(email: string, passwordHash: string): Promise<boolean> {
   const result = await pool.query(
-    `UPDATE users SET password_hash = $1 WHERE email = $2`,
+    `UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE email = $2`,
     [passwordHash, email]
   );
   return (result.rowCount ?? 0) > 0;
+}
+
+export async function getPasswordHashById(userId: string): Promise<string | null> {
+  const result = await pool.query<{ password_hash: string }>(
+    `SELECT password_hash FROM users WHERE id = $1`,
+    [userId]
+  );
+  return result.rows[0]?.password_hash ?? null;
+}
+
+// ── Self-service password change (e.g. changing a temp password on first login) ─
+
+export type ChangePasswordResult = { ok: true } | { ok: false; error: string };
+
+/** Updates the local row's password_hash and clears must_change_password inside
+ *  a transaction, calls applyExternalUpdate() (the matching Supabase Auth
+ *  update) before committing, and rolls back if the external call fails — same
+ *  pattern as reassignUserEmail, so the two identity stores stay in sync. */
+export async function changeOwnPassword(
+  userId: string,
+  passwordHash: string,
+  applyExternalUpdate: () => Promise<{ ok: boolean; error?: string }>
+): Promise<ChangePasswordResult> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `UPDATE users SET password_hash = $2, must_change_password = FALSE WHERE id = $1`,
+      [userId, passwordHash]
+    );
+    if ((result.rowCount ?? 0) === 0) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'not_found' };
+    }
+
+    const external = await applyExternalUpdate();
+    if (!external.ok) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: external.error ?? 'external_update_failed' };
+    }
+
+    await client.query('COMMIT');
+    return { ok: true };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ── Reassign email + password (e.g. handing an account to a new hire) ──────────

@@ -6,7 +6,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Client } from 'pg';
 import { verifyToken, requireRole } from '../middleware/auth';
-import { findUserByEmail, updatePasswordHash } from '../db/queries/users';
+import { findUserByEmail, updatePasswordHash, getPasswordHashById, changeOwnPassword } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
 import { redis } from '../middleware/rateLimit';
 
@@ -187,12 +187,12 @@ router.post('/login', async (req, res, next) => {
 
     // H-08: always release the pg client, even when an early return or exception occurs.
     const pg = getPgClient();
-    let local: { id: string; school_id: string; role: string; title: string; email: string; first_name: string; last_name: string; is_active: boolean; support_code: string } | undefined;
+    let local: { id: string; school_id: string; role: string; title: string; email: string; first_name: string; last_name: string; is_active: boolean; support_code: string; must_change_password: boolean } | undefined;
     let subscriptionTier: string | null = null;
     try {
       await pg.connect();
       const r = await pg.query(
-        `SELECT id, school_id, role, title, email, first_name, last_name, is_active, support_code FROM users WHERE id = $1`,
+        `SELECT id, school_id, role, title, email, first_name, last_name, is_active, support_code, must_change_password FROM users WHERE id = $1`,
         [userId]
       );
       local = r.rows[0];
@@ -233,6 +233,7 @@ router.post('/login', async (req, res, next) => {
       last_name: local.last_name,
       subscription_tier: subscriptionTier,
       support_code: local.support_code,
+      must_change_password: local.must_change_password,
     };
 
     const jwtSecret = process.env.JWT_SECRET;
@@ -462,6 +463,69 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
       success: true,
       data: { message: 'Your password has been updated. You can now sign in.' },
     });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+const changePasswordSchema = z
+  .object({
+    current_password: z.string().min(1, 'Current password is required'),
+    new_password: z.string().min(8, 'Password must be at least 8 characters'),
+  })
+  .refine((d) => d.current_password !== d.new_password, {
+    message: 'New password must be different from your current password',
+    path: ['new_password'],
+  });
+
+/** Self-service password change for an already-logged-in user — covers both
+ *  "change the temp password shown once on first login" and any later
+ *  voluntary change. Requires the current password (proves the caller, not
+ *  just an unattended open session, is making this change). */
+router.post('/change-password', verifyToken, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid input' },
+      });
+    }
+    const { current_password, new_password } = parsed.data;
+    const userId = req.user!.user_id;
+
+    const currentHash = await getPasswordHashById(userId);
+    if (!currentHash || !bcrypt.compareSync(current_password, currentHash)) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'INVALID_CURRENT_PASSWORD', message: 'Current password is incorrect' },
+      });
+    }
+
+    const newHash = bcrypt.hashSync(new_password, 12);
+    const result = await changeOwnPassword(userId, newHash, async () => {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: new_password });
+      return { ok: !error, error: error?.message };
+    });
+
+    if (!result.ok) {
+      if (result.error === 'not_found') {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+      }
+      return res.status(500).json({ success: false, error: { code: 'PASSWORD_UPDATE_FAILED', message: result.error } });
+    }
+
+    if (req.user!.school_id) {
+      await logAudit({
+        schoolId: req.user!.school_id,
+        userId,
+        actionType: 'PASSWORD_SELF_CHANGE',
+        entity: 'users',
+        entityId: userId,
+      });
+    }
+
+    return res.json({ success: true, data: { message: 'Password updated.' } });
   } catch (err) {
     return next(err);
   }
