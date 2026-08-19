@@ -108,6 +108,36 @@ function MessagesViewInner() {
 
   useEffect(() => { loadInbox(); }, [loadInbox]);
 
+  // Poll for new messages in the background so a reply shows up without a
+  // manual reload — there's no push/realtime channel wired up for messages,
+  // so this is the simplest reliable way to keep an open inbox current.
+  useEffect(() => {
+    if (!schoolId) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      apiFetch<{ success: boolean; data: InboxThread[] }>(`/api/schools/${schoolId}/messages/inbox`)
+        .then(({ data }) => setInbox(data))
+        .catch(() => {});
+    }, 12000);
+    return () => clearInterval(interval);
+  }, [schoolId]);
+
+  // Same idea for whichever thread is currently open — also picks up the
+  // server's mark-as-read side effect while the conversation stays in view.
+  useEffect(() => {
+    if (!schoolId || !activeThreadId) return;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      apiFetch<{ success: boolean; data: ThreadMessage[] }>(`/api/schools/${schoolId}/messages/thread/${activeThreadId}`)
+        .then(({ data }) => {
+          setThreadMessages(data);
+          setInbox(prev => prev.map(t => (t.thread_id === activeThreadId ? { ...t, unread_count: 0 } : t)));
+        })
+        .catch(() => {});
+    }, 12000);
+    return () => clearInterval(interval);
+  }, [schoolId, activeThreadId]);
+
   const openThread = useCallback((threadId: string) => {
     if (!schoolId) return;
     setActiveThreadId(threadId);
