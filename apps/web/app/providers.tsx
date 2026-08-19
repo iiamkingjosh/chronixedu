@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll', 'wheel'];
@@ -16,6 +16,7 @@ export interface AuthUser {
   last_name?: string;
   subscription_tier?: string | null;
   support_code?: string;
+  must_change_password?: boolean;
 }
 
 interface AuthContextValue {
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isImpersonating, setIsImpersonating] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -130,6 +132,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (idleTimer.current) clearTimeout(idleTimer.current);
     };
   }, [user, logout, router]);
+
+  // A temp password is only shown once — force a stop at /change-password
+  // right after login (and on any later navigation) until it's replaced.
+  useEffect(() => {
+    if (!user?.must_change_password) return;
+    if (pathname === '/change-password') return;
+    router.replace('/change-password');
+  }, [user, pathname, router]);
 
   return (
     <AuthContext.Provider

@@ -110,8 +110,19 @@ const CONTACT_QUERIES: Record<string, string> = {
     SELECT id, first_name, last_name, role, email
     FROM users WHERE school_id = $2 AND id != $1 AND is_active = TRUE
     ORDER BY role, first_name, last_name`,
+
+  // Bursar: any principal, plus other bursars and registrars (the school's
+  // admin staff) — not parents/students/teachers, whose fee questions should
+  // route through the principal rather than directly to accounts.
+  bursar: `
+    SELECT id, first_name, last_name, role, email
+    FROM users
+    WHERE school_id = $2 AND id != $1 AND is_active = TRUE
+      AND role IN ('principal', 'super_admin', 'bursar', 'registrar')
+    ORDER BY role, first_name, last_name`,
 };
 CONTACT_QUERIES.super_admin = CONTACT_QUERIES.principal;
+CONTACT_QUERIES.registrar = CONTACT_QUERIES.bursar;
 
 /** Valid messaging contacts for a user, per role-pair rules — used for the recipient picker and to validate POST /messages. */
 export async function getMessageContacts(userId: string, role: string, schoolId: string): Promise<MessageContact[]> {

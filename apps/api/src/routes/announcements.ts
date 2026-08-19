@@ -50,7 +50,7 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
 const createSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().min(1).max(5000),
-  target_role: z.enum(['all', 'teacher', 'parent', 'student']).default('all'),
+  target_role: z.enum(['all', 'teacher', 'parent', 'student', 'bursar', 'registrar']).default('all'),
 });
 
 // ── POST /:schoolId/announcements — principal only ──────────────────────────────

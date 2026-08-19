@@ -6,6 +6,7 @@ import {
   listBanks,
   resolveBankAccount,
   createPaystackSubaccount,
+  PaystackServiceError,
 } from '../services/paystackService';
 import crypto from 'crypto';
 
@@ -232,13 +233,11 @@ describe('verifyPaystackWebhookSignature', () => {
 });
 
 describe('listBanks', () => {
-  it('returns empty array without calling fetch when not configured', async () => {
+  it('throws PaystackServiceError without calling fetch when not configured', async () => {
     delete process.env.PAYSTACK_SECRET_KEY;
     global.fetch = jest.fn();
 
-    const result = await listBanks();
-
-    expect(result).toEqual([]);
+    await expect(listBanks()).rejects.toThrow(PaystackServiceError);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -266,24 +265,20 @@ describe('listBanks', () => {
     );
   });
 
-  it('returns empty array when fetch throws', async () => {
+  it('throws PaystackServiceError when fetch throws', async () => {
     process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
     global.fetch = jest.fn().mockRejectedValue(new Error('network error'));
 
-    const result = await listBanks();
-
-    expect(result).toEqual([]);
+    await expect(listBanks()).rejects.toThrow(PaystackServiceError);
   });
 });
 
 describe('resolveBankAccount', () => {
-  it('returns null without calling fetch when not configured', async () => {
+  it('throws PaystackServiceError without calling fetch when not configured', async () => {
     delete process.env.PAYSTACK_SECRET_KEY;
     global.fetch = jest.fn();
 
-    const result = await resolveBankAccount('058', '0123456789');
-
-    expect(result).toBeNull();
+    await expect(resolveBankAccount('058', '0123456789')).rejects.toThrow(PaystackServiceError);
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
@@ -316,13 +311,21 @@ describe('resolveBankAccount', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null when fetch throws', async () => {
+  it('throws PaystackServiceError when fetch throws', async () => {
     process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
     global.fetch = jest.fn().mockRejectedValue(new Error('network error'));
 
-    const result = await resolveBankAccount('058', '0123456789');
+    await expect(resolveBankAccount('058', '0123456789')).rejects.toThrow(PaystackServiceError);
+  });
 
-    expect(result).toBeNull();
+  it('throws PaystackServiceError when Paystack rejects the API key (401)', async () => {
+    process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 401,
+      json: async () => ({ status: false, message: 'Invalid key' }),
+    });
+
+    await expect(resolveBankAccount('058', '0123456789')).rejects.toThrow(PaystackServiceError);
   });
 });
 

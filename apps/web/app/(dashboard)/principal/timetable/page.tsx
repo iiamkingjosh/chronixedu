@@ -71,6 +71,7 @@ export default function PrincipalTimetablePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<Toast>(null);
+  const [armed, setArmed] = useState(false);
 
   function showToast(message: string, type: 'success' | 'error' = 'success') {
     setToast({ message, type });
@@ -128,6 +129,7 @@ export default function PrincipalTimetablePage() {
 
   async function handleDrop(day: number, period: number) {
     if (!schoolId || !classId || !termId || !subjectId || !teacherId) return;
+    setArmed(false);
     try {
       await apiFetch(`/api/schools/${schoolId}/timetable`, {
         method: 'POST',
@@ -196,7 +198,8 @@ export default function PrincipalTimetablePage() {
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-gray-900">Timetable Builder</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Pick a subject and teacher, then drag the pill onto an empty period to schedule it.
+          Pick a subject and teacher, then drag the pill onto an empty period — or on a touch
+          device, tap the pill to select it, then tap an empty period to place it.
         </p>
       </div>
 
@@ -240,17 +243,25 @@ export default function PrincipalTimetablePage() {
           </select>
         </label>
 
-        <div
+        <button
+          type="button"
           draggable={composerReady}
           onDragStart={(e) => e.dataTransfer.setData('text/plain', 'slot')}
-          className={`select-none rounded-lg border px-3 py-2 text-sm font-medium ${
-            composerReady
-              ? 'cursor-grab border-[#003366] bg-[#003366]/5 text-[#003366]'
-              : 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400'
+          onClick={() => { if (composerReady) setArmed((v) => !v); }}
+          disabled={!composerReady}
+          className={`select-none rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+            !composerReady
+              ? 'cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400'
+              : armed
+                ? 'cursor-pointer border-[#FF761B] bg-[#FF761B]/10 text-[#FF761B] ring-2 ring-[#FF761B]/30'
+                : 'cursor-grab border-[#003366] bg-[#003366]/5 text-[#003366]'
           }`}
         >
           {composerLabel}
-        </div>
+        </button>
+        {armed && (
+          <p className="text-xs text-[#FF761B] font-medium self-center">Tap an empty period to place it</p>
+        )}
       </div>
 
       {!termId ? (
@@ -281,7 +292,10 @@ export default function PrincipalTimetablePage() {
                         key={d.value}
                         onDragOver={(e) => { if (!slot) e.preventDefault(); }}
                         onDrop={(e) => { e.preventDefault(); if (!slot) handleDrop(d.value, period); }}
-                        className={`border border-gray-200 px-2 py-2 align-top ${slot ? 'bg-white' : 'bg-gray-50/50'}`}
+                        onClick={() => { if (!slot && armed) handleDrop(d.value, period); }}
+                        className={`border border-gray-200 px-2 py-2 align-top ${
+                          slot ? 'bg-white' : armed ? 'bg-[#FF761B]/5 cursor-pointer' : 'bg-gray-50/50'
+                        }`}
                       >
                         {slot ? (
                           <div className="rounded-md border border-[#003366]/20 bg-[#003366]/5 px-2 py-1">

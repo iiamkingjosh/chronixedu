@@ -40,6 +40,8 @@ export const SETTINGS_NAV: NavItem[] = [
 export const REGISTRAR_NAV: NavItem[] = [
   { label: 'Students', href: '/registrar/students' },
   { label: 'Promotions', href: '/registrar/promotions' },
+  { label: 'Messages', href: '/registrar/messages' },
+  { label: 'Announcements', href: '/registrar/announcements' },
 ];
 
 export const BURSAR_NAV: NavItem[] = [
@@ -47,6 +49,8 @@ export const BURSAR_NAV: NavItem[] = [
   { label: 'Invoices', href: '/bursar/invoices' },
   { label: 'Outstanding Balances', href: '/bursar/outstanding' },
   { label: 'Collection Summary', href: '/bursar/collections' },
+  { label: 'Messages', href: '/bursar/messages' },
+  { label: 'Announcements', href: '/bursar/announcements' },
 ];
 
 export const PARENT_NAV: NavItem[] = [

@@ -26,7 +26,7 @@ import { cache, schoolCacheKey } from '../services/cacheService';
 import { supabase, supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { generateReportCardPreview } from '../services/reportCardService';
-import { listBanks, resolveBankAccount, createPaystackSubaccount } from '../services/paystackService';
+import { listBanks, resolveBankAccount, createPaystackSubaccount, PaystackServiceError } from '../services/paystackService';
 import { sendTermiiSms } from '../services/termiiService';
 import { logger } from '../config/logger';
 
@@ -735,6 +735,9 @@ router.get(
       const banks = await listBanks();
       return res.json({ success: true, data: banks });
     } catch (err) {
+      if (err instanceof PaystackServiceError) {
+        return res.status(502).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
+      }
       return next(err);
     }
   }
@@ -753,7 +756,15 @@ router.post(
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
-      const resolved = await resolveBankAccount(parsed.data.bank_code, parsed.data.account_number);
+      let resolved: { account_name: string } | null;
+      try {
+        resolved = await resolveBankAccount(parsed.data.bank_code, parsed.data.account_number);
+      } catch (err) {
+        if (err instanceof PaystackServiceError) {
+          return res.status(502).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
+        }
+        throw err;
+      }
       if (!resolved) {
         return res.status(422).json({ success: false, error: { code: 'ACCOUNT_RESOLVE_FAILED', message: "Couldn't verify this account — check the details and try again." } });
       }
@@ -804,7 +815,15 @@ router.put(
       }
 
       // Never trust the client-confirmed name alone — re-resolve server-side.
-      const reResolved = await resolveBankAccount(bank_code, account_number);
+      let reResolved: { account_name: string } | null;
+      try {
+        reResolved = await resolveBankAccount(bank_code, account_number);
+      } catch (err) {
+        if (err instanceof PaystackServiceError) {
+          return res.status(502).json({ success: false, error: { code: 'PAYSTACK_UNAVAILABLE', message: err.message } });
+        }
+        throw err;
+      }
       if (!reResolved || reResolved.account_name !== account_name) {
         return res.status(422).json({ success: false, error: { code: 'ACCOUNT_MISMATCH', message: 'Account details could not be re-verified. Please resolve the account again.' } });
       }

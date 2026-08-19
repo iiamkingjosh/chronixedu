@@ -2,7 +2,7 @@ import pool from '../client';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type AnnouncementTarget = 'all' | 'teacher' | 'parent' | 'student';
+export type AnnouncementTarget = 'all' | 'teacher' | 'parent' | 'student' | 'bursar' | 'registrar';
 
 export interface AnnouncementRow {
   id: string;

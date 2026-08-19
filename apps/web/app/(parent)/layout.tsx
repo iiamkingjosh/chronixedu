@@ -87,7 +87,13 @@ function ParentChrome({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className="px-4 py-4 border-t border-white/10">
+        <div className="px-4 py-4 border-t border-white/10 space-y-2">
+          <Link
+            href="/change-password"
+            className="block w-full text-center rounded-md border border-white/10 px-3 py-2 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors duration-200"
+          >
+            Change Password
+          </Link>
           <button
             type="button"
             onClick={handleLogout}
@@ -134,7 +140,13 @@ function ParentChrome({ children }: { children: React.ReactNode }) {
               ))}
             </nav>
 
-            <div className="px-4 py-4 border-t border-white/10">
+            <div className="px-4 py-4 border-t border-white/10 space-y-2">
+              <Link
+                href="/change-password"
+                className="block w-full text-center rounded-md border border-white/10 px-3 py-2 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white transition-colors duration-200"
+              >
+                Change Password
+              </Link>
               <button
                 type="button"
                 onClick={handleLogout}
