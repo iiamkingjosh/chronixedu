@@ -15,6 +15,7 @@ import {
   findUserByEmail,
   insertUser,
   updateUserProfile,
+  reassignUserEmail,
   setUserActive,
   updateUserSignature,
 } from '../db/queries/users';
@@ -36,7 +37,7 @@ const listQuerySchema = z.object({
 });
 
 const createUserSchema = z.object({
-  email:        z.string().email('Enter a valid email address'),
+  email:        z.string().trim().toLowerCase().email('Enter a valid email address'),
   first_name:   z.string().min(1).max(255),
   last_name:    z.string().min(1).max(255),
   role:         z.enum(CREATABLE_ROLES),
@@ -59,6 +60,11 @@ const patchUserSchema = z.object({
 const statusSchema = z.object({
   is_active: z.boolean(),
   reason: z.string().min(10, 'Reason must be at least 10 characters').optional(),
+});
+
+const changeEmailSchema = z.object({
+  email: z.string().trim().toLowerCase().email('Enter a valid email address'),
+  reason: z.string().min(10, 'Reason must be at least 10 characters'),
 });
 
 // ── Middleware: super_admin or the school's own principal ──────────────────────
@@ -246,6 +252,89 @@ router.patch(
       });
 
       return res.json({ success: true, data: updated });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── PATCH /:schoolId/users/:userId/email ────────────────────────────────────────
+// Reassigns an account to a new email address — e.g. a principal resigns and a
+// replacement needs to take over the same account. super_admin only: this is
+// account-takeover-equivalent power, well above normal staff management.
+//
+// Also rotates the password to a fresh random value the caller never sees —
+// changing only the email would leave the departing holder able to log in as
+// the new owner with their already-known (unchanged) password, the moment
+// they learn the new address. Pair with POST .../reset-password afterward so
+// the new owner can set their own (it emails the link to whatever email is on
+// the account at call time, so it reaches the new address once this runs).
+//
+// The local row and Supabase Auth are updated inside one transaction
+// (reassignUserEmail) so the two identity stores can never end up holding
+// different emails/passwords for the same account.
+
+router.patch(
+  '/:schoolId/users/:userId/email',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = changeEmailSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const { email, reason } = parsed.data;
+
+      const existing = await findUserById(req.params.userId, req.params.schoolId);
+      if (!existing) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+      }
+      if (existing.role === 'super_admin') {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'super_admin accounts cannot be reassigned through the school router' } });
+      }
+
+      if (email !== existing.email) {
+        const duplicate = await findUserByEmail(email);
+        if (duplicate) {
+          return res.status(409).json({ success: false, error: { code: 'DUPLICATE_EMAIL', message: `A user with email "${email}" already exists` } });
+        }
+      }
+
+      const throwawayPassword = generateTempPassword();
+      const passwordHash = bcrypt.hashSync(throwawayPassword, 12);
+
+      const result = await reassignUserEmail(
+        req.params.userId,
+        req.params.schoolId,
+        email,
+        passwordHash,
+        async () => {
+          const { error } = await supabaseAdmin.auth.admin.updateUserById(existing.id, { email, email_confirm: true, password: throwawayPassword });
+          return { ok: !error, error: error?.message };
+        }
+      );
+
+      if (!result.ok) {
+        if (result.error === 'not_found') {
+          return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+        }
+        return res.status(500).json({ success: false, error: { code: 'AUTH_UPDATE_FAILED', message: result.error } });
+      }
+
+      await logAudit({
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'USER_EMAIL_CHANGED',
+        entity: 'users',
+        entityId: existing.id,
+        oldValue: { email: existing.email, role: existing.role },
+        newValue: { email: result.user.email, reason },
+      });
+
+      return res.json({ success: true, data: result.user });
     } catch (err) {
       return next(err);
     }
