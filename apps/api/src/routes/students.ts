@@ -18,12 +18,15 @@ import {
   insertStudentClass,
   findEnrollmentForCurrentSession,
   updateEnrollmentClass,
+  findUsersRolesByEmails,
 } from '../db/queries/students';
 import { findClassById } from '../db/queries/roster';
 import { logAudit } from '../db/queries/auditLog';
 import { generateTranscript } from '../services/transcriptService';
 import { signReportCardAsset } from '../services/reportCardService';
 import { sendEmail } from '../services/emailService';
+import { parseBulkImportFile, BulkImportParseError } from '../services/bulkImportParser';
+import { runFullValidation } from '../services/bulkImportValidation';
 import pool from '../db/client';
 
 async function getSchoolName(schoolId: string): Promise<string> {
@@ -217,6 +220,61 @@ router.post(
         // Unique violation — most likely duplicate email
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE', message: 'An account with this email already exists' } });
       }
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/students/bulk-import/preview ────────────────────────────────
+// Parses and validates a spreadsheet without writing anything — the registrar
+// confirms via /bulk-import/commit afterward. See docs/superpowers/specs/
+// 2026-08-19-student-bulk-import-design.md for the full design rationale.
+
+const MAX_BULK_IMPORT_ROWS = 200;
+const bulkImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+router.post(
+  '/:schoolId/students/bulk-import/preview',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'registrar'),
+  bulkImportUpload.single('file'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "file".' } });
+      }
+
+      let parsedRows;
+      try {
+        parsedRows = await parseBulkImportFile(file.buffer, file.originalname);
+      } catch (err) {
+        if (err instanceof BulkImportParseError) {
+          return res.status(400).json({ success: false, error: { code: 'PARSE_ERROR', message: err.message } });
+        }
+        throw err;
+      }
+
+      if (parsedRows.length === 0) {
+        return res.status(400).json({ success: false, error: { code: 'EMPTY_FILE', message: 'No student rows were found in this file.' } });
+      }
+      if (parsedRows.length > MAX_BULK_IMPORT_ROWS) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'TOO_MANY_ROWS', message: `This file has ${parsedRows.length} rows — the maximum per import is ${MAX_BULK_IMPORT_ROWS}. Split it into multiple files.` },
+        });
+      }
+
+      const results = await runFullValidation(parsedRows, findUsersRolesByEmails);
+      const summary = {
+        total: results.length,
+        valid: results.filter(r => r.status === 'valid').length,
+        invalid: results.filter(r => r.status === 'error').length,
+      };
+
+      return res.json({ success: true, data: { rows: results, summary } });
+    } catch (err) {
       return next(err);
     }
   }
