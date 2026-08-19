@@ -5,7 +5,6 @@ import { RedisStore } from 'rate-limit-redis';
 import { verifyToken } from '../middleware/auth';
 import { findUserById } from '../db/queries/users';
 import { createNotification } from '../db/queries/notifications';
-import { sendEmail } from '../services/emailService';
 import { redis } from '../middleware/rateLimit';
 import {
   getMessageContacts,
@@ -137,11 +136,6 @@ router.post(
       }).catch(() => {
         // Non-critical — do not surface notification errors to the caller
       });
-
-      const recipient = await findUserById(recipient_id, schoolId);
-      if (recipient) {
-        sendEmail(recipient.email, notificationTitle, notificationBody).catch(() => {});
-      }
 
       return res.status(201).json({ success: true, data: message });
     } catch (err) {
