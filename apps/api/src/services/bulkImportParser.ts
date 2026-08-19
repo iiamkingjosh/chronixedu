@@ -65,10 +65,10 @@ function cellText(value: ExcelJS.CellValue): string | null {
     const d = String(value.getDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
-  if (typeof value === 'object' && value !== null && 'text' in (value as Record<string, unknown>)) {
+  if (typeof value === 'object' && value !== null && 'text' in value) {
     return String((value as { text: unknown }).text).trim() || null;
   }
-  if (typeof value === 'object' && value !== null && 'result' in (value as Record<string, unknown>)) {
+  if (typeof value === 'object' && value !== null && 'result' in value) {
     return String((value as { result: unknown }).result).trim() || null;
   }
   const str = String(value).trim();
