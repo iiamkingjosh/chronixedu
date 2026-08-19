@@ -99,6 +99,55 @@ export async function updatePasswordHash(email: string, passwordHash: string): P
   return (result.rowCount ?? 0) > 0;
 }
 
+// ── Reassign email + password (e.g. handing an account to a new hire) ──────────
+
+export type ReassignEmailResult =
+  | { ok: true; user: UserRow }
+  | { ok: false; error: 'not_found' | string };
+
+/** Updates the local row's email + password_hash inside a transaction, calls
+ *  applyExternalUpdate() (the matching Supabase Auth update) before committing,
+ *  and rolls back the local write if the external call fails — so the two
+ *  identity stores can never end up out of sync with each other. */
+export async function reassignUserEmail(
+  userId: string,
+  schoolId: string,
+  email: string,
+  passwordHash: string,
+  applyExternalUpdate: () => Promise<{ ok: boolean; error?: string }>
+): Promise<ReassignEmailResult> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const result = await client.query<UserRow>(
+      `UPDATE users SET email = $3, password_hash = $4
+       WHERE id = $1 AND school_id = $2
+       RETURNING ${USER_COLUMNS}`,
+      [userId, schoolId, email, passwordHash]
+    );
+    const updated = result.rows[0];
+    if (!updated) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'not_found' };
+    }
+
+    const external = await applyExternalUpdate();
+    if (!external.ok) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: external.error ?? 'external_update_failed' };
+    }
+
+    await client.query('COMMIT');
+    return { ok: true, user: updated };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ── Create ─────────────────────────────────────────────────────────────────────
 
 export interface NewUserInput {
