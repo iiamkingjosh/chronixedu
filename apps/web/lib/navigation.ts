@@ -29,6 +29,7 @@ export const TEACHER_NAV: NavItem[] = [
 export const SETTINGS_NAV: NavItem[] = [
   { label: 'School Identity', href: '/settings/identity' },
   { label: 'Academic Structure', href: '/settings/academic-structure' },
+  { label: 'Roster', href: '/settings/roster' },
   { label: 'Grading Scale', href: '/settings/grading-scale' },
   { label: 'Assessment Config', href: '/settings/assessment-config' },
   { label: 'Report Card', href: '/settings/report-card' },
