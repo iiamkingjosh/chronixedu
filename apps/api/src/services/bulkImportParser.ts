@@ -57,6 +57,14 @@ const COLUMN_MAP: Record<string, string> = {
 
 function cellText(value: ExcelJS.CellValue): string | null {
   if (value === null || value === undefined) return null;
+  if (value instanceof Date) {
+    // Excel auto-types typed dates as JS Date objects — format as YYYY-MM-DD
+    // to match the expected dob format, rather than a garbled Date.toString().
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
   if (typeof value === 'object' && value !== null && 'text' in (value as Record<string, unknown>)) {
     return String((value as { text: unknown }).text).trim() || null;
   }
