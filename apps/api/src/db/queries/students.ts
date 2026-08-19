@@ -486,3 +486,17 @@ export async function findEnrollmentForCurrentSession(
 export async function updateEnrollmentClass(enrollmentId: string, classId: string): Promise<void> {
   await pool.query(`UPDATE student_classes SET class_id = $1 WHERE id = $2`, [classId, enrollmentId]);
 }
+
+// ── Bulk import support ──────────────────────────────────────────────────────
+
+/** Maps each already-registered email (lowercased) to its role, for the
+ *  subset of the given emails that exist in `users`. Platform-wide, not
+ *  school-scoped — `users.email` has a global UNIQUE constraint. */
+export async function findUsersRolesByEmails(emails: string[]): Promise<Map<string, string>> {
+  if (emails.length === 0) return new Map();
+  const result = await pool.query<{ email: string; role: string }>(
+    `SELECT email, role FROM users WHERE LOWER(email) = ANY($1::text[])`,
+    [emails.map(e => e.toLowerCase())]
+  );
+  return new Map(result.rows.map(r => [r.email.toLowerCase(), r.role]));
+}

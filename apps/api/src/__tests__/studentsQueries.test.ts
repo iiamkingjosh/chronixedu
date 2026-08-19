@@ -1,5 +1,5 @@
 import pool from '../db/client';
-import { registerStudent } from '../db/queries/students';
+import { registerStudent, findUsersRolesByEmails } from '../db/queries/students';
 
 jest.mock('../db/client', () => ({
   __esModule: true,
@@ -143,5 +143,24 @@ describe('registerStudent — admission number generation', () => {
     const result = await registerStudent('school-1', STUDENT_INPUT, []);
 
     expect(result.admission_no).toBe(`LGS/${year}/0042`);
+  });
+});
+
+describe('findUsersRolesByEmails', () => {
+  it('returns an empty map without querying when given no emails', async () => {
+    const result = await findUsersRolesByEmails([]);
+    expect(result).toEqual(new Map());
+    expect((pool as unknown as { query: jest.Mock }).query).not.toHaveBeenCalled();
+  });
+
+  it('returns a lowercase-email-to-role map from the query results', async () => {
+    (pool as unknown as { query: jest.Mock }).query.mockResolvedValueOnce({
+      rows: [{ email: 'Taken@Example.com', role: 'teacher' }],
+    });
+
+    const result = await findUsersRolesByEmails(['taken@example.com', 'free@example.com']);
+
+    expect(result.get('taken@example.com')).toBe('teacher');
+    expect(result.has('free@example.com')).toBe(false);
   });
 });
