@@ -321,3 +321,42 @@ export async function deleteSubject(subjectId: string, schoolId: string): Promis
     [subjectId, schoolId]
   );
 }
+
+// ── Bulk import support ──────────────────────────────────────────────────────
+
+/** Maps each matched email (lowercased) to the id of the teacher-role user it
+ *  belongs to, for the subset of the given emails that resolve to an actual
+ *  teacher in this school. Platform-wide findUsersRolesByEmails (used by the
+ *  Students bulk import) isn't reused here — Roster needs the id to store as
+ *  form_teacher_id/teacher_id, scoped to this school's teachers specifically. */
+export async function findTeachersByEmails(schoolId: string, emails: string[]): Promise<Map<string, { id: string }>> {
+  if (emails.length === 0) return new Map();
+  const result = await pool.query<{ id: string; email: string }>(
+    `SELECT id, email FROM users WHERE school_id = $1 AND role = 'teacher' AND LOWER(email) = ANY($2::text[])`,
+    [schoolId, emails.map(e => e.toLowerCase())]
+  );
+  return new Map(result.rows.map(r => [r.email.toLowerCase(), { id: r.id }]));
+}
+
+/** Lean id/name pairs for every class in the school — used by bulk-import
+ *  validation for duplicate detection and Teacher Assignment resolution,
+ *  without the extra columns listClasses() returns. */
+export async function listClassNamesAndIds(schoolId: string): Promise<{ id: string; name: string }[]> {
+  const result = await pool.query<{ id: string; name: string }>(
+    `SELECT id, name FROM classes WHERE school_id = $1`,
+    [schoolId]
+  );
+  return result.rows;
+}
+
+/** Lean id/code pairs for every subject in the school (not filtered to
+ *  is_active, matching findSubjectByCode's own unfiltered duplicate check) —
+ *  used by bulk-import validation for duplicate detection and Teacher
+ *  Assignment resolution. */
+export async function listSubjectCodesAndIds(schoolId: string): Promise<{ id: string; code: string }[]> {
+  const result = await pool.query<{ id: string; code: string }>(
+    `SELECT id, code FROM subjects WHERE school_id = $1`,
+    [schoolId]
+  );
+  return result.rows;
+}
