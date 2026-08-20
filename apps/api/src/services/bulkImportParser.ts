@@ -78,7 +78,8 @@ function cellText(value: ExcelJS.CellValue): string | null {
 function buildParent(raw: Record<string, string | null>, prefix: 'parent1' | 'parent2'): ParsedParentRow | null {
   const first_name = raw[`${prefix}_first_name`] ?? null;
   const last_name = raw[`${prefix}_last_name`] ?? null;
-  const email = raw[`${prefix}_email`] ?? null;
+  const emailRaw = raw[`${prefix}_email`] ?? null;
+  const email = emailRaw ? emailRaw.toLowerCase() : null;
   const phone = raw[`${prefix}_phone`] ?? null;
   const relationship_type = raw[`${prefix}_relationship_type`] ?? null;
   const isPrimaryRaw = raw[`${prefix}_is_primary_contact`] ?? null;
@@ -125,21 +126,20 @@ export async function parseBulkImportFile(buffer: Buffer, filename: string): Pro
   }
 
   const rows: ParsedStudentRow[] = [];
-  let dataRowNumber = 0;
   sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
     if (rowNumber === 1) return;
     const raw: Record<string, string | null> = {};
     columnIndexToField.forEach((field, colNumber) => {
       raw[field] = cellText(row.getCell(colNumber).value);
     });
-    if (!raw.first_name && !raw.last_name) return;
+    const hasAnyContent = Object.values(raw).some(v => v !== null);
+    if (!hasAnyContent) return;
 
-    dataRowNumber += 1;
     rows.push({
-      row_number: dataRowNumber,
+      row_number: rowNumber,
       first_name: raw.first_name ?? '',
       last_name: raw.last_name ?? '',
-      email: raw.email ?? null,
+      email: raw.email ? raw.email.toLowerCase() : null,
       phone: raw.phone ?? null,
       dob: raw.dob ?? null,
       gender: raw.gender ?? null,
