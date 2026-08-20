@@ -11,6 +11,9 @@ interface RowParent {
   first_name: string | null;
   last_name: string | null;
   email: string | null;
+  phone: string | null;
+  relationship_type: string | null;
+  is_primary_contact: boolean;
 }
 
 interface RowValidationResult {
@@ -18,9 +21,17 @@ interface RowValidationResult {
   status: 'valid' | 'error';
   errors: string[];
   student: {
+    row_number: number;
     first_name: string;
     last_name: string;
     email: string | null;
+    phone: string | null;
+    dob: string | null;
+    gender: string | null;
+    address: string | null;
+    blood_group: string | null;
+    emergency_contact_name: string | null;
+    emergency_contact_phone: string | null;
     parent1: RowParent | null;
     parent2: RowParent | null;
   };
