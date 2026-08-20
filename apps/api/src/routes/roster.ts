@@ -1,5 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
+import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole } from '../middleware/auth';
 import {
   findClassByName, insertClass, updateClass, listClasses,
@@ -9,9 +11,12 @@ import {
   getActiveTerm,
   findDuplicateAssignment, insertTeacherAssignment, listTeacherAssignments,
   findAssignmentById, scoresExistForAssignment, deleteTeacherAssignment,
+  findTeachersByEmails, listClassNamesAndIds, listSubjectCodesAndIds,
 } from '../db/queries/roster';
 import { findUserById } from '../db/queries/users';
 import { cache } from '../services/cacheService';
+import { parseRosterBulkImportFile, RosterBulkImportParseError } from '../services/rosterBulkImportParser';
+import { runFullRosterValidation } from '../services/rosterBulkImportValidation';
 
 const router = Router();
 
@@ -385,6 +390,95 @@ router.delete(
       await deleteTeacherAssignment(req.params.id, req.params.schoolId);
       cache.del(`roster:${req.params.schoolId}:assignments:${assignment.teacher_id}`);
       return res.json({ success: true, data: { message: 'Assignment removed' } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/roster-bulk-import/preview ──────────────────────────────
+// Parses and validates a 3-sheet workbook without writing anything — the
+// principal confirms via /roster-bulk-import/commit afterward. See
+// docs/superpowers/specs/2026-08-20-roster-bulk-import-design.md for the
+// full design rationale, including why Teacher Assignment rows never
+// resolve against same-file Classes/Subjects rows.
+
+const MAX_ROSTER_BULK_IMPORT_ROWS = 300;
+const rosterBulkImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+router.post(
+  '/:schoolId/roster-bulk-import/preview',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  rosterBulkImportUpload.single('file'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "file".' } });
+      }
+
+      // Verify actual file content via magic bytes before trusting the client-supplied
+      // filename extension — mirrors the same check on the Students bulk import route.
+      const detected = await fileTypeFromBuffer(file.buffer);
+      const allowedXlsxMimes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'];
+      if (!detected || !allowedXlsxMimes.includes(detected.mime)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'PARSE_ERROR', message: 'This file could not be read as an Excel spreadsheet.' },
+        });
+      }
+
+      let parsed;
+      try {
+        parsed = await parseRosterBulkImportFile(file.buffer, file.originalname);
+      } catch (err) {
+        if (err instanceof RosterBulkImportParseError) {
+          return res.status(400).json({ success: false, error: { code: 'PARSE_ERROR', message: err.message } });
+        }
+        return res.status(400).json({ success: false, error: { code: 'PARSE_ERROR', message: 'This file could not be read. Please check it is a valid .xlsx file.' } });
+      }
+
+      const totalRows = parsed.classes.length + parsed.subjects.length + parsed.assignments.length;
+      if (totalRows === 0) {
+        return res.status(400).json({ success: false, error: { code: 'EMPTY_FILE', message: 'No rows were found in any sheet of this file.' } });
+      }
+      if (totalRows > MAX_ROSTER_BULK_IMPORT_ROWS) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'TOO_MANY_ROWS', message: `This file has ${totalRows} rows across all sheets — the maximum per import is ${MAX_ROSTER_BULK_IMPORT_ROWS}. Split it into multiple files.` },
+        });
+      }
+
+      const [existingClasses, existingSubjects, activeTerm] = await Promise.all([
+        listClassNamesAndIds(req.params.schoolId),
+        listSubjectCodesAndIds(req.params.schoolId),
+        getActiveTerm(req.params.schoolId),
+      ]);
+
+      const results = await runFullRosterValidation(parsed, {
+        existingClasses,
+        existingSubjects,
+        activeTerm,
+        lookupTeachersByEmails: (emails) => findTeachersByEmails(req.params.schoolId, emails),
+        findDuplicateAssignment: (teacherId, classId, subjectId, termId) => findDuplicateAssignment(teacherId, classId, subjectId, termId),
+      });
+
+      const summarize = (rows: { status: 'valid' | 'error' }[]) => ({
+        total: rows.length,
+        valid: rows.filter(r => r.status === 'valid').length,
+        invalid: rows.filter(r => r.status === 'error').length,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          classes: { rows: results.classes, summary: summarize(results.classes) },
+          subjects: { rows: results.subjects, summary: summarize(results.subjects) },
+          assignments: { rows: results.assignments, summary: summarize(results.assignments) },
+        },
+      });
     } catch (err) {
       return next(err);
     }
