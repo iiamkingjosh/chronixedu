@@ -64,8 +64,19 @@ describe('findDuplicatesWithinFile', () => {
     expect(findDuplicatesWithinFile(rows)).toEqual(new Set([2]));
   });
 
-  it('does not flag rows with no email at all', () => {
-    const rows = [baseRow({ row_number: 1 }), baseRow({ row_number: 2 })];
+  it('flags two rows with the same name and no email at all — the common case, since student email is optional', () => {
+    const rows = [
+      baseRow({ row_number: 1, first_name: 'Tunde', last_name: 'Okonkwo', email: null }),
+      baseRow({ row_number: 2, first_name: 'Tunde', last_name: 'Okonkwo', email: null }),
+    ];
+    expect(findDuplicatesWithinFile(rows)).toEqual(new Set([2]));
+  });
+
+  it('does not flag two different students with no email, as long as their names differ', () => {
+    const rows = [
+      baseRow({ row_number: 1, first_name: 'Tunde', last_name: 'Okonkwo', email: null }),
+      baseRow({ row_number: 2, first_name: 'Ada', last_name: 'Bello', email: null }),
+    ];
     expect(findDuplicatesWithinFile(rows)).toEqual(new Set());
   });
 

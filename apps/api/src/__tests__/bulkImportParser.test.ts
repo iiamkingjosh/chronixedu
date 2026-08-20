@@ -26,7 +26,7 @@ describe('parseBulkImportFile — .xlsx', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
-      row_number: 1,
+      row_number: 2,
       first_name: 'Tunde',
       last_name: 'Okonkwo',
       email: 'tunde@example.com',
@@ -57,7 +57,10 @@ describe('parseBulkImportFile — .xlsx', () => {
     expect(rows[0]).toMatchObject({ first_name: 'Chidi', last_name: 'Nwosu' });
   });
 
-  it('assigns sequential row_number values, skipping fully blank trailing rows', async () => {
+  it('reports the real Excel sheet row number, skipping fully blank rows without compacting the count', async () => {
+    // Headers = row 1, "Ada Bello" = row 2, a fully blank row = row 3, "Chidi Nwosu" = row 4.
+    // The blank row is still excluded, but the row_number for "Chidi Nwosu" must reflect
+    // its actual position in the spreadsheet (4), not a compacted count (2).
     const buffer = await makeXlsxBuffer(
       ['First Name', 'Last Name'],
       [['Ada', 'Bello'], ['', ''], ['Chidi', 'Nwosu']]
@@ -65,8 +68,33 @@ describe('parseBulkImportFile — .xlsx', () => {
 
     const rows = await parseBulkImportFile(buffer, 'students.xlsx');
 
-    expect(rows.map(r => r.row_number)).toEqual([1, 2]);
+    expect(rows.map(r => r.row_number)).toEqual([2, 4]);
     expect(rows[1].first_name).toBe('Chidi');
+  });
+
+  it('does not skip a row that has content but is missing a name — it is pushed through for per-row validation to catch', async () => {
+    const buffer = await makeXlsxBuffer(
+      ['First Name', 'Last Name', 'Email'],
+      [['Ada', 'Bello'], ['', '', 'noname@example.com']]
+    );
+
+    const rows = await parseBulkImportFile(buffer, 'students.xlsx');
+
+    expect(rows).toHaveLength(2);
+    expect(rows[1]).toMatchObject({ first_name: '', last_name: '', email: 'noname@example.com' });
+  });
+
+  it('lowercases the student email and every parent email, but leaves other fields untouched', async () => {
+    const buffer = await makeXlsxBuffer(
+      ['First Name', 'Last Name', 'Email', 'Parent 1 First Name', 'Parent 1 Last Name', 'Parent 1 Email', 'Parent 1 Relationship'],
+      [['Tunde', 'Okonkwo', 'Tunde.Okonkwo@Example.COM', 'Bisi', 'Okonkwo', 'BISI@EXAMPLE.COM', 'Mother']]
+    );
+
+    const rows = await parseBulkImportFile(buffer, 'students.xlsx');
+
+    expect(rows[0].email).toBe('tunde.okonkwo@example.com');
+    expect(rows[0].first_name).toBe('Tunde');
+    expect(rows[0].parent1?.email).toBe('bisi@example.com');
   });
 
   it('throws BulkImportParseError when required headers are missing entirely', async () => {

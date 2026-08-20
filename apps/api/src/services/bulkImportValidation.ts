@@ -39,13 +39,18 @@ export function validateRowShape(row: ParsedStudentRow): string[] {
   return errors;
 }
 
-/** Row numbers (1-indexed data rows) that repeat an earlier row's non-blank student email. */
+/**
+ * Row numbers that repeat an earlier row's first name + last name + student email
+ * (case-insensitive). Keying on the composite tuple — not email alone — means two
+ * rows for the same student with no email at all are still caught as duplicates
+ * (the common case, since student email is optional), while two different students
+ * who happen to share a name are not falsely flagged as long as their emails differ.
+ */
 export function findDuplicatesWithinFile(rows: ParsedStudentRow[]): Set<number> {
   const seen = new Set<string>();
   const duplicates = new Set<number>();
   for (const row of rows) {
-    if (!row.email) continue;
-    const key = row.email.toLowerCase();
+    const key = `${row.first_name.toLowerCase()}|${row.last_name.toLowerCase()}|${(row.email ?? '').toLowerCase()}`;
     if (seen.has(key)) {
       duplicates.add(row.row_number);
     } else {
@@ -79,7 +84,7 @@ export async function runFullValidation(
     const errors = validateRowShape(row);
 
     if (duplicateRowNumbers.has(row.row_number)) {
-      errors.push('This student email also appears in an earlier row of this file.');
+      errors.push('This student (same name and email) also appears in an earlier row of this file.');
     }
 
     if (row.email) {
