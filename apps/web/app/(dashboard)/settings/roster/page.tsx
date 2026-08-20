@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -803,8 +804,19 @@ export default function RosterPage() {
         </div>
       )}
 
-      <h1 className="text-xl font-semibold text-gray-900 mb-1">Roster Management</h1>
-      <p className="text-sm text-gray-500 mb-6">Manage classes, subjects, and teacher-to-class-and-subject assignments.</p>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-1">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Roster Management</h1>
+          <p className="text-sm text-gray-500 mt-1">Manage classes, subjects, and teacher-to-class-and-subject assignments.</p>
+        </div>
+        <Link
+          href="/settings/roster/import"
+          className="shrink-0 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+        >
+          Bulk Import
+        </Link>
+      </div>
+      <div className="mb-6" />
 
       <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
         {TABS.map(t => (
