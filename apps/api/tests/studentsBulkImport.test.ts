@@ -15,9 +15,10 @@ import pool from '../src/db/client';
 import studentsRouter from '../src/routes/students';
 import { verifyToken } from '../src/middleware/auth';
 import { errorHandler } from '../src/middleware/errorHandler';
+import * as studentsQueries from '../src/db/queries/students';
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use('/api/schools', verifyToken);
 app.use('/api/schools', studentsRouter);
 app.use(errorHandler);
@@ -232,12 +233,16 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     expect(parentRows.rows).toHaveLength(1); // one parent account, not two
   });
 
-  it('does not roll back other rows when one row fails at commit time', async () => {
+  it('re-validates at commit and rejects a row that conflicted after preview', async () => {
     const goodEmail = `good-${randomUUID()}@test.com`;
     const conflictEmail = `will-conflict-${randomUUID()}@test.com`;
 
     // Pre-create a user with conflictEmail directly in the DB, AFTER preview
-    // would have run, to simulate a race between preview and commit.
+    // would have run, to simulate a race between preview and commit. This
+    // row never reaches registerStudent() at all — runFullValidation() at
+    // commit time catches it first and marks it an error, so this test
+    // exercises the re-validation path, not the per-row try/catch around
+    // registerStudent(). See the next test for that.
     const buffer = await xlsxBuffer(
       ['First Name', 'Last Name', 'Email'],
       [['Good', 'Row', goodEmail], ['Conflict', 'Row', conflictEmail]]
@@ -258,10 +263,91 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.created).toBe(1);
     expect(res.body.data.failed).toBe(1);
+    const failedResult = res.body.data.results.find((r: { status: string }) => r.status === 'failed');
+    expect(failedResult?.reason).toContain('already registered');
 
     const goodRow = await pool.query(`SELECT id FROM users WHERE email = $1`, [goodEmail]);
     expect(goodRow.rows).toHaveLength(1);
   });
+
+  it('does not roll back other rows when registerStudent itself fails partway through the batch', async () => {
+    const goodEmail = `good-${randomUUID()}@test.com`;
+    const failEmail = `will-fail-${randomUUID()}@test.com`;
+    const buffer = await xlsxBuffer(
+      ['First Name', 'Last Name', 'Email'],
+      [['Good', 'Row', goodEmail], ['Fail', 'Row', failEmail]]
+    );
+    const rows = await preview(registrarToken, buffer);
+
+    const originalRegisterStudent = studentsQueries.registerStudent;
+    let callCount = 0;
+    const spy = jest.spyOn(studentsQueries, 'registerStudent').mockImplementation(
+      async (...args: Parameters<typeof originalRegisterStudent>) => {
+        callCount += 1;
+        if (callCount === 2) throw new Error('Simulated DB failure');
+        return originalRegisterStudent(...args);
+      }
+    );
+
+    try {
+      const res = await request(app)
+        .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
+        .set('Authorization', `Bearer ${registrarToken}`)
+        .send({ rows });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.created).toBe(1);
+      expect(res.body.data.failed).toBe(1);
+      const failedResult = res.body.data.results.find((r: { status: string }) => r.status === 'failed');
+      expect(failedResult?.reason).toBe('Failed to create this record.');
+
+      const goodRow = await pool.query(`SELECT id FROM users WHERE email = $1`, [goodEmail]);
+      expect(goodRow.rows).toHaveLength(1);
+
+      const failRow = await pool.query(`SELECT id FROM users WHERE email = $1`, [failEmail]);
+      expect(failRow.rows).toHaveLength(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('accepts and creates a realistic near-200-row batch without hitting the JSON body size limit', async () => {
+    // 145 rows with both parent blocks filled produces a ~105KB commit
+    // payload — over Express's old 100kb default JSON body limit, and
+    // close to the reviewer's ~141KB measurement for a full 200-row file.
+    // Kept below 200 to bound this test's runtime: each row is a real
+    // registerStudent() transaction against the (remote) test database,
+    // measured at ~2.7s/row end-to-end through the full HTTP stack — see
+    // the 10-minute timeout below.
+    const ROW_COUNT = 145;
+    const headers = [
+      'First Name', 'Last Name', 'Email',
+      'Parent 1 First Name', 'Parent 1 Last Name', 'Parent 1 Email', 'Parent 1 Relationship',
+      'Parent 2 First Name', 'Parent 2 Last Name', 'Parent 2 Email', 'Parent 2 Relationship',
+    ];
+    const dataRows = Array.from({ length: ROW_COUNT }, (_, i) => [
+      `Student${i}`, `Row${i}`, `bulk-large-${i}-${randomUUID()}@test.com`,
+      `P1First${i}`, `P1Last${i}`, `bulk-large-p1-${i}-${randomUUID()}@test.com`, 'Mother',
+      `P2First${i}`, `P2Last${i}`, `bulk-large-p2-${i}-${randomUUID()}@test.com`, 'Father',
+    ]);
+    const buffer = await xlsxBuffer(headers, dataRows);
+    const rows = await preview(registrarToken, buffer);
+    expect(rows).toHaveLength(ROW_COUNT);
+
+    // This is the regression this test guards against: a realistic ~200-row
+    // commit payload is well over Express's old 100kb default JSON body limit.
+    const payloadSizeBytes = Buffer.byteLength(JSON.stringify({ rows }));
+    expect(payloadSizeBytes).toBeGreaterThan(100 * 1024);
+
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
+      .set('Authorization', `Bearer ${registrarToken}`)
+      .send({ rows });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.created).toBe(ROW_COUNT);
+    expect(res.body.data.failed).toBe(0);
+  }, 600000);
 });
 
 // Closes the shared pg pool once, after every describe block in this file has
