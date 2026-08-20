@@ -84,7 +84,7 @@ New module `apps/api/src/services/rosterBulkImportValidation.ts`, exporting one 
 ### 3. Backend — endpoints
 
 ```
-POST /:schoolId/roster/bulk-import/preview
+POST /:schoolId/roster-bulk-import/preview
   verifyToken, requireSchoolAccess, requireRole('super_admin','principal')
   multer upload.single('file'), limits: { fileSize: 5 * 1024 * 1024 } // 5MB
   → parses all 3 sheets, enforces 300-row cap (total across sheets, rejected
@@ -97,7 +97,7 @@ POST /:schoolId/roster/bulk-import/preview
     } }
   Writes nothing.
 
-POST /:schoolId/roster/bulk-import/commit
+POST /:schoolId/roster-bulk-import/commit
   verifyToken, requireSchoolAccess, requireRole('super_admin','principal')
   body: { classes: [...], subjects: [...], assignments: [...] }  // exactly the
     "valid" rows per sheet as returned by preview
