@@ -9,7 +9,7 @@ Roster setup — Classes, Subjects, and Teacher Assignments — is currently one
 
 This is the second of four approved bulk-import features (Students & Parents — shipped — then Roster, then Staff/Users, then Fee Structures). It reuses the upload → preview → commit pattern the Students & Parents feature established, adapted for Roster's different shape: three related sub-resources in one file instead of one resource type.
 
-**Scope of this spec:** principal/super_admin uploads a single `.xlsx`/`.csv` workbook with three sheets — Classes, Subjects, Teacher Assignments — previews exactly what will be created and what's wrong per row across all three sheets, then confirms to commit. Teacher Assignment rows resolve against **pre-existing** data only (see Decisions Made) — they are not aware of classes/subjects created earlier in the same commit.
+**Scope of this spec:** principal/super_admin uploads a single `.xlsx` workbook with three sheets — Classes, Subjects, Teacher Assignments — previews exactly what will be created and what's wrong per row across all three sheets, then confirms to commit. Teacher Assignment rows resolve against **pre-existing** data only (see Decisions Made) — they are not aware of classes/subjects created earlier in the same commit.
 
 **Explicitly out of scope for this spec:**
 - Assignments referencing classes/subjects newly created in the same file — deliberately deferred; a school doing a from-scratch setup imports Classes+Subjects first, then does a second import for Assignments once those exist.
@@ -30,6 +30,7 @@ This is the second of four approved bulk-import features (Students & Parents —
 ## Decisions Made
 
 - **One file, three sheets** (Classes, Subjects, Teacher Assignments), one upload, one commit — not three separate import flows. Matches how the Roster settings page itself is already organized (three tabs).
+- **`.xlsx` only — no CSV support for this feature.** CSV is a flat, single-table format and cannot represent three sheets; the "one file, three sheets" decision above is only coherent for a real workbook format. This is a deliberate divergence from Students & Parents (which accepts both `.xlsx` and `.csv`, since that feature is genuinely one flat table).
 - **Teacher Assignment rows resolve only against pre-existing data**, never against a class/subject created earlier in the same file/commit. This was a deliberate simplicity trade-off: it removes all same-file dependency-ordering and name-collision-resolution logic, at the cost of a from-scratch school setup needing two passes (Classes+Subjects first, then a second upload for Assignments once those exist). Explicitly chosen over the more powerful but more complex alternative.
 - **Commit processes sheets in a fixed order — Classes, then Subjects, then Teacher Assignments** — even though Assignments don't depend on same-commit data, this keeps the commit's own results/audit trail naturally ordered and matches the sheet order in the file.
 - **Two-step preview/commit flow**, identical shape to Students & Parents: nothing written until confirmed, commit re-validates from scratch server-side rather than trusting client-supplied row data.
