@@ -158,3 +158,156 @@ describe('POST /:schoolId/roster-bulk-import/preview', () => {
     expect(res.body.error.code).toBe('TOO_MANY_ROWS');
   });
 });
+
+describe('POST /:schoolId/roster-bulk-import/commit', () => {
+  let schoolId: string;
+  let principalToken: string;
+  let registrarToken: string;
+  let teacherEmail: string;
+
+  beforeAll(async () => {
+    const schoolResult = await pool.query<{ id: string }>(
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      ['Roster Bulk Commit Test School', `test-roster-commit-${randomUUID()}`]
+    );
+    schoolId = schoolResult.rows[0].id;
+
+    const principalResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject') RETURNING id, email`,
+      [schoolId, `principal-commit-${randomUUID()}@test.com`]
+    );
+    principalToken = makeToken(principalResult.rows[0].id, 'principal', schoolId, principalResult.rows[0].email);
+
+    const registrarResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'registrar', 'Test', 'Registrar', 'subject') RETURNING id, email`,
+      [schoolId, `registrar-commit-${randomUUID()}@test.com`]
+    );
+    registrarToken = makeToken(registrarResult.rows[0].id, 'registrar', schoolId, registrarResult.rows[0].email);
+
+    const teacherResult = await pool.query<{ email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Existing', 'Teacher', 'subject') RETURNING email`,
+      [schoolId, `teacher-commit-${randomUUID()}@test.com`]
+    );
+    teacherEmail = teacherResult.rows[0].email;
+
+    // An active session + term is required for any Teacher Assignment to
+    // validate — set one up directly, matching how other integration tests
+    // in this repo establish active-term state.
+    const sessionResult = await pool.query<{ id: string }>(
+      `INSERT INTO academic_sessions (school_id, name, start_date, end_date, is_current)
+       VALUES ($1, '2026/2027', NOW(), NOW() + interval '365 days', true) RETURNING id`,
+      [schoolId]
+    );
+    await pool.query(
+      `INSERT INTO terms (school_id, session_id, name, start_date, end_date, is_current)
+       VALUES ($1, $2, 'First Term', NOW(), NOW() + interval '90 days', true)`,
+      [schoolId, sessionResult.rows[0].id]
+    );
+  }, 30000);
+
+  afterAll(async () => {
+    await pool.query(`DELETE FROM teacher_assignments WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM classes WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM subjects WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM terms WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+  }, 30000);
+
+  async function preview(buffer: Buffer) {
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/roster-bulk-import/preview`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .attach('file', buffer, 'roster.xlsx');
+    return res.body.data;
+  }
+
+  it('rejects a registrar with 403', async () => {
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/roster-bulk-import/commit`)
+      .set('Authorization', `Bearer ${registrarToken}`)
+      .send({ classes: [], subjects: [], assignments: [] });
+    expect(res.status).toBe(403);
+  });
+
+  it('creates a class and a subject, then a later import creates an assignment referencing them', async () => {
+    const className = `JSS 1A ${randomUUID()}`;
+    const subjectCode = `MTH${randomUUID().slice(0, 4).toUpperCase()}`;
+
+    // Pass 1: Classes + Subjects only, matching the two-pass workflow the
+    // design spec explicitly chose (Assignments never see same-commit rows).
+    const buffer1 = await fullWorkbook({
+      Classes: [[className, 'JSS1', '', '']],
+      Subjects: [['Mathematics', subjectCode]],
+    });
+    const data1 = await preview(buffer1);
+    const commit1 = await request(app)
+      .post(`/api/schools/${schoolId}/roster-bulk-import/commit`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ classes: data1.classes.rows, subjects: data1.subjects.rows, assignments: [] });
+
+    expect(commit1.status).toBe(200);
+    expect(commit1.body.data.classes.created).toBe(1);
+    expect(commit1.body.data.subjects.created).toBe(1);
+    expect(typeof commit1.body.data.download_base64).toBe('string');
+
+    const classRow = await pool.query(`SELECT id FROM classes WHERE school_id = $1 AND name = $2`, [schoolId, className]);
+    expect(classRow.rows).toHaveLength(1);
+
+    // Pass 2: now that the class/subject exist, an Assignment referencing
+    // them resolves and commits successfully.
+    const buffer2 = await fullWorkbook({
+      'Teacher Assignments': [[teacherEmail, className, subjectCode]],
+    });
+    const data2 = await preview(buffer2);
+    expect(data2.assignments.summary).toEqual({ total: 1, valid: 1, invalid: 0 });
+
+    const commit2 = await request(app)
+      .post(`/api/schools/${schoolId}/roster-bulk-import/commit`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ classes: [], subjects: [], assignments: data2.assignments.rows });
+
+    expect(commit2.status).toBe(200);
+    expect(commit2.body.data.assignments.created).toBe(1);
+
+    const assignmentRow = await pool.query(`SELECT id FROM teacher_assignments WHERE school_id = $1`, [schoolId]);
+    expect(assignmentRow.rows).toHaveLength(1);
+  });
+
+  it('does not roll back other rows when one class row fails at commit time', async () => {
+    const goodName = `Good Class ${randomUUID()}`;
+    const conflictName = `Conflict Class ${randomUUID()}`;
+
+    const buffer = await fullWorkbook({ Classes: [[goodName, 'JSS1', '', ''], [conflictName, 'JSS1', '', '']] });
+    const data = await preview(buffer);
+
+    // Simulate a race: another request creates conflictName between preview and commit.
+    await pool.query(
+      `INSERT INTO classes (school_id, name, level) VALUES ($1, $2, 'JSS1')`,
+      [schoolId, conflictName]
+    );
+
+    const commit = await request(app)
+      .post(`/api/schools/${schoolId}/roster-bulk-import/commit`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ classes: data.classes.rows, subjects: [], assignments: [] });
+
+    expect(commit.status).toBe(200);
+    expect(commit.body.data.classes.created).toBe(1);
+    expect(commit.body.data.classes.failed).toBe(1);
+
+    const goodRow = await pool.query(`SELECT id FROM classes WHERE school_id = $1 AND name = $2`, [schoolId, goodName]);
+    expect(goodRow.rows).toHaveLength(1);
+  });
+});
+
+// Closes the shared pg pool once, after every describe block in this file has
+// finished — closing it inside an individual describe's afterAll would break
+// any sibling describe block that still needs to query the database.
+afterAll(async () => {
+  await pool.end();
+});
