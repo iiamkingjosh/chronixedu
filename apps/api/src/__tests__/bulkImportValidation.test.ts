@@ -53,6 +53,30 @@ describe('validateRowShape', () => {
     }));
     expect(errors).toEqual([]);
   });
+
+  it('flags a student first_name over 100 characters, matching the single-registration form limit', () => {
+    const errors = validateRowShape(baseRow({ first_name: 'A'.repeat(101) }));
+    expect(errors).toContain('First Name must be 100 characters or fewer.');
+  });
+
+  it('flags a student address over 500 characters', () => {
+    const errors = validateRowShape(baseRow({ address: 'A'.repeat(501) }));
+    expect(errors).toContain('Address must be 500 characters or fewer.');
+  });
+
+  it('flags a parent relationship_type over 50 characters', () => {
+    const errors = validateRowShape(baseRow({
+      parent1: { first_name: 'Bisi', last_name: 'Okonkwo', email: 'bisi@example.com', phone: null, relationship_type: 'A'.repeat(51), is_primary_contact: false },
+    }));
+    expect(errors).toContain('Parent 1 Relationship must be 50 characters or fewer.');
+  });
+
+  it('flags a parent phone over 30 characters', () => {
+    const errors = validateRowShape(baseRow({
+      parent1: { first_name: 'Bisi', last_name: 'Okonkwo', email: 'bisi@example.com', phone: '1'.repeat(31), relationship_type: 'Mother', is_primary_contact: false },
+    }));
+    expect(errors).toContain('Parent 1 Phone must be 30 characters or fewer.');
+  });
 });
 
 describe('findDuplicatesWithinFile', () => {
