@@ -119,6 +119,16 @@ describe('POST /:schoolId/students/bulk-import/preview', () => {
     expect(res.body.error.code).toBe('PARSE_ERROR');
   });
 
+  it('rejects a fake.xlsx whose bytes are not actually Excel with a clean PARSE_ERROR, never a 500', async () => {
+    const buffer = Buffer.from('this is not an excel file');
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/students/bulk-import/preview`)
+      .set('Authorization', `Bearer ${registrarToken}`)
+      .attach('file', buffer, 'fake.xlsx');
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PARSE_ERROR');
+  });
+
   it('rejects a file with more than 200 rows', async () => {
     const rows = Array.from({ length: 201 }, (_, i) => [`Student${i}`, 'Test']);
     const buffer = await xlsxBuffer(['First Name', 'Last Name'], rows);

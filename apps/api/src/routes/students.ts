@@ -247,6 +247,21 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "file".' } });
       }
 
+      // Verify actual file content via magic bytes before trusting the client-supplied
+      // filename extension — mirrors the H-04 check on the photo upload route above.
+      // Skipped for .csv: plain text has no reliable magic-byte signature.
+      const isXlsxByName = file.originalname.toLowerCase().endsWith('.xlsx');
+      if (isXlsxByName) {
+        const detected = await fileTypeFromBuffer(file.buffer);
+        const allowedXlsxMimes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'];
+        if (!detected || !allowedXlsxMimes.includes(detected.mime)) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'PARSE_ERROR', message: 'This file could not be read as an Excel spreadsheet.' },
+          });
+        }
+      }
+
       let parsedRows;
       try {
         parsedRows = await parseBulkImportFile(file.buffer, file.originalname);
@@ -254,7 +269,12 @@ router.post(
         if (err instanceof BulkImportParseError) {
           return res.status(400).json({ success: false, error: { code: 'PARSE_ERROR', message: err.message } });
         }
-        throw err;
+        // A failure to parse the uploaded file is fundamentally a bad-input problem,
+        // never a legitimate 500 — never re-throw here.
+        return res.status(400).json({
+          success: false,
+          error: { code: 'PARSE_ERROR', message: 'This file could not be read. Please check it is a valid .xlsx or .csv file.' },
+        });
       }
 
       if (parsedRows.length === 0) {
