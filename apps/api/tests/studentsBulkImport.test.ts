@@ -129,8 +129,8 @@ describe('POST /:schoolId/students/bulk-import/preview', () => {
     expect(res.body.error.code).toBe('PARSE_ERROR');
   });
 
-  it('rejects a file with more than 200 rows', async () => {
-    const rows = Array.from({ length: 201 }, (_, i) => [`Student${i}`, 'Test']);
+  it('rejects a file with more than 50 rows', async () => {
+    const rows = Array.from({ length: 51 }, (_, i) => [`Student${i}`, 'Test']);
     const buffer = await xlsxBuffer(['First Name', 'Last Name'], rows);
     const res = await request(app)
       .post(`/api/schools/${schoolId}/students/bulk-import/preview`)
@@ -321,15 +321,18 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     }
   });
 
-  it('accepts and creates a realistic near-200-row batch without hitting the JSON body size limit', async () => {
-    // 145 rows with both parent blocks filled produces a ~105KB commit
-    // payload — over Express's old 100kb default JSON body limit, and
-    // close to the reviewer's ~141KB measurement for a full 200-row file.
-    // Kept below 200 to bound this test's runtime: each row is a real
-    // registerStudent() transaction against the (remote) test database,
-    // measured at ~2.7s/row end-to-end through the full HTTP stack — see
-    // the 10-minute timeout below.
-    const ROW_COUNT = 145;
+  it('accepts a full 50-row batch', async () => {
+    // MAX_BULK_IMPORT_ROWS was lowered from 200 to 50 (measured ~2.7s/row
+    // end-to-end for the commit route, so a full 200-row commit would be an
+    // unacceptably long ~9-minute synchronous HTTP request). At 50 rows the
+    // payload is well under 100KB (roughly ~35-40KB, scaling from the
+    // original ~105KB measurement at 145 rows), so this test no longer
+    // stress-tests the JSON body size limit specifically — the limit is
+    // still raised to 2mb globally as a defensive measure, just not
+    // exercised by this smaller test. Each row is a real registerStudent()
+    // transaction against the (remote) test database, ~2.7s/row — see the
+    // timeout below.
+    const ROW_COUNT = 50;
     const headers = [
       'First Name', 'Last Name', 'Email',
       'Parent 1 First Name', 'Parent 1 Last Name', 'Parent 1 Email', 'Parent 1 Relationship',
@@ -344,11 +347,6 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     const rows = await preview(registrarToken, buffer);
     expect(rows).toHaveLength(ROW_COUNT);
 
-    // This is the regression this test guards against: a realistic ~200-row
-    // commit payload is well over Express's old 100kb default JSON body limit.
-    const payloadSizeBytes = Buffer.byteLength(JSON.stringify({ rows }));
-    expect(payloadSizeBytes).toBeGreaterThan(100 * 1024);
-
     const res = await request(app)
       .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
       .set('Authorization', `Bearer ${registrarToken}`)
@@ -357,7 +355,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.created).toBe(ROW_COUNT);
     expect(res.body.data.failed).toBe(0);
-  }, 600000);
+  }, 180000);
 });
 
 // Closes the shared pg pool once, after every describe block in this file has

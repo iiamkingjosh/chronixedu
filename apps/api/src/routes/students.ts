@@ -231,7 +231,11 @@ router.post(
 // confirms via /bulk-import/commit afterward. See docs/superpowers/specs/
 // 2026-08-19-student-bulk-import-design.md for the full design rationale.
 
-const MAX_BULK_IMPORT_ROWS = 200;
+// Lowered from 200 to 50: measured ~2.7s/row end-to-end for the commit route means a
+// full 200-row commit would be an unacceptably long ~9-minute synchronous HTTP request.
+// At 50 rows a full batch stays under ~2.5 minutes, with margin (real production latency
+// is likely better than the remote test DB this was measured against).
+const MAX_BULK_IMPORT_ROWS = 50;
 const bulkImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 router.post(
