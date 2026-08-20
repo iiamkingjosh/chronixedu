@@ -22,8 +22,13 @@ function validateParent(parent: ParsedParentRow, label: string): string[] {
   if (!parent.first_name || !parent.last_name) {
     errors.push(`${label} is missing a first or last name.`);
   }
+  if (parent.first_name && parent.first_name.length > 100) errors.push(`${label} First Name must be 100 characters or fewer.`);
+  if (parent.last_name && parent.last_name.length > 100) errors.push(`${label} Last Name must be 100 characters or fewer.`);
+  if (parent.phone && parent.phone.length > 30) errors.push(`${label} Phone must be 30 characters or fewer.`);
   if (!parent.relationship_type) {
     errors.push(`${label} is missing a relationship (e.g. Father, Mother, Guardian).`);
+  } else if (parent.relationship_type.length > 50) {
+    errors.push(`${label} Relationship must be 50 characters or fewer.`);
   }
   return errors;
 }
@@ -31,9 +36,17 @@ function validateParent(parent: ParsedParentRow, label: string): string[] {
 export function validateRowShape(row: ParsedStudentRow): string[] {
   const errors: string[] = [];
   if (!row.first_name) errors.push('First Name is required.');
+  else if (row.first_name.length > 100) errors.push('First Name must be 100 characters or fewer.');
   if (!row.last_name) errors.push('Last Name is required.');
+  else if (row.last_name.length > 100) errors.push('Last Name must be 100 characters or fewer.');
   if (row.email && !EMAIL_PATTERN.test(row.email)) errors.push(`Student email "${row.email}" is not a valid email address.`);
   if (row.dob && !DATE_PATTERN.test(row.dob)) errors.push(`Date of Birth "${row.dob}" must be in YYYY-MM-DD format.`);
+  if (row.phone && row.phone.length > 30) errors.push('Phone must be 30 characters or fewer.');
+  if (row.gender && row.gender.length > 50) errors.push('Gender must be 50 characters or fewer.');
+  if (row.address && row.address.length > 500) errors.push('Address must be 500 characters or fewer.');
+  if (row.blood_group && row.blood_group.length > 20) errors.push('Blood Group must be 20 characters or fewer.');
+  if (row.emergency_contact_name && row.emergency_contact_name.length > 200) errors.push('Emergency Contact Name must be 200 characters or fewer.');
+  if (row.emergency_contact_phone && row.emergency_contact_phone.length > 30) errors.push('Emergency Contact Phone must be 30 characters or fewer.');
   if (row.parent1) errors.push(...validateParent(row.parent1, 'Parent 1'));
   if (row.parent2) errors.push(...validateParent(row.parent2, 'Parent 2'));
   return errors;
