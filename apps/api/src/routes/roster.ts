@@ -17,6 +17,7 @@ import { findUserById } from '../db/queries/users';
 import { cache } from '../services/cacheService';
 import { parseRosterBulkImportFile, RosterBulkImportParseError } from '../services/rosterBulkImportParser';
 import { runFullRosterValidation } from '../services/rosterBulkImportValidation';
+import { generateRosterBulkImportResultsFile, type CreatedClassRecord, type CreatedSubjectRecord, type CreatedAssignmentRecord } from '../services/rosterBulkImportResults';
 
 const router = Router();
 
@@ -477,6 +478,172 @@ router.post(
           classes: { rows: results.classes, summary: summarize(results.classes) },
           subjects: { rows: results.subjects, summary: summarize(results.subjects) },
           assignments: { rows: results.assignments, summary: summarize(results.assignments) },
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/roster-bulk-import/commit ───────────────────────────────
+// Fetches ONE fresh snapshot of existing classes/subjects/active-term before
+// any inserts happen, and validates every sheet against that single
+// snapshot — this is what guarantees a Teacher Assignment row never
+// resolves against a class/subject this same commit just created, per the
+// design decision. Commits in order: Classes, then Subjects, then
+// Assignments, one insert per row, wrapped in its own try/catch.
+
+const rosterBulkImportRowSchema = z.object({
+  row_number: z.number(),
+  status: z.enum(['valid', 'error']),
+  errors: z.array(z.string()),
+});
+
+const rosterBulkImportCommitSchema = z.object({
+  classes: z.array(rosterBulkImportRowSchema.extend({
+    class: z.object({
+      row_number: z.number(),
+      name: z.string(),
+      level: z.string(),
+      stream: z.string().nullable(),
+      form_teacher_email: z.string().nullable(),
+    }),
+    resolved_form_teacher_id: z.string().nullable(),
+  })).max(MAX_ROSTER_BULK_IMPORT_ROWS),
+  subjects: z.array(rosterBulkImportRowSchema.extend({
+    subject: z.object({
+      row_number: z.number(),
+      name: z.string(),
+      code: z.string(),
+    }),
+  })).max(MAX_ROSTER_BULK_IMPORT_ROWS),
+  assignments: z.array(rosterBulkImportRowSchema.extend({
+    assignment: z.object({
+      row_number: z.number(),
+      teacher_email: z.string(),
+      class_name: z.string(),
+      subject_code: z.string(),
+    }),
+    resolved_teacher_id: z.string().nullable(),
+    resolved_class_id: z.string().nullable(),
+    resolved_subject_id: z.string().nullable(),
+  })).max(MAX_ROSTER_BULK_IMPORT_ROWS),
+});
+
+router.post(
+  '/:schoolId/roster-bulk-import/commit',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = rosterBulkImportCommitSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const submittedClasses = parsed.data.classes.map(r => r.class);
+      const submittedSubjects = parsed.data.subjects.map(r => r.subject);
+      const submittedAssignments = parsed.data.assignments.map(r => r.assignment);
+
+      // One snapshot, fetched once, before any insert in this request.
+      const [existingClasses, existingSubjects, activeTerm] = await Promise.all([
+        listClassNamesAndIds(req.params.schoolId),
+        listSubjectCodesAndIds(req.params.schoolId),
+        getActiveTerm(req.params.schoolId),
+      ]);
+
+      const revalidated = await runFullRosterValidation(
+        { classes: submittedClasses, subjects: submittedSubjects, assignments: submittedAssignments },
+        {
+          existingClasses,
+          existingSubjects,
+          activeTerm,
+          lookupTeachersByEmails: (emails) => findTeachersByEmails(req.params.schoolId, emails),
+          findDuplicateAssignment: (teacherId, classId, subjectId, termId) => findDuplicateAssignment(teacherId, classId, subjectId, termId),
+        }
+      );
+
+      // ── Classes ──
+      const classResults: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string }> = [];
+      const createdClasses: CreatedClassRecord[] = [];
+      for (const row of revalidated.classes) {
+        if (row.status === 'error') {
+          classResults.push({ row_number: row.row_number, status: 'failed', reason: row.errors.join(' ') });
+          continue;
+        }
+        try {
+          await insertClass(req.params.schoolId, row.class.name, row.class.level, row.class.stream, row.resolved_form_teacher_id);
+          classResults.push({ row_number: row.row_number, status: 'created' });
+          createdClasses.push({ row_number: row.row_number, name: row.class.name, level: row.class.level });
+        } catch (err: unknown) {
+          const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
+            ? 'A class with this name already exists.'
+            : 'Failed to create this class.';
+          classResults.push({ row_number: row.row_number, status: 'failed', reason });
+        }
+      }
+      if (createdClasses.length > 0) cache.del(`roster:${req.params.schoolId}:classes`);
+
+      // ── Subjects ──
+      const subjectResults: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string }> = [];
+      const createdSubjects: CreatedSubjectRecord[] = [];
+      for (const row of revalidated.subjects) {
+        if (row.status === 'error') {
+          subjectResults.push({ row_number: row.row_number, status: 'failed', reason: row.errors.join(' ') });
+          continue;
+        }
+        try {
+          await insertSubject(req.params.schoolId, row.subject.name, row.subject.code);
+          subjectResults.push({ row_number: row.row_number, status: 'created' });
+          createdSubjects.push({ row_number: row.row_number, name: row.subject.name, code: row.subject.code });
+        } catch (err: unknown) {
+          const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
+            ? 'A subject with this code already exists.'
+            : 'Failed to create this subject.';
+          subjectResults.push({ row_number: row.row_number, status: 'failed', reason });
+        }
+      }
+      if (createdSubjects.length > 0) cache.del(`roster:${req.params.schoolId}:subjects`);
+
+      // ── Teacher Assignments ──
+      const assignmentResults: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string }> = [];
+      const createdAssignments: CreatedAssignmentRecord[] = [];
+      const teachersToInvalidate = new Set<string>();
+      for (const row of revalidated.assignments) {
+        if (row.status === 'error' || !row.resolved_teacher_id || !row.resolved_class_id || !row.resolved_subject_id || !activeTerm) {
+          assignmentResults.push({ row_number: row.row_number, status: 'failed', reason: row.errors.join(' ') || 'Could not be created.' });
+          continue;
+        }
+        try {
+          await insertTeacherAssignment(row.resolved_teacher_id, row.resolved_class_id, row.resolved_subject_id, activeTerm.id, req.params.schoolId);
+          assignmentResults.push({ row_number: row.row_number, status: 'created' });
+          createdAssignments.push({
+            row_number: row.row_number,
+            teacher_email: row.assignment.teacher_email,
+            class_name: row.assignment.class_name,
+            subject_code: row.assignment.subject_code,
+          });
+          teachersToInvalidate.add(row.resolved_teacher_id);
+        } catch (err: unknown) {
+          const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
+            ? 'This assignment already exists.'
+            : 'Failed to create this assignment.';
+          assignmentResults.push({ row_number: row.row_number, status: 'failed', reason });
+        }
+      }
+      teachersToInvalidate.forEach(teacherId => cache.del(`roster:${req.params.schoolId}:assignments:${teacherId}`));
+
+      const resultsFile = await generateRosterBulkImportResultsFile(createdClasses, createdSubjects, createdAssignments);
+
+      return res.json({
+        success: true,
+        data: {
+          classes: { created: createdClasses.length, failed: classResults.filter(r => r.status === 'failed').length, results: classResults },
+          subjects: { created: createdSubjects.length, failed: subjectResults.filter(r => r.status === 'failed').length, results: subjectResults },
+          assignments: { created: createdAssignments.length, failed: assignmentResults.filter(r => r.status === 'failed').length, results: assignmentResults },
+          download_base64: resultsFile.toString('base64'),
         },
       });
     } catch (err) {
