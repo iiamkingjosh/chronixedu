@@ -502,15 +502,23 @@ export default function StudentRegistrationPage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
         <h1 className="text-xl font-semibold text-gray-900">Student Registration</h1>
-        <button
-          onClick={() => setRegisterOpen(true)}
-          className="btn-primary gap-1.5 self-start sm:self-auto"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Register Student
-        </button>
+        <div className="flex gap-2 self-start sm:self-auto">
+          <Link
+            href="/registrar/students/import"
+            className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+          >
+            Bulk Import
+          </Link>
+          <button
+            onClick={() => setRegisterOpen(true)}
+            className="btn-primary gap-1.5"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Register Student
+          </button>
+        </div>
       </div>
       <p className="text-sm text-gray-500 mb-6">Search existing students or register a new student into the school.</p>
 
