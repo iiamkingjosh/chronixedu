@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
@@ -81,6 +82,9 @@ export default function FeeStructuresPage() {
           <p className="text-sm text-gray-500 mt-1">Configure fee components and generate invoices for a term.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/bursar/fee-structures/import" className="btn-secondary">
+            Bulk Import Payments
+          </Link>
           <button
             type="button"
             onClick={() => setShowGenerateModal(true)}

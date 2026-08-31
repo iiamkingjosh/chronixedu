@@ -118,7 +118,7 @@ export default function PaymentBulkImportPage() {
       <div className="mb-6">
         <Link href="/bursar/fee-structures" className="text-sm text-[#2472B4] hover:underline">← Back to Fee Structures</Link>
         <h1 className="text-xl font-semibold text-gray-900 mt-2">Bulk Import Payments</h1>
-        <p className="text-sm text-gray-500 mt-1">Record historical payments (cash, bank transfer, or waiver) against existing invoices for one term — up to 100 rows per import.</p>
+        <p className="text-sm text-gray-500 mt-1">Record historical payments (cash, bank transfer, or waiver) against existing invoices for one term — up to 50 rows per import.</p>
       </div>
 
       {(step === 'select-term' || step === 'upload') && (
