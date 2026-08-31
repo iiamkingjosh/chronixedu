@@ -573,7 +573,16 @@ router.post(
 // that lets two rows for the same student in one file be validated correctly
 // against each other without any writes.
 
-const MAX_PAYMENT_BULK_IMPORT_ROWS = 100;
+// Measured (2026-08-31, apps/api/_measure_payment_bulk_timing.ts, 3 runs against
+// the real DB): a 100-row commit averaged 171.8s (158-192s across runs), before
+// even adding the ~35s preview step — not comfortably under the ~3-minute budget.
+// Each row is one recordPayment() transaction (several sequential round trips:
+// BEGIN, SELECT ... FOR UPDATE, duplicate check, INSERT, UPDATE, COMMIT), so the
+// cost scales linearly with rows. 50 rows keeps the commit comfortably under
+// budget (~86-96s projected from the measured 1.72-1.92s/row) and matches the
+// precedent set by Students/Staff bulk import (MAX_BULK_IMPORT_ROWS /
+// MAX_STAFF_BULK_IMPORT_ROWS = 50).
+const MAX_PAYMENT_BULK_IMPORT_ROWS = 50;
 const paymentBulkImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const paymentBulkImportFieldsSchema = z.object({

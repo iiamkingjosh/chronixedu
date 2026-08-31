@@ -176,8 +176,8 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejects a workbook with more than 100 rows', async () => {
-    const manyRows = Array.from({ length: 101 }, (_, i) => [`ADM-${i}`, 1000, 'cash', '', '']);
+  it('rejects a workbook with more than 50 rows', async () => {
+    const manyRows = Array.from({ length: 51 }, (_, i) => [`ADM-${i}`, 1000, 'cash', '', '']);
     const buffer = await xlsxBuffer(HEADERS, manyRows);
     const res = await request(app)
       .post(`/api/schools/${schoolId}/payments-bulk-import/preview`)
