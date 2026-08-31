@@ -203,7 +203,14 @@ export default function StaffBulkImportPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
           <p className="text-lg font-semibold text-gray-900">{commitResult.created} staff account(s) created</p>
           {commitResult.failed > 0 && (
-            <p className="text-sm text-red-600">{commitResult.failed} row(s) failed — see the downloaded results file for details.</p>
+            <p className="text-sm text-red-600">{commitResult.failed} row(s) failed:</p>
+          )}
+          {commitResult.failed > 0 && (
+            <div className="space-y-1">
+              {commitResult.results.filter(r => r.status === 'failed').map(r => (
+                <p key={r.row_number} className="text-sm text-red-700">Row {r.row_number}: {r.reason}</p>
+              ))}
+            </div>
           )}
           <button
             type="button"

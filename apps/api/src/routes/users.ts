@@ -22,7 +22,7 @@ import {
 import { findUsersRolesByEmails } from '../db/queries/students';
 import { parseStaffBulkImportFile, StaffBulkImportParseError } from '../services/staffBulkImportParser';
 import { runFullStaffValidation, STAFF_ROLES } from '../services/staffBulkImportValidation';
-import { generateStaffBulkImportResultsFile, type CreatedStaffRecord } from '../services/staffBulkImportResults';
+import { generateStaffBulkImportResultsFile, type CreatedStaffRecord, type FailedStaffRecord } from '../services/staffBulkImportResults';
 import pool from '../db/client';
 
 const router = Router();
@@ -610,10 +610,21 @@ router.post(
 
       const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string }> = [];
       const createdStaff: CreatedStaffRecord[] = [];
+      const failedStaff: FailedStaffRecord[] = [];
+
+      // Hashed once, outside the loop: STAFF_BULK_IMPORT_PASSWORD is a fixed
+      // constant string, so hashing it per-row is redundant work (bcrypt's
+      // embedded salt makes each call's output usable identically regardless
+      // of whether it's shared across rows) and, at cost 12, ~200-300ms of
+      // synchronous CPU per call — blocking this single-process API's event
+      // loop for every other school's requests across a 50-row batch.
+      const staffPasswordHash = bcrypt.hashSync(STAFF_BULK_IMPORT_PASSWORD, 12);
 
       for (const row of revalidated) {
         if (row.status === 'error') {
-          results.push({ row_number: row.row_number, status: 'failed', reason: row.errors.join(' ') });
+          const reason = row.errors.join(' ');
+          results.push({ row_number: row.row_number, status: 'failed', reason });
+          failedStaff.push({ row_number: row.row_number, first_name: row.staff.first_name, last_name: row.staff.last_name, email: row.staff.email, role: row.staff.role, reason });
           continue;
         }
 
@@ -628,15 +639,16 @@ router.post(
           user_metadata: { first_name: staff.first_name, last_name: staff.last_name, role, school_id: req.params.schoolId, title: staff.title, teacher_mode: teacherMode },
         });
         if (authError || !authData?.user) {
-          results.push({ row_number: staff.row_number, status: 'failed', reason: authError?.message ?? 'Failed to create authentication account.' });
+          const reason = authError?.message ?? 'Failed to create authentication account.';
+          results.push({ row_number: staff.row_number, status: 'failed', reason });
+          failedStaff.push({ row_number: staff.row_number, first_name: staff.first_name, last_name: staff.last_name, email: staff.email, role: staff.role, reason });
           continue;
         }
 
         try {
-          const passwordHash = bcrypt.hashSync(STAFF_BULK_IMPORT_PASSWORD, 12);
           const user = await insertUser(authData.user.id, req.params.schoolId, {
             email: staff.email,
-            passwordHash,
+            passwordHash: staffPasswordHash,
             role,
             first_name: staff.first_name,
             last_name: staff.last_name,
@@ -662,6 +674,7 @@ router.post(
             ? 'An account with this email already exists.'
             : 'Failed to create this record.';
           results.push({ row_number: staff.row_number, status: 'failed', reason });
+          failedStaff.push({ row_number: staff.row_number, first_name: staff.first_name, last_name: staff.last_name, email: staff.email, role: staff.role, reason });
         }
       }
 
@@ -684,7 +697,7 @@ router.post(
         }).catch(() => {});
       }
 
-      const resultsFile = await generateStaffBulkImportResultsFile(createdStaff);
+      const resultsFile = await generateStaffBulkImportResultsFile(createdStaff, failedStaff);
 
       await logAudit({
         supportSession: req.supportSession,
