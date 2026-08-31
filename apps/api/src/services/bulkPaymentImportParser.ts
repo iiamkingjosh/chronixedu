@@ -25,9 +25,9 @@ const COLUMN_MAP: Record<string, string> = {
 function cellText(value: ExcelJS.CellValue): string | null {
   if (value === null || value === undefined) return null;
   if (value instanceof Date) {
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, '0');
-    const d = String(value.getDate()).padStart(2, '0');
+    const y = value.getUTCFullYear();
+    const m = String(value.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(value.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
   if (typeof value === 'object' && value !== null && 'text' in value) {

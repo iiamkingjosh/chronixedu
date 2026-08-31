@@ -74,4 +74,23 @@ describe('parseBulkPaymentImportFile', () => {
     const rows = await parseBulkPaymentImportFile(buffer, 'payments.xlsx');
     expect(rows[0].amount).toBe('12345.5');
   });
+
+  it('handles a native Date cell in Payment Date (UTC parsing, timezone-safe)', async () => {
+    // Create a workbook with a real Excel Date cell (not a string)
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Payments');
+    sheet.addRow(HEADERS);
+    // Add row with blank Payment Date column first
+    sheet.addRow(['SCH/2024/0005', 15000, 'cash', '', 'TestRef']);
+    // Now set the Payment Date cell (column 4) to a native Date object (UTC: Jan 15, 2026)
+    sheet.getCell('D2').value = new Date(Date.UTC(2026, 0, 15));
+
+    const arrayBuffer = await workbook.xlsx.writeBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const rows = await parseBulkPaymentImportFile(buffer, 'payments.xlsx');
+
+    expect(rows).toHaveLength(1);
+    // The parsed date should be '2026-01-15' regardless of local timezone
+    expect(rows[0].payment_date).toBe('2026-01-15');
+  });
 });
