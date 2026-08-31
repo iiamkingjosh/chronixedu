@@ -188,3 +188,144 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
     expect(res.body.error.code).toBe('TOO_MANY_ROWS');
   });
 });
+
+describe('POST /:schoolId/payments-bulk-import/commit', () => {
+  let schoolId: string;
+  let bursarToken: string;
+  let principalToken: string;
+  let termId: string;
+  let studentAdmissionNo: string;
+  let invoiceId: string;
+
+  beforeAll(async () => {
+    const schoolResult = await pool.query<{ id: string }>(
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      ['Payment Bulk Commit Test School', `test-payment-commit-${randomUUID()}`]
+    );
+    schoolId = schoolResult.rows[0].id;
+
+    const bursarResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'bursar', 'Test', 'Bursar', 'subject') RETURNING id, email`,
+      [schoolId, `bursar-commit-${randomUUID()}@test.com`]
+    );
+    bursarToken = makeToken(bursarResult.rows[0].id, 'bursar', schoolId, bursarResult.rows[0].email);
+
+    const principalResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject') RETURNING id, email`,
+      [schoolId, `principal-commit-${randomUUID()}@test.com`]
+    );
+    principalToken = makeToken(principalResult.rows[0].id, 'principal', schoolId, principalResult.rows[0].email);
+
+    const sessionResult = await pool.query<{ id: string }>(
+      `INSERT INTO academic_sessions (school_id, name, start_date, end_date, is_current)
+       VALUES ($1, '2026/2027', NOW(), NOW() + interval '365 days', true) RETURNING id`,
+      [schoolId]
+    );
+    const termResult = await pool.query<{ id: string }>(
+      `INSERT INTO terms (school_id, session_id, name, start_date, end_date, is_current)
+       VALUES ($1, $2, 'First Term', NOW(), NOW() + interval '90 days', true) RETURNING id`,
+      [schoolId, sessionResult.rows[0].id]
+    );
+    termId = termResult.rows[0].id;
+
+    const studentUserResult = await pool.query<{ id: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'student', 'Chidi', 'Eze', 'subject') RETURNING id`,
+      [schoolId, `student-commit-${randomUUID()}@test.com`]
+    );
+    studentAdmissionNo = `SCH/2026/${randomUUID().slice(0, 6).toUpperCase()}`;
+    const studentResult = await pool.query<{ id: string }>(
+      `INSERT INTO students (school_id, user_id, admission_no) VALUES ($1, $2, $3) RETURNING id`,
+      [schoolId, studentUserResult.rows[0].id, studentAdmissionNo]
+    );
+
+    const invoiceResult = await pool.query<{ id: string }>(
+      `INSERT INTO fee_invoices (school_id, student_id, term_id, total_amount, amount_paid, balance, status)
+       VALUES ($1, $2, $3, 50000, 0, 50000, 'unpaid') RETURNING id`,
+      [schoolId, studentResult.rows[0].id, termId]
+    );
+    invoiceId = invoiceResult.rows[0].id;
+  }, 30000);
+
+  afterAll(async () => {
+    await pool.query(`DELETE FROM audit_logs WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM payments WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM fee_invoices WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM students WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM terms WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+  }, 30000);
+
+  async function preview(buffer: Buffer) {
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/payments-bulk-import/preview`)
+      .set('Authorization', `Bearer ${bursarToken}`)
+      .field('term_id', termId)
+      .attach('file', buffer, 'payments.xlsx');
+    return res.body.data;
+  }
+
+  it('rejects a principal with 403', async () => {
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/payments-bulk-import/commit`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ term_id: termId, rows: [] });
+    expect(res.status).toBe(403);
+  });
+
+  it('records a valid payment end-to-end, including a backdated payment_date', async () => {
+    const buffer = await xlsxBuffer(HEADERS, [[studentAdmissionNo, 15000, 'cash', '2026-01-10', 'Receipt #99']]);
+    const data = await preview(buffer);
+    expect(data.summary).toEqual({ total: 1, valid: 1, invalid: 0 });
+
+    const commit = await request(app)
+      .post(`/api/schools/${schoolId}/payments-bulk-import/commit`)
+      .set('Authorization', `Bearer ${bursarToken}`)
+      .send({ term_id: termId, rows: data.rows });
+
+    expect(commit.status).toBe(200);
+    expect(commit.body.data.created).toBe(1);
+    expect(commit.body.data.failed).toBe(0);
+    expect(typeof commit.body.data.download_base64).toBe('string');
+
+    const paymentRow = await pool.query(`SELECT amount, method, payment_date, reference FROM payments WHERE invoice_id = $1`, [invoiceId]);
+    expect(paymentRow.rows).toHaveLength(1);
+    expect(Number(paymentRow.rows[0].amount)).toBe(15000);
+    expect(paymentRow.rows[0].reference).toBe('Receipt #99');
+    expect(new Date(paymentRow.rows[0].payment_date).toISOString().slice(0, 10)).toBe('2026-01-10');
+
+    const invoiceRow = await pool.query(`SELECT amount_paid, balance, status FROM fee_invoices WHERE id = $1`, [invoiceId]);
+    expect(Number(invoiceRow.rows[0].amount_paid)).toBe(15000);
+    expect(Number(invoiceRow.rows[0].balance)).toBe(35000);
+    expect(invoiceRow.rows[0].status).toBe('partial');
+  }, 30000);
+
+  it('does not stop the batch when one row fails and a second, different-student row succeeds', async () => {
+    const buffer = await xlsxBuffer(HEADERS, [
+      ['NO-SUCH-ADMISSION', 5000, 'cash', '', ''],
+      [studentAdmissionNo, 5000, 'bank_transfer', '', ''],
+    ]);
+    const data = await preview(buffer);
+    expect(data.summary).toEqual({ total: 2, valid: 1, invalid: 1 });
+
+    const commit = await request(app)
+      .post(`/api/schools/${schoolId}/payments-bulk-import/commit`)
+      .set('Authorization', `Bearer ${bursarToken}`)
+      .send({ term_id: termId, rows: data.rows });
+
+    expect(commit.status).toBe(200);
+    expect(commit.body.data.created).toBe(1);
+    expect(commit.body.data.failed).toBe(1);
+  }, 30000);
+});
+
+// Closes the shared pg pool once, after every describe block in this file has
+// finished — closing it inside an individual describe's afterAll would break
+// any sibling describe block that still needs to query the database.
+afterAll(async () => {
+  await pool.end();
+});

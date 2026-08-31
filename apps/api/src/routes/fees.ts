@@ -11,6 +11,7 @@ import { findStudentByUserId, findStudentsByAdmissionNumbers } from '../db/queri
 import { getActiveTerm } from '../db/queries/roster';
 import { parseBulkPaymentImportFile, BulkPaymentImportParseError } from '../services/bulkPaymentImportParser';
 import { runFullPaymentValidation } from '../services/bulkPaymentImportValidation';
+import { generateBulkPaymentImportResultsFile, type CreatedPaymentRecord, type FailedPaymentRecord } from '../services/bulkPaymentImportResults';
 import { getSchoolPayoutConfig } from '../db/queries/schools';
 import { sendFeeRemindersForSchool } from '../services/feeReminderService';
 import {
@@ -651,6 +652,144 @@ router.post(
       };
 
       return res.json({ success: true, data: { rows: results, summary } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/payments-bulk-import/commit ─────────────────────────────
+// Re-validates every row from scratch — never trusts the client-supplied
+// "valid"/"error" status from preview. Each valid row's actual write goes
+// through the same recordPayment() the live single-item endpoint uses, so
+// duplicate-detection and overpayment safety are identical to a bursar
+// recording one payment by hand — this route just loops it.
+
+const paymentBulkImportRowSchema = z.object({
+  row_number: z.number(),
+  status: z.enum(['valid', 'error']),
+  errors: z.array(z.string()),
+  payment: z.object({
+    row_number: z.number(),
+    admission_no: z.string(),
+    amount: z.string(),
+    method: z.string(),
+    payment_date: z.string().nullable(),
+    reference: z.string().nullable(),
+  }),
+  resolved_student_id: z.string().nullable(),
+  resolved_invoice_id: z.string().nullable(),
+  resolved_amount: z.number().nullable(),
+});
+
+const paymentBulkImportCommitSchema = z.object({
+  term_id: z.string().uuid(),
+  rows: z.array(paymentBulkImportRowSchema).min(1).max(MAX_PAYMENT_BULK_IMPORT_ROWS),
+});
+
+router.post(
+  '/:schoolId/payments-bulk-import/commit',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('bursar', 'super_admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = paymentBulkImportCommitSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const { term_id } = parsed.data;
+
+      const submittedRows = parsed.data.rows.map(r => r.payment);
+      const revalidated = await runFullPaymentValidation(submittedRows, {
+        lookupStudentsByAdmissionNumbers: (admissionNumbers) => findStudentsByAdmissionNumbers(req.params.schoolId, admissionNumbers),
+        lookupInvoiceForStudent: async (studentId) => {
+          const invoice = await getInvoiceByStudent(req.params.schoolId, studentId, term_id);
+          // pg returns NUMERIC columns as strings at runtime despite the number
+          // type here — coerce explicitly, mirroring the same defensive Number()
+          // cast in the preview route above and the Paystack-initiate route.
+          return invoice ? { id: invoice.id, balance: Number(invoice.balance) } : null;
+        },
+      });
+
+      // Re-resolve student names for the results file — runFullPaymentValidation
+      // only returns ids, not names, to stay DB-shape-agnostic.
+      const admissionNumbers = [...new Set(revalidated.map(r => r.payment.admission_no).filter(Boolean))];
+      const students = await findStudentsByAdmissionNumbers(req.params.schoolId, admissionNumbers);
+
+      const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string }> = [];
+      const createdPayments: CreatedPaymentRecord[] = [];
+      const failedPayments: FailedPaymentRecord[] = [];
+
+      for (const row of revalidated) {
+        const student = students.get(row.payment.admission_no);
+        const studentName = student ? `${student.first_name} ${student.last_name}` : row.payment.admission_no;
+
+        if (row.status === 'error' || !row.resolved_invoice_id || row.resolved_amount === null) {
+          const reason = row.errors.join(' ') || 'Could not be recorded.';
+          results.push({ row_number: row.row_number, status: 'failed', reason });
+          failedPayments.push({ row_number: row.row_number, admission_no: row.payment.admission_no, amount: row.payment.amount, method: row.payment.method, reason });
+          continue;
+        }
+
+        try {
+          await recordPayment(req.params.schoolId, row.resolved_invoice_id, {
+            amount: row.resolved_amount,
+            method: row.payment.method as 'cash' | 'bank_transfer' | 'waiver',
+            reference: row.payment.reference,
+            paystack_reference: null,
+            recorded_by: req.user!.user_id,
+            payment_date: row.payment.payment_date,
+          });
+
+          await logAudit({
+            supportSession: req.supportSession,
+            schoolId: req.params.schoolId,
+            userId: req.user!.user_id,
+            actionType: 'PAYMENT_RECORDED',
+            entity: 'payments',
+            entityId: row.resolved_invoice_id,
+            newValue: { admission_no: row.payment.admission_no, amount: row.resolved_amount, method: row.payment.method },
+          });
+
+          results.push({ row_number: row.row_number, status: 'created' });
+          createdPayments.push({
+            row_number: row.row_number,
+            admission_no: row.payment.admission_no,
+            student_name: studentName,
+            amount: row.resolved_amount,
+            method: row.payment.method,
+          });
+        } catch (err: unknown) {
+          const reason = err instanceof DuplicatePaymentError || err instanceof OverpaymentError
+            ? err.message
+            : 'Failed to record this payment.';
+          results.push({ row_number: row.row_number, status: 'failed', reason });
+          failedPayments.push({ row_number: row.row_number, admission_no: row.payment.admission_no, amount: row.payment.amount, method: row.payment.method, reason });
+        }
+      }
+
+      const resultsFile = await generateBulkPaymentImportResultsFile(createdPayments, failedPayments);
+
+      await logAudit({
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'PAYMENT_BULK_IMPORT',
+        entity: 'payments',
+        entityId: req.params.schoolId,
+        newValue: { created: createdPayments.length, failed: failedPayments.length, term_id },
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          created: createdPayments.length,
+          failed: failedPayments.length,
+          results,
+          download_base64: resultsFile.toString('base64'),
+        },
+      });
     } catch (err) {
       return next(err);
     }
