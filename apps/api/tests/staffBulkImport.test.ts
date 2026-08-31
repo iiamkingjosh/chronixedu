@@ -145,3 +145,107 @@ describe('POST /:schoolId/staff-bulk-import/preview', () => {
     expect(res.body.error.code).toBe('TOO_MANY_ROWS');
   });
 });
+
+describe('POST /:schoolId/staff-bulk-import/commit', () => {
+  let schoolId: string;
+  let principalToken: string;
+  let registrarToken: string;
+
+  beforeAll(async () => {
+    const schoolResult = await pool.query<{ id: string }>(
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      ['Staff Bulk Commit Test School', `test-staff-commit-${randomUUID()}`]
+    );
+    schoolId = schoolResult.rows[0].id;
+
+    const principalResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject') RETURNING id, email`,
+      [schoolId, `principal-commit-${randomUUID()}@test.com`]
+    );
+    principalToken = makeToken(principalResult.rows[0].id, 'principal', schoolId, principalResult.rows[0].email);
+
+    const registrarResult = await pool.query<{ id: string; email: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'registrar', 'Test', 'Registrar', 'subject') RETURNING id, email`,
+      [schoolId, `registrar-commit-${randomUUID()}@test.com`]
+    );
+    registrarToken = makeToken(registrarResult.rows[0].id, 'registrar', schoolId, registrarResult.rows[0].email);
+  }, 30000);
+
+  afterAll(async () => {
+    // The commit route writes audit_logs rows referencing users in this
+    // school (see studentsBulkImport.test.ts for the identical precedent) —
+    // those must be deleted before the users themselves, or the FK
+    // constraint audit_logs_user_id_fkey blocks the DELETE below.
+    await pool.query(`DELETE FROM audit_logs WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+  }, 30000);
+
+  async function preview(buffer: Buffer) {
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/staff-bulk-import/preview`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .attach('file', buffer, 'staff.xlsx');
+    return res.body.data;
+  }
+
+  it('rejects a registrar with 403', async () => {
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/staff-bulk-import/commit`)
+      .set('Authorization', `Bearer ${registrarToken}`)
+      .send({ rows: [] });
+    expect(res.status).toBe(403);
+  });
+
+  it('creates a valid teacher row end-to-end (Supabase Auth + local DB row)', async () => {
+    const email = `e2e-teacher-${randomUUID()}@example.com`;
+    const buffer = await xlsxBuffer(HEADERS, [[email, 'E2E', 'Teacher', 'teacher', 'Mr.', '', 'class']]);
+    const data = await preview(buffer);
+    expect(data.summary).toEqual({ total: 1, valid: 1, invalid: 0 });
+
+    const commit = await request(app)
+      .post(`/api/schools/${schoolId}/staff-bulk-import/commit`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ rows: data.rows });
+
+    expect(commit.status).toBe(200);
+    expect(commit.body.data.created).toBe(1);
+    expect(commit.body.data.failed).toBe(0);
+    expect(typeof commit.body.data.download_base64).toBe('string');
+
+    const dbRow = await pool.query(`SELECT role, teacher_mode FROM users WHERE school_id = $1 AND email = $2`, [schoolId, email]);
+    expect(dbRow.rows).toHaveLength(1);
+    expect(dbRow.rows[0]).toMatchObject({ role: 'teacher', teacher_mode: 'class' });
+  }, 30000);
+
+  it('does not stop the batch when one row fails validation at commit time', async () => {
+    const goodEmail = `e2e-good-${randomUUID()}@example.com`;
+    const buffer = await xlsxBuffer(HEADERS, [
+      [goodEmail, 'Good', 'One', 'registrar', '', '', ''],
+      ['not-an-email', 'Bad', 'Two', 'bursar', '', '', ''],
+    ]);
+    const data = await preview(buffer);
+    expect(data.summary).toEqual({ total: 2, valid: 1, invalid: 1 });
+
+    const commit = await request(app)
+      .post(`/api/schools/${schoolId}/staff-bulk-import/commit`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ rows: data.rows });
+
+    expect(commit.status).toBe(200);
+    expect(commit.body.data.created).toBe(1);
+    expect(commit.body.data.failed).toBe(1);
+
+    const dbRow = await pool.query(`SELECT id FROM users WHERE school_id = $1 AND email = $2`, [schoolId, goodEmail]);
+    expect(dbRow.rows).toHaveLength(1);
+  }, 30000);
+});
+
+// Closes the shared pg pool once, after every describe block in this file has
+// finished — closing it inside an individual describe's afterAll would break
+// any sibling describe block that still needs to query the database.
+afterAll(async () => {
+  await pool.end();
+});
