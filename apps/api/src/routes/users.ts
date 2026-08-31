@@ -21,7 +21,9 @@ import {
 } from '../db/queries/users';
 import { findUsersRolesByEmails } from '../db/queries/students';
 import { parseStaffBulkImportFile, StaffBulkImportParseError } from '../services/staffBulkImportParser';
-import { runFullStaffValidation } from '../services/staffBulkImportValidation';
+import { runFullStaffValidation, STAFF_ROLES } from '../services/staffBulkImportValidation';
+import { generateStaffBulkImportResultsFile, type CreatedStaffRecord } from '../services/staffBulkImportResults';
+import pool from '../db/client';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -85,6 +87,31 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
 
 function generateTempPassword(): string {
   return crypto.randomBytes(12).toString('base64url');
+}
+
+async function getSchoolName(schoolId: string): Promise<string> {
+  const r = await pool.query<{ name: string }>('SELECT name FROM schools WHERE id = $1', [schoolId]);
+  return r.rows[0]?.name ?? 'your school';
+}
+
+function staffWelcomeEmailBody(role: string, name: string, email: string, tempPassword: string, schoolName: string, appUrl: string): string {
+  return [
+    `Hello ${name},`,
+    '',
+    `You have been added as a ${role} on Chronix Edu for ${schoolName}.`,
+    '',
+    'Your login credentials:',
+    `  Email:    ${email}`,
+    `  Password: ${tempPassword}`,
+    '',
+    `Log in here: ${appUrl}/login`,
+    '',
+    'IMPORTANT: Please change your password immediately after your first login.',
+    '',
+    'If you did not expect this email, please contact your school administrator.',
+    '',
+    '— Chronix Edu',
+  ].join('\n');
 }
 
 // ── GET /:schoolId/users ───────────────────────────────────────────────────────
@@ -529,6 +556,155 @@ router.post(
       };
 
       return res.json({ success: true, data: { rows: results, summary } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/staff-bulk-import/commit ────────────────────────────────
+// Re-validates every row from scratch — never trusts the client-supplied
+// "valid"/"error" status from preview. Each row is one Supabase Auth
+// createUser() call followed by one local insertUser() call, each wrapped
+// in its own try/catch so one bad row can't stop the rest of the batch. If
+// createUser() succeeds but insertUser() then fails, the resulting orphaned
+// Supabase Auth account is an accepted, pre-existing risk — the single-item
+// POST /:schoolId/users route has the identical two-call sequence with no
+// rollback today.
+
+const STAFF_BULK_IMPORT_PASSWORD = 'Password2$';
+const STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE = 50;
+
+const staffBulkImportCommitSchema = z.object({
+  rows: z.array(z.object({
+    row_number: z.number(),
+    status: z.enum(['valid', 'error']),
+    errors: z.array(z.string()),
+    staff: z.object({
+      row_number: z.number(),
+      email: z.string(),
+      first_name: z.string(),
+      last_name: z.string(),
+      role: z.string(),
+      title: z.string().nullable(),
+      phone: z.string().nullable(),
+      teacher_mode: z.string().nullable(),
+    }),
+  })).min(1).max(MAX_STAFF_BULK_IMPORT_ROWS),
+});
+
+router.post(
+  '/:schoolId/staff-bulk-import/commit',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = staffBulkImportCommitSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const submittedRows = parsed.data.rows.map(r => r.staff);
+      const revalidated = await runFullStaffValidation(submittedRows, findUsersRolesByEmails);
+
+      const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string }> = [];
+      const createdStaff: CreatedStaffRecord[] = [];
+
+      for (const row of revalidated) {
+        if (row.status === 'error') {
+          results.push({ row_number: row.row_number, status: 'failed', reason: row.errors.join(' ') });
+          continue;
+        }
+
+        const staff = row.staff;
+        const role = staff.role as typeof STAFF_ROLES[number];
+        const teacherMode = role === 'teacher' ? (staff.teacher_mode as 'class' | 'subject') : 'subject';
+
+        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+          email: staff.email,
+          password: STAFF_BULK_IMPORT_PASSWORD,
+          email_confirm: true,
+          user_metadata: { first_name: staff.first_name, last_name: staff.last_name, role, school_id: req.params.schoolId, title: staff.title, teacher_mode: teacherMode },
+        });
+        if (authError || !authData?.user) {
+          results.push({ row_number: staff.row_number, status: 'failed', reason: authError?.message ?? 'Failed to create authentication account.' });
+          continue;
+        }
+
+        try {
+          const passwordHash = bcrypt.hashSync(STAFF_BULK_IMPORT_PASSWORD, 12);
+          const user = await insertUser(authData.user.id, req.params.schoolId, {
+            email: staff.email,
+            passwordHash,
+            role,
+            first_name: staff.first_name,
+            last_name: staff.last_name,
+            title: staff.title,
+            teacher_mode: teacherMode,
+            phone: staff.phone,
+          });
+
+          await logAudit({
+            supportSession: req.supportSession,
+            schoolId: req.params.schoolId,
+            userId: req.user!.user_id,
+            actionType: 'USER_CREATE',
+            entity: 'users',
+            entityId: user.id,
+            newValue: { email: user.email, role: user.role, teacher_mode: user.teacher_mode },
+          });
+
+          results.push({ row_number: staff.row_number, status: 'created' });
+          createdStaff.push({ row_number: staff.row_number, first_name: staff.first_name, last_name: staff.last_name, email: staff.email, role });
+        } catch (err: unknown) {
+          const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
+            ? 'An account with this email already exists.'
+            : 'Failed to create this record.';
+          results.push({ row_number: staff.row_number, status: 'failed', reason });
+        }
+      }
+
+      if (createdStaff.length > 0) {
+        const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
+        getSchoolName(req.params.schoolId).then(async schoolName => {
+          for (let i = 0; i < createdStaff.length; i += STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE) {
+            const batch = createdStaff.slice(i, i + STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE);
+            await Promise.all(
+              batch.map(s => sendEmail(
+                s.email,
+                'Welcome to Chronix Edu — Your Staff Account is Ready',
+                staffWelcomeEmailBody(s.role, `${s.first_name} ${s.last_name}`, s.email, STAFF_BULK_IMPORT_PASSWORD, schoolName, appUrl)
+              ).catch(() => {}))
+            );
+            if (i + STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE < createdStaff.length) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+        }).catch(() => {});
+      }
+
+      const resultsFile = await generateStaffBulkImportResultsFile(createdStaff);
+
+      await logAudit({
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'STAFF_BULK_IMPORT',
+        entity: 'users',
+        entityId: req.params.schoolId,
+        newValue: { created: createdStaff.length, failed: results.filter(r => r.status === 'failed').length },
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          created: createdStaff.length,
+          failed: results.filter(r => r.status === 'failed').length,
+          results,
+          download_base64: resultsFile.toString('base64'),
+        },
+      });
     } catch (err) {
       return next(err);
     }
