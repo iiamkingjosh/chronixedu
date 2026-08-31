@@ -177,6 +177,7 @@ export interface PaymentInput {
   reference?: string | null;
   paystack_reference?: string | null;
   recorded_by?: string | null;
+  payment_date?: string | null;
 }
 
 export function deriveStatus(totalAmount: number, amountPaid: number): 'unpaid' | 'partial' | 'paid' {
@@ -226,18 +227,33 @@ export async function recordPayment(
     }
 
     const paymentResult = await client.query<PaymentRow>(
-      `INSERT INTO payments (invoice_id, school_id, amount, method, reference, paystack_reference, recorded_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, invoice_id, school_id, amount, payment_date, method, reference, paystack_reference, recorded_by, created_at`,
-      [
-        invoiceId,
-        schoolId,
-        input.amount,
-        input.method,
-        input.reference ?? null,
-        input.paystack_reference ?? null,
-        input.recorded_by ?? null,
-      ]
+      input.payment_date
+        ? `INSERT INTO payments (invoice_id, school_id, amount, method, reference, paystack_reference, recorded_by, payment_date)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING id, invoice_id, school_id, amount, payment_date, method, reference, paystack_reference, recorded_by, created_at`
+        : `INSERT INTO payments (invoice_id, school_id, amount, method, reference, paystack_reference, recorded_by)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, invoice_id, school_id, amount, payment_date, method, reference, paystack_reference, recorded_by, created_at`,
+      input.payment_date
+        ? [
+            invoiceId,
+            schoolId,
+            input.amount,
+            input.method,
+            input.reference ?? null,
+            input.paystack_reference ?? null,
+            input.recorded_by ?? null,
+            input.payment_date,
+          ]
+        : [
+            invoiceId,
+            schoolId,
+            input.amount,
+            input.method,
+            input.reference ?? null,
+            input.paystack_reference ?? null,
+            input.recorded_by ?? null,
+          ]
     );
     const payment = paymentResult.rows[0];
 

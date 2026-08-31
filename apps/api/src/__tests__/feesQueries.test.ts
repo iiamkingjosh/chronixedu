@@ -455,6 +455,47 @@ describe('recordPayment', () => {
     expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO payments'), expect.anything());
     expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('UPDATE fee_invoices'), expect.anything());
   });
+
+  it('stores a custom payment_date when given, using the payment_date-including INSERT branch', async () => {
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+
+    const paymentRow = {
+      id: 'pay-2', invoice_id: 'inv-1', school_id: 'school-1', amount: '5000.00',
+      payment_date: '2026-01-15', method: 'cash', reference: null, paystack_reference: null,
+      recorded_by: null, created_at: '',
+    };
+    const updatedInvoice = {
+      id: 'inv-1', school_id: 'school-1', student_id: 'student-1', term_id: 'term-1',
+      total_amount: '10000.00', amount_paid: '5000.00', balance: '5000.00', status: 'partial',
+      created_at: '', updated_at: '',
+    };
+
+    client.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ total_amount: '10000.00', amount_paid: '0.00' }] }) // SELECT FOR UPDATE
+      .mockResolvedValueOnce({ rows: [] }) // duplicate check (no prior payment)
+      .mockResolvedValueOnce({ rows: [paymentRow] }) // INSERT payment
+      .mockResolvedValueOnce({ rows: [updatedInvoice] }) // UPDATE invoice
+      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+    const result = await recordPayment('school-1', 'inv-1', {
+      amount: 5000,
+      method: 'cash',
+      payment_date: '2026-01-15',
+    });
+
+    expect(result).toEqual({ payment: paymentRow, invoice: updatedInvoice });
+
+    // The 4th call (INSERT) must be the payment_date-including branch, with
+    // '2026-01-15' present in its param list — proving the caller's date was
+    // actually used, not silently dropped in favor of the column default.
+    expect(client.query).toHaveBeenNthCalledWith(
+      4,
+      expect.stringContaining('payment_date'),
+      expect.arrayContaining(['2026-01-15'])
+    );
+  });
 });
 
 describe('getPaymentById', () => {
