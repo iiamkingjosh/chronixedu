@@ -93,6 +93,18 @@ describe('runFullPaymentValidation', () => {
     expect(results[1].errors[0]).toContain('exceeds the outstanding balance');
   });
 
+  it('does not decrement the running balance for a row that has an unrelated error', async () => {
+    const deps = baseDeps({ lookupInvoiceForStudent: async () => ({ id: 'invoice-1', balance: 1000 }) });
+    const rows = [
+      row({ row_number: 2, amount: '700', method: 'paystack' }),
+      row({ row_number: 3, amount: '700', method: 'cash' }),
+    ];
+    const results = await runFullPaymentValidation(rows, deps);
+    expect(results[0].status).toBe('error');
+    expect(results[0].errors[0]).toContain('Method must be one of');
+    expect(results[1].status).toBe('valid');
+  });
+
   it('only looks up the invoice once per student even across multiple rows', async () => {
     const lookupInvoice = jest.fn().mockResolvedValue({ id: 'invoice-1', balance: 1000 });
     const deps = baseDeps({ lookupInvoiceForStudent: lookupInvoice });

@@ -106,7 +106,7 @@ export async function runFullPaymentValidation(
         const state = invoiceStateByStudentId.get(studentId);
         if (state) {
           invoiceId = state.invoiceId;
-          if (resolvedAmount !== null) {
+          if (resolvedAmount !== null && errors.length === 0) {
             if (resolvedAmount > state.remainingBalance) {
               errors.push(`Amount exceeds the outstanding balance (₦${state.remainingBalance.toFixed(2)} remaining as of this row).`);
             } else {
