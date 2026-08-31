@@ -500,3 +500,24 @@ export async function findUsersRolesByEmails(emails: string[]): Promise<Map<stri
   );
   return new Map(result.rows.map(r => [r.email.toLowerCase(), r.role]));
 }
+
+// ── Bulk payment import support ─────────────────────────────────────────────
+
+/** Maps each matched Admission Number to the student's id and name, for the
+ *  subset of the given admission numbers that resolve to an active student in
+ *  this school. Exact-match, not case-normalized — admission numbers are
+ *  school-assigned codes (e.g. "SCH/2024/0001"), not free-text names. */
+export async function findStudentsByAdmissionNumbers(
+  schoolId: string,
+  admissionNumbers: string[]
+): Promise<Map<string, { id: string; first_name: string; last_name: string }>> {
+  if (admissionNumbers.length === 0) return new Map();
+  const result = await pool.query<{ admission_no: string; id: string; first_name: string; last_name: string }>(
+    `SELECT s.admission_no, s.id, u.first_name, u.last_name
+     FROM students s
+     JOIN users u ON u.id = s.user_id
+     WHERE s.school_id = $1 AND u.is_active = TRUE AND s.admission_no = ANY($2::text[])`,
+    [schoolId, admissionNumbers]
+  );
+  return new Map(result.rows.map(r => [r.admission_no, { id: r.id, first_name: r.first_name, last_name: r.last_name }]));
+}
