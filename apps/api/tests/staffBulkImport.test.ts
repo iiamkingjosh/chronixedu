@@ -9,6 +9,7 @@ import request from 'supertest';
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import ExcelJS from 'exceljs';
+import bcrypt from 'bcryptjs';
 
 import pool from '../src/db/client';
 import usersRouter from '../src/routes/users';
@@ -215,9 +216,14 @@ describe('POST /:schoolId/staff-bulk-import/commit', () => {
     expect(commit.body.data.failed).toBe(0);
     expect(typeof commit.body.data.download_base64).toBe('string');
 
-    const dbRow = await pool.query(`SELECT role, teacher_mode FROM users WHERE school_id = $1 AND email = $2`, [schoolId, email]);
+    const dbRow = await pool.query<{ role: string; teacher_mode: string; must_change_password: boolean; password_hash: string }>(
+      `SELECT role, teacher_mode, must_change_password, password_hash FROM users WHERE school_id = $1 AND email = $2`,
+      [schoolId, email]
+    );
     expect(dbRow.rows).toHaveLength(1);
     expect(dbRow.rows[0]).toMatchObject({ role: 'teacher', teacher_mode: 'class' });
+    expect(dbRow.rows[0].must_change_password).toBe(true);
+    expect(bcrypt.compareSync('Password2$', dbRow.rows[0].password_hash)).toBe(true);
   }, 30000);
 
   it('does not stop the batch when one row fails validation at commit time', async () => {
@@ -240,6 +246,42 @@ describe('POST /:schoolId/staff-bulk-import/commit', () => {
 
     const dbRow = await pool.query(`SELECT id FROM users WHERE school_id = $1 AND email = $2`, [schoolId, goodEmail]);
     expect(dbRow.rows).toHaveLength(1);
+  }, 30000);
+
+  it('re-validates every row server-side and ignores a forged "valid" status from the client', async () => {
+    // A dishonest client could hand-craft a commit request that skips
+    // /preview entirely and claims status: 'valid'/errors: [] on a row whose
+    // underlying data is actually invalid. The commit route must re-derive
+    // validity itself (via runFullStaffValidation) rather than trusting this
+    // client-supplied label — this is the core security property the whole
+    // "commit always re-validates" design rests on.
+    const forgedRow = {
+      row_number: 1,
+      status: 'valid',
+      errors: [],
+      staff: {
+        row_number: 1,
+        email: 'not-an-email',
+        first_name: 'Forged',
+        last_name: 'Status',
+        role: 'teacher',
+        title: null,
+        phone: null,
+        teacher_mode: 'class',
+      },
+    };
+
+    const commit = await request(app)
+      .post(`/api/schools/${schoolId}/staff-bulk-import/commit`)
+      .set('Authorization', `Bearer ${principalToken}`)
+      .send({ rows: [forgedRow] });
+
+    expect(commit.status).toBe(200);
+    expect(commit.body.data.created).toBe(0);
+    expect(commit.body.data.failed).toBe(1);
+
+    const dbRow = await pool.query(`SELECT id FROM users WHERE school_id = $1 AND email = $2`, [schoolId, 'not-an-email']);
+    expect(dbRow.rows).toHaveLength(0);
   }, 30000);
 });
 
