@@ -43,6 +43,7 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
   let termId: string;
   let studentAdmissionNo: string;
   let invoiceId: string;
+  let studentWithNoInvoiceAdmissionNo: string;
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
@@ -94,9 +95,29 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
       [schoolId, studentResult.rows[0].id, termId]
     );
     invoiceId = invoiceResult.rows[0].id;
+
+    // A second student, same school, who has NOT had an invoice generated for
+    // this term — exercises the feature's actual stated "no invoice" precondition
+    // against a real, resolvable, active student (as opposed to an admission
+    // number that matches no student at all, which is a different failure mode
+    // tested separately below).
+    const studentWithNoInvoiceUserResult = await pool.query<{ id: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
+       VALUES ($1, $2, 'test-hash', 'student', 'Bola', 'Musa', 'subject') RETURNING id`,
+      [schoolId, `student-no-invoice-${randomUUID()}@test.com`]
+    );
+    studentWithNoInvoiceAdmissionNo = `SCH/2026/${randomUUID().slice(0, 6).toUpperCase()}`;
+    await pool.query(
+      `INSERT INTO students (school_id, user_id, admission_no) VALUES ($1, $2, $3)`,
+      [schoolId, studentWithNoInvoiceUserResult.rows[0].id, studentWithNoInvoiceAdmissionNo]
+    );
+    // Deliberately no fee_invoices row for this student/term.
   }, 30000);
 
   afterAll(async () => {
+    // Scoped by school_id, so the second student added above (same school,
+    // no invoice) is already covered by these same DELETEs — no separate
+    // cleanup needed.
     await pool.query(`DELETE FROM payments WHERE school_id = $1`, [schoolId]);
     await pool.query(`DELETE FROM fee_invoices WHERE school_id = $1`, [schoolId]);
     await pool.query(`DELETE FROM students WHERE school_id = $1`, [schoolId]);
@@ -131,7 +152,7 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
     expect(res.body.data.rows[0]).toMatchObject({ resolved_invoice_id: invoiceId, resolved_amount: 10000 });
   });
 
-  it('flags a row for a student with no invoice for the chosen term', async () => {
+  it('flags an admission number that matches no active student', async () => {
     const buffer = await xlsxBuffer(HEADERS, [['NO-SUCH-ADMISSION-NO', 10000, 'cash', '', '']]);
     const res = await request(app)
       .post(`/api/schools/${schoolId}/payments-bulk-import/preview`)
@@ -141,6 +162,18 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.rows[0].status).toBe('error');
     expect(res.body.data.rows[0].errors[0]).toContain('does not match an existing active student');
+  });
+
+  it('flags a row for a real, active student who has no invoice for the chosen term', async () => {
+    const buffer = await xlsxBuffer(HEADERS, [[studentWithNoInvoiceAdmissionNo, 10000, 'cash', '', '']]);
+    const res = await request(app)
+      .post(`/api/schools/${schoolId}/payments-bulk-import/preview`)
+      .set('Authorization', `Bearer ${bursarToken}`)
+      .field('term_id', termId)
+      .attach('file', buffer, 'payments.xlsx');
+    expect(res.status).toBe(200);
+    expect(res.body.data.rows[0].status).toBe('error');
+    expect(res.body.data.rows[0].errors[0]).toContain('No invoice found');
   });
 
   it('flags an overpayment relative to the invoice balance', async () => {
