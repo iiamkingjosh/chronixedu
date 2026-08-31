@@ -304,6 +304,36 @@ describe('POST /:schoolId/payments-bulk-import/commit', () => {
     expect(invoiceRow.rows[0].status).toBe('partial');
   }, 30000);
 
+  it('logs the per-payment audit entry against the payment id, not the invoice id', async () => {
+    const buffer = await xlsxBuffer(HEADERS, [[studentAdmissionNo, 12000, 'cash', '', 'Receipt #100']]);
+    const data = await preview(buffer);
+    expect(data.summary).toEqual({ total: 1, valid: 1, invalid: 0 });
+
+    const commit = await request(app)
+      .post(`/api/schools/${schoolId}/payments-bulk-import/commit`)
+      .set('Authorization', `Bearer ${bursarToken}`)
+      .send({ term_id: termId, rows: data.rows });
+
+    expect(commit.status).toBe(200);
+    expect(commit.body.data.created).toBe(1);
+
+    const paymentRow = await pool.query(`SELECT id FROM payments WHERE invoice_id = $1 AND reference = $2`, [invoiceId, 'Receipt #100']);
+    expect(paymentRow.rows).toHaveLength(1);
+    const paymentId = paymentRow.rows[0].id;
+
+    const auditRow = await pool.query(
+      `SELECT entity_id FROM audit_logs WHERE entity = 'payments' AND action_type = 'PAYMENT_RECORDED' AND entity_id = $1`,
+      [paymentId]
+    );
+    expect(auditRow.rows).toHaveLength(1);
+    expect(auditRow.rows[0].entity_id).toBe(paymentId);
+    // The invoice id must NOT appear as the entity_id for this audit entry —
+    // that was the bug: using row.resolved_invoice_id instead of the actual
+    // payment's own id, which would make this payment unfindable by its id
+    // in the audit log and collide with the invoice id-space instead.
+    expect(paymentId).not.toBe(invoiceId);
+  }, 30000);
+
   it('does not stop the batch when one row fails and a second, different-student row succeeds', async () => {
     const buffer = await xlsxBuffer(HEADERS, [
       ['NO-SUCH-ADMISSION', 5000, 'cash', '', ''],
