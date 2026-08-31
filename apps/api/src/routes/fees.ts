@@ -732,8 +732,9 @@ router.post(
           continue;
         }
 
+        let paymentResult: Awaited<ReturnType<typeof recordPayment>>;
         try {
-          await recordPayment(req.params.schoolId, row.resolved_invoice_id, {
+          paymentResult = await recordPayment(req.params.schoolId, row.resolved_invoice_id, {
             amount: row.resolved_amount,
             method: row.payment.method as 'cash' | 'bank_transfer' | 'waiver',
             reference: row.payment.reference,
@@ -741,45 +742,74 @@ router.post(
             recorded_by: req.user!.user_id,
             payment_date: row.payment.payment_date,
           });
-
-          await logAudit({
-            supportSession: req.supportSession,
-            schoolId: req.params.schoolId,
-            userId: req.user!.user_id,
-            actionType: 'PAYMENT_RECORDED',
-            entity: 'payments',
-            entityId: row.resolved_invoice_id,
-            newValue: { admission_no: row.payment.admission_no, amount: row.resolved_amount, method: row.payment.method },
-          });
-
-          results.push({ row_number: row.row_number, status: 'created' });
-          createdPayments.push({
-            row_number: row.row_number,
-            admission_no: row.payment.admission_no,
-            student_name: studentName,
-            amount: row.resolved_amount,
-            method: row.payment.method,
-          });
         } catch (err: unknown) {
           const reason = err instanceof DuplicatePaymentError || err instanceof OverpaymentError
             ? err.message
             : 'Failed to record this payment.';
           results.push({ row_number: row.row_number, status: 'failed', reason });
           failedPayments.push({ row_number: row.row_number, admission_no: row.payment.admission_no, amount: row.payment.amount, method: row.payment.method, reason });
+          continue;
+        }
+
+        if (!paymentResult) {
+          // recordPayment returns null only if the invoice doesn't belong to
+          // this school — practically unreachable here since resolved_invoice_id
+          // came from a school-scoped lookup earlier in this same request, but
+          // never silently report a null write as a created payment.
+          const reason = 'Failed to record this payment.';
+          results.push({ row_number: row.row_number, status: 'failed', reason });
+          failedPayments.push({ row_number: row.row_number, admission_no: row.payment.admission_no, amount: row.payment.amount, method: row.payment.method, reason });
+          continue;
+        }
+
+        // The payment write succeeded — this row is created regardless of what
+        // happens next. An audit-log failure below must never retroactively
+        // mark an already-successful payment as "failed" (a bursar re-importing
+        // rows reported as failed would otherwise double-record a real payment,
+        // since recordPayment's duplicate guard only covers a 5-minute window).
+        results.push({ row_number: row.row_number, status: 'created' });
+        createdPayments.push({
+          row_number: row.row_number,
+          admission_no: row.payment.admission_no,
+          student_name: studentName,
+          amount: row.resolved_amount,
+          method: row.payment.method,
+        });
+
+        try {
+          await logAudit({
+            supportSession: req.supportSession,
+            schoolId: req.params.schoolId,
+            userId: req.user!.user_id,
+            actionType: 'PAYMENT_RECORDED',
+            entity: 'payments',
+            entityId: paymentResult.payment.id,
+            newValue: paymentResult.payment,
+          });
+        } catch {
+          // Payment already succeeded and is already correctly reported as
+          // created above — swallow an audit-log failure rather than letting
+          // it affect the row's outcome or the HTTP response.
         }
       }
 
       const resultsFile = await generateBulkPaymentImportResultsFile(createdPayments, failedPayments);
 
-      await logAudit({
-        supportSession: req.supportSession,
-        schoolId: req.params.schoolId,
-        userId: req.user!.user_id,
-        actionType: 'PAYMENT_BULK_IMPORT',
-        entity: 'payments',
-        entityId: req.params.schoolId,
-        newValue: { created: createdPayments.length, failed: failedPayments.length, term_id },
-      });
+      try {
+        await logAudit({
+          supportSession: req.supportSession,
+          schoolId: req.params.schoolId,
+          userId: req.user!.user_id,
+          actionType: 'PAYMENT_BULK_IMPORT',
+          entity: 'payments',
+          entityId: req.params.schoolId,
+          newValue: { created: createdPayments.length, failed: failedPayments.length, term_id },
+        });
+      } catch {
+        // The commit already succeeded and the response below reports the
+        // real outcome — don't turn a missing summary audit entry into an
+        // apparent total failure for the bursar.
+      }
 
       return res.json({
         success: true,
