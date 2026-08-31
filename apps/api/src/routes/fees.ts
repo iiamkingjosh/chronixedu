@@ -5,6 +5,7 @@ import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole, AuthUser } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
+import { logger } from '../config/logger';
 import { logAudit } from '../db/queries/auditLog';
 import { isParentLinkedToStudent } from '../db/queries/parents';
 import { findStudentByUserId, findStudentsByAdmissionNumbers } from '../db/queries/students';
@@ -795,14 +796,30 @@ router.post(
             entityId: paymentResult.payment.id,
             newValue: paymentResult.payment,
           });
-        } catch {
+        } catch (auditErr) {
           // Payment already succeeded and is already correctly reported as
           // created above — swallow an audit-log failure rather than letting
-          // it affect the row's outcome or the HTTP response.
+          // it affect the row's outcome or the HTTP response, but still log
+          // it server-side so an audit-log outage on this route is visible.
+          logger.error('payment_recorded_audit_log_failed', {
+            schoolId: req.params.schoolId,
+            paymentId: paymentResult.payment.id,
+            err: auditErr,
+          });
         }
       }
 
-      const resultsFile = await generateBulkPaymentImportResultsFile(createdPayments, failedPayments);
+      let resultsFile: Buffer | null = null;
+      try {
+        resultsFile = await generateBulkPaymentImportResultsFile(createdPayments, failedPayments);
+      } catch (err) {
+        // The commit already succeeded — the `results` array above already
+        // tells the bursar exactly what was created/failed. The downloadable
+        // file is a convenience, not the system of record, so its absence
+        // should degrade gracefully rather than turning a successful commit
+        // (money already moved) into an apparent 500 failure.
+        logger.error('payment_bulk_import_results_file_failed', { schoolId: req.params.schoolId, err });
+      }
 
       try {
         await logAudit({
@@ -814,10 +831,11 @@ router.post(
           entityId: req.params.schoolId,
           newValue: { created: createdPayments.length, failed: failedPayments.length, term_id },
         });
-      } catch {
+      } catch (auditErr) {
         // The commit already succeeded and the response below reports the
         // real outcome — don't turn a missing summary audit entry into an
-        // apparent total failure for the bursar.
+        // apparent total failure for the bursar, but still log it server-side.
+        logger.error('payment_bulk_import_summary_audit_log_failed', { schoolId: req.params.schoolId, err: auditErr });
       }
 
       return res.json({
@@ -826,7 +844,7 @@ router.post(
           created: createdPayments.length,
           failed: failedPayments.length,
           results,
-          download_base64: resultsFile.toString('base64'),
+          download_base64: resultsFile ? resultsFile.toString('base64') : null,
         },
       });
     } catch (err) {
