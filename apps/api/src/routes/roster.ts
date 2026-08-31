@@ -18,6 +18,7 @@ import { cache } from '../services/cacheService';
 import { parseRosterBulkImportFile, RosterBulkImportParseError } from '../services/rosterBulkImportParser';
 import { runFullRosterValidation } from '../services/rosterBulkImportValidation';
 import { generateRosterBulkImportResultsFile, type CreatedClassRecord, type CreatedSubjectRecord, type CreatedAssignmentRecord } from '../services/rosterBulkImportResults';
+import { logger } from '../config/logger';
 
 const router = Router();
 
@@ -635,7 +636,17 @@ router.post(
       }
       teachersToInvalidate.forEach(teacherId => cache.del(`roster:${req.params.schoolId}:assignments:${teacherId}`));
 
-      const resultsFile = await generateRosterBulkImportResultsFile(createdClasses, createdSubjects, createdAssignments);
+      // Never let a results-file failure turn an already-successful commit into
+      // an apparent 500 — every class/subject/assignment has already been
+      // written by this point, so a principal seeing an error here would
+      // reasonably re-upload the file, risking duplicate records. Degrade
+      // gracefully.
+      let resultsFile: Buffer | null = null;
+      try {
+        resultsFile = await generateRosterBulkImportResultsFile(createdClasses, createdSubjects, createdAssignments);
+      } catch (err) {
+        logger.error('roster_bulk_import_results_file_failed', { schoolId: req.params.schoolId, err });
+      }
 
       return res.json({
         success: true,
@@ -643,7 +654,7 @@ router.post(
           classes: { created: createdClasses.length, failed: classResults.filter(r => r.status === 'failed').length, results: classResults },
           subjects: { created: createdSubjects.length, failed: subjectResults.filter(r => r.status === 'failed').length, results: subjectResults },
           assignments: { created: createdAssignments.length, failed: assignmentResults.filter(r => r.status === 'failed').length, results: assignmentResults },
-          download_base64: resultsFile.toString('base64'),
+          download_base64: resultsFile ? resultsFile.toString('base64') : null,
         },
       });
     } catch (err) {

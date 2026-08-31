@@ -23,7 +23,8 @@ import { findUsersRolesByEmails } from '../db/queries/students';
 import { parseStaffBulkImportFile, StaffBulkImportParseError } from '../services/staffBulkImportParser';
 import { runFullStaffValidation, STAFF_ROLES } from '../services/staffBulkImportValidation';
 import { generateStaffBulkImportResultsFile, type CreatedStaffRecord, type FailedStaffRecord } from '../services/staffBulkImportResults';
-import pool from '../db/client';
+import { logger } from '../config/logger';
+import { getSchoolName, welcomeEmailBody } from '../services/welcomeEmail';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -89,30 +90,6 @@ function generateTempPassword(): string {
   return crypto.randomBytes(12).toString('base64url');
 }
 
-async function getSchoolName(schoolId: string): Promise<string> {
-  const r = await pool.query<{ name: string }>('SELECT name FROM schools WHERE id = $1', [schoolId]);
-  return r.rows[0]?.name ?? 'your school';
-}
-
-function staffWelcomeEmailBody(role: string, name: string, email: string, tempPassword: string, schoolName: string, appUrl: string): string {
-  return [
-    `Hello ${name},`,
-    '',
-    `You have been added as a ${role} on Chronix Edu for ${schoolName}.`,
-    '',
-    'Your login credentials:',
-    `  Email:    ${email}`,
-    `  Password: ${tempPassword}`,
-    '',
-    `Log in here: ${appUrl}/login`,
-    '',
-    'IMPORTANT: Please change your password immediately after your first login.',
-    '',
-    'If you did not expect this email, please contact your school administrator.',
-    '',
-    '— Chronix Edu',
-  ].join('\n');
-}
 
 // ── GET /:schoolId/users ───────────────────────────────────────────────────────
 
@@ -645,8 +622,9 @@ router.post(
           continue;
         }
 
+        let insertedUser;
         try {
-          const user = await insertUser(authData.user.id, req.params.schoolId, {
+          insertedUser = await insertUser(authData.user.id, req.params.schoolId, {
             email: staff.email,
             passwordHash: staffPasswordHash,
             role,
@@ -656,25 +634,36 @@ router.post(
             teacher_mode: teacherMode,
             phone: staff.phone,
           });
-
-          await logAudit({
-            supportSession: req.supportSession,
-            schoolId: req.params.schoolId,
-            userId: req.user!.user_id,
-            actionType: 'USER_CREATE',
-            entity: 'users',
-            entityId: user.id,
-            newValue: { email: user.email, role: user.role, teacher_mode: user.teacher_mode },
-          });
-
-          results.push({ row_number: staff.row_number, status: 'created' });
-          createdStaff.push({ row_number: staff.row_number, first_name: staff.first_name, last_name: staff.last_name, email: staff.email, role });
         } catch (err: unknown) {
           const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
             ? 'An account with this email already exists.'
             : 'Failed to create this record.';
           results.push({ row_number: staff.row_number, status: 'failed', reason });
           failedStaff.push({ row_number: staff.row_number, first_name: staff.first_name, last_name: staff.last_name, email: staff.email, role: staff.role, reason });
+          continue;
+        }
+
+        // The account write already succeeded (both the Supabase Auth identity
+        // and the local users row) — this row is created regardless of what
+        // happens next. An audit-log failure below must never retroactively
+        // mark it "failed": a retry would attempt to re-create the same
+        // Supabase Auth account and email, colliding with the one that already
+        // exists.
+        results.push({ row_number: staff.row_number, status: 'created' });
+        createdStaff.push({ row_number: staff.row_number, first_name: staff.first_name, last_name: staff.last_name, email: staff.email, role });
+
+        try {
+          await logAudit({
+            supportSession: req.supportSession,
+            schoolId: req.params.schoolId,
+            userId: req.user!.user_id,
+            actionType: 'USER_CREATE',
+            entity: 'users',
+            entityId: insertedUser.id,
+            newValue: { email: insertedUser.email, role: insertedUser.role, teacher_mode: insertedUser.teacher_mode },
+          });
+        } catch (auditErr) {
+          logger.error('staff_bulk_import_user_create_audit_log_failed', { schoolId: req.params.schoolId, userId: insertedUser.id, err: auditErr });
         }
       }
 
@@ -687,7 +676,7 @@ router.post(
               batch.map(s => sendEmail(
                 s.email,
                 'Welcome to Chronix Edu — Your Staff Account is Ready',
-                staffWelcomeEmailBody(s.role, `${s.first_name} ${s.last_name}`, s.email, STAFF_BULK_IMPORT_PASSWORD, schoolName, appUrl)
+                welcomeEmailBody({ role: s.role, name: `${s.first_name} ${s.last_name}`, email: s.email, tempPassword: STAFF_BULK_IMPORT_PASSWORD, schoolName, appUrl, introVerb: 'added' })
               ).catch(() => {}))
             );
             if (i + STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE < createdStaff.length) {
@@ -697,17 +686,30 @@ router.post(
         }).catch(() => {});
       }
 
-      const resultsFile = await generateStaffBulkImportResultsFile(createdStaff, failedStaff);
+      // Never let a post-write side effect turn an already-successful commit
+      // into an apparent 500 — every account has already been created by this
+      // point, so a principal seeing an error here would reasonably re-upload
+      // the file, risking duplicate Supabase Auth accounts. Degrade gracefully.
+      let resultsFile: Buffer | null = null;
+      try {
+        resultsFile = await generateStaffBulkImportResultsFile(createdStaff, failedStaff);
+      } catch (err) {
+        logger.error('staff_bulk_import_results_file_failed', { schoolId: req.params.schoolId, err });
+      }
 
-      await logAudit({
-        supportSession: req.supportSession,
-        schoolId: req.params.schoolId,
-        userId: req.user!.user_id,
-        actionType: 'STAFF_BULK_IMPORT',
-        entity: 'users',
-        entityId: req.params.schoolId,
-        newValue: { created: createdStaff.length, failed: results.filter(r => r.status === 'failed').length },
-      });
+      try {
+        await logAudit({
+          supportSession: req.supportSession,
+          schoolId: req.params.schoolId,
+          userId: req.user!.user_id,
+          actionType: 'STAFF_BULK_IMPORT',
+          entity: 'users',
+          entityId: req.params.schoolId,
+          newValue: { created: createdStaff.length, failed: results.filter(r => r.status === 'failed').length },
+        });
+      } catch (auditErr) {
+        logger.error('staff_bulk_import_summary_audit_log_failed', { schoolId: req.params.schoolId, err: auditErr });
+      }
 
       return res.json({
         success: true,
@@ -715,7 +717,7 @@ router.post(
           created: createdStaff.length,
           failed: results.filter(r => r.status === 'failed').length,
           results,
-          download_base64: resultsFile.toString('base64'),
+          download_base64: resultsFile ? resultsFile.toString('base64') : null,
         },
       });
     } catch (err) {

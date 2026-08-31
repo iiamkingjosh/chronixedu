@@ -48,7 +48,7 @@ interface CommitResponse {
   classes: CommitSheetResult;
   subjects: CommitSheetResult;
   assignments: CommitSheetResult;
-  download_base64: string;
+  download_base64: string | null;
 }
 
 type Step = 'upload' | 'preview' | 'done';
@@ -280,13 +280,17 @@ export default function RosterBulkImportPage() {
           <CommitFailures title="Subjects" result={commitResult.subjects} />
           <CommitFailures title="Teacher Assignments" result={commitResult.assignments} />
 
-          <button
-            type="button"
-            onClick={() => downloadBase64File(commitResult.download_base64, 'chronix-edu-roster-bulk-import-results.xlsx')}
-            className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700"
-          >
-            Download results (.xlsx)
-          </button>
+          {commitResult.download_base64 ? (
+            <button
+              type="button"
+              onClick={() => downloadBase64File(commitResult.download_base64 as string, 'chronix-edu-roster-bulk-import-results.xlsx')}
+              className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700"
+            >
+              Download results (.xlsx)
+            </button>
+          ) : (
+            <p className="text-sm text-gray-500">Results file unavailable — see the lists above for what was recorded.</p>
+          )}
 
           <div>
             <Link href="/settings/roster" className="text-sm text-[#2472B4] hover:underline">← Back to Roster</Link>

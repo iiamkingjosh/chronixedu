@@ -29,40 +29,8 @@ import { parseBulkImportFile, BulkImportParseError } from '../services/bulkImpor
 import { runFullValidation } from '../services/bulkImportValidation';
 import { generateBulkImportResultsFile, type CreatedStudentRecord, type CreatedParentRecord } from '../services/bulkImportResults';
 import pool from '../db/client';
-
-async function getSchoolName(schoolId: string): Promise<string> {
-  const r = await pool.query<{ name: string }>('SELECT name FROM schools WHERE id = $1', [schoolId]);
-  return r.rows[0]?.name ?? 'your school';
-}
-
-function welcomeEmailBody(
-  role: 'parent' | 'student',
-  name: string,
-  email: string,
-  tempPassword: string,
-  schoolName: string,
-  appUrl: string
-): string {
-  const portalLabel = role === 'parent' ? 'Parent Portal' : 'Student Portal';
-  return [
-    `Hello ${name},`,
-    '',
-    `You have been registered on Chronix Edu as a ${role} for ${schoolName}.`,
-    '',
-    'Your login credentials:',
-    `  Email:    ${email}`,
-    `  Password: ${tempPassword}`,
-    '',
-    `Log in here: ${appUrl}/login`,
-    '',
-    'IMPORTANT: Please change your password immediately after your first login.',
-    `Your ${portalLabel} gives you access to attendance, results, fees, and more.`,
-    '',
-    'If you did not expect this email, please contact your school administrator.',
-    '',
-    '— Chronix Edu',
-  ].join('\n');
-}
+import { logger } from '../config/logger';
+import { getSchoolName, welcomeEmailBody } from '../services/welcomeEmail';
 
 async function checkParentStudentLink(parentId: string, studentId: string, schoolId: string): Promise<boolean> {
   const result = await pool.query(
@@ -193,7 +161,7 @@ router.post(
             sendEmail(
               p.email,
               `Welcome to Chronix Edu — Your Parent Portal Access`,
-              welcomeEmailBody('parent', name, p.email, p.temp_password, schoolName, appUrl)
+              welcomeEmailBody({ role: 'parent', name, email: p.email, tempPassword: p.temp_password, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
             ).catch(() => {});
           }
         }).catch(() => {});
@@ -437,7 +405,7 @@ router.post(
               batch.map(p => sendEmail(
                 p.email,
                 'Welcome to Chronix Edu — Your Parent Portal Access',
-                welcomeEmailBody('parent', `${p.first_name} ${p.last_name}`, p.email, BULK_IMPORT_PASSWORD, schoolName, appUrl)
+                welcomeEmailBody({ role: 'parent', name: `${p.first_name} ${p.last_name}`, email: p.email, tempPassword: BULK_IMPORT_PASSWORD, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
               ).catch(() => {}))
             );
             if (i + BULK_IMPORT_EMAIL_BATCH_SIZE < allNewParents.length) {
@@ -447,7 +415,16 @@ router.post(
         }).catch(() => {});
       }
 
-      const resultsFile = await generateBulkImportResultsFile(createdStudents, allNewParents);
+      // Never let a results-file failure turn an already-successful commit into
+      // an apparent 500 — every payment/record has already been written by this
+      // point, so a bursar/registrar seeing an error here would reasonably
+      // re-upload the file, risking duplicate records. Degrade gracefully.
+      let resultsFile: Buffer | null = null;
+      try {
+        resultsFile = await generateBulkImportResultsFile(createdStudents, allNewParents);
+      } catch (err) {
+        logger.error('students_bulk_import_results_file_failed', { schoolId: req.params.schoolId, err });
+      }
 
       await logAudit({
         supportSession: req.supportSession,
@@ -465,7 +442,7 @@ router.post(
           created: createdStudents.length,
           failed: results.filter(r => r.status === 'failed').length,
           results,
-          download_base64: resultsFile.toString('base64'),
+          download_base64: resultsFile ? resultsFile.toString('base64') : null,
         },
       });
     } catch (err) {
@@ -962,7 +939,7 @@ router.post(
           sendEmail(
             email,
             `Welcome to Chronix Edu — Your Parent Portal Access`,
-            welcomeEmailBody('parent', `${first_name} ${last_name}`, email, pw, schoolName, appUrl)
+            welcomeEmailBody({ role: 'parent', name: `${first_name} ${last_name}`, email, tempPassword: pw, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
           ).catch(() => {});
         }).catch(() => {});
       }
