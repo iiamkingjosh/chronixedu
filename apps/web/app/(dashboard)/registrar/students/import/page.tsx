@@ -41,7 +41,7 @@ interface CommitResult {
   created: number;
   failed: number;
   results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string; admission_no?: string }>;
-  download_base64: string;
+  download_base64: string | null;
 }
 
 type Step = 'upload' | 'preview' | 'done';
@@ -242,13 +242,17 @@ export default function StudentBulkImportPage() {
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => downloadBase64File(commitResult.download_base64, 'chronix-edu-bulk-import-results.xlsx')}
-            className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700"
-          >
-            Download results (.xlsx)
-          </button>
+          {commitResult.download_base64 ? (
+            <button
+              type="button"
+              onClick={() => downloadBase64File(commitResult.download_base64 as string, 'chronix-edu-bulk-import-results.xlsx')}
+              className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700"
+            >
+              Download results (.xlsx)
+            </button>
+          ) : (
+            <p className="text-sm text-gray-500">Results file unavailable — see the list above for what was recorded.</p>
+          )}
 
           <div>
             <Link href="/registrar/students" className="text-sm text-[#2472B4] hover:underline">← Back to Students</Link>
