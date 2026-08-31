@@ -19,6 +19,9 @@ import {
   setUserActive,
   updateUserSignature,
 } from '../db/queries/users';
+import { findUsersRolesByEmails } from '../db/queries/students';
+import { parseStaffBulkImportFile, StaffBulkImportParseError } from '../services/staffBulkImportParser';
+import { runFullStaffValidation } from '../services/staffBulkImportValidation';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -453,6 +456,79 @@ router.post(
       });
 
       return res.json({ success: true, data: { signature_url: signatureUrl } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/staff-bulk-import/preview ───────────────────────────────
+// Parses and validates a flat staff spreadsheet without writing anything —
+// the principal confirms via /staff-bulk-import/commit afterward. See
+// docs/superpowers/specs/2026-08-20-staff-bulk-import-design.md for the
+// full design rationale.
+
+const MAX_STAFF_BULK_IMPORT_ROWS = 50;
+const staffBulkImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+router.post(
+  '/:schoolId/staff-bulk-import/preview',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  staffBulkImportUpload.single('file'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "file".' } });
+      }
+
+      // Magic-byte check only applies to .xlsx — plain-text CSV has no reliable
+      // magic-byte signature, matching the Students & Parents bulk import.
+      const isXlsxByName = file.originalname.toLowerCase().endsWith('.xlsx');
+      if (isXlsxByName) {
+        const detected = await fileTypeFromBuffer(file.buffer);
+        const allowedXlsxMimes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'];
+        if (!detected || !allowedXlsxMimes.includes(detected.mime)) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'PARSE_ERROR', message: 'This file could not be read as an Excel spreadsheet.' },
+          });
+        }
+      }
+
+      let parsedRows;
+      try {
+        parsedRows = await parseStaffBulkImportFile(file.buffer, file.originalname);
+      } catch (err) {
+        if (err instanceof StaffBulkImportParseError) {
+          return res.status(400).json({ success: false, error: { code: 'PARSE_ERROR', message: err.message } });
+        }
+        return res.status(400).json({
+          success: false,
+          error: { code: 'PARSE_ERROR', message: 'This file could not be read. Please check it is a valid .xlsx or .csv file.' },
+        });
+      }
+
+      if (parsedRows.length === 0) {
+        return res.status(400).json({ success: false, error: { code: 'EMPTY_FILE', message: 'No staff rows were found in this file.' } });
+      }
+      if (parsedRows.length > MAX_STAFF_BULK_IMPORT_ROWS) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'TOO_MANY_ROWS', message: `This file has ${parsedRows.length} rows — the maximum per import is ${MAX_STAFF_BULK_IMPORT_ROWS}. Split it into multiple files.` },
+        });
+      }
+
+      const results = await runFullStaffValidation(parsedRows, findUsersRolesByEmails);
+      const summary = {
+        total: results.length,
+        valid: results.filter(r => r.status === 'valid').length,
+        invalid: results.filter(r => r.status === 'error').length,
+      };
+
+      return res.json({ success: true, data: { rows: results, summary } });
     } catch (err) {
       return next(err);
     }
