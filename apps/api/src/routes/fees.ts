@@ -1,12 +1,16 @@
 ﻿import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
+import multer from 'multer';
+import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole, AuthUser } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { logAudit } from '../db/queries/auditLog';
 import { isParentLinkedToStudent } from '../db/queries/parents';
-import { findStudentByUserId } from '../db/queries/students';
+import { findStudentByUserId, findStudentsByAdmissionNumbers } from '../db/queries/students';
 import { getActiveTerm } from '../db/queries/roster';
+import { parseBulkPaymentImportFile, BulkPaymentImportParseError } from '../services/bulkPaymentImportParser';
+import { runFullPaymentValidation } from '../services/bulkPaymentImportValidation';
 import { getSchoolPayoutConfig } from '../db/queries/schools';
 import { sendFeeRemindersForSchool } from '../services/feeReminderService';
 import {
@@ -554,6 +558,99 @@ router.post(
 
       const remindersSent = await sendFeeRemindersForSchool(req.params.schoolId, term.id);
       return res.json({ success: true, data: { reminders_sent: remindersSent } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/payments-bulk-import/preview ────────────────────────────
+// Parses and validates a flat payment spreadsheet without writing anything —
+// the bursar confirms via /payments-bulk-import/commit afterward. See
+// docs/superpowers/specs/2026-08-31-bulk-payment-import-design.md for the
+// full design rationale, including the running-per-student-balance tracking
+// that lets two rows for the same student in one file be validated correctly
+// against each other without any writes.
+
+const MAX_PAYMENT_BULK_IMPORT_ROWS = 100;
+const paymentBulkImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+const paymentBulkImportFieldsSchema = z.object({
+  term_id: z.string().uuid(),
+});
+
+router.post(
+  '/:schoolId/payments-bulk-import/preview',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('bursar', 'super_admin'),
+  paymentBulkImportUpload.single('file'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const fields = paymentBulkImportFieldsSchema.safeParse(req.body);
+      if (!fields.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'A valid term_id field is required.' } });
+      }
+      const { term_id } = fields.data;
+
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'No file uploaded. Field name must be "file".' } });
+      }
+
+      const isXlsxByName = file.originalname.toLowerCase().endsWith('.xlsx');
+      if (isXlsxByName) {
+        const detected = await fileTypeFromBuffer(file.buffer);
+        const allowedXlsxMimes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'];
+        if (!detected || !allowedXlsxMimes.includes(detected.mime)) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'PARSE_ERROR', message: 'This file could not be read as an Excel spreadsheet.' },
+          });
+        }
+      }
+
+      let parsedRows;
+      try {
+        parsedRows = await parseBulkPaymentImportFile(file.buffer, file.originalname);
+      } catch (err) {
+        if (err instanceof BulkPaymentImportParseError) {
+          return res.status(400).json({ success: false, error: { code: 'PARSE_ERROR', message: err.message } });
+        }
+        return res.status(400).json({
+          success: false,
+          error: { code: 'PARSE_ERROR', message: 'This file could not be read. Please check it is a valid .xlsx or .csv file.' },
+        });
+      }
+
+      if (parsedRows.length === 0) {
+        return res.status(400).json({ success: false, error: { code: 'EMPTY_FILE', message: 'No payment rows were found in this file.' } });
+      }
+      if (parsedRows.length > MAX_PAYMENT_BULK_IMPORT_ROWS) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'TOO_MANY_ROWS', message: `This file has ${parsedRows.length} rows — the maximum per import is ${MAX_PAYMENT_BULK_IMPORT_ROWS}. Split it into multiple files.` },
+        });
+      }
+
+      const results = await runFullPaymentValidation(parsedRows, {
+        lookupStudentsByAdmissionNumbers: (admissionNumbers) => findStudentsByAdmissionNumbers(req.params.schoolId, admissionNumbers),
+        lookupInvoiceForStudent: async (studentId) => {
+          const invoice = await getInvoiceByStudent(req.params.schoolId, studentId, term_id);
+          // pg returns NUMERIC columns as strings at runtime despite the number
+          // type here — coerce explicitly, mirroring the same defensive Number()
+          // cast on invoice.balance in the Paystack-initiate route above.
+          return invoice ? { id: invoice.id, balance: Number(invoice.balance) } : null;
+        },
+      });
+
+      const summary = {
+        total: results.length,
+        valid: results.filter(r => r.status === 'valid').length,
+        invalid: results.filter(r => r.status === 'error').length,
+      };
+
+      return res.json({ success: true, data: { rows: results, summary } });
     } catch (err) {
       return next(err);
     }
