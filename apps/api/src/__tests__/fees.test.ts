@@ -491,6 +491,20 @@ describe('POST /api/schools/:schoolId/payments', () => {
     expect(mockFees.recordPayment).not.toHaveBeenCalled();
   });
 
+  it('returns 400 when paystack_reference is supplied for a non-paystack method', async () => {
+    // A cash/bank_transfer/waiver payment must never carry a paystack_reference —
+    // that column is globally unique, so a squatted value could collide with and
+    // swallow a real online payment recorded later under the same reference.
+    const res = await request(app)
+      .post(`/api/schools/${SCHOOL_ID}/payments`)
+      .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
+      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'cash', paystack_reference: 'some-real-ref' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    expect(mockFees.recordPayment).not.toHaveBeenCalled();
+  });
+
   it('returns 503 when paystack is not configured', async () => {
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(false);
 

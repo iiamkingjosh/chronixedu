@@ -129,6 +129,10 @@ const paymentSchema = z
   .refine((data) => data.method !== 'paystack' || !!data.paystack_reference, {
     message: 'paystack_reference is required when method is paystack',
     path: ['paystack_reference'],
+  })
+  .refine((data) => data.method === 'paystack' || !data.paystack_reference, {
+    message: 'paystack_reference is only valid when method is paystack',
+    path: ['paystack_reference'],
   });
 
 // ── POST /:schoolId/fee-structures ──────────────────────────────────────────────
