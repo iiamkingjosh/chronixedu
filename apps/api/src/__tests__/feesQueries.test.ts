@@ -390,7 +390,7 @@ describe('recordPayment', () => {
       recorded_by: 'user-1',
     });
 
-    expect(result).toEqual({ payment: paymentRow, invoice: updatedInvoice });
+    expect(result).toEqual({ payment: paymentRow, invoice: updatedInvoice, duplicate: false });
 
     expect(client.query).toHaveBeenNthCalledWith(
       2,
@@ -485,7 +485,7 @@ describe('recordPayment', () => {
       payment_date: '2026-01-15',
     });
 
-    expect(result).toEqual({ payment: paymentRow, invoice: updatedInvoice });
+    expect(result).toEqual({ payment: paymentRow, invoice: updatedInvoice, duplicate: false });
 
     // The 4th call (INSERT) must be the payment_date-including branch, with
     // '2026-01-15' present in its param list — proving the caller's date was
@@ -495,6 +495,122 @@ describe('recordPayment', () => {
       expect.stringContaining('payment_date'),
       expect.arrayContaining(['2026-01-15'])
     );
+  });
+
+  it('records a fresh paystack payment as non-duplicate, checking paystack_reference before the overpayment guard', async () => {
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+
+    const paymentRow = {
+      id: 'pay-3', invoice_id: 'inv-1', school_id: 'school-1', amount: '10000.00',
+      payment_date: '2026-06-11', method: 'paystack', reference: null, paystack_reference: 'PSK-REF-1',
+      recorded_by: null, created_at: '',
+    };
+    const updatedInvoice = {
+      id: 'inv-1', school_id: 'school-1', student_id: 'student-1', term_id: 'term-1',
+      total_amount: '10000.00', amount_paid: '10000.00', balance: '0.00', status: 'paid',
+      created_at: '', updated_at: '',
+    };
+
+    client.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ total_amount: '10000.00', amount_paid: '0.00' }] }) // SELECT FOR UPDATE
+      .mockResolvedValueOnce({ rows: [] }) // paystack_reference existence check — none found
+      .mockResolvedValueOnce({ rows: [paymentRow] }) // INSERT payment
+      .mockResolvedValueOnce({ rows: [updatedInvoice] }) // UPDATE invoice
+      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+    const result = await recordPayment('school-1', 'inv-1', {
+      amount: 10000,
+      method: 'paystack',
+      paystack_reference: 'PSK-REF-1',
+    });
+
+    expect(result).toEqual({ payment: paymentRow, invoice: updatedInvoice, duplicate: false });
+    expect(client.query).toHaveBeenNthCalledWith(
+      3,
+      expect.stringContaining('paystack_reference'),
+      ['PSK-REF-1']
+    );
+  });
+
+  it('returns the existing row as a duplicate when the same paystack_reference is recorded twice (webhook + callback race)', async () => {
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+
+    const existingPayment = {
+      id: 'pay-3', invoice_id: 'inv-1', school_id: 'school-1', amount: '10000.00',
+      payment_date: '2026-06-11', method: 'paystack', reference: null, paystack_reference: 'PSK-REF-1',
+      recorded_by: null, created_at: '',
+    };
+    const currentInvoice = {
+      id: 'inv-1', school_id: 'school-1', student_id: 'student-1', term_id: 'term-1',
+      total_amount: '10000.00', amount_paid: '10000.00', balance: '0.00', status: 'paid',
+      created_at: '', updated_at: '',
+    };
+
+    client.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      // The winner of the race already committed — balance is 0 by the time
+      // this (losing) call's FOR UPDATE lock is granted.
+      .mockResolvedValueOnce({ rows: [{ total_amount: '10000.00', amount_paid: '10000.00' }] }) // SELECT FOR UPDATE
+      .mockResolvedValueOnce({ rows: [existingPayment] }) // paystack_reference existence check — found
+      .mockResolvedValueOnce({ rows: [currentInvoice] }) // fresh invoice read
+      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+    const result = await recordPayment('school-1', 'inv-1', {
+      amount: 10000,
+      method: 'paystack',
+      paystack_reference: 'PSK-REF-1',
+    });
+
+    expect(result).toEqual({ payment: existingPayment, invoice: currentInvoice, duplicate: true });
+    expect(client.query).toHaveBeenLastCalledWith('COMMIT');
+    expect(client.release).toHaveBeenCalled();
+    // Never reaches the overpayment guard, a second INSERT, or another UPDATE.
+    expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO payments'), expect.anything());
+    expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('UPDATE fee_invoices'), expect.anything());
+  });
+
+  it('records a verified paystack payment even when it exceeds the outstanding balance, instead of throwing OverpaymentError', async () => {
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+
+    // A second guardian's independent Paystack transaction for a child whose
+    // invoice is already fully paid by the first guardian — the money is
+    // already captured by Paystack, so it must be recorded, not rejected.
+    const paymentRow = {
+      id: 'pay-4', invoice_id: 'inv-1', school_id: 'school-1', amount: '10000.00',
+      payment_date: '2026-06-11', method: 'paystack', reference: null, paystack_reference: 'PSK-REF-2',
+      recorded_by: null, created_at: '',
+    };
+    const updatedInvoice = {
+      id: 'inv-1', school_id: 'school-1', student_id: 'student-1', term_id: 'term-1',
+      total_amount: '10000.00', amount_paid: '20000.00', balance: '-10000.00', status: 'paid',
+      created_at: '', updated_at: '',
+    };
+
+    client.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ total_amount: '10000.00', amount_paid: '10000.00' }] }) // SELECT FOR UPDATE — already fully paid
+      .mockResolvedValueOnce({ rows: [] }) // paystack_reference existence check — this is a genuinely new reference
+      .mockResolvedValueOnce({ rows: [paymentRow] }) // INSERT payment
+      .mockResolvedValueOnce({ rows: [updatedInvoice] }) // UPDATE invoice
+      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+
+    const result = await recordPayment('school-1', 'inv-1', {
+      amount: 10000,
+      method: 'paystack',
+      paystack_reference: 'PSK-REF-2',
+    });
+
+    expect(result).toEqual({ payment: paymentRow, invoice: updatedInvoice, duplicate: false });
+    expect(client.query).toHaveBeenNthCalledWith(
+      5,
+      expect.stringContaining('UPDATE fee_invoices'),
+      [20000, -10000, 'paid', 'inv-1']
+    );
+    expect(client.query).toHaveBeenLastCalledWith('COMMIT');
   });
 });
 

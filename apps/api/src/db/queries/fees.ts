@@ -187,12 +187,14 @@ export function deriveStatus(totalAmount: number, amountPaid: number): 'unpaid' 
 }
 
 /** Records a payment against an invoice and recomputes amount_paid/balance/status.
- *  Returns null if invoiceId does not belong to schoolId. */
+ *  Returns null if invoiceId does not belong to schoolId. `duplicate: true` means
+ *  the paystack_reference was already recorded and the existing row was returned
+ *  as-is — callers must not re-send receipts/audit-log this as a new payment. */
 export async function recordPayment(
   schoolId: string,
   invoiceId: string,
   input: PaymentInput
-): Promise<{ payment: PaymentRow; invoice: FeeInvoiceRow } | null> {
+): Promise<{ payment: PaymentRow; invoice: FeeInvoiceRow; duplicate: boolean } | null> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -207,8 +209,39 @@ export async function recordPayment(
       return null;
     }
 
+    // A Paystack transaction is routinely delivered to us twice — once by the
+    // webhook, once by the browser callback — both racing to record the same
+    // paystack_reference. Resolving that here, before the balance check below,
+    // means the loser of the race gets back the payment that already exists
+    // instead of a false "overpayment" (the invoice is already fully paid by
+    // the winner by the time the loser's FOR UPDATE lock is granted).
+    if (input.method === 'paystack' && input.paystack_reference) {
+      const existing = await client.query<PaymentRow>(
+        `SELECT id, invoice_id, school_id, amount, payment_date, method, reference, paystack_reference, recorded_by, created_at
+         FROM payments WHERE paystack_reference = $1`,
+        [input.paystack_reference]
+      );
+      if (existing.rows.length > 0) {
+        const invoiceNow = await client.query<FeeInvoiceRow>(
+          `SELECT id, school_id, student_id, term_id, total_amount, amount_paid, balance, status, created_at, updated_at
+           FROM fee_invoices WHERE id = $1`,
+          [invoiceId]
+        );
+        await client.query('COMMIT');
+        return { payment: existing.rows[0], invoice: invoiceNow.rows[0], duplicate: true };
+      }
+    }
+
     const outstandingBalance = Number(invoiceRow.total_amount) - Number(invoiceRow.amount_paid);
-    if (input.amount > outstandingBalance) {
+    // A verified Paystack payment is money Paystack has already captured and
+    // settled to the school — rejecting it here would not return it, only
+    // lose the app's only record of it (e.g. two guardians of the same child
+    // both completing checkout for the full balance). Record it in full even
+    // if it pushes the invoice past zero; the resulting negative balance is a
+    // credit, not an error. Staff-entered cash/bank_transfer/waiver amounts
+    // are still rejected on overpayment below — no money has moved yet there,
+    // so it's safe (and correct) to treat it as a data-entry mistake.
+    if (input.amount > outstandingBalance && input.method !== 'paystack') {
       await client.query('ROLLBACK');
       throw new OverpaymentError();
     }
@@ -271,7 +304,7 @@ export async function recordPayment(
     );
 
     await client.query('COMMIT');
-    return { payment, invoice: invoiceUpdateResult.rows[0] };
+    return { payment, invoice: invoiceUpdateResult.rows[0], duplicate: false };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
