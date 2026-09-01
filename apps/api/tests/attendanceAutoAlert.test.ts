@@ -54,8 +54,8 @@ describe('Behaviour auto-alert — 3 consecutive absences → attendance_alert +
 
   beforeAll(async () => {
     const studentUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-       VALUES ($1, $2, 'test-hash', 'student', 'Absent', 'Student')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'Absent', 'Student', FALSE)
        RETURNING id`,
       [SCHOOL_ID, `absent-student-${suffix}@chronixedu-test.com`]
     );

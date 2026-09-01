@@ -44,8 +44,8 @@ describe('Attendance access control', () => {
   beforeAll(async () => {
     // A student user — used to prove non-staff roles can't read rosters/summaries/alerts.
     const studentUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-       VALUES ($1, $2, 'test-hash', 'student', 'AccessControl', 'Student')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'AccessControl', 'Student', FALSE)
        RETURNING id`,
       [SCHOOL_ID, `access-student-${suffix}@chronixedu-test.com`]
     );
@@ -53,8 +53,8 @@ describe('Attendance access control', () => {
 
     // A second teacher, not assigned to CLASS_ID and not its form teacher.
     const teacherUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'teacher', 'Unassigned', 'Teacher', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Unassigned', 'Teacher', 'subject', FALSE)
        RETURNING id`,
       [SCHOOL_ID, `access-unassigned-teacher-${suffix}@chronixedu-test.com`]
     );
@@ -140,8 +140,8 @@ describe('Attendance access control', () => {
 
     it('allows a properly assigned teacher (the form teacher) to mark attendance', async () => {
       const studentUserResult = await pool.query<{ id: string }>(
-        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-         VALUES ($1, $2, 'test-hash', 'student', 'Enrolled', 'Student')
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+         VALUES ($1, $2, 'test-hash', 'student', 'Enrolled', 'Student', FALSE)
          RETURNING id`,
         [SCHOOL_ID, `access-enrolled-student-${suffix}@chronixedu-test.com`]
       );
@@ -178,16 +178,16 @@ describe('Attendance access control', () => {
 
     it('allows a principal to mark attendance for any class without an assignment check', async () => {
       const principalUserResult = await pool.query<{ id: string }>(
-        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-         VALUES ($1, $2, 'test-hash', 'principal', 'Access', 'Principal')
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+         VALUES ($1, $2, 'test-hash', 'principal', 'Access', 'Principal', FALSE)
          RETURNING id`,
         [SCHOOL_ID, `access-principal-${suffix}@chronixedu-test.com`]
       );
       const principalUserId = principalUserResult.rows[0].id;
 
       const studentUserResult = await pool.query<{ id: string }>(
-        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-         VALUES ($1, $2, 'test-hash', 'student', 'Principal', 'Marked')
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+         VALUES ($1, $2, 'test-hash', 'student', 'Principal', 'Marked', FALSE)
          RETURNING id`,
         [SCHOOL_ID, `access-principal-student-${suffix}@chronixedu-test.com`]
       );

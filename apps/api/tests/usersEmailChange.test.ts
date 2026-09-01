@@ -75,8 +75,8 @@ describe('PATCH /:schoolId/users/:userId/email', () => {
     otherSchoolId = otherSchoolResult.rows[0].id;
 
     const superAdminResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Root', 'Admin', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Root', 'Admin', 'subject', FALSE)
        RETURNING id, email`,
       [`root-${randomUUID()}@test.com`]
     );
@@ -85,16 +85,16 @@ describe('PATCH /:schoolId/users/:userId/email', () => {
     trackedUserIds.push(superAdminUserId);
 
     const scopedSuperAdminResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'super_admin', 'Scoped', 'Admin', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'super_admin', 'Scoped', 'Admin', 'subject', FALSE)
        RETURNING id`,
       [schoolId, `scoped-admin-${randomUUID()}@test.com`]
     );
     scopedSuperAdminId = scopedSuperAdminResult.rows[0].id;
 
     const principalResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Departing', 'Principal', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Departing', 'Principal', 'subject', FALSE)
        RETURNING id, email`,
       [schoolId, `principal-${randomUUID()}@test.com`]
     );
@@ -103,24 +103,24 @@ describe('PATCH /:schoolId/users/:userId/email', () => {
     principalToken = makeToken(principalUserId, 'principal', schoolId, principalEmail);
 
     const teacherResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'teacher', 'Test', 'Teacher', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Test', 'Teacher', 'subject', FALSE)
        RETURNING id, email`,
       [schoolId, `teacher-${randomUUID()}@test.com`]
     );
     teacherToken = makeToken(teacherResult.rows[0].id, 'teacher', schoolId, teacherResult.rows[0].email);
 
     const otherResult = await pool.query<{ email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'teacher', 'Someone', 'Else', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Someone', 'Else', 'subject', FALSE)
        RETURNING email`,
       [schoolId, `taken-${randomUUID()}@test.com`]
     );
     otherUserEmail = otherResult.rows[0].email;
 
     const otherSchoolUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Other', 'Principal', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Other', 'Principal', 'subject', FALSE)
        RETURNING id`,
       [otherSchoolId, `other-tenant-principal-${randomUUID()}@test.com`]
     );

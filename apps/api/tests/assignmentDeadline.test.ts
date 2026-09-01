@@ -41,8 +41,8 @@ describe('Assignment deadline — submitting after due_date is rejected', () => 
 
   beforeAll(async () => {
     const studentUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-       VALUES ($1, $2, 'test-hash', 'student', 'Late', 'Submitter')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'Late', 'Submitter', FALSE)
        RETURNING id`,
       [SCHOOL_ID, `late-student-${suffix}@chronixedu-test.com`]
     );

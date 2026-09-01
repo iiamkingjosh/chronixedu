@@ -62,22 +62,22 @@ describe('POST /:schoolId/roster-bulk-import/preview', () => {
     schoolId = schoolResult.rows[0].id;
 
     const principalResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject') RETURNING id, email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject', FALSE) RETURNING id, email`,
       [schoolId, `principal-${randomUUID()}@test.com`]
     );
     principalToken = makeToken(principalResult.rows[0].id, 'principal', schoolId, principalResult.rows[0].email);
 
     const registrarResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'registrar', 'Test', 'Registrar', 'subject') RETURNING id, email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'registrar', 'Test', 'Registrar', 'subject', FALSE) RETURNING id, email`,
       [schoolId, `registrar-${randomUUID()}@test.com`]
     );
     registrarToken = makeToken(registrarResult.rows[0].id, 'registrar', schoolId, registrarResult.rows[0].email);
 
     const teacherResult = await pool.query<{ email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'teacher', 'Existing', 'Teacher', 'subject') RETURNING email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Existing', 'Teacher', 'subject', FALSE) RETURNING email`,
       [schoolId, `teacher-${randomUUID()}@test.com`]
     );
     teacherEmail = teacherResult.rows[0].email;
@@ -173,22 +173,22 @@ describe('POST /:schoolId/roster-bulk-import/commit', () => {
     schoolId = schoolResult.rows[0].id;
 
     const principalResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject') RETURNING id, email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject', FALSE) RETURNING id, email`,
       [schoolId, `principal-commit-${randomUUID()}@test.com`]
     );
     principalToken = makeToken(principalResult.rows[0].id, 'principal', schoolId, principalResult.rows[0].email);
 
     const registrarResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'registrar', 'Test', 'Registrar', 'subject') RETURNING id, email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'registrar', 'Test', 'Registrar', 'subject', FALSE) RETURNING id, email`,
       [schoolId, `registrar-commit-${randomUUID()}@test.com`]
     );
     registrarToken = makeToken(registrarResult.rows[0].id, 'registrar', schoolId, registrarResult.rows[0].email);
 
     const teacherResult = await pool.query<{ email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'teacher', 'Existing', 'Teacher', 'subject') RETURNING email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Existing', 'Teacher', 'subject', FALSE) RETURNING email`,
       [schoolId, `teacher-commit-${randomUUID()}@test.com`]
     );
     teacherEmail = teacherResult.rows[0].email;

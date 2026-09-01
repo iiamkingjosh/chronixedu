@@ -63,16 +63,16 @@ describe('Notification pipeline — suspension → audit log → worker → in-a
 
   beforeAll(async () => {
     const parentResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, phone)
-       VALUES ($1, $2, 'test-hash', 'parent', 'Notify', 'Parent', '+2348011111111')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, phone, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'parent', 'Notify', 'Parent', '+2348011111111', FALSE)
        RETURNING id`,
       [SCHOOL_ID, `notify-parent-${suffix}@chronixedu-test.com`]
     );
     parentUserId = parentResult.rows[0].id;
 
     const studentUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-       VALUES ($1, $2, 'test-hash', 'student', 'Notify', 'Student')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'Notify', 'Student', FALSE)
        RETURNING id`,
       [SCHOOL_ID, `notify-student-${suffix}@chronixedu-test.com`]
     );

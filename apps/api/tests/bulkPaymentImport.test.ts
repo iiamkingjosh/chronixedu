@@ -53,15 +53,15 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
     schoolId = schoolResult.rows[0].id;
 
     const bursarResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'bursar', 'Test', 'Bursar', 'subject') RETURNING id, email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'bursar', 'Test', 'Bursar', 'subject', FALSE) RETURNING id, email`,
       [schoolId, `bursar-${randomUUID()}@test.com`]
     );
     bursarToken = makeToken(bursarResult.rows[0].id, 'bursar', schoolId, bursarResult.rows[0].email);
 
     const principalResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject') RETURNING id, email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject', FALSE) RETURNING id, email`,
       [schoolId, `principal-${randomUUID()}@test.com`]
     );
     principalToken = makeToken(principalResult.rows[0].id, 'principal', schoolId, principalResult.rows[0].email);
@@ -79,8 +79,8 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
     termId = termResult.rows[0].id;
 
     const studentUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'student', 'Ada', 'Obi', 'subject') RETURNING id`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'Ada', 'Obi', 'subject', FALSE) RETURNING id`,
       [schoolId, `student-${randomUUID()}@test.com`]
     );
     studentAdmissionNo = `SCH/2026/${randomUUID().slice(0, 6).toUpperCase()}`;
@@ -102,8 +102,8 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
     // number that matches no student at all, which is a different failure mode
     // tested separately below).
     const studentWithNoInvoiceUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'student', 'Bola', 'Musa', 'subject') RETURNING id`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'Bola', 'Musa', 'subject', FALSE) RETURNING id`,
       [schoolId, `student-no-invoice-${randomUUID()}@test.com`]
     );
     studentWithNoInvoiceAdmissionNo = `SCH/2026/${randomUUID().slice(0, 6).toUpperCase()}`;
@@ -238,15 +238,15 @@ describe('POST /:schoolId/payments-bulk-import/commit', () => {
     schoolId = schoolResult.rows[0].id;
 
     const bursarResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'bursar', 'Test', 'Bursar', 'subject') RETURNING id, email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'bursar', 'Test', 'Bursar', 'subject', FALSE) RETURNING id, email`,
       [schoolId, `bursar-commit-${randomUUID()}@test.com`]
     );
     bursarToken = makeToken(bursarResult.rows[0].id, 'bursar', schoolId, bursarResult.rows[0].email);
 
     const principalResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject') RETURNING id, email`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', 'subject', FALSE) RETURNING id, email`,
       [schoolId, `principal-commit-${randomUUID()}@test.com`]
     );
     principalToken = makeToken(principalResult.rows[0].id, 'principal', schoolId, principalResult.rows[0].email);
@@ -264,8 +264,8 @@ describe('POST /:schoolId/payments-bulk-import/commit', () => {
     termId = termResult.rows[0].id;
 
     const studentUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'student', 'Chidi', 'Eze', 'subject') RETURNING id`,
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'Chidi', 'Eze', 'subject', FALSE) RETURNING id`,
       [schoolId, `student-commit-${randomUUID()}@test.com`]
     );
     studentAdmissionNo = `SCH/2026/${randomUUID().slice(0, 6).toUpperCase()}`;

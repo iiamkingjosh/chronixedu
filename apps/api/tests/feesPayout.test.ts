@@ -47,8 +47,8 @@ describe('Fee payment initiate — payout gate', () => {
     schoolId = schoolResult.rows[0].id;
 
     const parentResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'parent', 'Test', 'Parent', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'parent', 'Test', 'Parent', 'subject', FALSE)
        RETURNING id, email`,
       [schoolId, `parent-${randomUUID()}@test.com`]
     );
@@ -56,8 +56,8 @@ describe('Fee payment initiate — payout gate', () => {
     parentToken = makeToken(parentUserId, 'parent', schoolId, parentResult.rows[0].email);
 
     const studentUserResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'student', 'Test', 'Student', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'Test', 'Student', 'subject', FALSE)
        RETURNING id`,
       [schoolId, `student-${randomUUID()}@test.com`]
     );

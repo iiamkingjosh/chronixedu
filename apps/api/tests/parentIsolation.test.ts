@@ -27,8 +27,8 @@ function makeToken(userId: string, role: string, schoolId: string, email: string
 
 async function createUser(role: string, email: string, firstName: string, lastName: string): Promise<string> {
   const result = await pool.query<{ id: string }>(
-    `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-     VALUES ($1, $2, 'test-hash', $3, $4, $5)
+    `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+     VALUES ($1, $2, 'test-hash', $3, $4, $5, FALSE)
      RETURNING id`,
     [SCHOOL_ID, email, role, firstName, lastName]
   );

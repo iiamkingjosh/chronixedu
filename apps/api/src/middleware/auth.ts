@@ -114,6 +114,56 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
   return next();
 }
 
+/** Blocks every route this is mounted on whenever the account still has a
+ *  pending forced password change — the only way past it is to actually
+ *  change the password via POST /api/auth/change-password (a different
+ *  router, never touched by this middleware). This closes the real risk in
+ *  a shared/predictable temp password: whoever authenticates with it first
+ *  — the legitimate recipient or an attacker who reached it first — gets a
+ *  session that can do nothing except set a new password, not read or
+ *  write any school data.
+ *
+ *  Checks live DB state (Redis-cached, same pattern as the is_active check
+ *  above) rather than trusting the JWT's baked-in claim, so a user who
+ *  changes their password mid-token-lifetime is unblocked on their very
+ *  next request — see the cache invalidation in routes/auth.ts's
+ *  change-password and confirm-reset handlers. */
+export async function requirePasswordChanged(req: Request, res: Response, next: NextFunction) {
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
+  }
+
+  try {
+    const cacheKey = `must_change_password:${req.user.user_id}`;
+    let mustChange: boolean;
+    if (redis) {
+      const cached = await redis.get(cacheKey);
+      if (cached !== null) {
+        mustChange = cached === '1';
+      } else {
+        const result = await pool.query('SELECT must_change_password FROM users WHERE id = $1', [req.user.user_id]);
+        mustChange = result.rows[0]?.must_change_password === true;
+        await redis.set(cacheKey, mustChange ? '1' : '0', 'EX', 300);
+      }
+    } else {
+      const result = await pool.query('SELECT must_change_password FROM users WHERE id = $1', [req.user.user_id]);
+      mustChange = result.rows[0]?.must_change_password === true;
+    }
+
+    if (mustChange) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'PASSWORD_CHANGE_REQUIRED', message: 'You must change your temporary password before continuing.' },
+      });
+    }
+  } catch (err) {
+    logger.error('must_change_password_check_failed', { error: err instanceof Error ? err.message : String(err) });
+    return res.status(503).json({ success: false, error: { code: 'SERVICE_UNAVAILABLE', message: 'Authentication service temporarily unavailable. Please try again.' } });
+  }
+
+  return next();
+}
+
 export function requireRole(...roles: string[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     const role = req.user?.role;

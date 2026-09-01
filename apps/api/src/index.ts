@@ -32,7 +32,7 @@ import timetableRoutes from './routes/timetable';
 import classCommentsRoutes from './routes/classComments';
 import superAdminRoutes from './routes/superAdmin';
 import { detectSupportSession } from './middleware/detectSupportSession';
-import { verifyToken } from './middleware/auth';
+import { verifyToken, requirePasswordChanged } from './middleware/auth';
 import { requireActiveSchool } from './middleware/requireActiveSchool';
 import { closeReportCardBrowser } from './services/reportCardService';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationWorker';
@@ -134,6 +134,10 @@ app.use('/api/schools', detectSupportSession);
 // Authenticate once for all school routes; verifyToken is a no-op for
 // requests already authenticated by detectSupportSession (fix #4).
 app.use('/api/schools', verifyToken);
+// Block every school route until a pending forced password change is
+// resolved — the only way past this is POST /api/auth/change-password,
+// which lives on a different router this middleware never touches.
+app.use('/api/schools', requirePasswordChanged);
 // Block non-super_admin access to any suspended school before any handler runs.
 app.use('/api/schools', requireActiveSchool);
 
