@@ -4,6 +4,7 @@ import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { z } from 'zod';
 import { verifyToken, requireRole, type SupportSessionContext } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
+import { redis } from '../middleware/rateLimit';
 import {
   insertSchool,
   insertSchoolSettings,
@@ -787,6 +788,10 @@ router.post(
 // resolve access above) and gated behind a step-up re-authentication, on top of
 // the normal role check.
 
+const MAX_STEP_UP_ATTEMPTS = 5;
+const MAX_STEP_UP_IP_ATTEMPTS = 20; // higher threshold to avoid blocking shared NAT addresses
+const STEP_UP_LOCK_WINDOW_SECONDS = 15 * 60; // 15 minutes
+
 router.put(
   '/:schoolId/settings/payout',
   verifyToken,
@@ -812,8 +817,40 @@ router.put(
       if (!callerEmail) {
         return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
       }
+
+      // Same Redis-backed lockout as POST /api/auth/login (auth.ts) — without
+      // it, this password check is an unlimited, unlocked guessing oracle
+      // against the caller's real password, reachable at the general 100/min
+      // rate limit rather than the login route's 5/min.
+      const stepUpEmailKey = `payout_step_up_attempts:${callerEmail.toLowerCase()}`;
+      const stepUpIp = req.ip ?? 'unknown';
+      const stepUpIpKey = `payout_step_up_attempts_ip:${stepUpIp}`;
+      if (redis) {
+        const [emailCount, ipCount] = await Promise.all([
+          redis.get(stepUpEmailKey),
+          redis.get(stepUpIpKey),
+        ]);
+        if (
+          (emailCount !== null && parseInt(emailCount, 10) >= MAX_STEP_UP_ATTEMPTS) ||
+          (ipCount !== null && parseInt(ipCount, 10) >= MAX_STEP_UP_IP_ATTEMPTS)
+        ) {
+          return res.status(429).json({
+            success: false,
+            error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
+          });
+        }
+      }
+
       const { error: stepUpError } = await supabase.auth.signInWithPassword({ email: callerEmail, password: current_password });
       if (stepUpError) {
+        if (redis) {
+          const [emailAttempts, ipAttempts] = await Promise.all([
+            redis.incr(stepUpEmailKey),
+            redis.incr(stepUpIpKey),
+          ]);
+          if (emailAttempts === 1) await redis.expire(stepUpEmailKey, STEP_UP_LOCK_WINDOW_SECONDS);
+          if (ipAttempts === 1) await redis.expire(stepUpIpKey, STEP_UP_LOCK_WINDOW_SECONDS);
+        }
         return res.status(401).json({
           success: false,
           error: { code: 'STEP_UP_FAILED', message: 'Current password is incorrect. Re-enter your password to confirm this payout change.' },

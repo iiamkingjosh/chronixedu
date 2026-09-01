@@ -64,6 +64,13 @@ router.get(
           return res.redirect(`${redirectBase}?payment=error&reason=invoice_not_found`);
         }
 
+        // A duplicate delivery of the same transaction (the webhook usually wins
+        // this race) — the payment was already recorded and already notified/
+        // audit-logged the first time. Report success without doing either again.
+        if (result.duplicate) {
+          return res.redirect(`${redirectBase}?payment=success`);
+        }
+
         notifyPaymentReceipt(schoolId, result.payment.id, result.invoice.student_id);
 
         if (metadata.recorded_by) {
@@ -150,6 +157,13 @@ router.post(
 
         if (!result) {
           return res.status(200).json({ success: true, data: { processed: false } });
+        }
+
+        // A duplicate delivery of the same transaction (the browser callback
+        // usually wins this race) — already recorded and already notified/
+        // audit-logged the first time. Acknowledge without doing either again.
+        if (result.duplicate) {
+          return res.status(200).json({ success: true, data: { processed: false, duplicate: true } });
         }
 
         notifyPaymentReceipt(req.params.schoolId, result.payment.id, result.invoice.student_id);

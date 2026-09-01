@@ -394,6 +394,10 @@ router.post(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Invoice not found' } });
       }
 
+      if (result.duplicate) {
+        return res.status(409).json({ success: false, error: { code: 'DUPLICATE_PAYSTACK_REFERENCE', message: 'This Paystack transaction has already been recorded' } });
+      }
+
       notifyPaymentReceipt(req.params.schoolId, result.payment.id, result.invoice.student_id);
 
       await logAudit({
