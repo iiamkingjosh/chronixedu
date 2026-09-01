@@ -33,8 +33,8 @@ describe('Support Session Impersonation', () => {
 
   beforeAll(async () => {
     const saResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Impersonation', 'Admin', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Impersonation', 'Admin', 'subject', FALSE)
        RETURNING id`,
       [`impersonation-admin-${randomUUID()}@test.com`]
     );
@@ -47,8 +47,8 @@ describe('Support Session Impersonation', () => {
     targetSchoolId = schoolResult.rows[0].id;
 
     const userResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Target', 'Principal', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Target', 'Principal', 'subject', FALSE)
        RETURNING id`,
       [targetSchoolId, `impersonation-principal-${randomUUID()}@test.com`]
     );

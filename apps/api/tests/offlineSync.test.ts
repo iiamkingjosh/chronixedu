@@ -69,8 +69,8 @@ describe('Offline sync — Dexie queue → reconnect → database', () => {
 
   beforeAll(async () => {
     const userResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
-       VALUES ($1, $2, 'test-hash', 'student', 'Offline', 'Sync')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'student', 'Offline', 'Sync', FALSE)
        RETURNING id`,
       [SCHOOL_ID, `offline-sync-${suffix}@chronixedu-test.com`]
     );

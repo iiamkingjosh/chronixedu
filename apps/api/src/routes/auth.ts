@@ -449,6 +449,13 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
     const passwordHash = bcrypt.hashSync(password, 12);
     await updatePasswordHash(email, passwordHash);
 
+    // Immediately clear the must-change-password cache so requirePasswordChanged
+    // unblocks this user on their very next request, rather than waiting out the
+    // 5-minute cache TTL.
+    if (redis) {
+      await redis.set(`must_change_password:${local.id}`, '0', 'EX', 300);
+    }
+
     if (local.school_id) {
       await logAudit({
         schoolId: local.school_id,
@@ -513,6 +520,13 @@ router.post('/change-password', verifyToken, async (req: Request, res: Response,
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
       }
       return res.status(500).json({ success: false, error: { code: 'PASSWORD_UPDATE_FAILED', message: result.error } });
+    }
+
+    // Immediately clear the must-change-password cache so requirePasswordChanged
+    // unblocks this user on their very next request, rather than waiting out the
+    // 5-minute cache TTL.
+    if (redis) {
+      await redis.set(`must_change_password:${userId}`, '0', 'EX', 300);
     }
 
     if (req.user!.school_id) {

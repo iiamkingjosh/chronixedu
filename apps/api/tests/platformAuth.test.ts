@@ -28,8 +28,8 @@ describe('Platform Auth Isolation', () => {
 
   beforeAll(async () => {
     const result = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Platform', 'Auth', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Platform', 'Auth', 'subject', FALSE)
        RETURNING id`,
       [`platformauth-admin-${randomUUID()}@test.com`]
     );

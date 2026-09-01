@@ -32,8 +32,8 @@ describe('Phase 4 Integration', () => {
 
   beforeAll(async () => {
     const userResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Super', 'Admin', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Super', 'Admin', 'subject', FALSE)
        RETURNING id`,
       [`phase4-superadmin-${randomUUID()}@test.com`]
     );

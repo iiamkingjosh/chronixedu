@@ -93,8 +93,8 @@ describe('Payout settings', () => {
     schoolId = schoolResult.rows[0].id;
 
     const bursarResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'bursar', 'Test', 'Bursar', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'bursar', 'Test', 'Bursar', 'subject', FALSE)
        RETURNING id, email`,
       [schoolId, `bursar-${randomUUID()}@test.com`]
     );
@@ -102,8 +102,8 @@ describe('Payout settings', () => {
     bursarToken = makeToken(bursarUserId, 'bursar', schoolId, bursarResult.rows[0].email);
 
     const teacherResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'teacher', 'Test', 'Teacher', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'teacher', 'Test', 'Teacher', 'subject', FALSE)
        RETURNING id, email`,
       [schoolId, `teacher-${randomUUID()}@test.com`]
     );
@@ -112,8 +112,8 @@ describe('Payout settings', () => {
     // Principal — target of the fraud-alert fan-out (email + SMS). Needs a real
     // email/phone so the alert assertions in the PUT test can check real recipients.
     const principalResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, phone, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', $3, 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, phone, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Test', 'Principal', $3, 'subject', FALSE)
        RETURNING id, email`,
       [schoolId, `principal-${randomUUID()}@test.com`, principalPhone]
     );
@@ -129,16 +129,16 @@ describe('Payout settings', () => {
     otherSchoolId = otherSchoolResult.rows[0].id;
 
     const otherBursarResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'bursar', 'Other', 'Bursar', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'bursar', 'Other', 'Bursar', 'subject', FALSE)
        RETURNING id, email`,
       [otherSchoolId, `other-bursar-${randomUUID()}@test.com`]
     );
     otherBursarToken = makeToken(otherBursarResult.rows[0].id, 'bursar', otherSchoolId, otherBursarResult.rows[0].email);
 
     const otherPrincipalResult = await pool.query<{ id: string; email: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode)
-       VALUES ($1, $2, 'test-hash', 'principal', 'Other', 'Principal', 'subject')
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Other', 'Principal', 'subject', FALSE)
        RETURNING id, email`,
       [otherSchoolId, `other-principal-${randomUUID()}@test.com`]
     );
