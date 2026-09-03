@@ -196,6 +196,14 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Public liveness check — no token, no DB query, no sensitive detail (no
+// dbLatencyMs, no uptimeSeconds). Exists for external uptime monitors whose
+// plan can't send a custom header (so they can't use the token-gated
+// /health above). Express serves HEAD requests to this route automatically.
+app.get('/health/ping', (req, res) => {
+  res.status(200).json({ success: true, status: 'ok' });
+});
+
 // Catch-all 404 — keeps unmatched routes on the same JSON envelope as the rest
 // of the API instead of falling through to Express's default HTML error page.
 app.use((req, res) => {
