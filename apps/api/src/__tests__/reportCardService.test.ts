@@ -208,6 +208,24 @@ describe('generateReportCardPreview', () => {
     expect(html).not.toContain('Days Present');
   });
 
+  it('uses the school\'s primary_colour as the brand accent color when set', async () => {
+    mockFindSchoolById.mockResolvedValueOnce({ ...SCHOOL, identity_config: { ...SCHOOL.identity_config, primary_colour: '#ff6600' } });
+
+    await generateReportCardPreview('school-1', { template: 'modern' });
+
+    const html = mockPuppeteer.__mockPage.setContent.mock.calls[0][0] as string;
+    expect(html).toContain('--brand-color: #ff6600;');
+  });
+
+  it('falls back to the template\'s own default accent color when no primary_colour is set', async () => {
+    mockFindSchoolById.mockResolvedValueOnce(SCHOOL);
+
+    await generateReportCardPreview('school-1', { template: 'modern' });
+
+    const html = mockPuppeteer.__mockPage.setContent.mock.calls[0][0] as string;
+    expect(html).toContain('--brand-color: #1e3a5f;');
+  });
+
   it('defaults to the classic template when none is specified', async () => {
     mockFindSchoolById.mockResolvedValueOnce(SCHOOL);
 

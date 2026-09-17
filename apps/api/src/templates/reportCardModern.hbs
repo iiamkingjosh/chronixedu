@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="report-card-template" content="modern">
 <style>
+  :root {
+    --brand-color: {{#if school.primaryColour}}{{school.primaryColour}}{{else}}#1e3a5f{{/if}};
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
@@ -34,7 +37,7 @@
   .school-name {
     font-size: 18px;
     font-weight: 700;
-    color: #1e3a5f;
+    color: var(--brand-color);
     letter-spacing: 0.5px;
   }
   .school-motto {
@@ -48,7 +51,7 @@
   .report-title {
     font-size: 11px;
     font-weight: 600;
-    color: #1e3a5f;
+    color: var(--brand-color);
     text-align: right;
     letter-spacing: 2px;
     text-transform: uppercase;
@@ -112,18 +115,18 @@
   .section-title {
     font-weight: 700;
     font-size: 10.5px;
-    color: #1e3a5f;
+    color: var(--brand-color);
     text-transform: uppercase;
     margin-bottom: 4px;
     letter-spacing: 1.5px;
     padding-bottom: 3px;
-    border-bottom: 2px solid #1e3a5f;
+    border-bottom: 2px solid var(--brand-color);
   }
 
   /* ── Results table ──────────────────────────────────────────────── */
   table { width: 100%; border-collapse: collapse; font-size: 10px; }
   table th {
-    background: #1e3a5f;
+    background: var(--brand-color);
     color: #fff;
     padding: 5px 4px;
     text-align: center;
@@ -148,7 +151,7 @@
     background: #eef2f7 !important;
     font-weight: bold;
   }
-  .overall-row td { color: #1e3a5f; border-bottom: none; }
+  .overall-row td { color: var(--brand-color); border-bottom: none; }
 
   /* ── Comments ───────────────────────────────────────────────────── */
   .comments-section { margin-top: 10px; }
@@ -167,7 +170,7 @@
   }
   .summary-box-title {
     font-weight: 700;
-    color: #1e3a5f;
+    color: var(--brand-color);
     font-size: 10px;
     text-transform: uppercase;
     margin-bottom: 5px;

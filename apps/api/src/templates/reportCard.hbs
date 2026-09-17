@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="report-card-template" content="classic">
 <style>
+  :root {
+    --brand-color: {{#if school.primaryColour}}{{school.primaryColour}}{{else}}#1a5c1a{{/if}};
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     font-family: Arial, Helvetica, sans-serif;
@@ -23,7 +26,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    border-bottom: 3px solid #1a5c1a;
+    border-bottom: 3px solid var(--brand-color);
     padding-bottom: 8px;
     margin-bottom: 6px;
   }
@@ -34,7 +37,7 @@
   .school-name {
     font-size: 17px;
     font-weight: bold;
-    color: #1a5c1a;
+    color: var(--brand-color);
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
@@ -50,7 +53,7 @@
     font-size: 12px;
     font-weight: bold;
     color: #fff;
-    background: #1a5c1a;
+    background: var(--brand-color);
     padding: 4px 0;
     text-align: center;
     letter-spacing: 3px;
@@ -62,7 +65,7 @@
   .student-info {
     display: flex;
     gap: 10px;
-    border: 1.5px solid #1a5c1a;
+    border: 1.5px solid var(--brand-color);
     padding: 7px 9px;
     margin-bottom: 7px;
     border-radius: 2px;
@@ -98,7 +101,7 @@
   .field { display: flex; gap: 4px; align-items: baseline; }
   .field-label {
     font-weight: bold;
-    color: #1a5c1a;
+    color: var(--brand-color);
     white-space: nowrap;
     font-size: 10.5px;
   }
@@ -115,7 +118,7 @@
     font-weight: bold;
     font-size: 10.5px;
     color: #fff;
-    background: #1a5c1a;
+    background: var(--brand-color);
     padding: 3px 8px;
     text-transform: uppercase;
     margin-bottom: 3px;
@@ -125,7 +128,7 @@
   /* ── Results table ──────────────────────────────────────────────── */
   table { width: 100%; border-collapse: collapse; font-size: 10px; }
   table th {
-    background: #1a5c1a;
+    background: var(--brand-color);
     color: #fff;
     padding: 4px 4px;
     text-align: center;
@@ -151,7 +154,7 @@
     background: #e8f5e9 !important;
     font-weight: bold;
   }
-  .overall-row td { color: #1a5c1a; }
+  .overall-row td { color: var(--brand-color); }
 
   /* ── Comments ───────────────────────────────────────────────────── */
   .comments-section { margin-top: 7px; }
@@ -164,13 +167,13 @@
   }
   .summary-box {
     flex: 1;
-    border: 1.5px solid #1a5c1a;
+    border: 1.5px solid var(--brand-color);
     padding: 6px 8px;
     border-radius: 2px;
   }
   .summary-box-title {
     font-weight: bold;
-    color: #1a5c1a;
+    color: var(--brand-color);
     font-size: 10px;
     text-transform: uppercase;
     border-bottom: 1px solid #cce0cc;
@@ -202,7 +205,7 @@
     gap: 18px;
     margin-top: 12px;
     padding-top: 8px;
-    border-top: 2px solid #1a5c1a;
+    border-top: 2px solid var(--brand-color);
   }
   .sig-box { flex: 1; text-align: center; }
   .sig-line {
