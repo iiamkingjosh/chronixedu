@@ -9,6 +9,8 @@ import {
   findSessionById,
   insertTerm,
   activateSession,
+  findTermById,
+  activateTerm,
   getCurrentContext,
 } from '../db/queries/sessions';
 
@@ -147,6 +149,61 @@ router.patch(
       });
 
       return res.json({ success: true, data: { message: 'Session activated' } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── PATCH /:schoolId/sessions/:sessionId/terms/:termId/activate ──────────────────
+
+router.patch(
+  '/:schoolId/sessions/:sessionId/terms/:termId/activate',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (req.body.confirm !== true) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'CONFIRMATION_REQUIRED', message: 'Body must include { "confirm": true } to activate a term' },
+        });
+      }
+
+      const session = await findSessionById(req.params.sessionId, req.params.schoolId);
+      if (!session) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Session not found' } });
+      }
+      // getCurrentContext requires both the session AND the term to be current —
+      // activating a term in a non-current session would silently do nothing.
+      if (!session.is_current) {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'SESSION_NOT_CURRENT', message: 'Activate this term\'s academic session before activating one of its terms' },
+        });
+      }
+
+      const term = await findTermById(req.params.termId, req.params.sessionId, req.params.schoolId);
+      if (!term) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Term not found' } });
+      }
+
+      await activateTerm(req.params.schoolId, req.params.sessionId, req.params.termId);
+
+      // Bust the cache so the next current-context request is fresh
+      if (redis) await redis.del(`ctx:${req.params.schoolId}`);
+
+      await logAudit({
+        schoolId:   req.params.schoolId,
+        userId:     req.user!.user_id,
+        actionType: 'TERM_ACTIVATED',
+        entity:     'terms',
+        entityId:   req.params.termId,
+        newValue:   { term_id: req.params.termId, session_id: req.params.sessionId, name: term.name },
+      });
+
+      return res.json({ success: true, data: { message: 'Term activated' } });
     } catch (err) {
       return next(err);
     }

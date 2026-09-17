@@ -14,6 +14,7 @@ interface Term {
   name: string;
   start_date: string;
   end_date: string;
+  is_current: boolean;
 }
 
 interface Session {
@@ -267,6 +268,81 @@ function ActivateModal({ session, schoolId, onClose, onActivated }: {
   );
 }
 
+// ── Term Activate Confirmation Modal ──────────────────────────────────────────
+
+function TermActivateModal({ term, sessionId, schoolId, onClose, onActivated }: {
+  term: Term;
+  sessionId: string;
+  schoolId: string;
+  onClose: () => void;
+  onActivated: () => void;
+}) {
+  const [step, setStep]       = useState<1 | 2>(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+
+  async function confirm() {
+    setLoading(true);
+    setError('');
+    try {
+      await apiFetch(`/api/schools/${schoolId}/sessions/${sessionId}/terms/${term.id}/activate`, {
+        method: 'PATCH',
+        body: JSON.stringify({ confirm: true }),
+      });
+      onActivated();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Activation failed');
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Modal title="Activate Term" onClose={onClose}>
+      {step === 1 ? (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            You are about to activate <strong>{term.name}</strong> as the current term.
+            Timetables, score entry, attendance, and dashboards for students, teachers, and
+            parents will all switch to this term by default.
+          </p>
+          <p className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+            Any previously active term in this session will be deactivated. This action affects everyone at the school.
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+            <button
+              onClick={() => setStep(2)}
+              className="px-5 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700"
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <p className="text-sm text-gray-800 font-medium">
+            Final confirmation — activate <span className="text-slate-900">{term.name}</span>?
+          </p>
+          <p className="text-xs text-gray-500">
+            This will immediately update the active term school-wide.
+          </p>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex justify-end gap-3 pt-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+            <button
+              onClick={confirm}
+              disabled={loading}
+              className="px-5 py-2 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {loading ? 'Activating…' : 'Yes, Activate Term'}
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AcademicStructurePage() {
@@ -277,6 +353,7 @@ export default function AcademicStructurePage() {
   const [showCreateSession, setShowCreateSession]   = useState(false);
   const [addTermFor, setAddTermFor]                 = useState<Session | null>(null);
   const [activateSession, setActivateSession]       = useState<Session | null>(null);
+  const [activateTermFor, setActivateTermFor]       = useState<{ session: Session; term: Term } | null>(null);
   const [expandedSession, setExpandedSession]       = useState<string | null>(null);
 
   useEffect(() => {
@@ -313,6 +390,16 @@ export default function AcademicStructurePage() {
     ));
     show(`${activateSession!.name} is now the active session`);
     setActivateSession(null);
+  }
+
+  function handleTermActivated() {
+    const { session, term } = activateTermFor!;
+    setSessions(prev => prev.map(s => {
+      if (s.id !== session.id) return s;
+      return { ...s, terms: s.terms.map(t => ({ ...t, is_current: t.id === term.id })) };
+    }));
+    show(`${term.name} is now the active term`);
+    setActivateTermFor(null);
   }
 
   if (loading) {
@@ -413,11 +500,26 @@ export default function AcademicStructurePage() {
                       {session.terms.map(term => (
                         <div key={term.id} className="flex items-center justify-between bg-white rounded-lg px-4 py-3 border border-gray-200">
                           <div>
-                            <p className="text-sm font-medium text-gray-800">{term.name}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-800">{term.name}</p>
+                              {term.is_current && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                  Active
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-500">
                               {term.start_date?.slice(0, 10)} — {term.end_date?.slice(0, 10)}
                             </p>
                           </div>
+                          {!term.is_current && session.is_current && (
+                            <button
+                              onClick={() => setActivateTermFor({ session, term })}
+                              className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50"
+                            >
+                              Activate
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -452,6 +554,16 @@ export default function AcademicStructurePage() {
           schoolId={schoolId}
           onClose={() => setActivateSession(null)}
           onActivated={handleActivated}
+        />
+      )}
+
+      {activateTermFor && schoolId && (
+        <TermActivateModal
+          term={activateTermFor.term}
+          sessionId={activateTermFor.session.id}
+          schoolId={schoolId}
+          onClose={() => setActivateTermFor(null)}
+          onActivated={handleTermActivated}
         />
       )}
     </div>
