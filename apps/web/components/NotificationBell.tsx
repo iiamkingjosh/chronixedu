@@ -133,43 +133,26 @@ export default function NotificationBell({ variant = 'dark' }: { variant?: 'ligh
   // Initial load
   useEffect(() => { load(); }, [load]);
 
-  // Supabase Realtime — subscribe to new notifications for this user.
-  // Requires NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  // in apps/web/.env.local (values from Supabase project settings → API).
-  // If the notifications table has RLS enabled, add a SELECT policy:
-  //   USING (user_id::text = current_setting('request.jwt.claims', true)::json->>'sub')
+  // Live updates by polling (AUDIT H-9). The previous Supabase Realtime
+  // subscription used the anon key, but notifications are protected by
+  // `user_id = auth.uid()`, which is always NULL for anon — our custom JWTs are
+  // not Supabase tokens — so no event was ever delivered. Poll every 60s while
+  // the tab is visible, and refresh immediately when it becomes visible again.
   useEffect(() => {
     if (!user?.user_id || !schoolId) return;
-    let active = true;
-    let cleanupFn: (() => void) | null = null;
-
-    import('@/lib/supabaseClient').then(({ supabase: client }) => {
-      if (!active || !client || !user?.user_id) return;
-      const channel = client
-        .channel(`notifications:${user.user_id}`)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${user.user_id}`,
-          },
-          (payload) => {
-            const n = payload.new as NotificationItem;
-            setNotifications(prev => [n, ...prev]);
-            setUnreadCount(c => c + 1);
-          }
-        )
-        .subscribe();
-      cleanupFn = () => { client.removeChannel(channel); };
-    });
-
+    const POLL_MS = 60_000;
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') load();
+    }, POLL_MS);
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') load();
+    }
+    document.addEventListener('visibilitychange', handleVisibility);
     return () => {
-      active = false;
-      cleanupFn?.();
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [user?.user_id, schoolId]);
+  }, [user?.user_id, schoolId, load]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
