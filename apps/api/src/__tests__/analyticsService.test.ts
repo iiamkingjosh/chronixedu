@@ -117,7 +117,7 @@ describe('startAnalyticsCron / stopAnalyticsCron', () => {
 
     startAnalyticsCron();
 
-    expect(mockCron.schedule).toHaveBeenCalledWith('0 2 * * *', expect.any(Function));
+    expect(mockCron.schedule).toHaveBeenCalledWith('0 2 * * *', expect.any(Function), { timezone: 'Africa/Lagos' });
   });
 
   it('does not schedule a second job if already running', () => {

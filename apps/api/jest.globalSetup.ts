@@ -26,6 +26,19 @@ export default async function globalSetup(): Promise<void> {
     return;
   }
 
+  // AUDIT H-5: this seeds fixture rows into whatever DATABASE_URL points at —
+  // which, via apps/api/.env, has historically been PRODUCTION. Refuse any
+  // non-local database unless the operator explicitly names it as a target.
+  const host = new URL(process.env.DATABASE_URL).hostname;
+  const isLocal = ['localhost', '127.0.0.1', '::1', 'postgres'].includes(host);
+  if (!isLocal && process.env.ALLOW_REMOTE_TEST_DB !== host) {
+    throw new Error(
+      `Refusing to seed integration fixtures into remote database "${host}". ` +
+      `Point DATABASE_URL at a local/staging DB, or set ALLOW_REMOTE_TEST_DB=${host} ` +
+      `if you are certain this is NOT production.`
+    );
+  }
+
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
 
@@ -110,6 +123,13 @@ export default async function globalSetup(): Promise<void> {
        VALUES ($1, $2, $3, 'TEST-FATIMA-001')
        ON CONFLICT DO NOTHING`,
       [FATIMA_ID, SCHOOL_ID, FATIMA_USER]
+    );
+
+    // 9. A platform super_admin — system jobs (trial expiry) attribute audit rows to one.
+    await client.query(
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
+       VALUES ('eeeeeeee-0000-4000-8000-000000000001', NULL, 'system.admin@chronixedu-test.com', 'test-hash', 'super_admin', 'System', 'Admin', true, 'subject', false)
+       ON CONFLICT DO NOTHING`
     );
   } finally {
     await client.end();
