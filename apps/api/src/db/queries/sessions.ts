@@ -95,6 +95,43 @@ export async function insertTerm(
   return result.rows[0];
 }
 
+export async function findTermById(
+  termId: string,
+  sessionId: string,
+  schoolId: string
+): Promise<TermRow | null> {
+  const result = await pool.query<TermRow>(
+    `SELECT id, session_id, school_id, name, start_date, end_date, is_current
+     FROM terms
+     WHERE id = $1 AND session_id = $2 AND school_id = $3`,
+    [termId, sessionId, schoolId]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function activateTerm(schoolId: string, sessionId: string, termId: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Clear any existing current term within this session
+    await client.query(
+      `UPDATE terms SET is_current = FALSE WHERE session_id = $1 AND school_id = $2 AND is_current = TRUE`,
+      [sessionId, schoolId]
+    );
+    // Set the target term as current — partial unique index enforces one-current-per-session at DB level
+    await client.query(
+      `UPDATE terms SET is_current = TRUE WHERE id = $1 AND session_id = $2 AND school_id = $3`,
+      [termId, sessionId, schoolId]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 export async function activateSession(schoolId: string, sessionId: string): Promise<void> {
   const client = await pool.connect();
   try {
