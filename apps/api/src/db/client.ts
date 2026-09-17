@@ -3,6 +3,9 @@ import { logger } from '../config/logger';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  max: Number(process.env.PG_POOL_MAX ?? 10),
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 10_000,
 });
 
 // Without this, an idle pooled connection dropped server-side (e.g. Supabase's

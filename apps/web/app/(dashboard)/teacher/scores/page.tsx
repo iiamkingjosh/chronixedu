@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/app/providers';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, SessionExpiredError, redirectToLogin } from '@/lib/api';
 import { offlineDb } from '@/lib/offlineDb';
 import { isNetworkError } from '@/lib/offlineSync';
 import { useSyncStatus } from '@/lib/syncStatus';
@@ -160,6 +160,7 @@ function ScoreGrid({
     await apiFetch(`/api/schools/${schoolId}/scores/bulk-entry`, {
       method: 'POST',
       body: JSON.stringify({ subject_id: subjectId, class_id: classId, term_id: termId, entries }),
+      deferAuthRedirect: true,
     });
   }
 
@@ -179,6 +180,28 @@ function ScoreGrid({
     return true;
   }
 
+  /** Session expired mid-entry: keep the teacher's typed scores on this device,
+   *  then send them to sign in. The sync provider replays the queue after login. */
+  async function rescueAndRelogin() {
+    try {
+      const entries = buildEntries();
+      if (entries.length > 0) {
+        await offlineDb.offline_score_queue.add({
+          school_id: schoolId,
+          subject_id: subjectId,
+          class_id: classId,
+          term_id: termId,
+          entries,
+          queued_at: new Date().toISOString(),
+        });
+      }
+      show('Your session expired. Your scores are saved on this device and will upload after you sign in.', 'error');
+      await new Promise(r => setTimeout(r, 1500));
+    } finally {
+      redirectToLogin();
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setError('');
@@ -191,6 +214,10 @@ function ScoreGrid({
       show('Scores saved');
       load();
     } catch (err: unknown) {
+      if (err instanceof SessionExpiredError) {
+        await rescueAndRelogin();
+        return;
+      }
       if (isNetworkError(err)) {
         await queueScoresOffline();
         return;
@@ -215,11 +242,16 @@ function ScoreGrid({
       await apiFetch(`/api/schools/${schoolId}/results/submit`, {
         method: 'POST',
         body: JSON.stringify({ class_id: classId, subject_id: subjectId, term_id: termId }),
+        deferAuthRedirect: true,
       });
       show('Submitted for approval');
       onSubmitted();
       load();
     } catch (err: unknown) {
+      if (err instanceof SessionExpiredError) {
+        await rescueAndRelogin();
+        return;
+      }
       const message = isNetworkError(err)
         ? 'You are offline. Submitting for approval requires an internet connection.'
         : err instanceof Error ? err.message : 'Failed to submit for approval';

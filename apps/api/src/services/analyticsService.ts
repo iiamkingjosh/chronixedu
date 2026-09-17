@@ -9,7 +9,7 @@ import {
 } from '../db/queries/analytics';
 import { getCollectionSummary } from '../db/queries/fees';
 import { logger } from '../config/logger';
-import { registerCron, markCronRun } from './cronTracker';
+import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
 
 const CRON_NAME = 'nightly-analytics-snapshot';
 
@@ -57,14 +57,14 @@ let task: cron.ScheduledTask | null = null;
 export function startAnalyticsCron(): void {
   if (task) return;
   task = cron.schedule('0 2 * * *', () => {
-    runNightlyAnalyticsSnapshot()
-      .then(() => markCronRun(CRON_NAME, 'success'))
+    runExclusive(CRON_NAME, runNightlyAnalyticsSnapshot)
+      .then(ran => { if (ran) markCronRun(CRON_NAME, 'success'); })
       .catch(err => {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('analytics_cron_error', { error: message });
         markCronRun(CRON_NAME, 'error', message);
       });
-  });
+  }, { timezone: CRON_TIMEZONE });
 }
 
 export function stopAnalyticsCron(): void {

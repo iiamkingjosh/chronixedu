@@ -1,4 +1,5 @@
 import pool from '../db/client';
+import { runExclusive } from './cronTracker';
 import { createNotification } from '../db/queries/notifications';
 import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notificationLogs';
 import { sendEmail } from './emailService';
@@ -124,7 +125,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
 export function startNotificationWorker(): void {
   if (timer) return;
   timer = setInterval(() => {
-    processNotificationQueue().catch(err => {
+    runExclusive('notification-worker', processNotificationQueue).catch(err => {
       logger.error('notification_worker_error', { error: err instanceof Error ? err.message : err });
     });
   }, POLL_INTERVAL_MS);

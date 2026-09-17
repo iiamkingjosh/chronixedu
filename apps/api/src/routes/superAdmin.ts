@@ -759,9 +759,11 @@ router.get(
 // DANGER: permanently wipes a school's student, score, and result data.
 // The school record, settings, users, and subscription are preserved.
 
+// AUDIT H-3: root admin only — any other super_admin could previously wipe a
+// school with nothing more than its (non-secret) slug.
 router.delete(
   '/schools/:schoolId/data',
-  ...guard,
+  ...rootGuard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = wipeSchoolDataSchema.safeParse(req.body);
@@ -779,7 +781,7 @@ router.delete(
       }
 
       if (parsed.data.confirmation_token !== school.slug) {
-        return res.status(400).json({ error: true, code: 'CONFIRMATION_FAILED', message: 'Confirmation token does not match school slug' });
+        return res.status(400).json({ success: false, error: { code: 'CONFIRMATION_FAILED', message: 'Confirmation token does not match school slug' } });
       }
 
       const client = await pool.connect();

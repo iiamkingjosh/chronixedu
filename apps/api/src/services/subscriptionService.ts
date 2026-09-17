@@ -1,7 +1,7 @@
 import * as cron from 'node-cron';
 import pool from '../db/client';
 import { logger } from '../config/logger';
-import { registerCron, markCronRun } from './cronTracker';
+import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
 
 const CRON_NAME = 'trial-expiry-check';
 
@@ -22,21 +22,27 @@ export async function runTrialExpiryCheck(): Promise<number> {
   );
 
   if (expired.rows.length === 0) {
-    console.log('[trial-expiry-cron] Suspended 0 expired trials');
+    logger.info('trial_expiry_check', { suspended: 0 });
     return 0;
   }
 
   const systemAdminId = await getSystemAdminId();
+  if (!systemAdminId) {
+    // A suspension must never happen without an audit record.
+    logger.error('trial_expiry_no_system_admin', { pending: expired.rows.length });
+    throw new Error('No super_admin exists to attribute trial-expiry suspensions to; nothing was suspended');
+  }
 
   for (const row of expired.rows) {
-    await pool.query(
-      `UPDATE platform_subscriptions SET subscription_status = 'suspended', updated_at = NOW() WHERE id = $1`,
-      [row.id]
-    );
-    await pool.query(`UPDATE schools SET is_active = false WHERE id = $1`, [row.school_id]);
-
-    if (systemAdminId) {
-      await pool.query(
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE platform_subscriptions SET subscription_status = 'suspended', updated_at = NOW() WHERE id = $1`,
+        [row.id]
+      );
+      await client.query(`UPDATE schools SET is_active = false WHERE id = $1`, [row.school_id]);
+      await client.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata)
          VALUES ($1, $2, $3, $4)`,
         [
@@ -46,10 +52,16 @@ export async function runTrialExpiryCheck(): Promise<number> {
           JSON.stringify({ trial_ends_at: row.trial_ends_at, auto_suspended: true, subscription_id: row.id }),
         ]
       );
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
   }
 
-  console.log(`[trial-expiry-cron] Suspended ${expired.rows.length} expired trials`);
+  logger.info('trial_expiry_check', { suspended: expired.rows.length });
   return expired.rows.length;
 }
 
@@ -59,14 +71,14 @@ let task: cron.ScheduledTask | null = null;
 export function startSubscriptionCron(): void {
   if (task) return;
   task = cron.schedule('0 9 * * *', () => {
-    runTrialExpiryCheck()
-      .then(() => markCronRun(CRON_NAME, 'success'))
+    runExclusive(CRON_NAME, runTrialExpiryCheck)
+      .then(ran => { if (ran) markCronRun(CRON_NAME, 'success'); })
       .catch(err => {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('trial_expiry_cron_error', { error: message });
         markCronRun(CRON_NAME, 'error', message);
       });
-  });
+  }, { timezone: CRON_TIMEZONE });
 }
 
 export function stopSubscriptionCron(): void {

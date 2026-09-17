@@ -18,6 +18,42 @@ function getSupportSessionHeader(): Record<string, string> {
   return sessionId ? { 'x-support-session-id': sessionId } : {};
 }
 
+/** Thrown instead of redirecting when a caller passes `deferAuthRedirect`, so it
+ *  can save unsaved work (e.g. a half-filled score grid) before calling
+ *  `redirectToLogin()` itself. */
+export class SessionExpiredError extends Error {
+  constructor() {
+    super('Your session has expired. Please sign in again.');
+    this.name = 'SessionExpiredError';
+  }
+}
+
+export interface ApiFetchOptions extends RequestInit {
+  /** On 401, throw SessionExpiredError instead of redirecting immediately. */
+  deferAuthRedirect?: boolean;
+}
+
+/** Parses a JSON body, tolerating non-JSON error pages (e.g. a proxy's HTML 502). */
+async function readJson(res: Response): Promise<unknown> {
+  const text = await res.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function errorMessage(json: unknown, fallback: string): string {
+  const err = (json as { error?: unknown } | null)?.error;
+  const message = (err as { message?: unknown } | undefined)?.message ?? err ?? fallback;
+  return typeof message === 'string' ? message : JSON.stringify(message);
+}
+
+export function redirectToLogin() {
+  handleUnauthorized();
+}
+
 /** Clears the stored session and sends the user back to login. Called whenever
  *  the API rejects a request with 401 — expired, invalid, or tampered token. */
 function handleUnauthorized() {
@@ -31,24 +67,26 @@ function handleUnauthorized() {
 
 export async function apiFetch<T = unknown>(
   path: string,
-  options: RequestInit = {}
+  options: ApiFetchOptions = {}
 ): Promise<T> {
+  const { deferAuthRedirect, ...init } = options;
   const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
+    ...init,
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...getSupportSessionHeader(),
-      ...(options.headers ?? {}),
+      ...(init.headers ?? {}),
     },
   });
-  if (res.status === 401) handleUnauthorized();
-  const json = await res.json();
+  if (res.status === 401) {
+    if (deferAuthRedirect) throw new SessionExpiredError();
+    handleUnauthorized();
+  }
+  const json = await readJson(res);
   if (!res.ok) {
-    const message =
-      json?.error?.message ?? json?.error ?? `Request failed (${res.status})`;
-    throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+    throw new Error(errorMessage(json, `Request failed (${res.status})`));
   }
   return json as T;
 }
@@ -64,11 +102,9 @@ export async function apiUpload<T = unknown>(
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...getSupportSessionHeader() },
   });
   if (res.status === 401) handleUnauthorized();
-  const json = await res.json();
+  const json = await readJson(res);
   if (!res.ok) {
-    const message =
-      json?.error?.message ?? json?.error ?? `Upload failed (${res.status})`;
-    throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+    throw new Error(errorMessage(json, `Upload failed (${res.status})`));
   }
   return json as T;
 }
