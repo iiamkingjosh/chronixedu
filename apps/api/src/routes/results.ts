@@ -1,4 +1,4 @@
-﻿import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { verifyToken, requireRole } from '../middleware/auth';
@@ -10,6 +10,9 @@ import {
   getClassSubjectAssignments,
   getTeachersForClass,
   getApprovalDashboard,
+  getClassSubjectStatuses,
+  markSubjectSubmitted,
+  returnSubjectsToDraft,
 } from '../db/queries/results';
 import { startReportCardBatch, getJob, signReportCardAsset } from '../services/reportCardService';
 import { getReportCardsForClass, publishReportCards } from '../db/queries/reportCards';
@@ -38,8 +41,11 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
  */
 function validateStatusTransition(current: string | null, next: string): string | null {
   const from = current ?? 'draft';
+  // Student-level (class result) transitions. Subject-level draft → submitted
+  // lives in subject_result_status (AUDIT C-2). 'submitted' is a legacy
+  // student-level value that migration 029 converts to 'draft'.
   const allowed: Record<string, readonly string[]> = {
-    draft:     ['submitted'],
+    draft:     ['approved'],
     submitted: ['approved', 'draft'],
     approved:  ['published', 'draft'],
     published: [],
@@ -65,9 +71,10 @@ const classTermSchema = z.object({
 });
 
 const returnSchema = z.object({
-  class_id: z.string().uuid(),
-  term_id:  z.string().uuid(),
-  reason:   z.string().min(10, 'Reason must be at least 10 characters'),
+  class_id:   z.string().uuid(),
+  term_id:    z.string().uuid(),
+  subject_id: z.string().uuid().optional(), // omit to return every subject in the class
+  reason:     z.string().min(10, 'Reason must be at least 10 characters'),
 });
 
 // ── (1) POST /:schoolId/results/submit ────────────────────────────────────────
@@ -111,6 +118,13 @@ router.post(
       // Validate score completeness
       const completion = await checkSubjectCompletion(schoolId, class_id, subject_id, term_id);
 
+      if (completion.no_config) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'NO_ASSESSMENT_CONFIG', message: 'This school has no assessment configuration set up.' },
+        });
+      }
+
       if (completion.total_students === 0) {
         return res.status(400).json({
           success: false,
@@ -129,49 +143,40 @@ router.post(
         });
       }
 
-      // Get enrolled students and validate transitions
-      const students  = await getStudentsInClassWithStatus(class_id, term_id, schoolId);
-      const studentIds = students.map(s => s.student_id);
-
-      // Validate that no student is in an un-submittable state (approved/published blocks submit)
-      const blocked = students.filter(s => {
-        const err = validateStatusTransition(s.current_status, 'submitted');
-        // submitted → submitted is not in allowed transitions, but we allow re-submit as idempotent
-        return err !== null && (s.current_status ?? 'draft') !== 'submitted';
-      });
-      if (blocked.length > 0) {
+      // A class whose result is already approved/published cannot take new submissions.
+      const students = await getStudentsInClassWithStatus(class_id, term_id, schoolId);
+      const finalised = students.filter(s => ['approved', 'published'].includes(s.current_status ?? ''));
+      if (finalised.length > 0) {
         return res.status(409).json({
           success: false,
           error: {
             code: 'TRANSITION_BLOCKED',
-            message: 'Some students have results that are already approved or published and cannot be re-submitted',
-            blocked: blocked.map(s => ({
-              student_id: s.student_id,
-              name: `${s.first_name} ${s.last_name}`,
-              current_status: s.current_status,
-            })),
+            message: 'This class result has already been approved or published. Ask the principal to return it first.',
           },
         });
       }
 
-      // Update draft → submitted (skip students already at submitted/approved/published)
-      await batchUpsertStatuses(studentIds, schoolId, term_id, 'submitted', userId, ['draft']);
+      // Per class + subject (AUDIT C-2). Idempotent: re-submitting is a no-op.
+      const changed = await markSubjectSubmitted(schoolId, class_id, subject_id, term_id, userId);
 
-      await logAudit({
-        supportSession: req.supportSession,
-        schoolId,
-        userId,
-        actionType: 'RESULTS_SUBMITTED',
-        entity:     'result_status',
-        entityId:   class_id,
-        newValue:   { term_id, subject_id, student_count: studentIds.length },
-      });
+      if (changed) {
+        await logAudit({
+          supportSession: req.supportSession,
+          schoolId,
+          userId,
+          actionType: 'RESULTS_SUBMITTED',
+          entity:     'subject_result_status',
+          entityId:   class_id,
+          newValue:   { term_id, subject_id, student_count: students.length },
+        });
+      }
 
       return res.json({
         success: true,
         data: {
-          submitted_students: studentIds.length,
-          message: 'Results submitted successfully. Score editing is now locked for these students.',
+          submitted_students: students.length,
+          already_submitted: !changed,
+          message: 'Subject submitted for approval. Score editing is now locked for this subject.',
         },
       });
     } catch (err) {
@@ -235,34 +240,51 @@ router.post(
         });
       }
 
-      // All students must be 'submitted' — reject if any are in another status
-      const notSubmitted = students.filter(s => (s.current_status ?? 'draft') !== 'submitted');
-      if (notSubmitted.length > 0) {
+      // Every subject taught in this class this term must be submitted (AUDIT C-2).
+      const [assignments, subjectStatuses] = await Promise.all([
+        getClassSubjectAssignments(class_id, term_id, schoolId),
+        getClassSubjectStatuses(class_id, term_id, schoolId),
+      ]);
+      if (assignments.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'NO_SUBJECTS', message: 'No subjects are assigned to this class for the selected term' },
+        });
+      }
+      const seenSubjects = new Set<string>();
+      const pendingSubjects = assignments.filter(a => {
+        if (seenSubjects.has(a.subject_id)) return false;
+        seenSubjects.add(a.subject_id);
+        return subjectStatuses.get(a.subject_id)?.status !== 'submitted';
+      });
+      if (pendingSubjects.length > 0) {
         return res.status(400).json({
           success: false,
           error: {
             code: 'NOT_ALL_SUBMITTED',
-            message: `${notSubmitted.length} student(s) have not been submitted. All subjects for the class must be submitted before approval.`,
-            not_submitted: notSubmitted.map(s => ({
-              student_id:     s.student_id,
-              name:           `${s.first_name} ${s.last_name}`,
-              current_status: s.current_status ?? 'draft',
+            message: `${pendingSubjects.length} subject(s) have not been submitted. All subjects for the class must be submitted before approval.`,
+            not_submitted: pendingSubjects.map(a => ({
+              subject_id:   a.subject_id,
+              subject_name: a.subject_name,
+              teacher_name: `${a.teacher_first_name} ${a.teacher_last_name}`.trim(),
             })),
           },
         });
       }
 
-      // Validate transition for the batch
-      const transitionErr = validateStatusTransition('submitted', 'approved');
-      if (transitionErr) {
-        return res.status(409).json({
-          success: false,
-          error: { code: 'INVALID_TRANSITION', message: transitionErr },
-        });
+      // Student-level transition: anything already approved/published blocks re-approval.
+      for (const s of students) {
+        const transitionErr = validateStatusTransition(s.current_status, 'approved');
+        if (transitionErr) {
+          return res.status(409).json({
+            success: false,
+            error: { code: 'INVALID_TRANSITION', message: transitionErr },
+          });
+        }
       }
 
       const studentIds = students.map(s => s.student_id);
-      await batchUpsertStatuses(studentIds, schoolId, term_id, 'approved', userId, ['submitted']);
+      await batchUpsertStatuses(studentIds, schoolId, term_id, 'approved', userId, ['draft', 'submitted']);
 
       await logAudit({
         supportSession: req.supportSession,
@@ -402,7 +424,7 @@ router.post(
         });
       }
 
-      const { class_id, term_id, reason } = parsed.data;
+      const { class_id, term_id, subject_id, reason } = parsed.data;
       const userId   = req.user!.user_id;
       const schoolId = req.params.schoolId;
 
@@ -426,12 +448,8 @@ router.post(
         });
       }
 
-      // Validate transition: any non-draft student must support → draft
-      const returnable = students.filter(s => {
-        const status = s.current_status ?? 'draft';
-        return status !== 'draft'; // draft → draft is a no-op, skip
-      });
-
+      // Student-level: approved (or legacy submitted) → draft
+      const returnable = students.filter(s => (s.current_status ?? 'draft') !== 'draft');
       for (const student of returnable) {
         const err = validateStatusTransition(student.current_status, 'draft');
         if (err) {
@@ -447,8 +465,24 @@ router.post(
         await batchUpsertStatuses(toResetIds, schoolId, term_id, 'draft', userId);
       }
 
+      // Subject-level: submitted → draft (one subject, or all)
+      const resetSubjects = await returnSubjectsToDraft(schoolId, class_id, term_id, userId, reason, subject_id);
+
+      if (toResetIds.length === 0 && resetSubjects.length === 0) {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'NOTHING_TO_RETURN', message: 'Nothing to return — no submitted subjects or approved results for this selection.' },
+        });
+      }
+
       // Notify all teachers assigned to this class+term via audit log
-      const teachers = await getTeachersForClass(class_id, term_id, schoolId);
+      const classTeachers = await getTeachersForClass(class_id, term_id, schoolId);
+      let teachers = classTeachers;
+      if (subject_id) {
+        const assignments = await getClassSubjectAssignments(class_id, term_id, schoolId);
+        const ids = new Set(assignments.filter(a => a.subject_id === subject_id).map(a => a.teacher_id));
+        teachers = classTeachers.filter(t => ids.has(t.teacher_id));
+      }
 
       await logAudit({
         supportSession: req.supportSession,
@@ -460,6 +494,8 @@ router.post(
         newValue: {
           term_id,
           reason,
+          subject_id: subject_id ?? null,
+          reset_subject_ids: resetSubjects,
           reset_student_count: toResetIds.length,
           notified_teachers: teachers.map(t => ({
             teacher_id: t.teacher_id,
@@ -488,6 +524,7 @@ router.post(
         success: true,
         data: {
           reset_students: toResetIds.length,
+          reset_subjects: resetSubjects.length,
           message: reason
             ? `Results returned to draft. Teachers have been notified. Reason: ${reason}`
             : 'Results returned to draft. Teachers have been notified.',

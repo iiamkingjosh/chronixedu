@@ -132,43 +132,42 @@ export async function getTeacherOverview(
     results_submitted: string;
     results_pending: string;
   }>(
-    `WITH submitted_classes AS (
-       SELECT DISTINCT stc.class_id
-       FROM result_status rs
-       JOIN student_classes stc ON stc.student_id = rs.student_id
-       WHERE rs.term_id   = $3
-         AND rs.school_id = $2
-         AND rs.status    = ANY(ARRAY['submitted','approved','published']::chronixedu_result_status[])
-         AND stc.class_id IN (
-           SELECT DISTINCT class_id FROM teacher_assignments
-           WHERE teacher_id = $1 AND school_id = $2 AND term_id = $3
-         )
+    `WITH term_session AS (
+       SELECT session_id FROM terms WHERE id = $3 AND school_id = $2
      ),
-     teacher_classes AS (
-       SELECT DISTINCT class_id FROM teacher_assignments
+     my_assignments AS (
+       SELECT DISTINCT class_id, subject_id FROM teacher_assignments
        WHERE teacher_id = $1 AND school_id = $2 AND term_id = $3
      ),
+     submitted AS (
+       SELECT COUNT(*) AS cnt
+       FROM my_assignments ma
+       JOIN subject_result_status srs
+         ON srs.class_id = ma.class_id AND srs.subject_id = ma.subject_id
+        AND srs.term_id = $3 AND srs.school_id = $2 AND srs.status = 'submitted'
+     ),
      missing_scores AS (
-       SELECT COUNT(DISTINCT (ta.class_id, ta.subject_id, stc.student_id)) AS cnt
-       FROM teacher_assignments ta
-       JOIN student_classes stc ON stc.class_id = ta.class_id
-       WHERE ta.teacher_id = $1 AND ta.school_id = $2 AND ta.term_id = $3
-         AND NOT EXISTS (
+       SELECT COUNT(DISTINCT (ma.class_id, ma.subject_id, stc.student_id)) AS cnt
+       FROM my_assignments ma
+       JOIN student_classes stc
+         ON stc.class_id = ma.class_id
+        AND stc.session_id = (SELECT session_id FROM term_session)
+       WHERE NOT EXISTS (
            SELECT 1 FROM scores sc
            WHERE sc.student_id = stc.student_id
-             AND sc.subject_id = ta.subject_id
+             AND sc.subject_id = ma.subject_id
              AND sc.term_id    = $3
              AND sc.school_id  = $2
          )
      )
      SELECT
        u.teacher_mode,
-       (SELECT cnt FROM missing_scores)::int                  AS pending_score_entries,
-       (SELECT COUNT(*) FROM submitted_classes)::int          AS results_submitted,
+       (SELECT cnt FROM missing_scores)::int                AS pending_score_entries,
+       (SELECT cnt FROM submitted)::int                     AS results_submitted,
        GREATEST(
-         (SELECT COUNT(*) FROM teacher_classes)::int -
-         (SELECT COUNT(*) FROM submitted_classes)::int, 0
-       )                                                       AS results_pending
+         (SELECT COUNT(*) FROM my_assignments)::int -
+         (SELECT cnt FROM submitted)::int, 0
+       )                                                     AS results_pending
      FROM users u
      WHERE u.id = $1`,
     [teacherId, schoolId, termId]
@@ -189,15 +188,7 @@ export async function getTeacherScoreEntryStatus(
   termId: string
 ): Promise<ScoreEntryStatus[]> {
   const result = await pool.query<ScoreEntryStatus>(
-    `WITH class_submitted AS (
-       SELECT DISTINCT stc.class_id
-       FROM result_status rs
-       JOIN student_classes stc ON stc.student_id = rs.student_id
-       WHERE rs.term_id   = $3
-         AND rs.school_id = $2
-         AND rs.status    = ANY(ARRAY['submitted','approved','published']::chronixedu_result_status[])
-     )
-     SELECT
+    `SELECT
        ta.class_id,
        c.name                                                                 AS class_name,
        ta.subject_id,
@@ -205,20 +196,23 @@ export async function getTeacherScoreEntryStatus(
        COUNT(DISTINCT stc.student_id)::int                                    AS students_total,
        COUNT(DISTINCT sc.student_id)::int                                     AS students_scored,
        (COUNT(DISTINCT stc.student_id) - COUNT(DISTINCT sc.student_id))::int AS students_missing,
-       CASE WHEN cs.class_id IS NOT NULL THEN 'submitted' ELSE 'draft' END   AS result_status
+       COALESCE(srs.status, 'draft')                                          AS result_status
      FROM teacher_assignments ta
      JOIN classes c     ON c.id   = ta.class_id
      JOIN subjects sub  ON sub.id = ta.subject_id
-     JOIN student_classes stc ON stc.class_id = ta.class_id
+     JOIN terms t       ON t.id   = ta.term_id
+     JOIN student_classes stc ON stc.class_id = ta.class_id AND stc.session_id = t.session_id
      LEFT JOIN scores sc
        ON sc.student_id = stc.student_id
       AND sc.subject_id = ta.subject_id
       AND sc.term_id    = $3
       AND sc.school_id  = $2
-     LEFT JOIN class_submitted cs ON cs.class_id = ta.class_id
+     LEFT JOIN subject_result_status srs
+       ON srs.class_id = ta.class_id AND srs.subject_id = ta.subject_id
+      AND srs.term_id = ta.term_id AND srs.school_id = ta.school_id
      WHERE ta.teacher_id = $1 AND ta.school_id = $2 AND ta.term_id = $3
-     GROUP BY ta.class_id, c.name, c.level, ta.subject_id, sub.name, cs.class_id
-     ORDER BY c.level, c.name, sub.name`,
+     GROUP BY ta.class_id, c.name, c.level, ta.subject_id, sub.name, srs.status
+    ORDER BY c.level, c.name, sub.name`,
     [teacherId, schoolId, termId]
   );
   return result.rows;
@@ -241,6 +235,7 @@ export async function getStudentsInClassWithAverages(
      FROM students s
      JOIN users u ON u.id = s.user_id
      JOIN student_classes stc ON stc.student_id = s.id AND stc.class_id = $1
+       AND stc.session_id = (SELECT session_id FROM terms WHERE id = $3 AND school_id = $2)
      LEFT JOIN (
        SELECT
          sc.student_id,
@@ -285,22 +280,17 @@ export async function getTeacherActivity(
   termId: string
 ): Promise<TeacherActivity[]> {
   const result = await pool.query<TeacherActivity>(
-    `WITH class_submitted AS (
-       SELECT DISTINCT stc.class_id
-       FROM result_status rs
-       JOIN student_classes stc ON stc.student_id = rs.student_id
-       WHERE rs.term_id   = $2
-         AND rs.school_id = $1
-         AND rs.status    = ANY(ARRAY['submitted','approved','published']::chronixedu_result_status[])
-     ),
-     teacher_stats AS (
+    `WITH teacher_stats AS (
        SELECT
          ta.teacher_id,
-         COUNT(DISTINCT ta.subject_id)                                                AS subjects_assigned,
-         COUNT(DISTINCT ta.class_id)                                                  AS classes_assigned,
-         COUNT(DISTINCT CASE WHEN cs.class_id IS NOT NULL THEN ta.class_id END)       AS submitted
+         COUNT(DISTINCT ta.subject_id)                                                        AS subjects_assigned,
+         COUNT(DISTINCT ta.class_id)                                                          AS classes_assigned,
+         COUNT(DISTINCT (ta.class_id, ta.subject_id))                                         AS assignments_total,
+         COUNT(DISTINCT CASE WHEN srs.status = 'submitted' THEN (ta.class_id, ta.subject_id) END) AS submitted
        FROM teacher_assignments ta
-       LEFT JOIN class_submitted cs ON cs.class_id = ta.class_id
+       LEFT JOIN subject_result_status srs
+         ON srs.class_id = ta.class_id AND srs.subject_id = ta.subject_id
+        AND srs.term_id = ta.term_id AND srs.school_id = ta.school_id
        WHERE ta.school_id = $1 AND ta.term_id = $2
        GROUP BY ta.teacher_id
      ),
@@ -318,7 +308,7 @@ export async function getTeacherActivity(
        COALESCE(ts.subjects_assigned, 0)::int                 AS subjects_assigned,
        COALESCE(ts.classes_assigned,  0)::int                 AS classes_assigned,
        COALESCE(ts.submitted,         0)::int                 AS submitted,
-       GREATEST(COALESCE(ts.classes_assigned, 0) - COALESCE(ts.submitted, 0), 0)::int AS pending,
+       GREATEST(COALESCE(ts.assignments_total, 0) - COALESCE(ts.submitted, 0), 0)::int AS pending,
        le.last_score_entry_at
      FROM users u
      LEFT JOIN teacher_stats ts ON ts.teacher_id = u.id
