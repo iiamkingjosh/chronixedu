@@ -344,11 +344,12 @@ export async function generateReportCard(
 
   const templateData = {
     school: {
-      name:     school.name,
-      logoUrl:  identityConfig.logo_url   ?? null,
-      stampUrl: identityConfig.stamp_url  ?? null,
-      motto:    identityConfig.motto      ?? null,
-      address:  identityConfig.address    ?? null,
+      name:          school.name,
+      logoUrl:       identityConfig.logo_url      ?? null,
+      stampUrl:      identityConfig.stamp_url     ?? null,
+      motto:         identityConfig.motto         ?? null,
+      address:       identityConfig.address       ?? null,
+      primaryColour: identityConfig.primary_colour ?? null,
     },
     student: {
       fullName:    `${studentData.first_name} ${studentData.last_name}`,
@@ -483,11 +484,12 @@ export async function generateReportCardPreview(
 
   const templateData = dummyTemplateData();
   templateData.school = {
-    name:     school.name,
-    logoUrl:  identityConfig.logo_url  ?? null,
-    stampUrl: identityConfig.stamp_url ?? null,
-    motto:    identityConfig.motto     ?? null,
-    address:  identityConfig.address   ?? null,
+    name:          school.name,
+    logoUrl:       identityConfig.logo_url      ?? null,
+    stampUrl:      identityConfig.stamp_url     ?? null,
+    motto:         identityConfig.motto         ?? null,
+    address:       identityConfig.address       ?? null,
+    primaryColour: identityConfig.primary_colour ?? null,
   };
 
   applyReportConfig(templateData, reportConfig, identityConfig.signature_url ?? null);
