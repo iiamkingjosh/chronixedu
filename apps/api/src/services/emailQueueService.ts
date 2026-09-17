@@ -3,7 +3,7 @@ import sgMail from '@sendgrid/mail';
 import { getPendingEmails, markEmailSent, markEmailRetryFailed } from '../db/queries/emailQueue';
 import { isEmailConfigured } from './emailService';
 import { logger } from '../config/logger';
-import { registerCron, markCronRun } from './cronTracker';
+import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
 
 const CRON_NAME = 'email-queue-retry';
 const MAX_ATTEMPTS = 5;
@@ -34,14 +34,14 @@ let task: cron.ScheduledTask | null = null;
 export function startEmailQueueCron(): void {
   if (task) return;
   task = cron.schedule('*/30 * * * *', () => {
-    runEmailQueueRetry()
-      .then(() => markCronRun(CRON_NAME, 'success'))
+    runExclusive(CRON_NAME, runEmailQueueRetry)
+      .then(ran => { if (ran) markCronRun(CRON_NAME, 'success'); })
       .catch(err => {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('email_queue_cron_error', { error: message });
         markCronRun(CRON_NAME, 'error', message);
       });
-  });
+  }, { timezone: CRON_TIMEZONE });
 }
 
 export function stopEmailQueueCron(): void {

@@ -58,7 +58,11 @@ router.get(
           ? `${nameRow.first_name} ${nameRow.last_name}`
           : user.email ?? '';
 
-      const hour = new Date().getHours(); // server local time, 0–23
+      // School-local hour (Railway runs UTC; schools run on Lagos time).
+      const hour = Number(
+        new Intl.DateTimeFormat('en-GB', { hour: 'numeric', hourCycle: 'h23', timeZone: 'Africa/Lagos' })
+          .format(new Date())
+      );
       const salutation =
         hour >=  5 && hour < 12 ? 'Good morning'   :
         hour >= 12 && hour < 17 ? 'Good afternoon'  :

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import pool from '../db/client';
 import { logger } from '../config/logger';
-import { registerCron, markCronRun } from './cronTracker';
+import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
 
 const CRON_NAME = 'platform-analytics';
 
@@ -89,14 +89,14 @@ let task: cron.ScheduledTask | null = null;
 export function startPlatformAnalyticsCron(): void {
   if (task) return;
   task = cron.schedule('0 3 * * *', () => {
-    runPlatformAnalyticsSnapshot()
-      .then(() => markCronRun(CRON_NAME, 'success'))
+    runExclusive(CRON_NAME, runPlatformAnalyticsSnapshot)
+      .then(ran => { if (ran) markCronRun(CRON_NAME, 'success'); })
       .catch(err => {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('platform_analytics_cron_error', { error: message });
         markCronRun(CRON_NAME, 'error', message);
       });
-  });
+  }, { timezone: CRON_TIMEZONE });
 }
 
 export function stopPlatformAnalyticsCron(): void {
