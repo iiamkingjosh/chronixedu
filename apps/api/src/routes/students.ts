@@ -31,6 +31,7 @@ import { generateBulkImportResultsFile, type CreatedStudentRecord, type CreatedP
 import pool from '../db/client';
 import { logger } from '../config/logger';
 import { getSchoolName, welcomeEmailBody } from '../services/welcomeEmail';
+import { cache, schoolCacheKey } from '../services/cacheService';
 
 async function checkParentStudentLink(parentId: string, studentId: string, schoolId: string): Promise<boolean> {
   const result = await pool.query(
@@ -173,6 +174,10 @@ router.post(
         }
         return event;
       });
+
+      // The principal dashboard's stats (student/staff counts) are cached —
+      // bust it so a newly created student shows up immediately.
+      cache.del(schoolCacheKey(req.params.schoolId, 'dashboard-stats'));
 
       return res.status(201).json({
         success: true,
@@ -394,6 +399,10 @@ router.post(
             : 'Failed to create this record.';
           results.push({ row_number: row.row_number, status: 'failed', reason });
         }
+      }
+
+      if (createdStudents.length > 0) {
+        cache.del(schoolCacheKey(req.params.schoolId, 'dashboard-stats'));
       }
 
       if (allNewParents.length > 0) {

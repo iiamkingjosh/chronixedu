@@ -5,6 +5,7 @@ import { getActiveTerm, listClasses } from '../db/queries/roster';
 import { getApprovalDashboard } from '../db/queries/results';
 import { getDashboardStats, getUserName, getTeacherActivity } from '../db/queries/dashboard';
 import { getStudentsAtRisk } from '../services/resultEngine';
+import { cache as sharedCache, schoolCacheKey } from '../services/cacheService';
 
 const router = Router();
 
@@ -40,8 +41,14 @@ router.get(
     try {
       const { schoolId } = req.params;
 
-      // Stats are cached; greeting is per-user so always fresh
-      const stats = await withCache(`${schoolId}:overview`, () => getDashboardStats(schoolId));
+      // Stats are cached (shared cacheService, so user-creation routes can
+      // invalidate it — see cache.del(schoolCacheKey(schoolId, 'dashboard-stats'))
+      // in users.ts); greeting is per-user so always fresh.
+      const stats = await sharedCache.wrap(
+        schoolCacheKey(schoolId, 'dashboard-stats'),
+        sharedCache.TTL.STATS,
+        () => getDashboardStats(schoolId)
+      );
 
       const user    = req.user!;
       const nameRow = await getUserName(user.user_id);

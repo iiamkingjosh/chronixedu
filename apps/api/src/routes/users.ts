@@ -25,6 +25,7 @@ import { runFullStaffValidation, STAFF_ROLES } from '../services/staffBulkImport
 import { generateStaffBulkImportResultsFile, type CreatedStaffRecord, type FailedStaffRecord } from '../services/staffBulkImportResults';
 import { logger } from '../config/logger';
 import { getSchoolName, welcomeEmailBody } from '../services/welcomeEmail';
+import { cache, schoolCacheKey } from '../services/cacheService';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -175,6 +176,11 @@ router.post(
         entityId: user.id,
         newValue: { email: user.email, role: user.role, teacher_mode: user.teacher_mode },
       });
+
+      // The principal dashboard's stats (staff/student counts) are cached —
+      // bust it so a newly created user shows up immediately instead of
+      // waiting out the TTL.
+      cache.del(schoolCacheKey(req.params.schoolId, 'dashboard-stats'));
 
       return res.status(201).json({ success: true, data: { user, temp_password: tempPassword } });
     } catch (err) {
@@ -668,6 +674,8 @@ router.post(
       }
 
       if (createdStaff.length > 0) {
+        cache.del(schoolCacheKey(req.params.schoolId, 'dashboard-stats'));
+
         const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
         getSchoolName(req.params.schoolId).then(async schoolName => {
           for (let i = 0; i < createdStaff.length; i += STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE) {
