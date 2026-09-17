@@ -1,20 +1,22 @@
-﻿import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { logAudit } from '../db/queries/auditLog';
 import { getActiveTerm } from '../db/queries/roster';
 import {
   checkTeacherAssigned,
-  getResultStatus,
+  getComponentInfo,
   getExistingScore,
-  getEnrolledStudentIds,
+  findStudentsNotInClass,
+  getAllowedComponentIds,
+  getSubjectSubmissionStatus,
+  getFinalisedStudents,
   upsertScore,
   bulkUpsertScores,
   getClassSheet,
   getMyPendingAssignments,
   ComponentInfo,
 } from '../db/queries/scores';
-import { resolveAssessmentConfig } from '../db/queries/assessmentConfig';
 import pool from '../db/client';
 
 const router = Router();
@@ -88,27 +90,27 @@ router.post(
         }
       }
 
-      // (b) Enrollment check — the student being scored must actually be
-      // enrolled in class_id for this term. checkTeacherAssigned above only
-      // proves the teacher owns (subject, class, term); it says nothing
-      // about whose student_id was submitted, and class_id itself is never
-      // stored on the scores row — without this, a legitimately-assigned
-      // teacher could write a score against any student in the school.
-      const enrolled = await getEnrolledStudentIds(req.params.schoolId, class_id, term_id, [student_id]);
-      if (!enrolled.has(student_id)) {
+      const schoolId = req.params.schoolId;
+
+      // (b) Student must be enrolled in this class for the term (AUDIT H-1)
+      const notInClass = await findStudentsNotInClass(schoolId, class_id, term_id, [student_id]);
+      if (notInClass.length > 0) {
         return res.status(400).json({
           success: false,
           error: { code: 'STUDENT_NOT_ENROLLED', message: 'This student is not enrolled in the specified class for this term' },
         });
       }
 
-      // (c) Component check — the component must belong to the assessment
-      // config actually resolved for this class+subject+term, not merely
-      // exist somewhere in the school. Prevents writing a score under a
-      // component_id that belongs to a different subject's config.
-      const config = await resolveAssessmentConfig(req.params.schoolId, class_id, subject_id, term_id);
-      const comp = config?.components.find(c => c.id === component_id) ?? null;
-      if (!comp) {
+      // (c) Component must belong to the config that applies to this class + subject
+      const allowed = await getAllowedComponentIds(schoolId, class_id, subject_id, term_id);
+      if (!allowed) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'NO_ASSESSMENT_CONFIG', message: 'This school has no assessment configuration set up.' },
+        });
+      }
+      const comp = await getComponentInfo(component_id, schoolId);
+      if (!comp || !allowed.has(component_id)) {
         return res.status(404).json({
           success: false,
           error: { code: 'NOT_FOUND', message: 'Assessment component not found for this class, subject, and term' },
@@ -121,29 +123,38 @@ router.post(
         });
       }
 
-      // (d) Result status lock check — submitted/approved/published all block score edits
-      const status = await getResultStatus(student_id, term_id, req.params.schoolId);
-      if (status && ['submitted', 'approved', 'published'].includes(status)) {
+      // (d) Lock checks (AUDIT C-2): this subject submitted, or the student's
+      //     class result already approved/published.
+      const subjectStatus = await getSubjectSubmissionStatus(schoolId, class_id, subject_id, term_id);
+      if (subjectStatus === 'submitted') {
         return res.status(423).json({
           success: false,
-          error: { code: 'RESULT_LOCKED', message: `This student's result has been ${status} and scores can no longer be changed` },
+          error: { code: 'SUBJECT_SUBMITTED', message: 'This subject has been submitted for approval and scores can no longer be changed' },
+        });
+      }
+      const finalised = await getFinalisedStudents(schoolId, term_id, [student_id]);
+      const finalStatus = finalised.get(student_id);
+      if (finalStatus) {
+        return res.status(423).json({
+          success: false,
+          error: { code: 'RESULT_LOCKED', message: `This student's result has been ${finalStatus} and scores can no longer be changed` },
         });
       }
 
       // Capture old score for audit log
       const previous = await getExistingScore(student_id, subject_id, term_id, component_id);
 
-      const saved = await upsertScore(req.params.schoolId, student_id, subject_id, term_id, component_id, score, teacherId);
+      const saved = await upsertScore(schoolId, student_id, subject_id, term_id, component_id, score, teacherId);
 
       await logAudit({
         supportSession: req.supportSession,
-        schoolId:   req.params.schoolId,
+        schoolId,
         userId:     teacherId,
         actionType: previous ? 'SCORE_UPDATED' : 'SCORE_ENTERED',
         entity:     'scores',
         entityId:   saved.id,
         oldValue:   previous ?? undefined,
-        newValue:   { score, component_id, student_id },
+        newValue:   { score, component_id, student_id, subject_id, class_id },
       });
 
       return res.status(previous ? 200 : 201).json({ success: true, data: saved });
@@ -226,46 +237,53 @@ router.post(
         }
       }
 
-      // Fetch all unique component_ids and student_ids needed for validation
-      const uniqueStudentIds = [...new Set(entries.map(e => e.student_id))];
+      const schoolId = req.params.schoolId;
 
-      // (b) Component map is built from the assessment config actually
-      // resolved for this class+subject+term — not from any component that
-      // merely exists somewhere in the school — so a component_id borrowed
-      // from a different subject's config is rejected as "not found" rather
-      // than accepted and written under the wrong subject.
-      const config = await resolveAssessmentConfig(req.params.schoolId, class_id, subject_id, term_id);
-      const componentMap = new Map<string, ComponentInfo>(
-        (config?.components ?? []).map(c => [c.id, c])
-      );
+      // Subject-level lock (AUDIT C-2)
+      const subjectStatus = await getSubjectSubmissionStatus(schoolId, class_id, subject_id, term_id);
+      if (subjectStatus === 'submitted') {
+        return res.status(423).json({
+          success: false,
+          error: { code: 'SUBJECT_SUBMITTED', message: 'This subject has been submitted for approval and scores can no longer be changed' },
+        });
+      }
 
-      // (c) Enrollment check — every student_id in the batch must actually
-      // be enrolled in class_id for this term (see the single-entry route
-      // for why this can't be inferred from the teacher-assignment check).
-      const enrolledStudents = await getEnrolledStudentIds(req.params.schoolId, class_id, term_id, uniqueStudentIds);
+      const allowedComponentIds = await getAllowedComponentIds(schoolId, class_id, subject_id, term_id);
+      if (!allowedComponentIds) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'NO_ASSESSMENT_CONFIG', message: 'This school has no assessment configuration set up.' },
+        });
+      }
 
-      // (d) Load result_status for all students in batch
-      const statusRows = await pool.query<{ student_id: string; status: string }>(
-        `SELECT student_id, status FROM result_status
-         WHERE student_id = ANY($1::uuid[]) AND term_id = $2 AND school_id = $3`,
-        [uniqueStudentIds, term_id, req.params.schoolId]
-      );
-      const lockedStudents = new Set<string>(
-        statusRows.rows
-          .filter(r => ['submitted', 'approved', 'published'].includes(r.status))
-          .map(r => r.student_id)
-      );
+      const uniqueComponentIds = [...new Set(entries.map(e => e.component_id))];
+      const uniqueStudentIds   = [...new Set(entries.map(e => e.student_id))];
 
-      const result = await bulkUpsertScores(
-        req.params.schoolId,
-        subject_id,
-        term_id,
-        teacherId,
+      const [componentRows, notInClass, finalisedStudents] = await Promise.all([
+        pool.query<ComponentInfo>(
+          `SELECT ac.id, ac.config_id, ac.name, ac.max_score, ac.weight_percent, ac.display_order
+           FROM assessment_components ac
+           JOIN assessment_configs cfg ON cfg.id = ac.config_id
+           WHERE ac.id = ANY($1::uuid[]) AND cfg.school_id = $2`,
+          [uniqueComponentIds, schoolId]
+        ),
+        findStudentsNotInClass(schoolId, class_id, term_id, uniqueStudentIds),
+        getFinalisedStudents(schoolId, term_id, uniqueStudentIds),
+      ]);
+
+      const result = await bulkUpsertScores({
+        schoolId,
+        classId: class_id,
+        subjectId: subject_id,
+        termId: term_id,
+        enteredBy: teacherId,
         entries,
-        componentMap,
-        lockedStudents,
-        enrolledStudents
-      );
+        componentMap: new Map<string, ComponentInfo>(componentRows.rows.map(r => [r.id, r])),
+        allowedComponentIds,
+        notInClass: new Set(notInClass),
+        finalisedStudents,
+        supportSession: req.supportSession,
+      });
 
       if (result.errors.length > 0) {
         return res.status(422).json({

@@ -1,5 +1,6 @@
 import pool from '../client';
 import { resolveAssessmentConfig } from './assessmentConfig';
+import type { SupportSessionContext } from '../../middleware/auth';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -42,27 +43,18 @@ export async function checkTeacherAssigned(
   return result.rows.length > 0;
 }
 
-/** Which of the given students are actually enrolled in classId for the
- *  term's session — the write endpoints use this to stop a teacher who is
- *  legitimately assigned to (subjectId, classId, termId) from writing a
- *  score against a student who isn't in that class at all. */
-export async function getEnrolledStudentIds(
-  schoolId: string,
-  classId: string,
-  termId: string,
-  studentIds: string[]
-): Promise<Set<string>> {
-  if (studentIds.length === 0) return new Set();
-  const result = await pool.query<{ student_id: string }>(
-    `SELECT sc.student_id
-     FROM student_classes sc
-     JOIN students s ON s.id = sc.student_id
-     JOIN terms t ON t.id = $2
-     WHERE sc.class_id = $1 AND sc.session_id = t.session_id
-       AND s.school_id = $3 AND sc.student_id = ANY($4::uuid[])`,
-    [classId, termId, schoolId, studentIds]
+export async function getComponentInfo(
+  componentId: string,
+  schoolId: string
+): Promise<ComponentInfo | null> {
+  const result = await pool.query<ComponentInfo>(
+    `SELECT ac.id, ac.config_id, ac.name, ac.max_score, ac.weight_percent, ac.display_order
+     FROM assessment_components ac
+     JOIN assessment_configs cfg ON cfg.id = ac.config_id
+     WHERE ac.id = $1 AND cfg.school_id = $2`,
+    [componentId, schoolId]
   );
-  return new Set(result.rows.map(r => r.student_id));
+  return result.rows[0] ?? null;
 }
 
 export async function getResultStatus(
@@ -77,10 +69,80 @@ export async function getResultStatus(
   return result.rows[0]?.status ?? null;
 }
 
-// Capture existing score before upsert so we can log old_value in audit_logs.
-// Scoped by subject_id too, matching the widened uniqueness key below — a
-// component shared across subjects (a school-wide grading scheme) must not
-// return a different subject's row as this subject's "previous" value.
+// ── Target validation (AUDIT H-1) ─────────────────────────────────────────────
+
+/**
+ * Returns the subset of studentIds that are NOT enrolled in classId for the
+ * term's session within schoolId. An empty array means every id is valid.
+ */
+export async function findStudentsNotInClass(
+  schoolId: string,
+  classId: string,
+  termId: string,
+  studentIds: string[]
+): Promise<string[]> {
+  if (studentIds.length === 0) return [];
+  const result = await pool.query<{ student_id: string }>(
+    `SELECT sc.student_id
+     FROM student_classes sc
+     JOIN students s ON s.id = sc.student_id AND s.school_id = $1
+     JOIN classes  c ON c.id = sc.class_id   AND c.school_id = $1
+     WHERE sc.class_id = $2
+       AND sc.session_id = (SELECT session_id FROM terms WHERE id = $3 AND school_id = $1)
+       AND sc.student_id = ANY($4::uuid[])`,
+    [schoolId, classId, termId, studentIds]
+  );
+  const enrolled = new Set(result.rows.map(r => r.student_id));
+  return [...new Set(studentIds)].filter(id => !enrolled.has(id));
+}
+
+/** Component ids that are valid for this class + subject + term (the resolved config). */
+export async function getAllowedComponentIds(
+  schoolId: string,
+  classId: string,
+  subjectId: string,
+  termId: string
+): Promise<Set<string> | null> {
+  const config = await resolveAssessmentConfig(schoolId, classId, subjectId, termId);
+  if (!config) return null;
+  return new Set(config.components.map(c => c.id));
+}
+
+// ── Subject submission status (AUDIT C-2) ─────────────────────────────────────
+
+export type SubjectSubmissionStatus = 'draft' | 'submitted';
+
+export async function getSubjectSubmissionStatus(
+  schoolId: string,
+  classId: string,
+  subjectId: string,
+  termId: string
+): Promise<SubjectSubmissionStatus> {
+  const result = await pool.query<{ status: SubjectSubmissionStatus }>(
+    `SELECT status FROM subject_result_status
+     WHERE school_id = $1 AND class_id = $2 AND subject_id = $3 AND term_id = $4`,
+    [schoolId, classId, subjectId, termId]
+  );
+  return result.rows[0]?.status ?? 'draft';
+}
+
+/** Student ids (from the given list) whose class result is approved or published for the term. */
+export async function getFinalisedStudents(
+  schoolId: string,
+  termId: string,
+  studentIds: string[]
+): Promise<Map<string, string>> {
+  if (studentIds.length === 0) return new Map();
+  const result = await pool.query<{ student_id: string; status: string }>(
+    `SELECT student_id, status FROM result_status
+     WHERE school_id = $1 AND term_id = $2 AND student_id = ANY($3::uuid[])
+       AND status IN ('approved', 'published')`,
+    [schoolId, termId, studentIds]
+  );
+  return new Map(result.rows.map(r => [r.student_id, r.status]));
+}
+
+// Capture existing score before upsert so we can log old_value in audit_logs
 export async function getExistingScore(
   studentId: string,
   subjectId: string,
@@ -88,7 +150,8 @@ export async function getExistingScore(
   componentId: string
 ): Promise<{ id: string; score: number } | null> {
   const result = await pool.query<{ id: string; score: number }>(
-    `SELECT id, score FROM scores WHERE student_id = $1 AND subject_id = $2 AND term_id = $3 AND component_id = $4`,
+    `SELECT id, score FROM scores
+     WHERE student_id = $1 AND subject_id = $2 AND term_id = $3 AND component_id = $4`,
     [studentId, subjectId, termId, componentId]
   );
   return result.rows[0] ?? null;
@@ -137,43 +200,59 @@ export interface BulkUpsertResult {
   errors: BulkValidationError[];
 }
 
-export async function bulkUpsertScores(
-  schoolId: string,
-  subjectId: string,
-  termId: string,
-  enteredBy: string,
-  entries: BulkEntry[],
-  componentMap: Map<string, ComponentInfo>,
-  lockedStudents: Set<string>,
-  enrolledStudents: Set<string>
-): Promise<BulkUpsertResult> {
-  const saved: ScoreRow[] = [];
-  const errors: BulkValidationError[] = [];
+export interface BulkUpsertOptions {
+  schoolId: string;
+  classId: string;
+  subjectId: string;
+  termId: string;
+  enteredBy: string;
+  entries: BulkEntry[];
+  componentMap: Map<string, ComponentInfo>;
+  allowedComponentIds: Set<string>;
+  notInClass: Set<string>;
+  finalisedStudents: Map<string, string>;
+  supportSession?: SupportSessionContext;
+}
 
-  // Validate all entries before touching the DB — deliberately no pool
-  // connection is held during this loop, since acquiring one here and only
-  // releasing it in the write path's finally block leaked a connection on
-  // every rejected (validation-error) request.
+/**
+ * Validates every entry, then upserts all of them and writes one audit row per
+ * changed score — in a single transaction (AUDIT H-2: the bulk path used by the
+ * score grid previously wrote no audit trail at all).
+ *
+ * The pool client is only acquired after validation passes (the previous
+ * version acquired it first and leaked it on every validation failure).
+ */
+export async function bulkUpsertScores(opts: BulkUpsertOptions): Promise<BulkUpsertResult> {
+  const { schoolId, classId, subjectId, termId, enteredBy, entries } = opts;
+  const errors: BulkValidationError[] = [];
+  const seen = new Set<string>();
+
   for (let i = 0; i < entries.length; i++) {
     const { student_id, component_id, score } = entries[i];
+    const comp = opts.componentMap.get(component_id);
+    const key = `${student_id}:${component_id}`;
 
-    if (!enrolledStudents.has(student_id)) {
-      errors.push({ index: i, student_id, component_id, reason: `Student ${student_id} is not enrolled in this class` });
+    if (seen.has(key)) {
+      errors.push({ index: i, student_id, component_id, reason: 'Duplicate entry for the same student and component' });
       continue;
     }
+    seen.add(key);
 
-    const comp = componentMap.get(component_id);
-
-    if (!comp) {
-      errors.push({ index: i, student_id, component_id, reason: `Component ${component_id} is not part of the assessment config for this class/subject/term` });
+    if (!comp || !opts.allowedComponentIds.has(component_id)) {
+      errors.push({ index: i, student_id, component_id, reason: `Component ${component_id} is not part of the assessment configuration for this class and subject` });
       continue;
     }
     if (score > Number(comp.max_score)) {
       errors.push({ index: i, student_id, component_id, reason: `Score ${score} exceeds max_score ${comp.max_score} for component "${comp.name}"` });
       continue;
     }
-    if (lockedStudents.has(student_id)) {
-      errors.push({ index: i, student_id, component_id, reason: `Result for student ${student_id} is approved or published and cannot be changed` });
+    if (opts.notInClass.has(student_id)) {
+      errors.push({ index: i, student_id, component_id, reason: `Student ${student_id} is not enrolled in this class for the term` });
+      continue;
+    }
+    const finalStatus = opts.finalisedStudents.get(student_id);
+    if (finalStatus) {
+      errors.push({ index: i, student_id, component_id, reason: `Result for student ${student_id} is ${finalStatus} and cannot be changed` });
     }
   }
 
@@ -185,20 +264,68 @@ export async function bulkUpsertScores(
   try {
     await client.query('BEGIN');
 
-    for (const { student_id, component_id, score } of entries) {
-      const row = await client.query<ScoreRow>(
-        `INSERT INTO scores (school_id, student_id, subject_id, term_id, component_id, score, entered_by)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+    const upsert = await client.query<ScoreRow & { previous_score: string | null }>(
+      `WITH input AS (
+         SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::numeric[]) AS t(student_id, component_id, score)
+       ),
+       prev AS (
+         SELECT s.id, s.score
+         FROM scores s
+         JOIN input i ON i.student_id = s.student_id AND i.component_id = s.component_id
+         WHERE s.subject_id = $5 AND s.term_id = $6
+       ),
+       up AS (
+         INSERT INTO scores (school_id, student_id, subject_id, term_id, component_id, score, entered_by)
+         SELECT $4, i.student_id, $5, $6, i.component_id, i.score, $7 FROM input i
          ON CONFLICT (student_id, subject_id, term_id, component_id) DO UPDATE
            SET score = EXCLUDED.score, entered_by = EXCLUDED.entered_by, updated_at = NOW()
          RETURNING id, school_id, student_id, subject_id, term_id, component_id, score,
-                   entered_by, entered_at, updated_at`,
-        [schoolId, student_id, subjectId, termId, component_id, score, enteredBy]
+                   entered_by, entered_at, updated_at
+       )
+       SELECT up.*, prev.score::text AS previous_score
+       FROM up LEFT JOIN prev ON prev.id = up.id`,
+      [
+        entries.map(e => e.student_id),
+        entries.map(e => e.component_id),
+        entries.map(e => e.score),
+        schoolId, subjectId, termId, enteredBy,
+      ]
+    );
+
+    const changed = upsert.rows.filter(
+      r => r.previous_score === null || Number(r.previous_score) !== Number(r.score)
+    );
+
+    if (changed.length > 0) {
+      const support = opts.supportSession
+        ? { performed_by_admin: opts.supportSession.realAdminId, support_session_id: opts.supportSession.sessionId }
+        : null;
+      await client.query(
+        `INSERT INTO audit_logs (school_id, user_id, action_type, entity, entity_id, old_value, new_value)
+         SELECT $1, $2, t.action_type, 'scores', t.entity_id, t.old_value, t.new_value
+         FROM unnest($3::text[], $4::uuid[], $5::jsonb[], $6::jsonb[])
+           AS t(action_type, entity_id, old_value, new_value)`,
+        [
+          schoolId,
+          enteredBy,
+          changed.map(r => (r.previous_score === null ? 'SCORE_ENTERED' : 'SCORE_UPDATED')),
+          changed.map(r => r.id),
+          changed.map(r => (r.previous_score === null ? null : JSON.stringify({ score: Number(r.previous_score) }))),
+          changed.map(r => JSON.stringify({
+            score: Number(r.score),
+            student_id: r.student_id,
+            subject_id: subjectId,
+            class_id: classId,
+            component_id: r.component_id,
+            source: 'bulk',
+            ...(support ? { _support: support } : {}),
+          })),
+        ]
       );
-      saved.push(row.rows[0]);
     }
 
     await client.query('COMMIT');
+    const saved: ScoreRow[] = upsert.rows.map(({ previous_score: _p, ...row }) => row);
     return { saved, errors: [] };
   } catch (err) {
     await client.query('ROLLBACK');
