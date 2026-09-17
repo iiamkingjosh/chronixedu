@@ -15,6 +15,7 @@ export interface SubjectCompletionResult {
   total_students: number;
   fully_scored: number;
   missing: MissingScore[]; // students with ≥1 component unscored
+  no_config?: boolean;     // no assessment configuration resolves for this class+subject
 }
 
 export interface StudentWithStatus {
@@ -37,6 +38,8 @@ export interface ClassSubjectAssignment {
 }
 
 export interface SubjectStatusInfo {
+  submission_status: 'draft' | 'submitted';
+  submitted_at: string | null;
   subject_id: string;
   subject_name: string;
   subject_code: string;
@@ -63,7 +66,8 @@ export interface ClassDashboardEntry {
   subjects: SubjectStatusInfo[];
   status_summary: ClassStatusSummary;
   all_subjects_complete: boolean;
-  can_approve: boolean;  // all subjects complete AND all students submitted
+  all_subjects_submitted: boolean;
+  can_approve: boolean;  // every assigned subject complete AND submitted, and no student already approved/published
   can_publish: boolean;  // all students approved
 }
 
@@ -135,7 +139,7 @@ export async function checkSubjectCompletion(
 ): Promise<SubjectCompletionResult> {
   const config = await resolveAssessmentConfig(schoolId, classId, subjectId, termId);
   if (!config || config.components.length === 0) {
-    return { total_students: 0, fully_scored: 0, missing: [] };
+    return { total_students: 0, fully_scored: 0, missing: [], no_config: true };
   }
 
   const studentsRes = await pool.query<{
@@ -218,6 +222,70 @@ export async function batchUpsertStatuses(
       [studentIds, termId, schoolId, newStatus, updatedBy]
     );
   }
+}
+
+// ── Subject-level submission (AUDIT C-2) ──────────────────────────────────────
+
+export interface SubjectSubmissionRow {
+  subject_id: string;
+  status: 'draft' | 'submitted';
+  submitted_at: string | null;
+}
+
+export async function getClassSubjectStatuses(
+  classId: string,
+  termId: string,
+  schoolId: string
+): Promise<Map<string, SubjectSubmissionRow>> {
+  const result = await pool.query<SubjectSubmissionRow>(
+    `SELECT subject_id, status, submitted_at::text AS submitted_at
+     FROM subject_result_status
+     WHERE class_id = $1 AND term_id = $2 AND school_id = $3`,
+    [classId, termId, schoolId]
+  );
+  return new Map(result.rows.map(r => [r.subject_id, r]));
+}
+
+/** Marks one class+subject as submitted. Returns false if it was already submitted. */
+export async function markSubjectSubmitted(
+  schoolId: string,
+  classId: string,
+  subjectId: string,
+  termId: string,
+  userId: string
+): Promise<boolean> {
+  const result = await pool.query(
+    `INSERT INTO subject_result_status
+       (school_id, class_id, subject_id, term_id, status, submitted_by, submitted_at, updated_at)
+     VALUES ($1, $2, $3, $4, 'submitted', $5, NOW(), NOW())
+     ON CONFLICT (class_id, subject_id, term_id) DO UPDATE
+       SET status = 'submitted', submitted_by = EXCLUDED.submitted_by,
+           submitted_at = NOW(), updated_at = NOW()
+       WHERE subject_result_status.status = 'draft'
+     RETURNING id`,
+    [schoolId, classId, subjectId, termId, userId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** Returns submitted subjects (all, or one) to draft. Returns the subject ids reset. */
+export async function returnSubjectsToDraft(
+  schoolId: string,
+  classId: string,
+  termId: string,
+  userId: string,
+  reason: string,
+  subjectId?: string
+): Promise<string[]> {
+  const result = await pool.query<{ subject_id: string }>(
+    `UPDATE subject_result_status
+     SET status = 'draft', returned_by = $4, returned_at = NOW(), return_reason = $5, updated_at = NOW()
+     WHERE school_id = $1 AND class_id = $2 AND term_id = $3 AND status = 'submitted'
+       AND ($6::uuid IS NULL OR subject_id = $6::uuid)
+     RETURNING subject_id`,
+    [schoolId, classId, termId, userId, reason, subjectId ?? null]
+  );
+  return result.rows.map(r => r.subject_id);
 }
 
 /** Subject+teacher assignments for a class — used in submit auth check and dashboard. */
@@ -326,6 +394,16 @@ export async function getApprovalDashboard(
       )
     : { rows: [] };
 
+  // 4b. Subject submission statuses for these classes
+  const subjStatusRes = await pool.query<{ class_id: string; subject_id: string; status: 'draft' | 'submitted'; submitted_at: string | null }>(
+    `SELECT class_id, subject_id, status, submitted_at::text AS submitted_at
+     FROM subject_result_status
+     WHERE class_id = ANY($1::uuid[]) AND term_id = $2 AND school_id = $3`,
+    [classIds, termId, schoolId]
+  );
+  const subjStatusIndex = new Map<string, { status: 'draft' | 'submitted'; submitted_at: string | null }>();
+  for (const r of subjStatusRes.rows) subjStatusIndex.set(`${r.class_id}:${r.subject_id}`, r);
+
   // 5. All assessment configs for this term+school, with their components
   const configsRes = await pool.query<BulkConfig & { id: string }>(
     `SELECT ac.id, ac.subject_id, ac.class_level, ac.is_default,
@@ -385,7 +463,10 @@ export async function getApprovalDashboard(
 
       const total      = students.length;
       const isComplete = total > 0 && compIds.length > 0 && fullyScored === total;
+      const sub        = subjStatusIndex.get(`${cls.class_id}:${asgn.subject_id}`);
       return {
+        submission_status:     sub?.status ?? 'draft',
+        submitted_at:          sub?.submitted_at ?? null,
         subject_id:            asgn.subject_id,
         subject_name:          asgn.subject_name,
         subject_code:          asgn.subject_code,
@@ -398,9 +479,11 @@ export async function getApprovalDashboard(
       };
     });
 
-    const allSubjectsComplete = asgns.length > 0 && subjectStatuses.every(s => s.is_complete);
+    const allSubjectsComplete  = asgns.length > 0 && subjectStatuses.every(s => s.is_complete);
+    const allSubjectsSubmitted = asgns.length > 0 && subjectStatuses.every(s => s.submission_status === 'submitted');
     const n = students.length;
-    const canApprove = allSubjectsComplete && n > 0 && statusSummary.submitted === n;
+    const canApprove = allSubjectsComplete && allSubjectsSubmitted && n > 0
+      && statusSummary.approved === 0 && statusSummary.published === 0;
     const canPublish  = n > 0 && statusSummary.approved === n;
 
     return {
@@ -411,6 +494,7 @@ export async function getApprovalDashboard(
       subjects:             subjectStatuses,
       status_summary:       statusSummary,
       all_subjects_complete: allSubjectsComplete,
+      all_subjects_submitted: allSubjectsSubmitted,
       can_approve:  canApprove,
       can_publish:  canPublish,
     };

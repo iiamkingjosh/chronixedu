@@ -131,8 +131,11 @@ export async function checkPublishedResultsExist(schoolId: string): Promise<bool
 export async function checkSubmittedResultsExist(schoolId: string): Promise<boolean> {
   try {
     const result = await pool.query(
-      `SELECT COUNT(*)::text AS count FROM result_status
-       WHERE school_id = $1 AND status = 'submitted'::chronixedu_result_status`,
+      `SELECT (
+         (SELECT COUNT(*) FROM subject_result_status WHERE school_id = $1 AND status = 'submitted')
+         + (SELECT COUNT(*) FROM result_status
+            WHERE school_id = $1 AND status IN ('submitted', 'approved'))
+       )::text AS count`,
       [schoolId]
     );
     return parseInt(result.rows[0]?.count ?? '0', 10) > 0;

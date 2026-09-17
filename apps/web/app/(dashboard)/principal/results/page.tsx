@@ -1,12 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface SubjectStatusInfo {
+  submission_status: 'draft' | 'submitted';
+  submitted_at: string | null;
   subject_id: string;
   subject_name: string;
   subject_code: string;
@@ -33,6 +38,7 @@ interface ClassDashboardEntry {
   subjects: SubjectStatusInfo[];
   status_summary: ClassStatusSummary;
   all_subjects_complete: boolean;
+  all_subjects_submitted: boolean;
   can_approve: boolean;
   can_publish: boolean;
 }
@@ -149,6 +155,56 @@ function SummaryBadge({ label, count, tone }: { label: string; count: number; to
   return <span className={badgeClass(tone)}>{label}: {count}</span>;
 }
 
+// ── Return-to-teacher modal ───────────────────────────────────────────────────
+
+const returnSchema = z.object({
+  reason: z.string().trim().min(10, 'Please give the teacher at least 10 characters of explanation'),
+});
+type ReturnForm = z.infer<typeof returnSchema>;
+
+function ReturnModal({
+  heading, description, confirming, onClose, onConfirm,
+}: {
+  heading: string;
+  description: string;
+  confirming: boolean;
+  onClose: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const { register, handleSubmit, formState: { errors } } = useForm<ReturnForm>({
+    resolver: zodResolver(returnSchema),
+    defaultValues: { reason: '' },
+  });
+  return (
+    <Modal title={heading} onClose={onClose}>
+      <form onSubmit={handleSubmit(v => onConfirm(v.reason))} className="space-y-4">
+        <p className="text-sm text-gray-600">{description}</p>
+        <div>
+          <label htmlFor="return-reason" className="block text-sm font-medium text-gray-700 mb-1">Reason for the teacher</label>
+          <textarea
+            id="return-reason"
+            rows={3}
+            {...register('reason')}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+            placeholder="e.g. Exam scores for 3 students look swapped — please recheck."
+          />
+          {errors.reason && <p className="mt-1 text-xs text-red-600">{errors.reason.message}</p>}
+        </div>
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+          <button
+            type="submit"
+            disabled={confirming}
+            className="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-lg hover:bg-amber-700 disabled:opacity-40"
+          >
+            {confirming ? 'Returning…' : 'Return to teacher'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function PrincipalResultsPage() {
@@ -164,6 +220,8 @@ export default function PrincipalResultsPage() {
 
   const [approveOpen, setApproveOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  // null = closed; { subject } = return one subject; { subject: null } = return whole class
+  const [returnTarget, setReturnTarget] = useState<{ subject: SubjectStatusInfo | null } | null>(null);
   const [acting, setActing] = useState(false);
 
   const load = useCallback(() => {
@@ -235,6 +293,32 @@ export default function PrincipalResultsPage() {
     }
   }
 
+  async function handleReturn(reason: string) {
+    if (!schoolId || !selectedClass || !termId || !returnTarget) return;
+    setActing(true);
+    try {
+      const res = await apiFetch<{ success: boolean; data: { message: string } }>(
+        `/api/schools/${schoolId}/results/return`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            class_id: selectedClass.class_id,
+            term_id: termId,
+            reason,
+            ...(returnTarget.subject ? { subject_id: returnTarget.subject.subject_id } : {}),
+          }),
+        }
+      );
+      show(res.data.message);
+      setReturnTarget(null);
+      load();
+    } catch (err: unknown) {
+      show(err instanceof Error ? err.message : 'Failed to return results', 'error');
+    } finally {
+      setActing(false);
+    }
+  }
+
   if (!schoolId || loading) {
     return <div className="max-w-5xl mx-auto p-8"><p className="text-sm text-gray-500">Loading approval dashboard…</p></div>;
   }
@@ -290,17 +374,32 @@ export default function PrincipalResultsPage() {
                 <div>
                   <h2 className="text-base font-semibold text-gray-900">{selectedClass.class_name} ({selectedClass.class_level})</h2>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    <SummaryBadge label="Draft" count={selectedClass.status_summary.draft} tone="gray" />
-                    <SummaryBadge label="Submitted" count={selectedClass.status_summary.submitted} tone="blue" />
+                    <span className={badgeClass('blue')}>
+                      Subjects submitted: {selectedClass.subjects.filter(s => s.submission_status === 'submitted').length} / {selectedClass.subjects.length}
+                    </span>
                     <SummaryBadge label="Approved" count={selectedClass.status_summary.approved} tone="amber" />
                     <SummaryBadge label="Published" count={selectedClass.status_summary.published} tone="green" />
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {selectedClass.status_summary.published === 0 &&
+                    (selectedClass.status_summary.approved > 0 ||
+                      selectedClass.subjects.some(s => s.submission_status === 'submitted')) && (
+                    <button
+                      onClick={() => setReturnTarget({ subject: null })}
+                      className="px-4 py-2 border border-amber-300 text-amber-700 text-sm font-medium rounded-lg hover:bg-amber-50"
+                    >
+                      Return class
+                    </button>
+                  )}
                   <button
                     onClick={() => setApproveOpen(true)}
                     disabled={!selectedClass.can_approve}
-                    title={!selectedClass.can_approve ? 'All subjects must be submitted before results can be approved' : undefined}
+                    title={!selectedClass.can_approve
+                      ? (selectedClass.status_summary.approved + selectedClass.status_summary.published > 0
+                          ? 'This class has already been approved'
+                          : 'Every subject must be complete and submitted by its teacher before approval')
+                      : undefined}
                     className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Approve results
@@ -325,6 +424,7 @@ export default function PrincipalResultsPage() {
                     <th className="text-left px-5 py-2.5 font-medium">Scored</th>
                     <th className="text-left px-5 py-2.5 font-medium">Completion</th>
                     <th className="text-left px-5 py-2.5 font-medium">Status</th>
+                    <th className="px-5 py-2.5"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -337,9 +437,23 @@ export default function PrincipalResultsPage() {
                       <td className="px-5 py-3 text-gray-600">{subject.fully_scored_students} / {subject.total_students}</td>
                       <td className="px-5 py-3 text-gray-600">{Number(subject.completion_pct)}%</td>
                       <td className="px-5 py-3">
-                        {subject.is_complete
-                          ? <span className={badgeClass('green')}>Complete</span>
-                          : <span className={badgeClass('amber')}>Incomplete</span>}
+                        {subject.submission_status === 'submitted'
+                          ? <span className={badgeClass('blue')}>Submitted</span>
+                          : subject.is_complete
+                            ? <span className={badgeClass('gray')}>Complete — not submitted</span>
+                            : <span className={badgeClass('amber')}>Incomplete</span>}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        {subject.submission_status === 'submitted'
+                          && selectedClass.status_summary.approved === 0
+                          && selectedClass.status_summary.published === 0 && (
+                          <button
+                            onClick={() => setReturnTarget({ subject })}
+                            className="text-xs font-medium text-amber-700 hover:underline"
+                          >
+                            Return
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -364,9 +478,8 @@ export default function PrincipalResultsPage() {
               body: (
                 <p>
                   All {selectedClass.subjects.length} subject(s) for this class have been submitted.
-                  Approving will move {selectedClass.status_summary.submitted} student result(s) from
-                  <span className="font-medium"> submitted</span> to <span className="font-medium">approved</span>,
-                  and unlock report card generation and publishing.
+                  Approving will lock all {selectedClass.total_students} student result(s) as
+                  <span className="font-medium"> approved</span> and unlock report card generation and publishing.
                 </p>
               ),
             },
@@ -381,6 +494,18 @@ export default function PrincipalResultsPage() {
               ),
             },
           ]}
+        />
+      )}
+
+      {returnTarget && selectedClass && (
+        <ReturnModal
+          heading={returnTarget.subject ? `Return ${returnTarget.subject.subject_name}` : `Return ${selectedClass.class_name}`}
+          description={returnTarget.subject
+            ? `${returnTarget.subject.teacher_name} will be able to edit ${returnTarget.subject.subject_name} scores for ${selectedClass.class_name} again, and will be notified with your reason.`
+            : `Every submitted subject in ${selectedClass.class_name} goes back to its teacher for editing${selectedClass.status_summary.approved > 0 ? ', and the class approval is undone' : ''}. All assigned teachers will be notified.`}
+          confirming={acting}
+          onClose={() => setReturnTarget(null)}
+          onConfirm={handleReturn}
         />
       )}
 
