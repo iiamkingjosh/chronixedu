@@ -147,11 +147,13 @@ export async function bulkUpsertScores(
   lockedStudents: Set<string>,
   enrolledStudents: Set<string>
 ): Promise<BulkUpsertResult> {
-  const client = await pool.connect();
   const saved: ScoreRow[] = [];
   const errors: BulkValidationError[] = [];
 
-  // Validate all entries before touching the DB
+  // Validate all entries before touching the DB — deliberately no pool
+  // connection is held during this loop, since acquiring one here and only
+  // releasing it in the write path's finally block leaked a connection on
+  // every rejected (validation-error) request.
   for (let i = 0; i < entries.length; i++) {
     const { student_id, component_id, score } = entries[i];
 
@@ -179,6 +181,7 @@ export async function bulkUpsertScores(
     return { saved: [], errors };
   }
 
+  const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
