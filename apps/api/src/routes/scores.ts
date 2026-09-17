@@ -5,15 +5,16 @@ import { logAudit } from '../db/queries/auditLog';
 import { getActiveTerm } from '../db/queries/roster';
 import {
   checkTeacherAssigned,
-  getComponentInfo,
   getResultStatus,
   getExistingScore,
+  getEnrolledStudentIds,
   upsertScore,
   bulkUpsertScores,
   getClassSheet,
   getMyPendingAssignments,
   ComponentInfo,
 } from '../db/queries/scores';
+import { resolveAssessmentConfig } from '../db/queries/assessmentConfig';
 import pool from '../db/client';
 
 const router = Router();
@@ -87,10 +88,31 @@ router.post(
         }
       }
 
-      // (b) Component max_score check
-      const comp = await getComponentInfo(component_id, req.params.schoolId);
+      // (b) Enrollment check — the student being scored must actually be
+      // enrolled in class_id for this term. checkTeacherAssigned above only
+      // proves the teacher owns (subject, class, term); it says nothing
+      // about whose student_id was submitted, and class_id itself is never
+      // stored on the scores row — without this, a legitimately-assigned
+      // teacher could write a score against any student in the school.
+      const enrolled = await getEnrolledStudentIds(req.params.schoolId, class_id, term_id, [student_id]);
+      if (!enrolled.has(student_id)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'STUDENT_NOT_ENROLLED', message: 'This student is not enrolled in the specified class for this term' },
+        });
+      }
+
+      // (c) Component check — the component must belong to the assessment
+      // config actually resolved for this class+subject+term, not merely
+      // exist somewhere in the school. Prevents writing a score under a
+      // component_id that belongs to a different subject's config.
+      const config = await resolveAssessmentConfig(req.params.schoolId, class_id, subject_id, term_id);
+      const comp = config?.components.find(c => c.id === component_id) ?? null;
       if (!comp) {
-        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Assessment component not found' } });
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Assessment component not found for this class, subject, and term' },
+        });
       }
       if (score > Number(comp.max_score)) {
         return res.status(400).json({
@@ -99,7 +121,7 @@ router.post(
         });
       }
 
-      // (c) Result status lock check — submitted/approved/published all block score edits
+      // (d) Result status lock check — submitted/approved/published all block score edits
       const status = await getResultStatus(student_id, term_id, req.params.schoolId);
       if (status && ['submitted', 'approved', 'published'].includes(status)) {
         return res.status(423).json({
@@ -109,7 +131,7 @@ router.post(
       }
 
       // Capture old score for audit log
-      const previous = await getExistingScore(student_id, term_id, component_id);
+      const previous = await getExistingScore(student_id, subject_id, term_id, component_id);
 
       const saved = await upsertScore(req.params.schoolId, student_id, subject_id, term_id, component_id, score, teacherId);
 
@@ -205,22 +227,24 @@ router.post(
       }
 
       // Fetch all unique component_ids and student_ids needed for validation
-      const uniqueComponentIds = [...new Set(entries.map(e => e.component_id))];
-      const uniqueStudentIds   = [...new Set(entries.map(e => e.student_id))];
+      const uniqueStudentIds = [...new Set(entries.map(e => e.student_id))];
 
-      // (b) Load component info for all components in this batch
-      const componentRows = await pool.query<ComponentInfo & { school_id: string }>(
-        `SELECT ac.id, ac.config_id, ac.name, ac.max_score, ac.weight_percent, ac.display_order
-         FROM assessment_components ac
-         JOIN assessment_configs cfg ON cfg.id = ac.config_id
-         WHERE ac.id = ANY($1::uuid[]) AND cfg.school_id = $2`,
-        [uniqueComponentIds, req.params.schoolId]
-      );
+      // (b) Component map is built from the assessment config actually
+      // resolved for this class+subject+term — not from any component that
+      // merely exists somewhere in the school — so a component_id borrowed
+      // from a different subject's config is rejected as "not found" rather
+      // than accepted and written under the wrong subject.
+      const config = await resolveAssessmentConfig(req.params.schoolId, class_id, subject_id, term_id);
       const componentMap = new Map<string, ComponentInfo>(
-        componentRows.rows.map(r => [r.id, r])
+        (config?.components ?? []).map(c => [c.id, c])
       );
 
-      // (c) Load result_status for all students in batch
+      // (c) Enrollment check — every student_id in the batch must actually
+      // be enrolled in class_id for this term (see the single-entry route
+      // for why this can't be inferred from the teacher-assignment check).
+      const enrolledStudents = await getEnrolledStudentIds(req.params.schoolId, class_id, term_id, uniqueStudentIds);
+
+      // (d) Load result_status for all students in batch
       const statusRows = await pool.query<{ student_id: string; status: string }>(
         `SELECT student_id, status FROM result_status
          WHERE student_id = ANY($1::uuid[]) AND term_id = $2 AND school_id = $3`,
@@ -239,7 +263,8 @@ router.post(
         teacherId,
         entries,
         componentMap,
-        lockedStudents
+        lockedStudents,
+        enrolledStudents
       );
 
       if (result.errors.length > 0) {

@@ -42,18 +42,27 @@ export async function checkTeacherAssigned(
   return result.rows.length > 0;
 }
 
-export async function getComponentInfo(
-  componentId: string,
-  schoolId: string
-): Promise<ComponentInfo | null> {
-  const result = await pool.query<ComponentInfo>(
-    `SELECT ac.id, ac.config_id, ac.name, ac.max_score, ac.weight_percent, ac.display_order
-     FROM assessment_components ac
-     JOIN assessment_configs cfg ON cfg.id = ac.config_id
-     WHERE ac.id = $1 AND cfg.school_id = $2`,
-    [componentId, schoolId]
+/** Which of the given students are actually enrolled in classId for the
+ *  term's session — the write endpoints use this to stop a teacher who is
+ *  legitimately assigned to (subjectId, classId, termId) from writing a
+ *  score against a student who isn't in that class at all. */
+export async function getEnrolledStudentIds(
+  schoolId: string,
+  classId: string,
+  termId: string,
+  studentIds: string[]
+): Promise<Set<string>> {
+  if (studentIds.length === 0) return new Set();
+  const result = await pool.query<{ student_id: string }>(
+    `SELECT sc.student_id
+     FROM student_classes sc
+     JOIN students s ON s.id = sc.student_id
+     JOIN terms t ON t.id = $2
+     WHERE sc.class_id = $1 AND sc.session_id = t.session_id
+       AND s.school_id = $3 AND sc.student_id = ANY($4::uuid[])`,
+    [classId, termId, schoolId, studentIds]
   );
-  return result.rows[0] ?? null;
+  return new Set(result.rows.map(r => r.student_id));
 }
 
 export async function getResultStatus(
@@ -68,15 +77,19 @@ export async function getResultStatus(
   return result.rows[0]?.status ?? null;
 }
 
-// Capture existing score before upsert so we can log old_value in audit_logs
+// Capture existing score before upsert so we can log old_value in audit_logs.
+// Scoped by subject_id too, matching the widened uniqueness key below — a
+// component shared across subjects (a school-wide grading scheme) must not
+// return a different subject's row as this subject's "previous" value.
 export async function getExistingScore(
   studentId: string,
+  subjectId: string,
   termId: string,
   componentId: string
 ): Promise<{ id: string; score: number } | null> {
   const result = await pool.query<{ id: string; score: number }>(
-    `SELECT id, score FROM scores WHERE student_id = $1 AND term_id = $2 AND component_id = $3`,
-    [studentId, termId, componentId]
+    `SELECT id, score FROM scores WHERE student_id = $1 AND subject_id = $2 AND term_id = $3 AND component_id = $4`,
+    [studentId, subjectId, termId, componentId]
   );
   return result.rows[0] ?? null;
 }
@@ -95,7 +108,7 @@ export async function upsertScore(
   const result = await pool.query<ScoreRow>(
     `INSERT INTO scores (school_id, student_id, subject_id, term_id, component_id, score, entered_by)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
-     ON CONFLICT (student_id, term_id, component_id) DO UPDATE
+     ON CONFLICT (student_id, subject_id, term_id, component_id) DO UPDATE
        SET score = EXCLUDED.score, entered_by = EXCLUDED.entered_by, updated_at = NOW()
      RETURNING id, school_id, student_id, subject_id, term_id, component_id, score,
                entered_by, entered_at, updated_at`,
@@ -131,7 +144,8 @@ export async function bulkUpsertScores(
   enteredBy: string,
   entries: BulkEntry[],
   componentMap: Map<string, ComponentInfo>,
-  lockedStudents: Set<string>
+  lockedStudents: Set<string>,
+  enrolledStudents: Set<string>
 ): Promise<BulkUpsertResult> {
   const client = await pool.connect();
   const saved: ScoreRow[] = [];
@@ -140,10 +154,16 @@ export async function bulkUpsertScores(
   // Validate all entries before touching the DB
   for (let i = 0; i < entries.length; i++) {
     const { student_id, component_id, score } = entries[i];
+
+    if (!enrolledStudents.has(student_id)) {
+      errors.push({ index: i, student_id, component_id, reason: `Student ${student_id} is not enrolled in this class` });
+      continue;
+    }
+
     const comp = componentMap.get(component_id);
 
     if (!comp) {
-      errors.push({ index: i, student_id, component_id, reason: `Component ${component_id} not found or not in this school` });
+      errors.push({ index: i, student_id, component_id, reason: `Component ${component_id} is not part of the assessment config for this class/subject/term` });
       continue;
     }
     if (score > Number(comp.max_score)) {
@@ -166,7 +186,7 @@ export async function bulkUpsertScores(
       const row = await client.query<ScoreRow>(
         `INSERT INTO scores (school_id, student_id, subject_id, term_id, component_id, score, entered_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (student_id, term_id, component_id) DO UPDATE
+         ON CONFLICT (student_id, subject_id, term_id, component_id) DO UPDATE
            SET score = EXCLUDED.score, entered_by = EXCLUDED.entered_by, updated_at = NOW()
          RETURNING id, school_id, student_id, subject_id, term_id, component_id, score,
                    entered_by, entered_at, updated_at`,
