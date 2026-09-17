@@ -234,6 +234,32 @@ export default function StudentBulkImportPage() {
             {commitResult.failed > 0 && <span className="text-red-600">, {commitResult.failed} failed</span>}
           </p>
 
+          {commitResult.created > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
+                    <th className="px-4 py-2">Student</th>
+                    <th className="px-4 py-2">Admission No.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {commitResult.results.filter(r => r.status === 'created').map(r => {
+                    const previewRow = rows.find(row => row.row_number === r.row_number);
+                    return (
+                      <tr key={r.row_number}>
+                        <td className="px-4 py-2">
+                          {previewRow ? `${previewRow.student.first_name} ${previewRow.student.last_name}` : `Row ${r.row_number}`}
+                        </td>
+                        <td className="px-4 py-2 font-mono text-gray-700">{r.admission_no}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {commitResult.failed > 0 && (
             <div className="space-y-1">
               {commitResult.results.filter(r => r.status === 'failed').map(r => (

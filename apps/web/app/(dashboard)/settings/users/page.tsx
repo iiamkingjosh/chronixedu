@@ -596,6 +596,14 @@ export default function UsersPage() {
               {credentials.user.email} &nbsp;/&nbsp; {credentials.temp_password}
             </p>
             <p className="text-xs text-green-600 mt-1">This temporary password is shown only once. The user should change it on first login.</p>
+            {credentials.user.role === 'teacher' && (
+              <p className="text-xs text-green-700 mt-2">
+                This teacher isn&apos;t assigned to any class or subject yet.{' '}
+                <Link href="/settings/roster" className="font-medium underline hover:text-green-900">
+                  Assign them now →
+                </Link>
+              </p>
+            )}
           </div>
           <button onClick={() => setCredentials(null)} className="text-green-500 hover:text-green-700">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

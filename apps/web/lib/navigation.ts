@@ -6,6 +6,7 @@ export interface NavItem {
 export const PRINCIPAL_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/principal/dashboard' },
   { label: 'Analytics', href: '/principal/analytics' },
+  { label: 'Students', href: '/registrar/students' },
   { label: 'Timetable', href: '/principal/timetable' },
   { label: 'Results', href: '/principal/results' },
   { label: 'Report Cards', href: '/principal/report-cards' },
