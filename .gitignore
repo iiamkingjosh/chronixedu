@@ -47,3 +47,13 @@ Cookies101.txt
 Privacy101.txt
 Terms of service.txt
 chronixedu-legal-documents-for-review.html
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Local build/extraction artefacts (AUDIT L-hygiene)
+apps/web/tsc_out.txt
+ChronixEdu_AgentFile_strings.txt
+ChronixEdu_ToDo (1).pdf
+extract_pdf_*.ps1
+extract_pdf_*.py
