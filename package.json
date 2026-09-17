@@ -18,7 +18,9 @@
     "migrate": "npm --workspace=@chronixedu/api run migrate",
     "test:isolation": "npm --workspace=@chronixedu/api run test -- --testPathPattern=tests/",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
-    "prepare": "node -e \"if(!process.env.CI && require('fs').existsSync('.git')) process.exit(1)\" || husky install"
+    "prepare": "node -e \"if(!process.env.CI && require('fs').existsSync('.git')) process.exit(1)\" || husky install",
+    "test:db": "npm --workspace=@chronixedu/api run test:db",
+    "test:integration:local": "npm --workspace=@chronixedu/api run test:integration:local"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.4",

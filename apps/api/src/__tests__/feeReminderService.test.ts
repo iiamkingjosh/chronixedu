@@ -196,7 +196,7 @@ describe('startFeeReminderCron / stopFeeReminderCron', () => {
 
     startFeeReminderCron();
 
-    expect(mockCron.schedule).toHaveBeenCalledWith('0 8 * * 1', expect.any(Function));
+    expect(mockCron.schedule).toHaveBeenCalledWith('0 8 * * 1', expect.any(Function), { timezone: 'Africa/Lagos' });
   });
 
   it('does not schedule a second job if already running', () => {

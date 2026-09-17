@@ -32,6 +32,9 @@ schoolApp.use('/api/schools', detectSupportSession);
 schoolApp.use('/api/schools', teacherDashboardRouter);
 schoolApp.use(errorHandler);
 
+// Steps that create Supabase Auth users need a real Supabase project.
+const itLiveAuth = /\.supabase\.co/.test(process.env.SUPABASE_URL ?? '') ? it : it.skip;
+
 function makeToken(userId: string, role: string, schoolId: string | null, email: string) {
   return jwt.sign({ user_id: userId, role, school_id: schoolId, email }, process.env.JWT_SECRET!, { expiresIn: '1h' });
 }
@@ -39,6 +42,7 @@ function makeToken(userId: string, role: string, schoolId: string | null, email:
 describe('superAdmin — platform school management', () => {
   let superAdminUserId: string;
   let superAdminToken: string;
+  let rootAdminToken: string;
   let testSchoolId: string;
   const testSchoolSlug = `test-superadmin-${randomUUID()}`;
 
@@ -53,6 +57,8 @@ describe('superAdmin — platform school management', () => {
 
     const userRow = await pool.query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [superAdminUserId]);
     superAdminToken = makeToken(superAdminUserId, 'super_admin', null, userRow.rows[0].email);
+    // DELETE /schools/:schoolId/data is root-admin only (AUDIT H-3).
+    rootAdminToken = makeToken(superAdminUserId, 'super_admin', null, process.env.ROOT_ADMIN_EMAIL!);
 
     const schoolResult = await pool.query<{ id: string }>(
       `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
@@ -148,19 +154,28 @@ describe('superAdmin — platform school management', () => {
 
   // ── DELETE /schools/:schoolId/data ─────────────────────────────────────────
 
-  it('DELETE /schools/:schoolId/data — wrong confirmation_token → 400 CONFIRMATION_FAILED', async () => {
+  it('DELETE /schools/:schoolId/data — non-root super_admin → 403 ROOT_ADMIN_REQUIRED', async () => {
     const res = await request(app)
       .delete(`/api/super-admin/schools/${testSchoolId}/data`)
       .set('Authorization', `Bearer ${superAdminToken}`)
+      .send({ confirmation_token: testSchoolSlug });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('ROOT_ADMIN_REQUIRED');
+  });
+
+  it('DELETE /schools/:schoolId/data — wrong confirmation_token → 400 CONFIRMATION_FAILED', async () => {
+    const res = await request(app)
+      .delete(`/api/super-admin/schools/${testSchoolId}/data`)
+      .set('Authorization', `Bearer ${rootAdminToken}`)
       .send({ confirmation_token: 'wrong-token' });
     expect(res.status).toBe(400);
-    expect(res.body.code).toBe('CONFIRMATION_FAILED');
+    expect(res.body.error.code).toBe('CONFIRMATION_FAILED');
   });
 
   it('DELETE /schools/:schoolId/data — correct slug → 200', async () => {
     const res = await request(app)
       .delete(`/api/super-admin/schools/${testSchoolId}/data`)
-      .set('Authorization', `Bearer ${superAdminToken}`)
+      .set('Authorization', `Bearer ${rootAdminToken}`)
       .send({ confirmation_token: testSchoolSlug });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -597,7 +612,7 @@ describe('superAdmin — platform school management', () => {
       expect(res.status).toBe(400);
     });
 
-    it('PATCH /onboarding/:sessionId/step/6 — valid principal data → 200, has temp_password in response', async () => {
+    itLiveAuth('PATCH /onboarding/:sessionId/step/6 — valid principal data → 200, has temp_password in response', async () => {
       const res = await request(app)
         .patch(`/api/super-admin/onboarding/${sessionId}/step/6`)
         .set('Authorization', `Bearer ${superAdminToken}`)
@@ -624,7 +639,7 @@ describe('superAdmin — platform school management', () => {
       expect(res.body.error.code).toBe('INCOMPLETE_WIZARD');
     });
 
-    it('POST /onboarding/:sessionId/complete — after completing steps 1-6 → 200, school is_active=true', async () => {
+    itLiveAuth('POST /onboarding/:sessionId/complete — after completing steps 1-6 → 200, school is_active=true', async () => {
       const step2Res = await request(app)
         .patch(`/api/super-admin/onboarding/${sessionId}/step/2`)
         .set('Authorization', `Bearer ${superAdminToken}`)

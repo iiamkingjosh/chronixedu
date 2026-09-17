@@ -27,11 +27,6 @@ const admin = createClient(
   }
 );
 
-// Debug: verify admin client role
-admin.from('schools').select('count').limit(1).then(({ data: _data, error, status }) => {
-  console.log('Admin client test - status:', status, 'error:', error?.message ?? 'none');
-});
-
 function anonClientWithToken(accessToken: string) {
   return createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
@@ -50,10 +45,6 @@ describe('T3 — RLS tenant isolation: School A cannot read School B data', () =
   let tokenB: string;
 
   beforeAll(async () => {
-    console.log('SUPABASE_URL loaded:', !!process.env.SUPABASE_URL);
-    console.log('SERVICE_ROLE_KEY loaded:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
-    console.log('SERVICE_ROLE_KEY prefix:', process.env.SUPABASE_SERVICE_ROLE_KEY?.slice(0, 30));
-
     // 1. Insert school records via service role (bypasses RLS)
     const { error: errA } = await admin.from('schools').insert({
       id:   schoolAId,
