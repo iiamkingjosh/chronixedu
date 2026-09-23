@@ -11,6 +11,10 @@ import studentsRoutes from '../routes/students';
 import feesRoutes from '../routes/fees';
 import dashboardRoutes from '../routes/dashboard';
 import teacherDashboardRoutes from '../routes/teacherDashboard';
+import parentRoutes from '../routes/parent';
+import studentRoutes from '../routes/student';
+import usersRoutes from '../routes/users';
+import sessionsRoutes from '../routes/sessions';
 
 // Fixed RFC-4122 v4 ids so zod's uuid() accepts them.
 const id = (prefix: string, n: number) => `${prefix}000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -37,6 +41,9 @@ export const IDS = {
   s2: id('60', 2),
   s3OtherClass: id('60', 3),
   sOtherSchool: id('60', 9),
+  // Parent of s1, and s1's own login — used by the publish-gate tests (AUDIT R10-H1).
+  parentA: id('30', 5),
+  s1User: id('39', 1),
 };
 
 export function token(userId: string, role: string, schoolId: string): string {
@@ -51,13 +58,15 @@ export const tokens = {
   english: () => token(IDS.engTeacher, 'teacher', IDS.schoolA),
   principalA: () => token(IDS.principalA, 'principal', IDS.schoolA),
   principalB: () => token(IDS.principalB, 'principal', IDS.schoolB),
+  parentA: () => token(IDS.parentA, 'parent', IDS.schoolA),
+  studentS1: () => token(IDS.s1User, 'student', IDS.schoolA),
 };
 
 export function buildApp(): express.Express {
   const app = express();
   app.use(express.json());
   app.use('/api/schools', detectSupportSession, verifyToken, requirePasswordChanged, requireActiveSchool);
-  for (const r of [scoresRoutes, resultsRoutes, studentsRoutes, feesRoutes, dashboardRoutes, teacherDashboardRoutes]) {
+  for (const r of [scoresRoutes, resultsRoutes, studentsRoutes, feesRoutes, dashboardRoutes, teacherDashboardRoutes, parentRoutes, studentRoutes, usersRoutes, sessionsRoutes]) {
     app.use('/api/schools', r);
   }
   app.use(errorHandler);
@@ -105,6 +114,11 @@ export async function seed(): Promise<void> {
 
   await q(`INSERT INTO student_classes (student_id, class_id, session_id) VALUES ($1,$3,$4),($2,$3,$4),($5,$6,$4)`,
     [I.s1, I.s2, I.jss2a, I.sessionA, I.s3OtherClass, I.jss3b]);
+
+  // Parent of s1 only — lets the publish-gate tests exercise a real linked parent.
+  await user(I.parentA, I.schoolA, 'parent', 'ParentA');
+  await q(`INSERT INTO parent_students (parent_id, student_id, relationship_type, is_primary_contact)
+           VALUES ($1,$2,'mother',true)`, [I.parentA, I.s1]);
   await q(`INSERT INTO teacher_assignments (teacher_id, class_id, subject_id, term_id, school_id) VALUES ($1,$3,$4,$6,$7),($2,$3,$5,$6,$7)`,
     [I.mathTeacher, I.engTeacher, I.jss2a, I.math, I.english, I.termA, I.schoolA]);
 

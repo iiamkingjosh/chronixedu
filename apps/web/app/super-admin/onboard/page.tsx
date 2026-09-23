@@ -324,10 +324,51 @@ const termSchema = z.object({
   path: ['end_date'],
 });
 
-const step3Schema = z.object({
-  session_name: z.string().min(1, 'Required'),
-  terms: z.array(termSchema).length(3),
+/** A term row that may be left entirely blank — but if any field is filled, all are
+ *  required. Only the first term is mandatory at onboarding; the rest are usually
+ *  unknown at sign-up and can be added later from Settings → Academic Structure. */
+const wizardTermRowSchema = z.object({
+  name: z.string(),
+  start_date: z.string(),
+  end_date: z.string(),
 });
+
+const step3Schema = z
+  .object({
+    session_name: z.string().min(1, 'Required'),
+    terms: z.array(wizardTermRowSchema).length(3),
+  })
+  .superRefine((data, ctx) => {
+    data.terms.forEach((term, i) => {
+      const touched = [term.name, term.start_date, term.end_date].some(v => v.trim() !== '');
+      const required = i === 0 || touched;
+      if (!required) return;
+
+      (['name', 'start_date', 'end_date'] as const).forEach(field => {
+        if (term[field].trim() === '') {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required', path: ['terms', i, field] });
+        }
+      });
+      if (term.start_date && term.end_date && new Date(term.end_date) <= new Date(term.start_date)) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'End date must be after start date', path: ['terms', i, 'end_date'] });
+      }
+    });
+
+    // Terms must not overlap — the API resolves a date to a term without tie-breaking.
+    const filled = data.terms
+      .map((t, i) => ({ ...t, i }))
+      .filter(t => t.start_date && t.end_date && new Date(t.end_date) > new Date(t.start_date))
+      .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+    for (let n = 1; n < filled.length; n++) {
+      if (new Date(filled[n].start_date) <= new Date(filled[n - 1].end_date)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Overlaps "${filled[n - 1].name || 'the previous term'}"`,
+          path: ['terms', filled[n].i, 'start_date'],
+        });
+      }
+    }
+  });
 type Step3Form = z.infer<typeof step3Schema>;
 
 function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
@@ -340,9 +381,11 @@ function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext
 
   async function onSubmit(values: Step3Form) {
     setApiError('');
+    // Blank rows mean "not known yet" — drop them rather than sending empty dates.
+    const terms = values.terms.filter(t => t.name.trim() && t.start_date && t.end_date);
     try {
-      await saveOnboardingStep(wizard.sessionId, 3, values);
-      onNext({ sessionName: values.session_name, terms: values.terms });
+      await saveOnboardingStep(wizard.sessionId, 3, { session_name: values.session_name, terms });
+      onNext({ sessionName: values.session_name, terms });
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : 'Failed to save academic calendar');
     }
@@ -353,9 +396,17 @@ function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext
       <Field label="Session Name" error={errors.session_name?.message}>
         <input {...register('session_name')} className={inputClass} placeholder="2025/2026" />
       </Field>
+      <p className="text-xs text-gray-500">
+        Only the term the school is starting in is required. Later terms can be added
+        any time from Settings → Academic Structure, and dates stay editable if the
+        calendar shifts.
+      </p>
       <div className="space-y-3">
         {wizard.terms.map((_, i) => (
           <div key={i} className="grid grid-cols-1 sm:grid-cols-3 gap-3 border border-gray-200 rounded-lg p-3">
+            {i > 0 && (
+              <p className="sm:col-span-3 -mb-1 text-xs font-medium text-gray-400">Optional — leave blank if not yet decided</p>
+            )}
             <Field label="Term Name" error={errors.terms?.[i]?.name?.message}>
               <input {...register(`terms.${i}.name`)} className={inputClass} />
             </Field>
@@ -705,7 +756,9 @@ function Step7Review({ wizard, onBack, onComplete }: {
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Academic Session</h3>
         <p className="text-sm text-gray-900 mb-1">{wizard.sessionName}</p>
         <ul className="text-sm text-gray-600 space-y-0.5">
-          {wizard.terms.map((t, i) => <li key={i}>{t.name}: {t.start_date} – {t.end_date}</li>)}
+          {wizard.terms
+            .filter(t => t.name.trim() && t.start_date && t.end_date)
+            .map((t, i) => <li key={i}>{t.name}: {t.start_date} – {t.end_date}</li>)}
         </ul>
       </div>
       <div>
