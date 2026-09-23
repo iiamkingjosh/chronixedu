@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 10 — 2026-09-23  
 **Scope:** Full role-by-role review (principal, teacher, parent, student)  
-**Round 10 total findings:** 4 (0 Critical · 1 High · 3 Medium) + 1 withdrawn false positive
+**Round 10 total findings:** 10 (0 Critical · 1 High · 3 Medium · 6 Low) + 1 withdrawn false positive
 
 ---
 
@@ -37,6 +37,42 @@ All four routes now require `result_status === 'published'` before populating an
 **Files:** `apps/web/app/(dashboard)/principal/dashboard/page.tsx`
 
 **Fix:** Four of the five `dashboard/principal/*` endpoints had no frontend consumer at all — `students-at-risk`, `teacher-activity`, `result-status` and `class-selector`. Not a security issue, but `getStudentsAtRisk` and `getTeacherActivity` are exactly the oversight a principal needs and were invisible. Both are now rendered on the principal dashboard, loading independently so a failure in either cannot blank the page. `result-status` and `class-selector` were left unwired deliberately — they duplicate the existing results page and roster endpoints respectively.
+
+### L-01 — `parent_students` link had no tenant guarantee of its own ✅ Fixed
+
+**Files:** `migrations/033_parent_students_tenant_consistency.sql`, `apps/api/src/db/queries/parents.ts`
+
+**Fix:** `parent_students` carries no `school_id`, so `isParentLinkedToStudent()` matched on `(parent_id, student_id)` alone — the most security-sensitive join in the parent portal, with no tenant filter. Not exploitable (every caller pairs it with `requireSchoolAccess` and a school-scoped query, and a check confirmed zero cross-school links exist), but it meant the guard depended entirely on its callers. The query now also requires parent and student to share a school, and migration 033 adds a trigger rejecting any cross-school link at write time — same approach migration 029 uses for `scores`. Verified against production inside a rolled-back transaction: the insert is refused with "parent school does not match student school".
+
+### L-02 — Announcements left no audit trail ✅ Fixed
+
+**Files:** `apps/api/src/routes/announcements.ts`
+
+**Fix:** A principal-only, school-wide broadcast that reaches every targeted user's inbox and email had no `logAudit` call anywhere in the route or its queries, while 10+ other route files log far less consequential writes. Now recorded as `ANNOUNCEMENT_CREATED`, non-blocking so a logging failure can never fail the broadcast.
+
+### L-03 — Parent and student route groups did not check role ✅ Fixed
+
+**Files:** `apps/web/app/(parent)/layout.tsx`, `apps/web/app/(student)/layout.tsx`
+
+**Fix:** Both layouts checked only that *someone* was signed in, so any authenticated user could open `/parent/*` or `/student/*` and get a rendered shell whose data calls then 403'd. The API was never at risk — this is a UX correctness fix. Non-matching roles are now redirected to their own landing page via `getDefaultDashboardPath`.
+
+### L-04 — Any authenticated user could read any class's timetable ✅ Fixed
+
+**Files:** `apps/api/src/routes/timetable.ts`, `apps/api/src/db/queries/timetable.ts`
+
+**Fix:** `GET /timetable/class/:classId` took `classId` straight from the path with no check beyond school membership. Staff legitimately need any class, so the restriction applies to the student role: a student may now only read a class they are or were enrolled in (past sessions included, so an earlier term's schedule still resolves).
+
+### L-05 — Past-term results were labelled with the student's current class ✅ Fixed
+
+**Files:** `apps/api/src/routes/student.ts`, `apps/api/src/routes/parent.ts`
+
+**Fix:** `summarizeStudent` took `enrollments[0]`, and enrollments are ordered by session start descending — so selecting an older term showed correct scores under the wrong class name. Both copies now prefer the enrollment matching the class the requested term actually resolved to, falling back to the latest only when unknown.
+
+### L-06 — Timetable could not distinguish "no active term" from "no slots" ✅ Fixed
+
+**Files:** `apps/api/src/routes/timetable.ts`, plus the three web consumers
+
+**Fix:** Both GET routes returned a bare `data: []` when no term was active, identical to a term with no slots scheduled — a blank timetable gave the viewer no way to tell whether the school had forgotten to activate a term or simply not built the schedule. The teacher page's own empty-state text ("No active academic term, or no periods have been assigned to you yet") encoded the ambiguity. Responses now carry `{ term_id, reason, slots }`, and each page states which case applies.
 
 ### Withdrawn — `GET /:schoolId/users` open to all roles ❌ False positive
 

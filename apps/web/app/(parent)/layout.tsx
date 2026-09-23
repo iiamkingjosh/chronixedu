@@ -9,6 +9,7 @@ import { useEffect, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { ParentProvider, useParentContext } from '@/lib/parentContext';
 import { PARENT_NAV, type NavItem } from '@/lib/navigation';
+import { getDefaultDashboardPath } from '@/lib/auth';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
 
@@ -190,8 +191,17 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading) return;
+    if (!user) {
       router.replace('/login');
+      return;
+    }
+    // AUDIT Round 10 L-03: the layout only checked that someone was signed in, so a
+    // teacher or student landing on /parent/* got a rendered parent shell whose data
+    // calls then 403'd. The API was never at risk — this is about not showing a
+    // signed-in user a section that isn't theirs.
+    if (user.role !== 'parent' && user.role !== 'super_admin') {
+      router.replace(getDefaultDashboardPath(user.role));
     }
   }, [loading, user, router]);
 

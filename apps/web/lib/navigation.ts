@@ -59,6 +59,7 @@ export const PARENT_NAV: NavItem[] = [
   { label: 'Home', href: '/parent/dashboard' },
   { label: 'Results', href: '/parent/results' },
   { label: 'Attendance', href: '/parent/attendance' },
+  { label: 'Notices', href: '/parent/notices' },
   { label: 'Messages', href: '/parent/messages' },
   { label: 'Fees', href: '/parent/fees' },
 ];

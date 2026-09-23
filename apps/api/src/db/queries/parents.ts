@@ -37,10 +37,29 @@ export async function getLinkedChildren(parentId: string, schoolId: string): Pro
   return result.rows;
 }
 
-/** Authorization check — is this parent linked to this student? */
+/**
+ * Authorization check — is this parent linked to this student?
+ *
+ * AUDIT Round 10 L-01: parent_students carries no school_id, so matching on
+ * (parent_id, student_id) alone gave this — the most security-sensitive join in the
+ * parent portal — no tenant guarantee of its own. It now also requires the parent
+ * and the student to belong to the same school, so the check stands up even if a
+ * caller ever forgets to pair it with a school-scoped query. Migration 033 enforces
+ * the same invariant at write time.
+ *
+ * Deliberately keeps its two-argument signature: callers resolve the school from the
+ * JWT via requireSchoolAccess, and the join below derives it rather than trusting a
+ * third argument that a caller could pass incorrectly.
+ */
 export async function isParentLinkedToStudent(parentId: string, studentId: string): Promise<boolean> {
   const result = await pool.query(
-    `SELECT 1 FROM parent_students WHERE parent_id = $1 AND student_id = $2`,
+    `SELECT 1
+     FROM parent_students ps
+     JOIN users    u ON u.id = ps.parent_id
+     JOIN students s ON s.id = ps.student_id
+     WHERE ps.parent_id = $1
+       AND ps.student_id = $2
+       AND u.school_id = s.school_id`,
     [parentId, studentId]
   );
   return result.rows.length > 0;

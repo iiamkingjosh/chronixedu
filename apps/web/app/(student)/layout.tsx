@@ -8,6 +8,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { STUDENT_NAV, type NavItem } from '@/lib/navigation';
+import { getDefaultDashboardPath } from '@/lib/auth';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
 
@@ -168,8 +169,15 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading) return;
+    if (!user) {
       router.replace('/login');
+      return;
+    }
+    // AUDIT Round 10 L-03: see the parent layout — this only checked for a signed-in
+    // user, so any role landing on /student/* got a student shell with failing calls.
+    if (user.role !== 'student' && user.role !== 'super_admin') {
+      router.replace(getDefaultDashboardPath(user.role));
     }
   }, [loading, user, router]);
 

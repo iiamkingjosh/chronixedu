@@ -8,6 +8,7 @@ import { redis } from '../middleware/rateLimit';
 import { createNotificationsBulk } from '../db/queries/notifications';
 import { sendEmail } from '../services/emailService';
 import { createAnnouncement, listAnnouncementsForRole, getTargetUsers } from '../db/queries/announcements';
+import { logAudit } from '../db/queries/auditLog';
 
 const router = Router();
 
@@ -77,6 +78,19 @@ router.post(
         title,
         body,
         target_role,
+      });
+
+      // AUDIT Round 10 L-04: a school-wide broadcast reaches every targeted user's
+      // inbox and email, and previously left no record of who published it.
+      logAudit({
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'ANNOUNCEMENT_CREATED',
+        entity: 'announcements',
+        entityId: announcement.id,
+        newValue: { title, target_role },
+      }).catch(() => {
+        // Non-critical — never fail the broadcast because logging failed.
       });
 
       // Fan out in-app notifications + batched emails to everyone targeted (non-blocking).

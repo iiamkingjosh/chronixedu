@@ -114,10 +114,10 @@ export default function PrincipalTimetablePage() {
 
   const loadSlots = useCallback(() => {
     if (!schoolId || !classId || !termId) return;
-    apiFetch<{ success: boolean; data: ClassTimetableSlot[] }>(
+    apiFetch<{ success: boolean; data: { term_id: string | null; reason: string | null; slots: ClassTimetableSlot[] } }>(
       `/api/schools/${schoolId}/timetable/class/${classId}?term_id=${termId}`
     )
-      .then((res) => setSlots(res.data))
+      .then((res) => setSlots(res.data.slots))
       .catch((err: unknown) => showToast(err instanceof Error ? err.message : 'Failed to load timetable', 'error'));
   }, [schoolId, classId, termId]);
 
