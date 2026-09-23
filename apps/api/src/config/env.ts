@@ -27,6 +27,10 @@ const envSchema = z.object({
   PAYSTACK_SECRET_KEY: z.string().optional(),
   APP_URL: z.string().url('APP_URL must be a valid URL').optional(),
   NEXTAUTH_URL: z.string().url('NEXTAUTH_URL must be a valid URL').optional(),
+  // Public base URL of this API service. Used to build the Paystack callback_url a
+  // payer returns to after paying — if neither is set it falls back to localhost and
+  // payers land on a dead page, so keep one of them set in every deployed environment.
+  API_BASE_URL: z.string().url('API_BASE_URL must be a valid URL').optional(),
   NEXT_PUBLIC_API_URL: z.string().url('NEXT_PUBLIC_API_URL must be a valid URL').optional(),
   CORS_ORIGIN: z.string().url('CORS_ORIGIN must be a valid URL').optional(),
   SENTRY_DSN: z.string().url('SENTRY_DSN must be a valid URL').optional(),

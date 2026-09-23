@@ -474,8 +474,29 @@ interface PaystackPaymentMetadata {
   recorded_by?: string | null;
 }
 
+/**
+ * Public base URL of THIS api service — used to build the Paystack callback_url a
+ * payer is redirected to after paying.
+ *
+ * This silently fell back to localhost in production once: neither variable was set
+ * on the Railway API service, so every callback_url was http://localhost:3001/... and
+ * payers were redirected to a dead page. The payment still reached Paystack, so the
+ * only thing standing between that and an unrecorded payment was the webhook.
+ * Misconfiguration here costs money, so it now logs loudly instead of failing quietly.
+ *
+ * API_BASE_URL is the preferred name; NEXT_PUBLIC_API_URL is accepted because that is
+ * what the deployment already uses (it is a Next.js-style name, but the API needs the
+ * same value and it is already in this service's validated env schema).
+ */
 function getApiBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
+  const configured = process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL;
+  if (!configured) {
+    logger.error('api_base_url_not_configured', {
+      detail: 'Neither API_BASE_URL nor NEXT_PUBLIC_API_URL is set. Paystack callback_url will point at localhost and payers will be redirected to a dead page after paying.',
+    });
+    return 'http://localhost:3001';
+  }
+  return configured.replace(/\/$/, '');
 }
 
 // ── POST /:schoolId/payments/paystack/initiate ───────────────────────────────────
