@@ -18,6 +18,7 @@ import {
   listUnresolvedAlerts,
   getClassRoster,
   isTeacherAssignedToClass,
+  isTeacherAssignedToClassAnyTerm,
   LOW_ATTENDANCE_ALERT_TYPE,
   AttendanceAlertRow,
 } from '../db/queries/attendance';
@@ -67,6 +68,35 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
   if (user.role === 'super_admin') { next(); return; }
   if (user.school_id === req.params.schoolId) { next(); return; }
   res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+}
+
+/**
+ * AUDIT R10-M1: attendance READ guard. The write path (POST /attendance/mark) has
+ * always verified the caller is the class's form teacher or assigned to it, but the
+ * read paths only checked role + that the class existed in the school — so any
+ * teacher could pull the roster and 30-day history of a class they have no
+ * relationship to (GET /classes is unrestricted, so discovering class ids is
+ * trivial). Returns true when the caller may proceed; sends the 403 otherwise.
+ */
+async function canTeacherViewClass(
+  req: Request,
+  res: Response,
+  cls: { form_teacher_id: string | null },
+  classId: string,
+  schoolId: string
+): Promise<boolean> {
+  const role = req.user!.role ?? '';
+  if (['super_admin', 'principal'].includes(role)) return true;
+
+  const userId = req.user!.user_id;
+  if (cls.form_teacher_id === userId) return true;
+  if (await isTeacherAssignedToClassAnyTerm(userId, classId, schoolId)) return true;
+
+  res.status(403).json({
+    success: false,
+    error: { code: 'NOT_ASSIGNED', message: 'You are not assigned to this class' },
+  });
+  return false;
 }
 
 // ── POST /:schoolId/attendance/mark ────────────────────────────────────────────
@@ -204,6 +234,8 @@ router.get(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Class not found' } });
       }
 
+      if (!await canTeacherViewClass(req, res, cls, class_id, schoolId)) return;
+
       const roster = await getClassAttendanceForDate(class_id, schoolId, date);
       return res.json({ success: true, data: { class: cls, date, roster } });
     } catch (err) {
@@ -286,6 +318,8 @@ router.get(
       if (!cls) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Class not found' } });
       }
+
+      if (!await canTeacherViewClass(req, res, cls, class_id, schoolId)) return;
 
       const summary = await getMonthlySummary(class_id, schoolId, month, year);
       return res.json({ success: true, data: { class: cls, month, year, students: summary } });

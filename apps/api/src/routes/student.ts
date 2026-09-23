@@ -113,7 +113,12 @@ router.get(
       let academic = null;
       let subjects: Array<{ subject_id: string; subject_name: string; total_score: number | null; grade: string | null }> = [];
 
-      if (classId) {
+      // AUDIT R10-H1: a student only sees their own scores once the term's result has
+      // been PUBLISHED (doctrine 5). Draft/approved means entry or review is still in
+      // progress. result_status is echoed below so the UI can explain the empty state.
+      // Note: term_name is sourced from computeClassResults, so an explicitly-requested
+      // unpublished term returns a null name — already an allowed value for this field.
+      if (classId && resultStatus === 'published') {
         const classResult = await computeClassResults(classId, termId, schoolId);
         if (!termName) termName = classResult.term_name;
         const studentRecord = classResult.students.find(s => s.student_id === studentId);
@@ -198,7 +203,8 @@ router.get(
         remark: string | null;
       }> = [];
 
-      if (classId) {
+      // AUDIT R10-H1: same publish gate as the dashboard route above (doctrine 5).
+      if (classId && resultStatus === 'published') {
         const classResult = await computeClassResults(classId, termId, schoolId);
         const studentRecord = classResult.students.find(s => s.student_id === studentId);
         if (studentRecord) {
