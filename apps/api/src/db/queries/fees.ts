@@ -344,7 +344,7 @@ export async function getPaymentById(schoolId: string, paymentId: string): Promi
      JOIN students s ON s.id = fi.student_id
      JOIN users u ON u.id = s.user_id
      JOIN terms t ON t.id = fi.term_id
-     JOIN sessions sess ON sess.id = t.session_id
+     JOIN academic_sessions sess ON sess.id = t.session_id
      LEFT JOIN student_classes sc ON sc.student_id = fi.student_id AND sc.session_id = t.session_id
      LEFT JOIN classes c ON c.id = sc.class_id
      WHERE p.id = $1 AND p.school_id = $2`,
