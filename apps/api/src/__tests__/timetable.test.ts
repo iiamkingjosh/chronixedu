@@ -168,7 +168,9 @@ describe('GET /api/schools/:schoolId/timetable/class/:classId', () => {
       .set('Authorization', `Bearer ${makeToken('teacher', SCHOOL_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual(CLASS_SLOTS);
+    expect(res.body.data.slots).toEqual(CLASS_SLOTS);
+    expect(res.body.data.term_id).toBe(TERM_ID);
+    expect(res.body.data.reason).toBeNull();
     expect(mockTimetable.getClassTimetable).toHaveBeenCalledWith(SCHOOL_ID, CLASS_ID, TERM_ID);
     expect(mockRoster.getActiveTerm).not.toHaveBeenCalled();
   });
@@ -176,6 +178,7 @@ describe('GET /api/schools/:schoolId/timetable/class/:classId', () => {
   it('falls back to the active term when term_id is not provided', async () => {
     mockRoster.getActiveTerm.mockResolvedValueOnce({ id: TERM_ID, name: 'Term 1', session_id: 'session-1' } as never);
     mockTimetable.getClassTimetable.mockResolvedValueOnce(CLASS_SLOTS as never);
+    mockTimetable.getStudentClassIds.mockResolvedValueOnce([CLASS_ID] as never);
 
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/timetable/class/${CLASS_ID}`)
@@ -185,15 +188,27 @@ describe('GET /api/schools/:schoolId/timetable/class/:classId', () => {
     expect(mockTimetable.getClassTimetable).toHaveBeenCalledWith(SCHOOL_ID, CLASS_ID, TERM_ID);
   });
 
-  it('returns an empty array when there is no active term and no term_id', async () => {
+  it('distinguishes "no active term" from "no slots" instead of returning a bare empty array', async () => {
     mockRoster.getActiveTerm.mockResolvedValueOnce(null);
+    mockTimetable.getStudentClassIds.mockResolvedValueOnce([CLASS_ID] as never);
 
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/timetable/class/${CLASS_ID}`)
       .set('Authorization', `Bearer ${makeToken('student', SCHOOL_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual([]);
+    expect(res.body.data).toEqual({ term_id: null, reason: 'NO_ACTIVE_TERM', slots: [] });
+    expect(mockTimetable.getClassTimetable).not.toHaveBeenCalled();
+  });
+
+  it('refuses a student asking for a class they are not enrolled in', async () => {
+    mockTimetable.getStudentClassIds.mockResolvedValueOnce([] as never);
+
+    const res = await request(app)
+      .get(`/api/schools/${SCHOOL_ID}/timetable/class/${CLASS_ID}?term_id=${TERM_ID}`)
+      .set('Authorization', `Bearer ${makeToken('student', SCHOOL_ID)}`);
+
+    expect(res.status).toBe(403);
     expect(mockTimetable.getClassTimetable).not.toHaveBeenCalled();
   });
 });
@@ -211,7 +226,8 @@ describe('GET /api/schools/:schoolId/timetable/teacher/:teacherId', () => {
       .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual(TEACHER_SLOTS);
+    expect(res.body.data.slots).toEqual(TEACHER_SLOTS);
+    expect(res.body.data.term_id).toBe(TERM_ID);
   });
 
   it('allows a teacher to view their own timetable', async () => {

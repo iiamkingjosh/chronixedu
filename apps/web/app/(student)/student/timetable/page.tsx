@@ -40,6 +40,7 @@ export default function StudentTimetablePage() {
   const [slots, setSlots] = useState<ClassTimetableSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [noActiveTerm, setNoActiveTerm] = useState(false);
 
   useEffect(() => {
     if (!schoolId) {
@@ -57,10 +58,12 @@ export default function StudentTimetablePage() {
           setLoading(false);
           return;
         }
-        return apiFetch<{ success: boolean; data: ClassTimetableSlot[] }>(
+        return apiFetch<{ success: boolean; data: { term_id: string | null; reason: string | null; slots: ClassTimetableSlot[] } }>(
           `/api/schools/${schoolId}/timetable/class/${data.student.class_id}`
         ).then((res) => {
-          if (!cancelled) setSlots(res.data);
+          if (cancelled) return;
+          setSlots(res.data.slots);
+          setNoActiveTerm(res.data.reason === 'NO_ACTIVE_TERM');
         });
       })
       .catch((err: unknown) => {
@@ -101,7 +104,11 @@ export default function StudentTimetablePage() {
       </div>
 
       {slots.length === 0 ? (
-        <p className="text-sm text-gray-500 py-10 text-center">No timetable has been set up yet.</p>
+        <p className="text-sm text-gray-500 py-10 text-center">
+          {noActiveTerm
+            ? 'Your school has not started a term yet, so there is no timetable to show.'
+            : 'No timetable has been set up yet.'}
+        </p>
       ) : (
         <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
           <table className="w-full border-collapse text-sm">

@@ -34,6 +34,7 @@ export default function TeacherTimetablePage() {
   const [slots, setSlots] = useState<TeacherTimetableSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [noActiveTerm, setNoActiveTerm] = useState(false);
 
   useEffect(() => {
     if (!schoolId || !user) {
@@ -43,11 +44,13 @@ export default function TeacherTimetablePage() {
     }
     let cancelled = false;
 
-    apiFetch<{ success: boolean; data: TeacherTimetableSlot[] }>(
+    apiFetch<{ success: boolean; data: { term_id: string | null; reason: string | null; slots: TeacherTimetableSlot[] } }>(
       `/api/schools/${schoolId}/timetable/teacher/${user.user_id}`
     )
       .then((res) => {
-        if (!cancelled) setSlots(res.data);
+        if (cancelled) return;
+        setSlots(res.data.slots);
+        setNoActiveTerm(res.data.reason === 'NO_ACTIVE_TERM');
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load timetable');
@@ -87,7 +90,11 @@ export default function TeacherTimetablePage() {
       </div>
 
       {slots.length === 0 ? (
-        <p className="text-sm text-gray-500">No active academic term, or no periods have been assigned to you yet.</p>
+        <p className="text-sm text-gray-500">
+          {noActiveTerm
+            ? 'No academic term is currently active, so there is no timetable to show. Ask your principal to activate the current term.'
+            : 'No periods have been assigned to you for this term yet.'}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">

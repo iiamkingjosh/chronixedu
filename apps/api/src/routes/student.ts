@@ -49,8 +49,20 @@ const termQuerySchema = z.object({
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function summarizeStudent(profile: NonNullable<Awaited<ReturnType<typeof getStudentProfile>>>) {
-  const currentEnrollment = profile.enrollments[0] ?? null;
+/**
+ * AUDIT Round 10 L-05: enrollments are ordered by session start descending, so
+ * taking [0] labelled a past term's results with the student's *current* class.
+ * When the caller knows which class the requested term resolved to, prefer that
+ * enrollment; fall back to the latest only when it is unknown.
+ */
+function summarizeStudent(
+  profile: NonNullable<Awaited<ReturnType<typeof getStudentProfile>>>,
+  classIdForTerm?: string | null
+) {
+  const currentEnrollment =
+    (classIdForTerm ? profile.enrollments.find(e => e.class_id === classIdForTerm) : null)
+    ?? profile.enrollments[0]
+    ?? null;
   return {
     student_id:   profile.id,
     first_name:   profile.first_name,
@@ -142,7 +154,7 @@ router.get(
       return res.json({
         success: true,
         data: {
-          student: summarizeStudent(profile),
+          student: summarizeStudent(profile, classId),
           term: { id: termId, name: termName },
           academic,
           subjects,
@@ -228,7 +240,7 @@ router.get(
       return res.json({
         success: true,
         data: {
-          student: summarizeStudent(profile),
+          student: summarizeStudent(profile, classId),
           term_id: termId,
           overall_average,
           position,

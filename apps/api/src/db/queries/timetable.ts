@@ -153,3 +153,19 @@ export async function deleteSlot(slotId: string, schoolId: string): Promise<void
     [slotId, schoolId]
   );
 }
+
+/**
+ * Every class a student user is (or has been) enrolled in, for this school.
+ * Used to stop a student reading another class's timetable. Covers all sessions so a
+ * student can still view a previous term's schedule for a class they were in.
+ */
+export async function getStudentClassIds(userId: string, schoolId: string): Promise<string[]> {
+  const result = await pool.query<{ class_id: string }>(
+    `SELECT DISTINCT sc.class_id
+     FROM student_classes sc
+     JOIN students s ON s.id = sc.student_id
+     WHERE s.user_id = $1 AND s.school_id = $2`,
+    [userId, schoolId]
+  );
+  return result.rows.map(r => r.class_id);
+}

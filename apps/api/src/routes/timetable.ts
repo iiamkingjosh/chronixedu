@@ -11,6 +11,7 @@ import {
   getTeacherTimetable,
   findSlotById,
   deleteSlot,
+  getStudentClassIds,
 } from '../db/queries/timetable';
 
 const router = Router();
@@ -49,6 +50,17 @@ async function resolveTermId(schoolId: string, termIdFromQuery?: string): Promis
   if (termIdFromQuery) return termIdFromQuery;
   const activeTerm = await getActiveTerm(schoolId);
   return activeTerm?.id ?? null;
+}
+
+/**
+ * AUDIT Round 10 L-06: both GET routes used to return `data: []` when there was no
+ * active term, which is indistinguishable from "this term has no slots yet". A blank
+ * timetable then gave the viewer no idea whether the school had forgotten to activate
+ * a term or simply not built the schedule. Callers now get an explicit term_id: null
+ * plus a reason, so the UI can say which it is.
+ */
+function emptyTimetable(reason: 'NO_ACTIVE_TERM') {
+  return { term_id: null, reason, slots: [] as unknown[] };
 }
 
 // ── POST /:schoolId/timetable ──────────────────────────────────────────────────
@@ -117,13 +129,24 @@ router.get(
       }
 
       const { schoolId, classId } = req.params;
+
+      // AUDIT Round 10 L-07: classId came straight from the path with no check, so any
+      // authenticated member of the school could read any class's timetable. Staff
+      // legitimately need any class; a student may only read their own.
+      if (req.user!.role === 'student') {
+        const own = await getStudentClassIds(req.user!.user_id, schoolId);
+        if (!own.includes(classId)) {
+          return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+        }
+      }
+
       const termId = await resolveTermId(schoolId, parsed.data.term_id);
       if (!termId) {
-        return res.json({ success: true, data: [] });
+        return res.json({ success: true, data: emptyTimetable('NO_ACTIVE_TERM') });
       }
 
       const slots = await getClassTimetable(schoolId, classId, termId);
-      return res.json({ success: true, data: slots });
+      return res.json({ success: true, data: { term_id: termId, reason: null, slots } });
     } catch (err) {
       return next(err);
     }
@@ -151,11 +174,11 @@ router.get(
 
       const termId = await resolveTermId(schoolId, parsed.data.term_id);
       if (!termId) {
-        return res.json({ success: true, data: [] });
+        return res.json({ success: true, data: emptyTimetable('NO_ACTIVE_TERM') });
       }
 
       const slots = await getTeacherTimetable(schoolId, teacherId, termId);
-      return res.json({ success: true, data: slots });
+      return res.json({ success: true, data: { term_id: termId, reason: null, slots } });
     } catch (err) {
       return next(err);
     }

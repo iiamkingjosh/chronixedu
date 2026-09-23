@@ -29,6 +29,20 @@
 - Principals can now edit a term's name and dates, with the change recorded in the audit log.
 - Terms are also now prevented from overlapping each other (on both adding and editing). Overlapping terms previously caused attendance to be filed against an arbitrary one of them.
 
+### Parents can now see school notices
+- Announcements could already target parents and did reach them as in-app notifications, but there was no page listing them — the only way to read one was the notification popup. Added a Notices page to the parent menu.
+
+### Timetables now say *why* they're empty
+- A blank timetable previously looked the same whether the school hadn't activated a term or simply hadn't built the schedule yet. The teacher page even said "No active academic term, or no periods have been assigned to you yet" because the two cases were indistinguishable.
+- Teacher, student and principal timetables now state which it is, so a principal knows when the fix is to activate the term.
+
+### Smaller corrections
+- Viewing an older term's results showed the student's *current* class name next to the correct scores; it now shows the class they were actually in that term.
+- Students can no longer open another class's timetable by changing the address (staff are unaffected).
+- Parent and student sections now redirect other roles to their own home page instead of rendering an empty shell.
+- School-wide announcements are now recorded in the audit log.
+- A parent can no longer be linked to a student from a different school, enforced in the database itself.
+
 ### Teacher signature on class comments
 - The class-comments page fetched the teacher's signature from an admin-only endpoint, silently received a permission error, and showed nothing. Added a self-scoped `users/me` endpoint and pointed the page at it.
 
