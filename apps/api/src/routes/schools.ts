@@ -86,6 +86,17 @@ const updateAcademicSchema = z.object({
     weight: z.number().int().positive(),
     display_order: z.number().int().positive(),
   })).optional(),
+  // Per-class-level overrides of the two fields above, keyed by classes.level, for a
+  // school running more than one section (e.g. a primary and a secondary arm) that
+  // needs a different pass mark or grading band for each. Omitted fields fall back to
+  // the school-wide values; an empty object clears all overrides.
+  level_overrides: z.record(
+    z.string().min(1).max(50),
+    z.object({
+      grading_scale: z.array(gradeBandSchema).min(1).optional(),
+      promotion_cutoff: z.number().int().min(0).max(100).optional(),
+    }).refine(o => Object.keys(o).length > 0, { message: 'An override must set at least one field' })
+  ).optional(),
 }).refine(obj => Object.keys(obj).length > 0, { message: 'At least one field is required' });
 
 const notificationChannelsSchema = z.object({
@@ -305,12 +316,25 @@ router.patch(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
 
-      const { grading_scale, promotion_cutoff, assessment_components } = parsed.data;
+      const { grading_scale, promotion_cutoff, assessment_components, level_overrides } = parsed.data;
 
       if (grading_scale) {
         const bandError = validateGradeBands(grading_scale);
         if (bandError) {
           return res.status(400).json({ success: false, error: { code: 'INVALID_GRADE_BANDS', message: bandError } });
+        }
+      }
+
+      // Each override's bands must be internally valid too, or a section could be
+      // given a scale with gaps or overlaps that the school-wide check would catch.
+      for (const [level, override] of Object.entries(level_overrides ?? {})) {
+        if (!override.grading_scale) continue;
+        const bandError = validateGradeBands(override.grading_scale);
+        if (bandError) {
+          return res.status(400).json({
+            success: false,
+            error: { code: 'INVALID_GRADE_BANDS', message: `Level "${level}": ${bandError}` },
+          });
         }
       }
 
@@ -338,6 +362,7 @@ router.patch(
       if (grading_scale) patch.grading_scale = grading_scale;
       if (promotion_cutoff !== undefined) patch.promotion_cutoff = promotion_cutoff;
       if (assessment_components) patch.assessment_components = assessment_components;
+      if (level_overrides !== undefined) patch.level_overrides = level_overrides;
 
       await updateAcademicConfig(req.params.schoolId, patch);
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));

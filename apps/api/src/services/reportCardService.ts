@@ -10,6 +10,7 @@ import {
   fetchFormTeacher,
   fetchPrincipalRemark,
   upsertReportCard,
+  fetchClassLevel,
 } from '../db/queries/reportCards';
 import { computeClassResults } from './resultEngine';
 import type { ClassResult } from './resultEngine';
@@ -257,7 +258,17 @@ export async function generateReportCard(
   ]);
 
   const identityConfig = (school.identity_config ?? {}) as Record<string, string | null>;
-  const academicConfig = (school.academic_config ?? {}) as Record<string, unknown>;
+
+  // academic_config may carry per-level overrides so a school running both a primary
+  // and a secondary section can grade them differently (school_settings holds exactly
+  // one row per school, so without this every section shares one scale). Keyed by
+  // classes.level, matching how assessment_configs already resolve.
+  const baseAcademicConfig = (school.academic_config ?? {}) as Record<string, unknown>;
+  const classLevel = await fetchClassLevel(studentData.class_id, schoolId);
+  const levelOverrides = (baseAcademicConfig.level_overrides ?? {}) as Record<string, Record<string, unknown>>;
+  const academicConfig: Record<string, unknown> = classLevel && levelOverrides[classLevel]
+    ? { ...baseAcademicConfig, ...levelOverrides[classLevel] }
+    : baseAcademicConfig;
   const reportConfig = (school.report_config ?? {}) as ReportConfigOverrides;
 
   // Grading scale from academic_config (or default)

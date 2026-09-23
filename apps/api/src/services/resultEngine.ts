@@ -21,6 +21,17 @@ interface AcademicConfig {
   promotion_cutoff: number;
 }
 
+/**
+ * Stored shape of school_settings.academic_config. `level_overrides` lets a school
+ * that runs more than one section — a primary and a secondary arm under one roof —
+ * grade them differently. school_settings has exactly one row per school, so before
+ * this the pass mark and grading bands were necessarily identical across the whole
+ * school. Keyed by classes.level, which is what assessment_configs already matches on.
+ */
+interface StoredAcademicConfig extends Partial<AcademicConfig> {
+  level_overrides?: Record<string, Partial<AcademicConfig>>;
+}
+
 export interface ComponentScore {
   component_id: string;
   name: string;
@@ -134,15 +145,27 @@ function buildComponentScores(
 
 // ── DB helpers (private) ────────────────────────────────────────────────────────
 
-async function fetchAcademicConfig(schoolId: string): Promise<AcademicConfig> {
-  const result = await pool.query<{ academic_config: AcademicConfig }>(
-    `SELECT academic_config FROM school_settings WHERE school_id = $1`,
-    [schoolId]
+/**
+ * Resolves the grading scale and promotion cut-off for a class. When `classId` is
+ * given, a `level_overrides` entry matching that class's level wins over the
+ * school-wide values, field by field — a school can override just the pass mark and
+ * keep the shared grading bands. The class level is read in the same round trip.
+ */
+async function fetchAcademicConfig(schoolId: string, classId?: string | null): Promise<AcademicConfig> {
+  const result = await pool.query<{ academic_config: StoredAcademicConfig; level: string | null }>(
+    `SELECT ss.academic_config, c.level
+     FROM school_settings ss
+     LEFT JOIN classes c ON c.id = $2 AND c.school_id = $1
+     WHERE ss.school_id = $1`,
+    [schoolId, classId ?? null]
   );
-  const cfg = result.rows[0]?.academic_config as AcademicConfig | undefined;
+  const cfg = result.rows[0]?.academic_config as StoredAcademicConfig | undefined;
+  const level = result.rows[0]?.level ?? null;
+  const override = level ? cfg?.level_overrides?.[level] : undefined;
+
   return {
-    grading_scale:    cfg?.grading_scale    ?? [],
-    promotion_cutoff: cfg?.promotion_cutoff ?? 40,
+    grading_scale:    override?.grading_scale    ?? cfg?.grading_scale    ?? [],
+    promotion_cutoff: override?.promotion_cutoff ?? cfg?.promotion_cutoff ?? 40,
   };
 }
 
@@ -170,7 +193,7 @@ export async function computeStudentSubjectResult(
 
   const [config, academicConfig, scoresResult] = await Promise.all([
     resolveAssessmentConfig(schoolId, classId, subjectId, termId),
-    fetchAcademicConfig(schoolId),
+    fetchAcademicConfig(schoolId, classId),
     pool.query<{ component_id: string; score: string }>(
       `SELECT component_id, score::text
        FROM scores
@@ -233,7 +256,7 @@ export async function computeClassResults(
        ORDER BY sub.name`,
       [classId, termId, schoolId]
     ),
-    fetchAcademicConfig(schoolId),
+    fetchAcademicConfig(schoolId, classId),
   ]);
 
   const cls      = classRow.rows[0];
@@ -353,9 +376,6 @@ export async function getStudentsAtRisk(
   termId: string,
   schoolId: string
 ): Promise<AtRiskStudent[]> {
-  const academicConfig = await fetchAcademicConfig(schoolId);
-  const { promotion_cutoff } = academicConfig;
-
   // All classes that have students enrolled for this term's session
   const classesResult = await pool.query<{ class_id: string; class_name: string }>(
     `SELECT DISTINCT sc.class_id, c.name AS class_name
@@ -371,6 +391,9 @@ export async function getStudentsAtRisk(
   const atRisk: AtRiskStudent[] = [];
 
   for (const { class_id, class_name } of classesResult.rows) {
+    // Resolved per class: a school running both a primary and a secondary section can
+    // set a different pass mark for each via academic_config.level_overrides.
+    const { promotion_cutoff } = await fetchAcademicConfig(schoolId, class_id);
     const result = await computeClassResults(class_id, termId, schoolId);
     for (const student of result.students) {
       if (student.subjects_scored > 0 && student.overall_average < promotion_cutoff) {

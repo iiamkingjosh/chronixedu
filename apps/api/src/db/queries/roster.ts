@@ -190,6 +190,65 @@ export async function insertTeacherAssignment(
   return result.rows[0];
 }
 
+/**
+ * Assigns one teacher to many (class, subject) pairs in a single statement.
+ *
+ * A primary-school class teacher covers every subject in their class, so the
+ * one-row-at-a-time route meant a dozen round trips per teacher, repeated for every
+ * class and again every term. Existing rows are skipped rather than erroring, so the
+ * caller can safely re-send a full set. Returns the rows actually created.
+ */
+export async function insertTeacherAssignmentsBulk(
+  teacherId: string,
+  pairs: Array<{ class_id: string; subject_id: string }>,
+  termId: string,
+  schoolId: string
+): Promise<AssignmentRow[]> {
+  if (pairs.length === 0) return [];
+  const result = await pool.query<AssignmentRow>(
+    `INSERT INTO teacher_assignments (teacher_id, class_id, subject_id, term_id, school_id)
+     SELECT $1, p.class_id, p.subject_id, $2, $3
+     FROM unnest($4::uuid[], $5::uuid[]) AS p(class_id, subject_id)
+     WHERE NOT EXISTS (
+       SELECT 1 FROM teacher_assignments ta
+       WHERE ta.teacher_id = $1 AND ta.class_id = p.class_id
+         AND ta.subject_id = p.subject_id AND ta.term_id = $2
+     )
+     RETURNING id, teacher_id, class_id, subject_id, term_id, school_id`,
+    [teacherId, termId, schoolId, pairs.map(p => p.class_id), pairs.map(p => p.subject_id)]
+  );
+  return result.rows;
+}
+
+/**
+ * Copies every teacher assignment from one term into another, skipping any that
+ * already exist. Assignments are term-scoped and nothing carried them forward, so a
+ * school previously rebuilt its entire teaching roster by hand every single term.
+ * Only copies classes/subjects that still exist and belong to this school.
+ */
+export async function copyAssignmentsBetweenTerms(
+  schoolId: string,
+  fromTermId: string,
+  toTermId: string
+): Promise<number> {
+  const result = await pool.query(
+    `INSERT INTO teacher_assignments (teacher_id, class_id, subject_id, term_id, school_id)
+     SELECT src.teacher_id, src.class_id, src.subject_id, $3, $1
+     FROM teacher_assignments src
+     JOIN classes  c ON c.id = src.class_id   AND c.school_id = $1
+     JOIN subjects s ON s.id = src.subject_id AND s.school_id = $1
+     JOIN users    u ON u.id = src.teacher_id AND u.school_id = $1 AND u.is_active
+     WHERE src.school_id = $1 AND src.term_id = $2
+       AND NOT EXISTS (
+         SELECT 1 FROM teacher_assignments dst
+         WHERE dst.teacher_id = src.teacher_id AND dst.class_id = src.class_id
+           AND dst.subject_id = src.subject_id AND dst.term_id = $3
+       )`,
+    [schoolId, fromTermId, toTermId]
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function listTeacherAssignments(
   teacherId: string,
   schoolId: string,

@@ -15,6 +15,7 @@ import parentRoutes from '../routes/parent';
 import studentRoutes from '../routes/student';
 import usersRoutes from '../routes/users';
 import sessionsRoutes from '../routes/sessions';
+import rosterRoutes from '../routes/roster';
 
 // Fixed RFC-4122 v4 ids so zod's uuid() accepts them.
 const id = (prefix: string, n: number) => `${prefix}000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -66,7 +67,7 @@ export function buildApp(): express.Express {
   const app = express();
   app.use(express.json());
   app.use('/api/schools', detectSupportSession, verifyToken, requirePasswordChanged, requireActiveSchool);
-  for (const r of [scoresRoutes, resultsRoutes, studentsRoutes, feesRoutes, dashboardRoutes, teacherDashboardRoutes, parentRoutes, studentRoutes, usersRoutes, sessionsRoutes]) {
+  for (const r of [scoresRoutes, resultsRoutes, studentsRoutes, feesRoutes, dashboardRoutes, teacherDashboardRoutes, parentRoutes, studentRoutes, usersRoutes, sessionsRoutes, rosterRoutes]) {
     app.use('/api/schools', r);
   }
   app.use(errorHandler);

@@ -25,7 +25,10 @@ const createUserSchema = z.object({
   first_name:   z.string().min(1).max(80).trim().optional(),
   last_name:    z.string().min(1).max(80).trim().optional(),
   title:        z.string().max(20).trim().optional(),
-  teacher_mode: z.enum(['subject', 'form']).optional(),
+  // Must match the chronixedu_teacher_mode enum in migration 001. This previously
+  // read ['subject','form']; 'form' is not a valid enum value, so any caller passing
+  // it cleared validation and then failed at the INSERT.
+  teacher_mode: z.enum(['subject', 'class']).optional(),
 });
 
 router.post('/create-user', verifyToken, requireRole('super_admin'), async (req, res) => {

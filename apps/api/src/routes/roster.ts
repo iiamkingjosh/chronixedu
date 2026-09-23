@@ -12,8 +12,11 @@ import {
   findDuplicateAssignment, insertTeacherAssignment, listTeacherAssignments,
   findAssignmentById, scoresExistForAssignment, deleteTeacherAssignment,
   findTeachersByEmails, listClassNamesAndIds, listSubjectCodesAndIds,
+  insertTeacherAssignmentsBulk, copyAssignmentsBetweenTerms,
 } from '../db/queries/roster';
 import { findUserById } from '../db/queries/users';
+import { logAudit } from '../db/queries/auditLog';
+import pool from '../db/client';
 import { cache } from '../services/cacheService';
 import { parseRosterBulkImportFile, RosterBulkImportParseError } from '../services/rosterBulkImportParser';
 import { runFullRosterValidation } from '../services/rosterBulkImportValidation';
@@ -51,6 +54,27 @@ const assignmentSchema = z.object({
   teacher_id: z.string().uuid(),
   class_id:   z.string().uuid(),
   subject_id: z.string().uuid(),
+});
+
+/** Bulk assign: one teacher, many (class, subject) pairs. Either give explicit pairs,
+ *  or give class_ids and let the server expand them across every subject in the
+ *  school — the primary-school "this teacher takes the whole class" case. */
+const bulkAssignmentSchema = z
+  .object({
+    teacher_id: z.string().uuid(),
+    pairs: z.array(z.object({
+      class_id:   z.string().uuid(),
+      subject_id: z.string().uuid(),
+    })).min(1).max(200).optional(),
+    all_subjects_for_class_ids: z.array(z.string().uuid()).min(1).max(20).optional(),
+  })
+  .refine(d => d.pairs || d.all_subjects_for_class_ids, {
+    message: 'Provide either pairs or all_subjects_for_class_ids',
+  });
+
+const copyAssignmentsSchema = z.object({
+  from_term_id: z.string().uuid(),
+  to_term_id:   z.string().uuid(),
 });
 
 // ── Middleware: super_admin or any authenticated member of the school ───────────
@@ -364,6 +388,133 @@ router.get(
       });
       res.setHeader('Cache-Control', 'private, max-age=60');
       return res.json({ success: true, data: result });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/teacher-assignments/bulk ──────────────────────────────────
+// One teacher, many (class, subject) pairs. A primary class teacher takes every
+// subject in their class, which previously meant a dozen separate requests per
+// class, repeated every term.
+
+router.post(
+  '/:schoolId/teacher-assignments/bulk',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = bulkAssignmentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const schoolId = req.params.schoolId;
+      const { teacher_id, pairs, all_subjects_for_class_ids } = parsed.data;
+
+      const term = await getActiveTerm(schoolId);
+      if (!term) {
+        return res.status(422).json({ success: false, error: { code: 'NO_ACTIVE_TERM', message: 'No active term found for this school. Activate a session and term first.' } });
+      }
+
+      const teacher = await findUserById(teacher_id, schoolId);
+      if (!teacher || teacher.role !== 'teacher') {
+        return res.status(404).json({ success: false, error: { code: 'TEACHER_NOT_FOUND', message: 'Teacher not found in this school' } });
+      }
+
+      // Expand "whole class" into one pair per active subject in the school.
+      let resolved = pairs ?? [];
+      if (all_subjects_for_class_ids?.length) {
+        const [schoolClasses, schoolSubjects] = await Promise.all([
+          listClasses(schoolId),
+          listActiveSubjects(schoolId),
+        ]);
+        const validClassIds = new Set(schoolClasses.map(c => c.id));
+        const unknown = all_subjects_for_class_ids.filter(id => !validClassIds.has(id));
+        if (unknown.length > 0) {
+          return res.status(404).json({ success: false, error: { code: 'CLASS_NOT_FOUND', message: 'One or more classes do not belong to this school' } });
+        }
+        if (schoolSubjects.length === 0) {
+          return res.status(422).json({ success: false, error: { code: 'NO_SUBJECTS', message: 'This school has no subjects yet — add subjects before assigning a class teacher' } });
+        }
+        resolved = [
+          ...resolved,
+          ...all_subjects_for_class_ids.flatMap(class_id =>
+            schoolSubjects.map(s => ({ class_id, subject_id: s.id }))
+          ),
+        ];
+      }
+
+      const created = await insertTeacherAssignmentsBulk(teacher_id, resolved, term.id, schoolId);
+      cache.del(`roster:${schoolId}:assignments:${teacher_id}`);
+
+      await logAudit({
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TEACHER_ASSIGNMENTS_BULK_CREATED',
+        entity: 'teacher_assignments',
+        entityId: teacher_id,
+        newValue: { term_id: term.id, requested: resolved.length, created: created.length },
+      }).catch(() => {});
+
+      return res.status(201).json({
+        success: true,
+        data: { created: created.length, skipped: resolved.length - created.length, assignments: created },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/teacher-assignments/copy-from-term ────────────────────────
+// Carries a whole term's teaching roster into another term. Assignments are
+// term-scoped and nothing copied them forward, so every term started empty.
+
+router.post(
+  '/:schoolId/teacher-assignments/copy-from-term',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = copyAssignmentsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const schoolId = req.params.schoolId;
+      const { from_term_id, to_term_id } = parsed.data;
+
+      if (from_term_id === to_term_id) {
+        return res.status(400).json({ success: false, error: { code: 'SAME_TERM', message: 'Source and destination terms must differ' } });
+      }
+
+      // Both terms must belong to this school — findTermById is session-scoped, so
+      // verify against the school directly.
+      const terms = await pool.query<{ id: string }>(
+        `SELECT id FROM terms WHERE school_id = $1 AND id = ANY($2::uuid[])`,
+        [schoolId, [from_term_id, to_term_id]]
+      );
+      if (terms.rows.length !== 2) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'One or both terms do not belong to this school' } });
+      }
+
+      const copied = await copyAssignmentsBetweenTerms(schoolId, from_term_id, to_term_id);
+      cache.delByPrefix(`roster:${schoolId}:assignments:`);
+
+      await logAudit({
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TEACHER_ASSIGNMENTS_COPIED',
+        entity: 'teacher_assignments',
+        entityId: to_term_id,
+        newValue: { from_term_id, to_term_id, copied },
+      }).catch(() => {});
+
+      return res.json({ success: true, data: { copied } });
     } catch (err) {
       return next(err);
     }

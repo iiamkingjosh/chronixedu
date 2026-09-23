@@ -104,6 +104,30 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   user-visible changes in `docs/CHANGELOG.md`, in the same PR as the change.
 - New integration tests in `apps/api/tests/` must delete the rows they create in `afterAll`.
 
+## Primary vs secondary (teaching model)
+
+- `users.teacher_mode` is `'class'` (primary: one teacher takes every subject in their
+  class) or `'subject'` (secondary). It is set at creation and **immutable** after.
+  Any zod schema for it must match the `chronixedu_teacher_mode` enum exactly —
+  `'class' | 'subject'`. It drives score-entry UI layout only; it grants no rights.
+- **Authorization never depends on `teacher_mode`.** Both modes require a
+  `teacher_assignments` row per `(teacher, class, subject, term)`. `classes.form_teacher_id`
+  grants attendance and class-comment rights but **not** score entry.
+- A primary class teacher therefore needs one assignment per subject. Use
+  `POST /:schoolId/teacher-assignments/bulk` (`all_subjects_for_class_ids` expands to
+  every active subject; both forms skip existing rows, so re-sending is safe).
+- Assignments are **term-scoped**. `POST /:schoolId/teacher-assignments/copy-from-term`
+  carries a term's roster into the next one — without it each term starts empty.
+- `classes.level` is free text (e.g. "Primary", "JSS", "SSS") and is matched
+  **exactly**, so keep it consistent: a typo silently falls back to school-wide config
+  rather than erroring. It resolves both `assessment_configs` and grading overrides.
+- **Per-level grading:** `school_settings` holds one row per school, so grading_scale
+  and promotion_cutoff are school-wide by default. A school running more than one
+  section sets `academic_config.level_overrides[<level>]` to override either field for
+  that level. Resolved in `fetchAcademicConfig(schoolId, classId)` and mirrored in
+  report-card generation — any new code serving grades must resolve per class, not
+  per school.
+
 ## Academic calendar
 
 - A session has **at most 3 terms**, but onboarding only requires the one the school

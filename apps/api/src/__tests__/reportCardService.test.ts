@@ -27,6 +27,7 @@ jest.mock('../db/queries/reportCards', () => ({
   fetchFormTeacher: jest.fn(),
   fetchPrincipalRemark: jest.fn(),
   upsertReportCard: jest.fn(),
+  fetchClassLevel: jest.fn().mockResolvedValue(null),
 }));
 jest.mock('../services/resultEngine', () => ({
   computeClassResults: jest.fn(),
