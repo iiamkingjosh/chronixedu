@@ -30,6 +30,13 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    `/api/schools/:schoolId/...` route runs `requireSchoolAccess`
    (`req.user.school_id === req.params.schoolId`, super_admin excepted) and
    filters every query by `school_id`. Never trust `school_id` in a body/query.
+   ⚠️ **`requireSchoolAccess` is defined per route file and they are NOT identical.**
+   Most files define the permissive version above; `routes/users.ts` defines one
+   that admits **only super_admin and principal**. Read the definition in the file
+   you are working in before concluding a route is or isn't guarded — a Round 10
+   audit pass misreported an endpoint as world-readable by assuming the common
+   version. When a route's access differs from its file's norm, add an explicit
+   `requireRole(...)` so the intent is visible at the call site.
 2. **RLS is defence in depth, not the enforcement layer.** The API's `pg` pool
    connects as the table owner and **bypasses RLS**. Isolation lives in route
    guards + `WHERE school_id = $n`. Every table still has RLS enabled (CI
@@ -48,6 +55,13 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
      Approve requires every assigned subject submitted. Publish requires all approved.
    - `published` is final. Return moves approved → draft and submitted subjects → draft.
    - Guard every student-level change with `validateStatusTransition`.
+   - **Parent- and student-facing score data requires `result_status === 'published'`.**
+     Not `approved`, and not "a report card exists". The four routes that expose
+     scores to those roles (`parent.ts` snapshot + results, `student.ts` dashboard +
+     results) each gate on it explicitly; `computeClassResults` reads raw `scores`
+     and applies no workflow filter of its own, so any new caller that serves a
+     parent or student must apply the gate itself. Gating only the report-card PDF
+     is not sufficient — that was the Round 10 H-01 defect.
 6. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
    settings, payments, support-session actions. `audit_logs` has no DELETE.
@@ -89,6 +103,22 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Record security fixes in `SECURITY.md` (next round, existing format) and
   user-visible changes in `docs/CHANGELOG.md`, in the same PR as the change.
 - New integration tests in `apps/api/tests/` must delete the rows they create in `afterAll`.
+
+## Academic calendar
+
+- A session has **at most 3 terms**, but onboarding only requires the one the school
+  is starting in. Schools rarely know later term dates at sign-up and Nigerian
+  calendars shift (holidays, strikes, elections), so the rest are added afterwards
+  via `POST /:schoolId/sessions/:sessionId/terms`.
+- **Term dates stay editable** via `PATCH /:schoolId/sessions/:sessionId/terms/:termId`
+  (principal/super_admin, audited as `TERM_UPDATED`). `is_current` is deliberately not
+  editable there — use the activate route, which maintains one-current-term-per-session.
+- **Terms in a session must never overlap.** `findTermForDate()` resolves a date with
+  `LIMIT 1` and no ordering, so an overlap makes attendance land in an arbitrary term.
+  Both the add and edit routes reject overlaps with `409 TERM_DATE_CONFLICT`; onboarding
+  applies the same rule through `validateTermRanges`.
+- One current session per school and one current term per session are enforced by
+  partial unique indexes from migration 001 (`one_current_session`, `one_current_term`).
 
 ## Migrations
 
