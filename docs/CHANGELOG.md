@@ -29,6 +29,21 @@
 - Principals can now edit a term's name and dates, with the change recorded in the audit log.
 - Terms are also now prevented from overlapping each other (on both adding and editing). Overlapping terms previously caused attendance to be filed against an arbitrary one of them.
 
+### Primary schools: assign a class teacher to a whole class at once
+- A primary class teacher takes every subject in their class, but assignments could only be created one subject at a time — a dozen separate saves per class, and again for every class.
+- A teacher can now be assigned to every subject in one or more classes in a single action. Re-running it is safe; existing assignments are left alone.
+
+### Teaching assignments carry forward to the next term
+- Assignments belong to a term, and nothing copied them forward — so every school rebuilt its entire teaching roster by hand at the start of every term.
+- A term's roster can now be copied into another term, skipping anything already there.
+
+### Schools running both a primary and a secondary section can grade them differently
+- The grading scale and promotion cut-off were stored once per school, so both sections were forced to share one pass mark.
+- A school can now override the grading scale and/or pass mark per class level, falling back to the school-wide values where no override is set. Applies to results, the at-risk list and report cards alike.
+
+### Fixed: creating a teacher via the admin API could fail
+- The account-creation endpoint accepted a teaching mode value the database doesn't recognise, which failed on save. It now accepts exactly the two valid modes.
+
 ### Parents can now see school notices
 - Announcements could already target parents and did reach them as in-app notifications, but there was no page listing them — the only way to read one was the notification popup. Added a Notices page to the parent menu.
 

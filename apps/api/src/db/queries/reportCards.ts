@@ -183,3 +183,13 @@ export async function getReportCardsForClass(
   );
   return result.rows;
 }
+
+/** The level string of a class (e.g. "Primary", "JSS"), used to resolve per-level
+ *  grading overrides in academic_config. Null when the class has no level set. */
+export async function fetchClassLevel(classId: string, schoolId: string): Promise<string | null> {
+  const result = await pool.query<{ level: string | null }>(
+    `SELECT level FROM classes WHERE id = $1 AND school_id = $2`,
+    [classId, schoolId]
+  );
+  return result.rows[0]?.level ?? null;
+}
