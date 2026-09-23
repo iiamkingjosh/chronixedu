@@ -69,10 +69,10 @@ export default function ClassCommentsPage() {
   // Load current signature
   useEffect(() => {
     if (!schoolId || !user) return;
-    apiFetch<{ success: boolean; data: { users: { id: string; signature_url: string | null }[] } }>(
-      `/api/schools/${schoolId}/users?role=teacher&limit=100`
+    apiFetch<{ success: boolean; data: { id: string; signature_url: string | null } }>(
+      `/api/schools/${schoolId}/users/me`
     )
-      .then(({ data }) => setSignatureUrl(data.users.find(u => u.id === user.user_id)?.signature_url ?? null))
+      .then(({ data }) => setSignatureUrl(data.signature_url ?? null))
       .catch(() => {});
   }, [schoolId, user]);
 

@@ -89,6 +89,16 @@ describe('Notification pipeline — suspension → audit log → worker → in-a
        VALUES ($1, $2, 'mother', TRUE)`,
       [parentUserId, studentId]
     );
+
+    // Enrol the student in CLASS_ID for the active term's session. POST /behaviour
+    // validates that the student is actually in the class being cited (AUDIT R10-M2),
+    // so without this row the incident is correctly rejected with STUDENT_NOT_ENROLLED.
+    await pool.query(
+      `INSERT INTO student_classes (student_id, class_id, session_id)
+       SELECT $1, $2, t.session_id FROM terms t WHERE t.school_id = $3 AND t.is_current = TRUE
+       ON CONFLICT DO NOTHING`,
+      [studentId, CLASS_ID, SCHOOL_ID]
+    );
   }, 20000);
 
   afterAll(async () => {
@@ -97,6 +107,7 @@ describe('Notification pipeline — suspension → audit log → worker → in-a
     await pool.query(`DELETE FROM audit_logs WHERE entity = 'behaviour_records' AND entity_id = $1`, [behaviourRecordId]);
     await pool.query(`DELETE FROM behaviour_records WHERE id = $1`, [behaviourRecordId]);
     await pool.query(`DELETE FROM parent_students WHERE parent_id = $1`, [parentUserId]);
+    await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [studentId]);
     await pool.query(`DELETE FROM students WHERE id = $1`, [studentId]);
     await pool.query(`DELETE FROM users WHERE id IN ($1, $2)`, [parentUserId, studentUserId]);
     await pool.end();

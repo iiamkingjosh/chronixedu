@@ -5,6 +5,8 @@ import { logAudit } from '../db/queries/auditLog';
 import { getActiveTerm, findClassById } from '../db/queries/roster';
 import { findStudentById, findStudentByUserId } from '../db/queries/students';
 import { isParentLinkedToStudent } from '../db/queries/parents';
+import { findStudentsNotInClass } from '../db/queries/scores';
+import { isTeacherAssignedToClass } from '../db/queries/attendance';
 import {
   createBehaviourRecord,
   getStudentBehaviourHistory,
@@ -77,6 +79,31 @@ router.post(
       const term = await getActiveTerm(schoolId);
       if (!term) {
         return res.status(404).json({ success: false, error: { code: 'NO_ACTIVE_TERM', message: 'No active term found for this school.' } });
+      }
+
+      // AUDIT R10-M2: validate the target, not just the caller (doctrine 3). This
+      // route previously checked only that the student and class each existed in the
+      // school — so a teacher could file an incident against any student in any
+      // class, and a severity of 'suspension' notifies the parent immediately.
+      const notEnrolled = await findStudentsNotInClass(schoolId, class_id, term.id, [student_id]);
+      if (notEnrolled.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'STUDENT_NOT_ENROLLED', message: 'This student is not enrolled in the specified class for this term' },
+        });
+      }
+
+      const role = req.user!.role ?? '';
+      if (!['super_admin', 'principal'].includes(role)) {
+        const reporterId = req.user!.user_id;
+        const isAssigned = cls.form_teacher_id === reporterId
+          || await isTeacherAssignedToClass(reporterId, class_id, schoolId, term.id);
+        if (!isAssigned) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'NOT_ASSIGNED', message: 'You are not assigned to this class for the current term' },
+          });
+        }
       }
 
       const record = await createBehaviourRecord({

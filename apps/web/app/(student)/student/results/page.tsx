@@ -194,6 +194,14 @@ export default function StudentResultsPage() {
 
       {loading ? (
         <p className="text-sm text-gray-500 py-10 text-center">Loading results…</p>
+      ) : results && results.result_status !== 'published' ? (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-10 text-center">
+          <p className="text-sm font-medium text-amber-900">Results not published yet</p>
+          <p className="text-xs text-amber-700 mt-2 max-w-sm mx-auto">
+            Your scores for this term become visible here once your school has finished
+            marking and published the results.
+          </p>
+        </div>
       ) : results && (
         <>
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 grid grid-cols-2 gap-4 text-center">

@@ -84,6 +84,27 @@ export async function isTeacherAssignedToClass(
   return result.rows.length > 0;
 }
 
+/**
+ * Term-agnostic variant used by the attendance READ paths (AUDIT R10-M1).
+ * Marking attendance is checked against the specific term that covers the date;
+ * for reads we only need to know the teacher has a real relationship to the class
+ * at some point, which also lets them review a previous term's history for a class
+ * they still teach. Callers combine this with the class's form_teacher_id check.
+ */
+export async function isTeacherAssignedToClassAnyTerm(
+  teacherId: string,
+  classId: string,
+  schoolId: string
+): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT id FROM teacher_assignments
+     WHERE teacher_id = $1 AND class_id = $2 AND school_id = $3
+     LIMIT 1`,
+    [teacherId, classId, schoolId]
+  );
+  return result.rows.length > 0;
+}
+
 // ── Mark attendance (bulk upsert — same-day correction allowed) ───────────────
 
 export interface BulkAttendanceEntry {

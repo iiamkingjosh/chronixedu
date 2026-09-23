@@ -361,8 +361,11 @@ router.post(
 
       // Release any already-generated report cards for these students — this is
       // the only place report_cards.is_published ever flips to TRUE. Without it,
-      // the parent- and student-facing routes (which gate on is_published = TRUE)
+      // the parent/student report-card PDF routes (which gate on is_published = TRUE)
       // would never return a report card, no matter what the result_status says.
+      // NOTE: the PDF is not the only thing publishing releases. The parent/student
+      // JSON score routes gate on result_status = 'published' (AUDIT R10-H1), so this
+      // batchUpsertStatuses call above is what makes scores visible to them at all.
       await publishReportCards(schoolId, term_id, studentIds);
 
       await logAudit({

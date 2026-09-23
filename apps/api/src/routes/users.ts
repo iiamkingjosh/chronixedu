@@ -87,17 +87,64 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
   res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
 }
 
+/**
+ * Any authenticated member of the school (not just admins). requireSchoolAccess
+ * above is deliberately admin-only because every other route in this file manages
+ * OTHER users; this one is for routes that only ever expose the caller's own record.
+ */
+function requireSchoolMember(req: Request, res: Response, next: NextFunction): void {
+  const user = req.user;
+  if (!user) {
+    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
+    return;
+  }
+  if (user.role === 'super_admin') { next(); return; }
+  if (user.school_id === req.params.schoolId) { next(); return; }
+  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+}
+
 function generateTempPassword(): string {
   return crypto.randomBytes(12).toString('base64url');
 }
 
 
+// ── GET /:schoolId/users/me ────────────────────────────────────────────────────
+// Any authenticated member of the school can read THEIR OWN record, resolved from
+// the JWT (no user id is accepted from the request). Added because the teacher
+// class-comments page needs its own signature_url, and the only endpoint that
+// exposed it was the admin-only directory below — so that lookup had been silently
+// 403-ing behind a .catch(() => {}) and teachers never saw their signature.
+
+router.get(
+  '/:schoolId/users/me',
+  verifyToken,
+  requireSchoolMember,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const me = await findUserById(req.user!.user_id, req.params.schoolId);
+      if (!me) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found in this school' } });
+      }
+      return res.json({ success: true, data: me });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 // ── GET /:schoolId/users ───────────────────────────────────────────────────────
+// Admin-only. This returns email, phone and last_login_at for every user in the
+// school and accepts a `role` filter, so it must never widen beyond admins.
+// requireSchoolAccess (above) already enforces super_admin/principal; the explicit
+// requireRole is defence in depth so the restriction survives any future edit to
+// that helper, and states the intent at the call site. Callers that only need
+// their own record use GET /:schoolId/users/me above.
 
 router.get(
   '/:schoolId/users',
   verifyToken,
   requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = listQuerySchema.safeParse(req.query);

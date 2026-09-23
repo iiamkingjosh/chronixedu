@@ -120,7 +120,11 @@ router.get(
       let academic = null;
       let recentResults: Array<{ subject_id: string; subject_name: string; total_score: number | null; grade: string | null }> = [];
 
-      if (classId) {
+      // AUDIT R10-H1: scores are only visible to a parent once the student's result
+      // for the term has been PUBLISHED (doctrine 5). Before that the row is draft or
+      // approved — still being entered, submitted, or reviewed — and must not leak.
+      // result_status is echoed below so the UI can explain *why* nothing is shown.
+      if (classId && resultStatus === 'published') {
         const classResult = await computeClassResults(classId, termId, schoolId);
         const studentRecord = classResult.students.find(s => s.student_id === studentId);
         if (studentRecord) {
@@ -203,7 +207,8 @@ router.get(
         remark: string | null;
       }> = [];
 
-      if (classId) {
+      // AUDIT R10-H1: same publish gate as the snapshot route above (doctrine 5).
+      if (classId && resultStatus === 'published') {
         const classResult = await computeClassResults(classId, termId, schoolId);
         const studentRecord = classResult.students.find(s => s.student_id === studentId);
         if (studentRecord) {
