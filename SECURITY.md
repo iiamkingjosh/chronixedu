@@ -1,8 +1,48 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 9 — 2026-09-17  
-**Scope:** Academic-records write authorization (scores/results)  
-**Round 9 total findings:** 1 (0 Critical · 1 High · 0 Medium · 0 Low · 0 Info)
+**Latest audit:** Round 10 — 2026-09-23  
+**Scope:** Full role-by-role review (principal, teacher, parent, student)  
+**Round 10 total findings:** 4 (0 Critical · 1 High · 3 Medium) + 1 withdrawn false positive
+
+---
+
+## Round 10 — 2026-09-23
+
+**Scope:** A full pass over every role's read and write surface — principal, teacher, parent and student — covering route guards, frontend↔backend wiring, and whether each role can reach data belonging to someone else. Four parallel reviews, each finding independently re-verified against the source before being accepted.
+
+### H-01 — Parents and students could see unpublished (draft) results ✅ Fixed
+
+**Files:** `apps/api/src/routes/parent.ts`, `apps/api/src/routes/student.ts`, `apps/web/app/(parent)/parent/results/page.tsx`, `apps/web/app/(student)/student/results/page.tsx`, `apps/api/src/__db_tests__/resultVisibility.db.test.ts`
+
+**Fix:** Four endpoints — the parent snapshot and results routes, and the student dashboard and results routes — each fetched `getResultStatus(...)` and then used it **only to echo back in the response payload**. The score data itself came from `computeClassResults`, whose query reads the `scores` table with no join to `result_status` or `subject_result_status`. The practical effect: a parent or student saw a score the instant a teacher typed it — before subject submission, before the principal approved, and before anything was published. Doctrine 5 states `published` is the parent/student-visible state.
+
+Two things let this persist. The earlier fix recorded as Round 5 L-01 gated only the **report-card PDF** (`report_cards.is_published`), not the live-computed JSON score routes — so the workflow *looked* addressed. And a comment in `results.ts` asserted that "the parent- and student-facing routes (which gate on `is_published = TRUE`)", which is true of the PDF route alone and would reassure anyone who read it. That comment has been corrected.
+
+All four routes now require `result_status === 'published'` before populating any score data, and both web pages render an explicit "Results not published yet" panel instead of a blank table. Regression coverage in `resultVisibility.db.test.ts` — verified to fail against the pre-fix code.
+
+### M-01 — Attendance read paths lacked the assignment check their write path enforced ✅ Fixed
+
+**Files:** `apps/api/src/routes/attendance.ts`, `apps/api/src/db/queries/attendance.ts`
+
+**Fix:** `POST /attendance/mark` has always verified the caller is the class's form teacher or holds a `teacher_assignments` row for it, with a comment explaining why. `GET /attendance/class` and `GET /attendance/monthly-summary` checked only `requireRole(...)` plus "does this class exist in this school" — so any teacher could pull the full roster (names, admission numbers, per-day status) and 30-day history of a class they have no relationship to. `GET /:schoolId/classes` has no role restriction, so discovering class ids is trivial. Added `canTeacherViewClass`, backed by a new term-agnostic `isTeacherAssignedToClassAnyTerm` query (reads may legitimately span past terms; the write path keeps its stricter term-specific check). Principals and super_admins bypass, as before.
+
+### M-02 — `POST /behaviour` validated neither the reporter's assignment nor the student's enrollment ✅ Fixed
+
+**Files:** `apps/api/src/routes/behaviour.ts`, `apps/api/tests/notificationPipeline.test.ts`
+
+**Fix:** The route confirmed the student existed in the school and the class existed in the school — but never that the student was *in that class*, nor that the reporting teacher had any relationship to it. A `severity: 'suspension'` record notifies the parent immediately, so this let any teacher trigger a real parent notification against any student in the school, citing an arbitrary class. Now validates enrollment via `findStudentsNotInClass` (the same doctrine-3 helper `scores` uses) and requires the reporter to be the form teacher or assigned to the class for the current term. Surfaced a fixture gap in `notificationPipeline.test.ts`, which had been creating a `students` row with no `student_classes` enrollment and only passed because the validation was missing.
+
+### M-03 — Principal dashboard capability built but never wired ✅ Fixed
+
+**Files:** `apps/web/app/(dashboard)/principal/dashboard/page.tsx`
+
+**Fix:** Four of the five `dashboard/principal/*` endpoints had no frontend consumer at all — `students-at-risk`, `teacher-activity`, `result-status` and `class-selector`. Not a security issue, but `getStudentsAtRisk` and `getTeacherActivity` are exactly the oversight a principal needs and were invisible. Both are now rendered on the principal dashboard, loading independently so a failure in either cannot blank the page. `result-status` and `class-selector` were left unwired deliberately — they duplicate the existing results page and roster endpoints respectively.
+
+### Withdrawn — `GET /:schoolId/users` open to all roles ❌ False positive
+
+Reported during this round as a High-severity PII exposure and **retracted after verification**. Recorded here because the misreading is easy to repeat: the route carries no `requireRole`, which in every other route file would mean "any authenticated member of the school." But `users.ts` defines its **own** `requireSchoolAccess` that admits only super_admin and principal. The endpoint was never open.
+
+The real defect underneath was smaller: the teacher class-comments page called that admin-only endpoint to fetch its own `signature_url`, received 403, and swallowed it in a `.catch(() => {})` — so teachers never saw their signature. Fixed by adding `GET /:schoolId/users/me` (permissive guard, resolves the caller from the JWT, no id accepted from the request) and pointing that page at it. An explicit `requireRole` was also added to the list route as defence in depth, so the restriction survives future edits to the local helper.
 
 ---
 

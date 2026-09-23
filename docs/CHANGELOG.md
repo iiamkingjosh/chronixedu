@@ -1,5 +1,37 @@
 # Chronix Edu — Changelog
 
+## Role-by-Role Audit — Result Visibility, Attendance & Behaviour Guards (2026-09-23)
+
+### Results are no longer visible before publication
+- Parents and students previously saw scores as soon as a teacher entered them — before subject submission, principal approval, or publication. The four routes that serve score data to those roles fetched the result status but never actually checked it.
+- All four now require the term's result to be **published** before any score, average, grade or class position is returned (`routes/parent.ts`, `routes/student.ts`).
+- Both results pages now show a clear "Results not published yet" message explaining that scores appear once the school has finished marking, instead of rendering an empty table.
+- Previously only the report-card *PDF* was gated, which made the workflow look complete when it wasn't.
+
+### Attendance history is restricted to a teacher's own classes
+- Marking attendance always required being the class's form teacher or assigned to it; *viewing* a class's roster and 30-day history did not — any teacher could read any class in the school.
+- Both attendance read endpoints now apply the same relationship check (`routes/attendance.ts`). Principals and super-admins are unaffected.
+
+### Behaviour incidents must cite a class the student is actually in
+- Logging an incident verified that the student and the class each existed, but never that the student was *in* that class, nor that the reporting teacher taught it — and a suspension notifies the parent immediately.
+- Now validates the student's enrollment and requires the reporter to be the form teacher or assigned to that class for the current term (`routes/behaviour.ts`).
+
+### Principal dashboard: at-risk students and teacher activity
+- Two fully-built backend capabilities had no UI and were invisible to principals. The dashboard now shows students below the promotion cut-off (with how far short they are) and per-teacher submission progress with last score-entry date.
+
+### Onboarding no longer demands the whole year's calendar upfront
+- Sign-up previously required all three terms with exact start and end dates — six date fields a school usually can't answer months ahead.
+- Onboarding now asks only for the term the school is actually starting in; the others are marked optional and can be left blank.
+- Remaining terms are added later from Settings → Academic Structure.
+
+### Term dates can now be corrected when the calendar shifts
+- There was previously **no way to edit a term's dates** anywhere in the product — only to mark one current. A holiday change, strike or election that moved the calendar could only be fixed with direct database access.
+- Principals can now edit a term's name and dates, with the change recorded in the audit log.
+- Terms are also now prevented from overlapping each other (on both adding and editing). Overlapping terms previously caused attendance to be filed against an arbitrary one of them.
+
+### Teacher signature on class comments
+- The class-comments page fetched the teacher's signature from an admin-only endpoint, silently received a permission error, and showed nothing. Added a self-scoped `users/me` endpoint and pointed the page at it.
+
 ## Staff & Payment Bulk Import, Data-Integrity Fixes, Security Hardening (2026-08-31 — 2026-09-17)
 
 ### Staff Bulk Import

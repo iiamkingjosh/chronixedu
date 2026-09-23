@@ -14,7 +14,7 @@
     "lint:api": "npm --workspace=@chronixedu/api run lint",
     "lint": "npm run lint:web && npm run lint:api",
     "test": "npm --workspace=@chronixedu/api run test",
-    "test:unit": "npm --workspace=@chronixedu/api run test -- --testPathPattern=src/__tests__",
+    "test:unit": "npm --workspace=@chronixedu/api run test:unit",
     "migrate": "npm --workspace=@chronixedu/api run migrate",
     "test:isolation": "npm --workspace=@chronixedu/api run test -- --testPathPattern=tests/",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
