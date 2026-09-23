@@ -6,8 +6,15 @@ Where the PDFs in `docs/spec/` disagree with this file, this file wins — see
 
 ## What this is
 
-Multi-tenant school management SaaS for Nigerian private schools. First client
-Child Prime Onyx School (live since 7 Sep 2026). Monorepo, npm workspaces:
+Multi-tenant school management SaaS for Nigerian private schools. No real paying
+client is live yet — every school currently in the database is either a test
+fixture (created by an integration test, never cleaned up — see `L-test-data`
+in `docs/AUDIT-2026-09.md`) or demo/sandbox data. `apps/api/scripts/seed-child-prime.js`
+seeds a fictional "Child Prime Onyx School" with made-up Nigerian names and
+gmail.com parent emails for demos/sales — it is NOT a real customer record, and
+running it **wipes every school and every Supabase Auth user first**. Treat
+this repo's "production" database as pre-launch: no real student, parent, or
+payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 
 | Path | What |
 |---|---|
