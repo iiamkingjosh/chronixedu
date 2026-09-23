@@ -95,6 +95,54 @@ export async function insertTerm(
   return result.rows[0];
 }
 
+/** All terms in a session, earliest first. Used to check a new/edited term's dates
+ *  against its siblings — terms must not overlap (see findTermForDate). */
+export async function listTermsBySession(sessionId: string, schoolId: string): Promise<TermRow[]> {
+  const result = await pool.query<TermRow>(
+    `SELECT id, session_id, school_id, name, start_date, end_date, is_current
+     FROM terms
+     WHERE session_id = $1 AND school_id = $2
+     ORDER BY start_date`,
+    [sessionId, schoolId]
+  );
+  return result.rows;
+}
+
+/**
+ * Updates a term's name and/or dates. School calendars shift after onboarding
+ * (holidays, strikes, elections), and before this existed the only way to correct a
+ * term was direct database access. is_current is deliberately NOT editable here —
+ * use activateTerm, which maintains the one-current-term-per-session invariant.
+ */
+export async function updateTerm(
+  termId: string,
+  sessionId: string,
+  schoolId: string,
+  patch: { name?: string; start_date?: string; end_date?: string }
+): Promise<TermRow | null> {
+  // Column names are taken from this fixed allowlist, never from the caller's object
+  // keys — see SECURITY.md Round 5 M-07 (dynamic SQL column names from Zod fields).
+  const COLUMNS = ['name', 'start_date', 'end_date'] as const;
+  const sets: string[] = [];
+  const params: unknown[] = [];
+  for (const column of COLUMNS) {
+    const value = patch[column];
+    if (value === undefined) continue;
+    params.push(value);
+    sets.push(`${column} = $${params.length}`);
+  }
+  if (sets.length === 0) return findTermById(termId, sessionId, schoolId);
+
+  params.push(termId, sessionId, schoolId);
+  const result = await pool.query<TermRow>(
+    `UPDATE terms SET ${sets.join(', ')}
+     WHERE id = $${params.length - 2} AND session_id = $${params.length - 1} AND school_id = $${params.length}
+     RETURNING id, session_id, school_id, name, start_date, end_date, is_current`,
+    params
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function findTermById(
   termId: string,
   sessionId: string,

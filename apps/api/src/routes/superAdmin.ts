@@ -160,26 +160,57 @@ const onboardingTermSchema = z.object({
   end_date: z.string(),
 });
 
+/**
+ * Validates a set of term date ranges: each end after its start, and no two terms
+ * overlapping. Shared by onboarding and the post-onboarding add/edit term routes.
+ * Overlap matters at runtime — findTermForDate() resolves a date to a term with
+ * `LIMIT 1` and no ordering, so overlapping terms would attribute attendance to an
+ * arbitrary one of them.
+ */
+export function validateTermRanges(
+  terms: Array<{ name: string; start_date: string; end_date: string }>,
+  ctx: z.RefinementCtx
+): void {
+  const parsed = terms.map((term, idx) => {
+    const start = new Date(term.start_date);
+    const end = new Date(term.end_date);
+    if (isNaN(start.getTime())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Term ${idx + 1}: invalid start_date`, path: ['terms', idx, 'start_date'] });
+    }
+    if (isNaN(end.getTime())) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Term ${idx + 1}: invalid end_date`, path: ['terms', idx, 'end_date'] });
+    }
+    if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end <= start) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Term ${idx + 1}: end_date must be after start_date`, path: ['terms', idx, 'end_date'] });
+    }
+    return { idx, name: term.name, start, end };
+  });
+
+  const usable = parsed.filter(t => !isNaN(t.start.getTime()) && !isNaN(t.end.getTime()) && t.end > t.start);
+  const byStart = [...usable].sort((a, b) => a.start.getTime() - b.start.getTime());
+  for (let i = 1; i < byStart.length; i++) {
+    const prev = byStart[i - 1];
+    const curr = byStart[i];
+    if (curr.start <= prev.end) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `"${curr.name}" starts on or before "${prev.name}" ends — terms cannot overlap`,
+        path: ['terms', curr.idx, 'start_date'],
+      });
+    }
+  }
+}
+
 const onboardingStep3Schema = z
   .object({
     session_name: z.string().min(1),
-    terms: z.array(onboardingTermSchema).length(3, 'Exactly 3 terms are required'),
+    // Only the term the school is actually starting in is required. A school rarely
+    // knows its second- and third-term dates at sign-up, and Nigerian calendars shift
+    // (holidays, strikes, elections) — so the remaining terms are added later via
+    // POST /:schoolId/sessions/:sessionId/terms, and dates stay editable via PATCH.
+    terms: z.array(onboardingTermSchema).min(1, 'At least the current term is required').max(3, 'A session has at most 3 terms'),
   })
-  .superRefine((data, ctx) => {
-    data.terms.forEach((term, idx) => {
-      const start = new Date(term.start_date);
-      const end = new Date(term.end_date);
-      if (isNaN(start.getTime())) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Term ${idx + 1}: invalid start_date`, path: ['terms', idx, 'start_date'] });
-      }
-      if (isNaN(end.getTime())) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Term ${idx + 1}: invalid end_date`, path: ['terms', idx, 'end_date'] });
-      }
-      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end <= start) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Term ${idx + 1}: end_date must be after start_date`, path: ['terms', idx, 'end_date'] });
-      }
-    });
-  });
+  .superRefine((data, ctx) => validateTermRanges(data.terms, ctx));
 
 const onboardingGradeSchema = z.object({
   label: z.string().min(1),
@@ -1399,20 +1430,29 @@ router.patch(
           }
           const { session_name, terms } = parsed.data;
 
+          // Span the session across the real earliest start and latest end rather than
+          // the first/last array entries — terms may be submitted in any order, and a
+          // school can now onboard with fewer than three.
+          const sortedTerms = [...terms].sort(
+            (a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
+          );
+          const sessionStart = sortedTerms[0].start_date;
+          const sessionEnd = sortedTerms[sortedTerms.length - 1].end_date;
+
           const sessionRowResult = await pool.query<{ id: string }>(
             `INSERT INTO academic_sessions (school_id, name, start_date, end_date, is_current)
              VALUES ($1, $2, $3, $4, TRUE)
              RETURNING id`,
-            [school.id, session_name, terms[0].start_date, terms[terms.length - 1].end_date]
+            [school.id, session_name, sessionStart, sessionEnd]
           );
           const academicSessionId = sessionRowResult.rows[0].id;
 
-          for (let i = 0; i < terms.length; i++) {
-            const term = terms[i];
+          // The chronologically first term becomes the current one.
+          for (const term of sortedTerms) {
             await pool.query(
               `INSERT INTO terms (session_id, school_id, name, start_date, end_date, is_current)
                VALUES ($1, $2, $3, $4, $5, $6)`,
-              [academicSessionId, school.id, term.name, term.start_date, term.end_date, i === 0]
+              [academicSessionId, school.id, term.name, term.start_date, term.end_date, term === sortedTerms[0]]
             );
           }
 

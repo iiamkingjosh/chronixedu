@@ -12,6 +12,8 @@ import {
   findTermById,
   activateTerm,
   getCurrentContext,
+  listTermsBySession,
+  updateTerm,
 } from '../db/queries/sessions';
 
 const router = Router();
@@ -32,6 +34,38 @@ const termSchema = z.object({
   start_date: z.string().regex(datePattern, 'Must be YYYY-MM-DD'),
   end_date:   z.string().regex(datePattern, 'Must be YYYY-MM-DD'),
 });
+
+const termPatchSchema = z
+  .object({
+    name:       z.string().min(1).max(255).optional(),
+    start_date: z.string().regex(datePattern, 'Must be YYYY-MM-DD').optional(),
+    end_date:   z.string().regex(datePattern, 'Must be YYYY-MM-DD').optional(),
+  })
+  .refine(obj => Object.keys(obj).length > 0, { message: 'At least one field is required' });
+
+/**
+ * Rejects a term whose dates are inverted or overlap a sibling term in the same
+ * session. Overlap is not cosmetic: findTermForDate() resolves a date to a term with
+ * `LIMIT 1` and no ordering, so overlapping terms make attendance land in whichever
+ * term the planner happens to return. `excludeTermId` skips the row being edited.
+ */
+async function findTermDateConflict(
+  sessionId: string,
+  schoolId: string,
+  startDate: string,
+  endDate: string,
+  excludeTermId?: string
+): Promise<string | null> {
+  if (new Date(endDate) <= new Date(startDate)) {
+    return 'end_date must be after start_date';
+  }
+  const siblings = await listTermsBySession(sessionId, schoolId);
+  const clash = siblings.find(t => {
+    if (excludeTermId && t.id === excludeTermId) return false;
+    return new Date(startDate) <= new Date(t.end_date) && new Date(endDate) >= new Date(t.start_date);
+  });
+  return clash ? `These dates overlap "${clash.name}" (${clash.start_date} – ${clash.end_date})` : null;
+}
 
 // ── Middleware: super_admin or any user belonging to the school ─────────────────
 
@@ -105,8 +139,77 @@ router.post(
       }
 
       const { name, start_date, end_date } = parsed.data;
+
+      const conflict = await findTermDateConflict(req.params.sessionId, req.params.schoolId, start_date, end_date);
+      if (conflict) {
+        return res.status(409).json({ success: false, error: { code: 'TERM_DATE_CONFLICT', message: conflict } });
+      }
+
       const term = await insertTerm(req.params.sessionId, req.params.schoolId, name, start_date, end_date);
+      await logAudit({
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TERM_CREATED',
+        entity: 'terms',
+        entityId: term.id,
+        newValue: { name, start_date, end_date, session_id: req.params.sessionId },
+      }).catch(() => {});
+
       return res.status(201).json({ success: true, data: term });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── PATCH /:schoolId/sessions/:sessionId/terms/:termId ────────────────────────
+// Corrects a term's name or dates. School calendars shift after onboarding, and
+// before this route existed the only way to change a term was direct DB access.
+
+router.patch(
+  '/:schoolId/sessions/:sessionId/terms/:termId',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = termPatchSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const { schoolId, sessionId, termId } = req.params;
+
+      const existing = await findTermById(termId, sessionId, schoolId);
+      if (!existing) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Term not found' } });
+      }
+
+      // Validate the resulting date range, not just the supplied fields — a caller may
+      // move only one edge and still invert or overlap.
+      const nextStart = parsed.data.start_date ?? existing.start_date;
+      const nextEnd = parsed.data.end_date ?? existing.end_date;
+      const conflict = await findTermDateConflict(sessionId, schoolId, nextStart, nextEnd, termId);
+      if (conflict) {
+        return res.status(409).json({ success: false, error: { code: 'TERM_DATE_CONFLICT', message: conflict } });
+      }
+
+      const term = await updateTerm(termId, sessionId, schoolId, parsed.data);
+      if (!term) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Term not found' } });
+      }
+
+      await logAudit({
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TERM_UPDATED',
+        entity: 'terms',
+        entityId: termId,
+        oldValue: { name: existing.name, start_date: existing.start_date, end_date: existing.end_date },
+        newValue: { name: term.name, start_date: term.start_date, end_date: term.end_date },
+      }).catch(() => {});
+
+      return res.json({ success: true, data: term });
     } catch (err) {
       return next(err);
     }
