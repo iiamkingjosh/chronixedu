@@ -40,6 +40,22 @@ function resolveMigrationsDir(): string {
 
 const MIGRATIONS_DIR = resolveMigrationsDir();
 
+/**
+ * Records that this runner executed. Deliberately non-fatal: losing the audit trail
+ * is not a reason to block a deploy whose migrations actually succeeded.
+ */
+async function recordRun(fileCount: number, appliedCount: number): Promise<void> {
+  try {
+    await pool.query(
+      `INSERT INTO migration_runs (migrations_dir, file_count, applied_count, commit_sha)
+       VALUES ($1, $2, $3, $4)`,
+      [MIGRATIONS_DIR, fileCount, appliedCount, process.env.RAILWAY_GIT_COMMIT_SHA ?? null]
+    );
+  } catch (err) {
+    console.warn('could not record migration run:', err instanceof Error ? err.message : err);
+  }
+}
+
 async function migrate() {
   // Printed so a deploy log shows which copy was used, not just that it worked.
   console.log(`migrations dir: ${MIGRATIONS_DIR}`);
@@ -51,6 +67,29 @@ async function migrate() {
       applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+
+  // A run that applies nothing writes nothing, so "did the pre-deploy gate actually
+  // execute?" is unanswerable from the database — and Railway does not surface
+  // pre-deploy output in the log streams the API exposes. A gate that silently never
+  // runs looks identical to a healthy one, which is the same failure class as a
+  // migrate that reports success after reading zero files. This records every run,
+  // including no-ops, so execution is provable without dashboard access.
+  //
+  // RLS is enabled with no policy: nothing but the owning role (which the API's pool
+  // uses and which bypasses RLS) can read it, so the Supabase REST endpoint exposes
+  // nothing. Enabling it also keeps tenantIsolation.db.test.ts passing unchanged —
+  // that test flags public tables with relrowsecurity = false.
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS migration_runs (
+      id             BIGSERIAL PRIMARY KEY,
+      ran_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+      migrations_dir TEXT        NOT NULL,
+      file_count     INTEGER     NOT NULL,
+      applied_count  INTEGER     NOT NULL,
+      commit_sha     TEXT
+    )
+  `);
+  await pool.query('ALTER TABLE migration_runs ENABLE ROW LEVEL SECURITY');
 
   const applied = await pool.query<{ filename: string }>(
     'SELECT filename FROM schema_migrations ORDER BY filename'
@@ -66,6 +105,7 @@ async function migrate() {
 
   if (pending.length === 0) {
     console.log('✓ All migrations up to date');
+    await recordRun(files.length, 0);
     await pool.end();
     return;
   }
@@ -90,6 +130,7 @@ async function migrate() {
   }
 
   console.log(`✓ ${pending.length} migration(s) applied`);
+  await recordRun(files.length, pending.length);
   await pool.end();
 }
 

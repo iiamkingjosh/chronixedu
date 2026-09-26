@@ -158,7 +158,15 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   pushing the code that needs it, or set the API service's **Pre-Deploy Command** to
   `npm run migrate:prod` (`node dist/scripts/migrate.js` — plain JS, so it needs no
   ts-node; it exits non-zero on failure, which aborts the deploy). Set it on the API
-  service only: the web service has no `dist/scripts`.
+  service only: the web service has no `dist/scripts`. **Railway runs commands from
+  `/app`, not from the service directory** — which is why `build` and `start` both begin
+  `cd apps/api &&`. The command currently set is `cd apps/api && npm run migrate:prod`;
+  a root-level `migrate:prod` delegate also exists, so the bare form works too.
+- Every migrate run, including a no-op, writes a row to `migration_runs` (resolved dir,
+  file count, applied count, `RAILWAY_GIT_COMMIT_SHA`). A pre-deploy step that silently
+  never executes looks exactly like a healthy one from outside, and Railway does not
+  surface pre-deploy output in the API's log streams — so `SELECT * FROM migration_runs
+  ORDER BY id DESC LIMIT 5` is how you confirm the gate actually ran.
 - **The API service's `build.watchPatterns` must include `/migrations/**`.** It is
   scoped to `/apps/api/**`, and `migrations/` sits at the repo root — so a commit that
   adds only a migration triggers no build and no deploy, which is exactly the commit a
