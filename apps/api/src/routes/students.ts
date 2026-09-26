@@ -19,6 +19,7 @@ import {
   findEnrollmentForCurrentSession,
   updateEnrollmentClass,
   findUsersRolesByEmails,
+  type CreateAuthAccount,
 } from '../db/queries/students';
 import { findClassById } from '../db/queries/roster';
 import { logAudit } from '../db/queries/auditLog';
@@ -120,6 +121,28 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
   res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
 }
 
+/**
+ * Builds the auth-account creator handed to registerStudent. Every account this app
+ * creates needs a Supabase Auth identity, because login is
+ * supabase.auth.signInWithPassword and the local users row is then resolved by the id
+ * it returns — a users row without one can never be logged into, whatever its
+ * password_hash says. Mirrors the sequence in routes/users.ts.
+ */
+function createAuthAccountFor(schoolId: string): CreateAuthAccount {
+  return async ({ email, password, role, first_name, last_name }) => {
+    const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { first_name, last_name, role, school_id: schoolId },
+    });
+    if (error || !data?.user) {
+      throw new Error(`Failed to create login for ${email}: ${error?.message ?? 'unknown error'}`);
+    }
+    return data.user.id;
+  };
+}
+
 // ── POST /:schoolId/students ───────────────────────────────────────────────────
 
 router.post(
@@ -148,8 +171,9 @@ router.post(
 
       const result = await registerStudent(
         req.params.schoolId,
-        { ...studentData, passwordHash },
-        parentsWithHashes
+        { ...studentData, passwordHash, tempPassword },
+        parentsWithHashes,
+        createAuthAccountFor(req.params.schoolId)
       );
 
       // Send welcome emails to newly created parent accounts (fire-and-forget)
@@ -283,7 +307,12 @@ router.post(
 // "valid"/"error" status from preview. One registerStudent() transaction per
 // row, so a single bad row can't roll back the rest of the batch.
 
-const BULK_IMPORT_PASSWORD = 'Password2$';
+/** One random password per account. A shared constant here — which this file used to
+ *  hardcode — would give every imported account at every school the same password,
+ *  and it would be readable in the repo. */
+function generateTempPassword(): string {
+  return randomBytes(9).toString('base64url');
+}
 const BULK_IMPORT_EMAIL_BATCH_SIZE = 50;
 
 const bulkImportParentSchema = z.object({
@@ -333,10 +362,10 @@ router.post(
       const submittedRows = parsed.data.rows.map(r => r.student);
       const revalidated = await runFullValidation(submittedRows, findUsersRolesByEmails);
 
-      const passwordHash = hashSync(BULK_IMPORT_PASSWORD, 12);
       const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string; admission_no?: string }> = [];
       const createdStudents: CreatedStudentRecord[] = [];
       const allNewParents: CreatedParentRecord[] = [];
+      const parentTempPasswords = new Map<string, string>();
 
       for (const row of revalidated) {
         if (row.status === 'error') {
@@ -345,18 +374,25 @@ router.post(
         }
 
         const student = row.student;
+        // Per-row credentials. A single shared constant here would hand every
+        // imported account at every school the same publicly-known password.
+        const studentTempPassword = generateTempPassword();
+        const passwordHash = hashSync(studentTempPassword, 12);
         const parentsInput = [student.parent1, student.parent2]
           .filter((p): p is NonNullable<typeof p> => p !== null)
-          .map(p => ({
-            email: p.email!,
-            first_name: p.first_name ?? '',
-            last_name: p.last_name ?? '',
-            phone: p.phone ?? undefined,
-            relationship_type: p.relationship_type ?? '',
-            is_primary_contact: p.is_primary_contact,
-            passwordHash,
-            tempPassword: BULK_IMPORT_PASSWORD,
-          }));
+          .map(p => {
+            const parentTempPassword = generateTempPassword();
+            return {
+              email: p.email!,
+              first_name: p.first_name ?? '',
+              last_name: p.last_name ?? '',
+              phone: p.phone ?? undefined,
+              relationship_type: p.relationship_type ?? '',
+              is_primary_contact: p.is_primary_contact,
+              passwordHash: hashSync(parentTempPassword, 12),
+              tempPassword: parentTempPassword,
+            };
+          });
 
         try {
           const result = await registerStudent(
@@ -373,8 +409,10 @@ router.post(
               emergency_contact_name: student.emergency_contact_name,
               emergency_contact_phone: student.emergency_contact_phone,
               passwordHash,
+              tempPassword: studentTempPassword,
             },
-            parentsInput
+            parentsInput,
+            createAuthAccountFor(req.params.schoolId)
           );
 
           results.push({ row_number: row.row_number, status: 'created', admission_no: result.admission_no });
@@ -384,6 +422,7 @@ router.post(
             last_name: student.last_name,
             admission_no: result.admission_no,
             email: result.student.email,
+            temp_password: studentTempPassword,
           });
           for (const p of result.new_parents) {
             const source = parentsInput.find(pi => pi.email === p.email);
@@ -392,6 +431,9 @@ router.post(
               last_name: source?.last_name ?? '',
               email: p.email,
             });
+            // Held only in memory for the welcome email. Deliberately NOT added to
+            // CreatedParentRecord, which is written into a downloadable results file.
+            parentTempPasswords.set(p.email, p.temp_password);
           }
         } catch (err: unknown) {
           const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
@@ -411,10 +453,12 @@ router.post(
           for (let i = 0; i < allNewParents.length; i += BULK_IMPORT_EMAIL_BATCH_SIZE) {
             const batch = allNewParents.slice(i, i + BULK_IMPORT_EMAIL_BATCH_SIZE);
             await Promise.all(
-              batch.map(p => sendEmail(
+              // A parent with no recorded password gets no email at all — a welcome
+              // message carrying a blank password is worse than none.
+              batch.filter(p => parentTempPasswords.has(p.email)).map(p => sendEmail(
                 p.email,
                 'Welcome to Chronix Edu — Your Parent Portal Access',
-                welcomeEmailBody({ role: 'parent', name: `${p.first_name} ${p.last_name}`, email: p.email, tempPassword: BULK_IMPORT_PASSWORD, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
+                welcomeEmailBody({ role: 'parent', name: `${p.first_name} ${p.last_name}`, email: p.email, tempPassword: parentTempPasswords.get(p.email)!, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
               ).catch(() => {}))
             );
             if (i + BULK_IMPORT_EMAIL_BATCH_SIZE < allNewParents.length) {

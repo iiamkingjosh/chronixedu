@@ -4,6 +4,15 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 
 jest.setTimeout(30000);
 
+// Captures the welcome emails so the test can read the password the staff member is
+// actually given — it is emailed and nothing else surfaces it.
+const sentEmails: Array<{ to: string; body: string }> = [];
+jest.mock('../src/services/emailService', () => ({
+  sendEmail: jest.fn(async (to: string, _subject: string, text: string) => {
+    sentEmails.push({ to, body: text });
+  }),
+}));
+
 import { randomUUID } from 'crypto';
 import request from 'supertest';
 import express from 'express';
@@ -223,7 +232,18 @@ describe('POST /:schoolId/staff-bulk-import/commit', () => {
     expect(dbRow.rows).toHaveLength(1);
     expect(dbRow.rows[0]).toMatchObject({ role: 'teacher', teacher_mode: 'class' });
     expect(dbRow.rows[0].must_change_password).toBe(true);
-    expect(bcrypt.compareSync('Password2$', dbRow.rows[0].password_hash)).toBe(true);
+
+    // Each staff account now gets its own random password rather than a constant that
+    // is readable in the repo and shared by every school. The welcome email is the
+    // only channel that carries it, so assert the password it sends actually works.
+    await new Promise(r => setTimeout(r, 500)); // welcome emails are fire-and-forget
+    const welcome = sentEmails.find(e => e.to === email);
+    expect(welcome).toBeDefined();
+    const match = welcome!.body.match(/[Pp]assword:\s*(\S+)/);
+    expect(match).not.toBeNull();
+    const emailedPassword = match![1];
+    expect(emailedPassword).not.toBe('Password2$');
+    expect(bcrypt.compareSync(emailedPassword, dbRow.rows[0].password_hash)).toBe(true);
   }, 30000);
 
   it('does not stop the batch when one row fails validation at commit time', async () => {

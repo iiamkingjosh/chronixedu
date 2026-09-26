@@ -1,8 +1,36 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 10 — 2026-09-23  
-**Scope:** Full role-by-role review (principal, teacher, parent, student)  
-**Round 10 total findings:** 10 (0 Critical · 1 High · 3 Medium · 6 Low) + 1 withdrawn false positive
+**Latest audit:** Round 11 — 2026-09-26  
+**Scope:** Account creation and credential issuance (student registration, bulk import)  
+**Round 11 total findings:** 2 (0 Critical · 1 High · 1 Medium)
+
+---
+
+## Round 11 — 2026-09-26
+
+**Scope:** How accounts are created and how their first credentials are issued. Prompted by a live registration whose account could not log in.
+
+### H-01 — Registered students and parents were given login rows with no auth identity ✅ Fixed
+
+**Files:** `apps/api/src/db/queries/students.ts`, `apps/api/src/routes/students.ts`, `apps/api/src/__db_tests__/registrationIdentity.db.test.ts`
+
+**Fix:** Login is `supabase.auth.signInWithPassword`, and the local `public.users` row is then resolved **by the auth id that call returns**. `users.password_hash` is read in exactly one place — verifying a change-password request (`routes/auth.ts`). So a `users` row whose id is not the id of a real Supabase Auth account can never be logged into, whatever password was set on it.
+
+`registerStudent` created its `users` rows with a Postgres-generated id and never called Supabase Auth at all. Every student registered through the registrar flow, and **every parent account created alongside them**, was unusable. The parent case is the damaging one: the route emails those parents a welcome message containing credentials that cannot work, so the failure surfaces to an outside user, not to staff. It also hit bulk import, at one broken account per imported row.
+
+`registerStudent` now takes an injected `CreateAuthAccount` and binds the returned id as `users.id` for the student and for each newly created parent. Following the pattern already documented in `routes/users.ts`, the auth calls run **outside** the DB transaction: an external API call inside one orphans the remote account whenever the DB later rolls back. The accepted trade-off is unchanged — a failure after account creation leaves an orphaned Supabase identity, which is recoverable; a local row with no identity is not.
+
+Regression coverage in `registrationIdentity.db.test.ts` asserts a registered student **and every parent created with them** join to an auth identity — verified to fail against the pre-fix code (3 of its 4 tests).
+
+### M-01 — Bulk import gave every account at every school the same repo-readable password ✅ Fixed
+
+**Files:** `apps/api/src/routes/students.ts`, `apps/api/src/routes/users.ts`, `apps/api/src/services/bulkImportResults.ts`, `apps/api/src/services/staffBulkImportResults.ts`, `apps/web/app/(dashboard)/settings/users/import/page.tsx`
+
+**Fix:** Both import paths hardcoded `Password2$` — `BULK_IMPORT_PASSWORD` for students and parents, `STAFF_BULK_IMPORT_PASSWORD` for staff. The staff case was directly exploitable: those accounts do get a working Supabase Auth identity, so anyone who had read the repo, or who had ever been imported at any school, could log into any freshly imported staff account. `must_change_password` confines the session to the change-password route, but that is enough to take the account over before its owner's first legitimate login. This had to be fixed in the same change as H-01, because H-01 is what would have made the student and parent accounts reachable too.
+
+Each account now gets its own `randomBytes(9).toString('base64url')` password. Staff and parents receive theirs by email; students, who have no email address of their own, receive theirs in the import results workbook, which now prints a per-student password column and tells the registrar to delete the file after handing them out. The staff hash moved from a hoisted `bcrypt.hashSync` to a per-row `await bcrypt.hash` — sharing one hash was a deliberate event-loop optimisation, and the async call keeps it off the event loop now that each row differs. A welcome email is no longer sent at all when no password was recorded for that address, rather than sending a blank one.
+
+**Throughput note:** bulk import is now ~3.4s/row, up from ~2.7s/row, because each student and each new parent costs one Supabase Auth round-trip and one bcrypt hash. A full 50-row commit is a ~3-minute synchronous HTTP request. `MAX_BULK_IMPORT_ROWS` was not changed.
 
 ---
 

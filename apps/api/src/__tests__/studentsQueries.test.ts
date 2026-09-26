@@ -34,37 +34,66 @@ const STUDENT_INPUT = {
   first_name: 'Tunde',
   last_name: 'Okonkwo',
   passwordHash: 'hashed-pw',
+  tempPassword: 'temp-pw',
 };
+
+const AUTH_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
+const createAuth = jest.fn(async () => AUTH_ID);
+
+/** Phase 1 runs on pool.query OUTSIDE the transaction: prefix lookup, then sequence. */
+function arrangePhase1(prefixRow: unknown, nextSeq: string) {
+  (pool as unknown as { query: jest.Mock }).query
+    .mockResolvedValueOnce({ rows: prefixRow === null ? [] : [prefixRow] })
+    .mockResolvedValueOnce({ rows: [{ next_seq: nextSeq }] });
+}
+
+/** Phase 2 runs on the pooled client: BEGIN, insert user, insert student, COMMIT. */
+function arrangeTransaction(client: { query: jest.Mock }, admissionNo: string) {
+  client.query
+    .mockResolvedValueOnce({ rows: [] })
+    .mockResolvedValueOnce({ rows: [{ id: AUTH_ID }] })
+    .mockResolvedValueOnce({ rows: [studentRow(admissionNo)] })
+    .mockResolvedValueOnce({ rows: [] });
+}
 
 describe('registerStudent — admission number generation', () => {
   it('uses the school-configured admission_prefix in PREFIX/YEAR/seq format', async () => {
     const year = new Date().getFullYear();
     const client = makeMockClient();
     mockConnect.mockResolvedValueOnce(client);
+    arrangePhase1({ admission_prefix: 'LGS' }, '1');
+    arrangeTransaction(client, `LGS/${year}/0001`);
 
-    client.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ admission_prefix: 'LGS' }] }) // identity_config lookup
-      .mockResolvedValueOnce({ rows: [{ next_seq: '1' }] }) // sequence lookup
-      .mockResolvedValueOnce({ rows: [{ id: 'user-1' }] }) // INSERT INTO users
-      .mockResolvedValueOnce({ rows: [studentRow(`LGS/${year}/0001`)] }) // INSERT INTO students
-      .mockResolvedValueOnce({ rows: [] }); // COMMIT
-
-    const result = await registerStudent('school-1', STUDENT_INPUT, []);
+    const result = await registerStudent('school-1', STUDENT_INPUT, [], createAuth);
 
     expect(result.admission_no).toBe(`LGS/${year}/0001`);
-
-    expect(client.query).toHaveBeenNthCalledWith(
-      2,
+    expect((pool as unknown as { query: jest.Mock }).query).toHaveBeenNthCalledWith(
+      1,
       expect.stringContaining("identity_config->>'admission_prefix'"),
       ['school-1']
     );
-
-    expect(client.query).toHaveBeenNthCalledWith(
-      3,
+    expect((pool as unknown as { query: jest.Mock }).query).toHaveBeenNthCalledWith(
+      2,
       expect.any(String),
       ['school-1', `LGS/${year}/%`]
     );
+  });
+
+  it('creates a Supabase Auth identity and binds ITS id as users.id', async () => {
+    const year = new Date().getFullYear();
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+    arrangePhase1({ admission_prefix: 'LGS' }, '1');
+    arrangeTransaction(client, `LGS/${year}/0001`);
+
+    await registerStudent('school-1', STUDENT_INPUT, [], createAuth);
+
+    expect(createAuth).toHaveBeenCalledWith(expect.objectContaining({ role: 'student' }));
+    // Login resolves the local row by the id signInWithPassword returns, so a
+    // generated id here produces an account that can never be logged into.
+    const usersInsert = client.query.mock.calls.find(c => String(c[0]).includes('INSERT INTO users'));
+    expect(usersInsert).toBeDefined();
+    expect(usersInsert![1][0]).toBe(AUTH_ID);
   });
 
   it('defaults to "SCH" when admission_prefix is not set in identity_config', async () => {
@@ -72,19 +101,14 @@ describe('registerStudent — admission number generation', () => {
     const client = makeMockClient();
     mockConnect.mockResolvedValueOnce(client);
 
-    client.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ admission_prefix: null }] }) // identity_config lookup
-      .mockResolvedValueOnce({ rows: [{ next_seq: '1' }] }) // sequence lookup
-      .mockResolvedValueOnce({ rows: [{ id: 'user-1' }] }) // INSERT INTO users
-      .mockResolvedValueOnce({ rows: [studentRow(`SCH/${year}/0001`)] }) // INSERT INTO students
-      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+    arrangePhase1({ admission_prefix: null }, '1');
+    arrangeTransaction(client, `SCH/${year}/0001`);
 
-    const result = await registerStudent('school-1', STUDENT_INPUT, []);
+    const result = await registerStudent('school-1', STUDENT_INPUT, [], createAuth);
 
     expect(result.admission_no).toBe(`SCH/${year}/0001`);
-    expect(client.query).toHaveBeenNthCalledWith(
-      3,
+    expect((pool as unknown as { query: jest.Mock }).query).toHaveBeenNthCalledWith(
+      2,
       expect.any(String),
       ['school-1', `SCH/${year}/%`]
     );
@@ -95,15 +119,10 @@ describe('registerStudent — admission number generation', () => {
     const client = makeMockClient();
     mockConnect.mockResolvedValueOnce(client);
 
-    client.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [] }) // identity_config lookup — no row
-      .mockResolvedValueOnce({ rows: [{ next_seq: '1' }] }) // sequence lookup
-      .mockResolvedValueOnce({ rows: [{ id: 'user-1' }] }) // INSERT INTO users
-      .mockResolvedValueOnce({ rows: [studentRow(`SCH/${year}/0001`)] }) // INSERT INTO students
-      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+    arrangePhase1(null, '1'); // identity_config lookup — no row
+    arrangeTransaction(client, `SCH/${year}/0001`);
 
-    const result = await registerStudent('school-1', STUDENT_INPUT, []);
+    const result = await registerStudent('school-1', STUDENT_INPUT, [], createAuth);
 
     expect(result.admission_no).toBe(`SCH/${year}/0001`);
   });
@@ -113,15 +132,10 @@ describe('registerStudent — admission number generation', () => {
     const client = makeMockClient();
     mockConnect.mockResolvedValueOnce(client);
 
-    client.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ admission_prefix: 'LGS' }] }) // identity_config lookup
-      .mockResolvedValueOnce({ rows: [{ next_seq: '1' }] }) // sequence lookup
-      .mockResolvedValueOnce({ rows: [{ id: 'user-1' }] }) // INSERT INTO users
-      .mockResolvedValueOnce({ rows: [studentRow(`LGS/${year}/0001`)] }) // INSERT INTO students
-      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+    arrangePhase1({ admission_prefix: 'LGS' }, '1');
+    arrangeTransaction(client, `LGS/${year}/0001`);
 
-    const result = await registerStudent('school-1', STUDENT_INPUT, []);
+    const result = await registerStudent('school-1', STUDENT_INPUT, [], createAuth);
 
     expect(result.student.email).toBe(`lgs-${year}-0001@students.internal`);
     expect(result.student.email).not.toContain('/');
@@ -132,15 +146,10 @@ describe('registerStudent — admission number generation', () => {
     const client = makeMockClient();
     mockConnect.mockResolvedValueOnce(client);
 
-    client.query
-      .mockResolvedValueOnce({ rows: [] }) // BEGIN
-      .mockResolvedValueOnce({ rows: [{ admission_prefix: 'LGS' }] }) // identity_config lookup
-      .mockResolvedValueOnce({ rows: [{ next_seq: '42' }] }) // sequence lookup
-      .mockResolvedValueOnce({ rows: [{ id: 'user-1' }] }) // INSERT INTO users
-      .mockResolvedValueOnce({ rows: [studentRow(`LGS/${year}/0042`)] }) // INSERT INTO students
-      .mockResolvedValueOnce({ rows: [] }); // COMMIT
+    arrangePhase1({ admission_prefix: 'LGS' }, '42');
+    arrangeTransaction(client, `LGS/${year}/0042`);
 
-    const result = await registerStudent('school-1', STUDENT_INPUT, []);
+    const result = await registerStudent('school-1', STUDENT_INPUT, [], createAuth);
 
     expect(result.admission_no).toBe(`LGS/${year}/0042`);
   });

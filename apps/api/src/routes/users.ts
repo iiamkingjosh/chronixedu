@@ -602,7 +602,14 @@ router.post(
 // POST /:schoolId/users route has the identical two-call sequence with no
 // rollback today.
 
-const STAFF_BULK_IMPORT_PASSWORD = 'Password2$';
+/** One random password per staff account. This was a single hardcoded constant, which
+ *  meant every bulk-imported staff member at every school shared one password that is
+ *  readable in the repo — and unlike the student path, these accounts DO get a working
+ *  Supabase Auth identity, so it was usable. must_change_password gates them to the
+ *  change-password route, but that still allows takeover before first legitimate login. */
+function generateStaffTempPassword(): string {
+  return crypto.randomBytes(9).toString('base64url');
+}
 const STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE = 50;
 
 const staffBulkImportCommitSchema = z.object({
@@ -642,13 +649,13 @@ router.post(
       const createdStaff: CreatedStaffRecord[] = [];
       const failedStaff: FailedStaffRecord[] = [];
 
-      // Hashed once, outside the loop: STAFF_BULK_IMPORT_PASSWORD is a fixed
-      // constant string, so hashing it per-row is redundant work (bcrypt's
-      // embedded salt makes each call's output usable identically regardless
-      // of whether it's shared across rows) and, at cost 12, ~200-300ms of
-      // synchronous CPU per call — blocking this single-process API's event
-      // loop for every other school's requests across a 50-row batch.
-      const staffPasswordHash = bcrypt.hashSync(STAFF_BULK_IMPORT_PASSWORD, 12);
+      // Each row now gets its own password, so the hash cannot be computed once up
+      // front. The original reason for sharing it was cost: hashSync at cost 12 is
+      // ~200-300ms of SYNCHRONOUS CPU, which across a 50-row batch would block this
+      // single-process API's event loop for every other school. bcrypt.hash (async)
+      // yields between rounds, so per-row hashing costs wall-clock time on this
+      // request without stalling everyone else's.
+      const staffTempPasswords = new Map<string, string>();
 
       for (const row of revalidated) {
         if (row.status === 'error') {
@@ -662,9 +669,13 @@ router.post(
         const role = staff.role as typeof STAFF_ROLES[number];
         const teacherMode = role === 'teacher' ? (staff.teacher_mode as 'class' | 'subject') : 'subject';
 
+        const staffTempPassword = generateStaffTempPassword();
+        const staffPasswordHash = await bcrypt.hash(staffTempPassword, 12);
+        staffTempPasswords.set(staff.email, staffTempPassword);
+
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: staff.email,
-          password: STAFF_BULK_IMPORT_PASSWORD,
+          password: staffTempPassword,
           email_confirm: true,
           user_metadata: { first_name: staff.first_name, last_name: staff.last_name, role, school_id: req.params.schoolId, title: staff.title, teacher_mode: teacherMode },
         });
@@ -728,10 +739,12 @@ router.post(
           for (let i = 0; i < createdStaff.length; i += STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE) {
             const batch = createdStaff.slice(i, i + STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE);
             await Promise.all(
-              batch.map(s => sendEmail(
+              // No recorded password means no email — a welcome message carrying a
+              // blank password is worse than none.
+              batch.filter(s => staffTempPasswords.has(s.email)).map(s => sendEmail(
                 s.email,
                 'Welcome to Chronix Edu — Your Staff Account is Ready',
-                welcomeEmailBody({ role: s.role, name: `${s.first_name} ${s.last_name}`, email: s.email, tempPassword: STAFF_BULK_IMPORT_PASSWORD, schoolName, appUrl, introVerb: 'added' })
+                welcomeEmailBody({ role: s.role, name: `${s.first_name} ${s.last_name}`, email: s.email, tempPassword: staffTempPasswords.get(s.email)!, schoolName, appUrl, introVerb: 'added' })
               ).catch(() => {}))
             );
             if (i + STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE < createdStaff.length) {

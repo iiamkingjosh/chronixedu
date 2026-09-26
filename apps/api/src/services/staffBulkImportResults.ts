@@ -30,7 +30,7 @@ export async function generateStaffBulkImportResultsFile(
   if (failed.length > 0) {
     summary.addRow([`${failed.length} row(s) failed — see the "Rows Failed" sheet for details.`]);
   }
-  summary.addRow(['All accounts use the temporary password Password2$ — users are required to change it on first login.']);
+  summary.addRow(['Each account has its own temporary password, sent to the staff member by email — they must change it on first login.']);
 
   const staffSheet = workbook.addWorksheet('Staff Created');
   staffSheet.columns = [
