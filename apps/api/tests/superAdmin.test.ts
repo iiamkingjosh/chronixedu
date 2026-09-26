@@ -65,6 +65,14 @@ describe('superAdmin — platform school management', () => {
       ['Super Admin Test School', testSchoolSlug]
     );
     testSchoolId = schoolResult.rows[0].id;
+
+    // Reactivation now requires a principal (migration 038): an active school with
+    // nobody able to administer it is the hole this fixture would otherwise recreate.
+    await pool.query(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
+       VALUES ($1, $2, 'x', 'principal', 'Fixture', 'Principal')`,
+      [testSchoolId, `fixture-principal-${testSchoolSlug}@test.com`]
+    );
   }, 20000);
 
   afterAll(async () => {
