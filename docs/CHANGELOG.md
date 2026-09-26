@@ -11,6 +11,15 @@
 - Grades now print exactly as the school configured them, whatever the scale. Colour is chosen by where the grade sits in the school's own scale, so the best grade is always green and the lowest always red.
 - This did not affect Chronix High School, which uses the standard A–F scale.
 
+### No promotion decision for a school that never set a pass mark
+- A Third Term report card printed **Promoted** or **Repeat Class** using a built-in pass mark of 40 whenever a school had not set its own. That is a decision about a child's year, made with a number the school never chose.
+- It now prints **Not determined** until the school sets a pass mark in Settings.
+- Students are likewise no longer listed as at-risk against a pass mark the school never set.
+
+### Principals see each student's grade in the Students list
+- The list now shows term grade alongside average and position, from the school's own grading scale.
+- A dash means no scores yet, or that the school has not configured a grading scale.
+
 ### Report cards and transcripts use the school's own scale, always
 - Both documents carried a built-in 70/60/50/40 scale used whenever a school's own scale could not be read — so a school could receive a report card graded against a scale it had never agreed to. That fallback is gone.
 - The overall average and grade on a report card now come from the same calculation as the approval screen and the principal's student list, so the three cannot disagree.
