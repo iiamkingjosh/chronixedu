@@ -14,9 +14,12 @@ afterAll(() => pool.end());
 describe('RLS coverage', () => {
   it('every public table has row level security enabled', async () => {
     const { rows } = await pool.query<{ relname: string }>(
+      // No carve-out. schema_migrations used to be excluded BY NAME here, which made
+      // this assertion quietly mean "every public table except that one" — an
+      // invariant with a silent asterisk. Migration 034 enables RLS on it and on
+      // migration_runs, so the claim in this test's name is now literally true.
       `SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-       WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity
-         AND c.relname <> 'schema_migrations'`
+       WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity`
     );
     expect(rows.map(r => r.relname)).toEqual([]);
   });
