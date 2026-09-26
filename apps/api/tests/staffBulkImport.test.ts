@@ -82,8 +82,8 @@ describe('POST /:schoolId/staff-bulk-import/preview', () => {
   }, 30000);
 
   afterAll(async () => {
-    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM users WHERE school_id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [schoolId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [schoolId]);
     // pool is NOT closed here — Task 4 adds a sibling describe block below
     // that still needs it. A single top-level afterAll closes it once.
   }, 30000);
@@ -188,9 +188,12 @@ describe('POST /:schoolId/staff-bulk-import/commit', () => {
     // school (see studentsBulkImport.test.ts for the identical precedent) —
     // those must be deleted before the users themselves, or the FK
     // constraint audit_logs_user_id_fkey blocks the DELETE below.
-    await pool.query(`DELETE FROM audit_logs WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+    // audit_logs is append-only (migrations 036/037), so these rows are deliberately NOT
+    // cleaned up. They are a few rows per run in a disposable test database, and the
+    // alternative — an escape hatch that lets tests delete audit rows — would put a
+    // hole in the guarantee for the sake of tidiness.
+    await pool.query(`DELETE FROM users WHERE school_id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [schoolId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [schoolId]);
   }, 30000);
 
   async function preview(buffer: Buffer) {

@@ -30,7 +30,7 @@ describe('Subscription Trial Expiry', () => {
   afterAll(async () => {
     await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [trialSchoolId]).catch(() => {});
     await pool.query(`DELETE FROM platform_subscriptions WHERE id = $1`, [trialSubscriptionId]).catch(() => {});
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [trialSchoolId]).catch(() => {});
+    await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [trialSchoolId]).catch(() => {});
     await pool.end();
   }, 20000);
 

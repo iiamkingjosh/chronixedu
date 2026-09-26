@@ -78,7 +78,7 @@ describe('Parent data isolation — cannot access another parent\'s child', () =
   afterAll(async () => {
     await pool.query(`DELETE FROM parent_students WHERE parent_id IN ($1, $2)`, [parentAUserId, parentBUserId]);
     await pool.query(`DELETE FROM students WHERE id IN ($1, $2)`, [studentAId, studentBId]);
-    await pool.query(`DELETE FROM users WHERE id IN ($1, $2, $3, $4)`, [
+    await pool.query(`DELETE FROM users WHERE id IN ($1, $2, $3, $4) AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [
       parentAUserId,
       parentBUserId,
       studentAUserId,

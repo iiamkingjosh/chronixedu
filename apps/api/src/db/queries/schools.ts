@@ -28,9 +28,24 @@ export interface PayoutConfig {
   updated_by?: string;
 }
 
+/**
+ * Creates a dormant school. `is_active` is FALSE explicitly, NOT left to the column
+ * default, which is TRUE.
+ *
+ * This inserts a school and nothing else — no principal, no users at all. With the
+ * column default it produced a live, fully routable tenant that nobody could
+ * administer, in a single request, for any super_admin. The onboarding wizard already
+ * models this correctly: it creates with is_active = FALSE and flips it at
+ * POST /onboarding/:sessionId/complete, which now refuses without a principal. This
+ * brings the direct path in line, so "active" means "went through onboarding" on both
+ * routes rather than on one.
+ *
+ * The school stays reachable to super_admins for onboarding; requireActiveSchool keeps
+ * everyone else out until it is activated.
+ */
 export async function insertSchool(name: string, slug: string): Promise<SchoolRow> {
   const result = await pool.query<SchoolRow>(
-    `INSERT INTO schools (name, slug) VALUES ($1, $2) RETURNING id, name, slug, is_active, created_at, updated_at`,
+    `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, FALSE) RETURNING id, name, slug, is_active, created_at, updated_at`,
     [name, slug]
   );
   return result.rows[0];

@@ -73,7 +73,7 @@ describe('Assignment deadline — submitting after due_date is rejected', () => 
     await pool.query(`DELETE FROM assignments WHERE id = $1`, [assignmentId]);
     await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [studentId]);
     await pool.query(`DELETE FROM students WHERE id = $1`, [studentId]);
-    await pool.query(`DELETE FROM users WHERE id = $1`, [studentUserId]);
+    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [studentUserId]);
     await pool.end();
   }, 20000);
 

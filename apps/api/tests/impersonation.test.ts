@@ -77,10 +77,10 @@ describe('Support Session Impersonation', () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM support_sessions WHERE id = $1`, [supportSessionId]).catch(() => {});
-    await pool.query(`DELETE FROM users WHERE id = $1`, [targetUserId]).catch(() => {});
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [targetSchoolId]).catch(() => {});
+    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [targetUserId]).catch(() => {});
+    await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [targetSchoolId]).catch(() => {});
     await pool.query(`DELETE FROM platform_audit_logs WHERE platform_admin_id = $1`, [platformAdminId]).catch(() => {});
-    await pool.query(`DELETE FROM users WHERE id = $1`, [platformAdminId]).catch(() => {});
+    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [platformAdminId]).catch(() => {});
     await pool.end();
   }, 20000);
 

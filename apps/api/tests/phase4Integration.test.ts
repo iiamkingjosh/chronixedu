@@ -45,7 +45,7 @@ describe('Phase 4 Integration', () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM platform_audit_logs WHERE platform_admin_id = $1`, [superAdminUserId]);
-    await pool.query(`DELETE FROM users WHERE id = $1`, [superAdminUserId]);
+    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [superAdminUserId]);
     await pool.end();
   });
 
@@ -98,7 +98,7 @@ describe('Phase 4 Integration', () => {
 
     afterAll(async () => {
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [lifecycleSchoolId]);
-      await pool.query(`DELETE FROM schools WHERE id = $1`, [lifecycleSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [lifecycleSchoolId]);
     });
 
     it('2a. PATCH /schools/:schoolId/suspend → 200, is_active false', async () => {
@@ -159,7 +159,7 @@ describe('Phase 4 Integration', () => {
     afterAll(async () => {
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [trialSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE id = $1`, [trialSubscriptionId]);
-      await pool.query(`DELETE FROM schools WHERE id = $1`, [trialSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [trialSchoolId]);
     });
 
     it('3b-3e. runTrialExpiryCheck suspends the expired trial subscription and school, and logs TRIAL_EXPIRED_AUTO_SUSPEND', async () => {
@@ -196,7 +196,7 @@ describe('Phase 4 Integration', () => {
 
     afterAll(async () => {
       if (principalUserId) {
-        await pool.query(`DELETE FROM users WHERE id = $1`, [principalUserId]);
+        await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [principalUserId]);
         await supabaseAdmin.auth.admin.deleteUser(principalUserId);
       }
       if (onboardingSchoolId) {
@@ -205,7 +205,7 @@ describe('Phase 4 Integration', () => {
         await pool.query(`DELETE FROM terms WHERE school_id = $1`, [onboardingSchoolId]);
         await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [onboardingSchoolId]);
         await pool.query(`DELETE FROM school_settings WHERE school_id = $1`, [onboardingSchoolId]);
-        await pool.query(`DELETE FROM schools WHERE id = $1`, [onboardingSchoolId]);
+        await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [onboardingSchoolId]);
       }
     }, 20000);
 

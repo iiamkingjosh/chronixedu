@@ -98,7 +98,7 @@ describe('Offline sync — Dexie queue → reconnect → database', () => {
     );
     await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [studentId]);
     await pool.query(`DELETE FROM students WHERE id = $1`, [studentId]);
-    await pool.query(`DELETE FROM users WHERE id = $1`, [studentUserId]);
+    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [studentUserId]);
     await offlineDb.delete();
     await pool.end();
   }, 20000);

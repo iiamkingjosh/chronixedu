@@ -101,8 +101,8 @@ describe('Fee payment initiate — payout gate', () => {
     await pool.query(`DELETE FROM students WHERE school_id = $1`, [schoolId]);
     await pool.query(`DELETE FROM terms WHERE school_id = $1`, [schoolId]);
     await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM users WHERE school_id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [schoolId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [schoolId]);
     await pool.end();
   });
 

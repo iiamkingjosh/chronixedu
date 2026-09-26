@@ -69,8 +69,8 @@ describe('superAdmin — platform school management', () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1 OR platform_admin_id = $2`, [testSchoolId, superAdminUserId]);
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [testSchoolId]);
-    await pool.query(`DELETE FROM users WHERE id = $1`, [superAdminUserId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [testSchoolId]);
+    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [superAdminUserId]);
     await pool.end();
   });
 
@@ -214,7 +214,7 @@ describe('superAdmin — platform school management', () => {
     afterAll(async () => {
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id IN ($1, $2)`, [subSchoolId, trialSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE school_id IN ($1, $2)`, [subSchoolId, trialSchoolId]);
-      await pool.query(`DELETE FROM schools WHERE id IN ($1, $2)`, [subSchoolId, trialSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id IN ($1, $2) AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [subSchoolId, trialSchoolId]);
     });
 
     // ── POST /subscriptions ───────────────────────────────────────────────
@@ -271,7 +271,7 @@ describe('superAdmin — platform school management', () => {
       } finally {
         await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [newSchoolId]);
         await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [newSchoolId]);
-        await pool.query(`DELETE FROM schools WHERE id = $1`, [newSchoolId]);
+        await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [newSchoolId]);
       }
     });
 
@@ -294,7 +294,7 @@ describe('superAdmin — platform school management', () => {
       } finally {
         await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [newSchoolId]);
         await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [newSchoolId]);
-        await pool.query(`DELETE FROM schools WHERE id = $1`, [newSchoolId]);
+        await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [newSchoolId]);
       }
     });
 
@@ -329,7 +329,7 @@ describe('superAdmin — platform school management', () => {
 
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [syncTestSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [syncTestSchoolId]);
-      await pool.query(`DELETE FROM schools WHERE id = $1`, [syncTestSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [syncTestSchoolId]);
     });
 
     it('POST /subscriptions invalidates school cache when subscription tier changes', async () => {
@@ -352,7 +352,7 @@ describe('superAdmin — platform school management', () => {
       cacheSpy.mockRestore();
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [cacheTestSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [cacheTestSchoolId]);
-      await pool.query(`DELETE FROM schools WHERE id = $1`, [cacheTestSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [cacheTestSchoolId]);
     });
 
     // ── GET /subscriptions ────────────────────────────────────────────────
@@ -423,7 +423,7 @@ describe('superAdmin — platform school management', () => {
       cacheSpy.mockRestore();
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [cacheTestSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [cacheTestSchoolId]);
-      await pool.query(`DELETE FROM schools WHERE id = $1`, [cacheTestSchoolId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [cacheTestSchoolId]);
     });
 
     // ── POST /subscriptions/:id/extend-trial ──────────────────────────────
@@ -492,7 +492,7 @@ describe('superAdmin — platform school management', () => {
 
     afterAll(async () => {
       if (principalUserId) {
-        await pool.query(`DELETE FROM users WHERE id = $1`, [principalUserId]);
+        await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [principalUserId]);
         await supabaseAdmin.auth.admin.deleteUser(principalUserId);
       }
       if (onboardingSchoolId) {
@@ -501,7 +501,7 @@ describe('superAdmin — platform school management', () => {
         await pool.query(`DELETE FROM terms WHERE school_id = $1`, [onboardingSchoolId]);
         await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [onboardingSchoolId]);
         await pool.query(`DELETE FROM school_settings WHERE school_id = $1`, [onboardingSchoolId]);
-        await pool.query(`DELETE FROM schools WHERE id = $1`, [onboardingSchoolId]);
+        await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [onboardingSchoolId]);
       }
     }, 20000);
 
@@ -882,7 +882,7 @@ describe('superAdmin — platform school management', () => {
     });
 
     afterAll(async () => {
-      await pool.query(`DELETE FROM users WHERE id = $1`, [fakeSuperAdminInSchoolId]);
+      await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [fakeSuperAdminInSchoolId]);
       if (sessionId) {
         await pool.query(`DELETE FROM platform_audit_logs WHERE support_session_id = $1`, [sessionId]);
         await pool.query(`DELETE FROM support_sessions WHERE id = $1`, [sessionId]);
@@ -1074,8 +1074,8 @@ describe('superAdmin — platform school management', () => {
 
     afterAll(async () => {
       await pool.query(`DELETE FROM students WHERE id = $1`, [csvStudentId]);
-      await pool.query(`DELETE FROM users WHERE id = $1`, [csvUserId]);
-      await pool.query(`DELETE FROM schools WHERE id = $1`, [csvSchoolId]);
+      await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [csvUserId]);
+      await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [csvSchoolId]);
     });
 
     it('a student full_name starting with "=" is neutralized with a leading apostrophe in the CSV output', async () => {
@@ -1179,7 +1179,7 @@ describe('superAdmin — platform school management', () => {
         // both directions before deleting the users themselves (FK constraint).
         await pool.query(`DELETE FROM platform_audit_logs WHERE target_user_id = ANY($1) OR platform_admin_id = ANY($1)`, [createdAdminIds]);
         await pool.query(`DELETE FROM support_sessions WHERE platform_admin_id = ANY($1)`, [createdAdminIds]);
-        await pool.query(`DELETE FROM users WHERE id = ANY($1)`, [createdAdminIds]);
+        await pool.query(`DELETE FROM users WHERE id = ANY($1) AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [createdAdminIds]);
       }
       await isolatedPool.end();
     });

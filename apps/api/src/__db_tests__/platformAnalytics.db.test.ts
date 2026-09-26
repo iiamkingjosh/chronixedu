@@ -137,10 +137,30 @@ describe('audit_logs is append-only in the database, not just in the docs', () =
     ).rejects.toThrow(/append-only/);
   });
 
-  it('rejects UPDATE — a log that can be rewritten in place is not append-only', async () => {
+  it('rejects an UPDATE that rewrites the record — that is what append-only means', async () => {
     await anAuditRow();
     await expect(
       pool.query(`UPDATE audit_logs SET action_type = 'TAMPERED' WHERE action_type = 'TEST_ACTION'`)
+    ).rejects.toThrow(/append-only/);
+  });
+
+  it('allows processed_at to be stamped — audit_logs is also the notification queue', async () => {
+    // Migration 036 banned every UPDATE, which broke notificationWorker.ts:115 and
+    // silenced notifications: the worker logs the failure and moves on, so it would
+    // have been a green deploy with no parent notifications. 037 narrowed it.
+    await anAuditRow();
+    await expect(
+      pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = 'TEST_ACTION'`)
+    ).resolves.toBeDefined();
+    const { rows } = await pool.query<{ processed_at: string | null }>(
+      `SELECT processed_at FROM audit_logs WHERE action_type = 'TEST_ACTION'`);
+    expect(rows[0].processed_at).not.toBeNull();
+  });
+
+  it('still rejects a change that smuggles a content edit alongside processed_at', async () => {
+    await anAuditRow();
+    await expect(
+      pool.query(`UPDATE audit_logs SET processed_at = NOW(), entity = 'tampered' WHERE action_type = 'TEST_ACTION'`)
     ).rejects.toThrow(/append-only/);
   });
 });
