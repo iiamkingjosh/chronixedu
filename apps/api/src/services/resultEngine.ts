@@ -8,7 +8,7 @@ import { resolveAssessmentConfig } from '../db/queries/assessmentConfig';
 
 // ── Domain types ───────────────────────────────────────────────────────────────
 
-interface GradeBand {
+export interface GradeBand {
   grade: string;
   min: number;
   max: number;
@@ -62,6 +62,14 @@ export interface StudentClassResult {
   last_name: string;
   subjects: SubjectResult[];
   overall_average: number;  // mean of scored subject totals; 0 if none scored
+  /**
+   * The band the overall average falls in, resolved from the SAME per-level scale as
+   * the per-subject grades. null when nothing is scored — an ungraded student is not
+   * an F, and the two must stay distinguishable all the way to the page.
+   * Report cards used to derive this separately, over a hard-coded fallback scale.
+   */
+  overall_grade: string | null;
+  overall_remark: string | null;
   subjects_scored: number;
   position: number;         // standard competition ranking — ties share same position
 }
@@ -90,7 +98,14 @@ export interface AtRiskStudent {
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
-function lookupGrade(score: number, scale: GradeBand[]): GradeBand | null {
+/**
+ * The single grade-band lookup. reportCardService had its own copy that returned the
+ * string 'F' when no band matched, over its own hard-coded 70/60/50/40 scale used
+ * whenever academic_config.grading_scale was absent — so a school on any other scale
+ * got a report card graded against a scale it had never configured. This returns null
+ * on no match, because "no band covers this score" is not the same fact as "F".
+ */
+export function lookupGrade(score: number, scale: GradeBand[]): GradeBand | null {
   return scale.find(b => score >= b.min && score <= b.max) ?? null;
 }
 
@@ -335,13 +350,21 @@ export async function computeClassResults(
       };
     });
 
+    // academicConfig is already resolved for this class's level, so per-level grading
+    // (level_overrides) applies here for free — the same resolution the per-subject
+    // grades above used.
+    const overallAverage = scoredCount > 0 ? round2(totalOverall / scoredCount) : 0;
+    const overallBand = scoredCount > 0 ? lookupGrade(overallAverage, academicConfig.grading_scale) : null;
+
     return {
       student_id:      student.student_id,
       admission_no:    student.admission_no,
       first_name:      student.first_name,
       last_name:       student.last_name,
       subjects:        subjectResults,
-      overall_average: scoredCount > 0 ? round2(totalOverall / scoredCount) : 0,
+      overall_average: overallAverage,
+      overall_grade:   overallBand ? overallBand.grade : null,
+      overall_remark:  overallBand ? overallBand.remark : null,
       subjects_scored: scoredCount,
       position:        0, // filled by assignPositions below
     };

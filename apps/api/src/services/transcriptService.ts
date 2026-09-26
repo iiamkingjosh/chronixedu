@@ -7,7 +7,9 @@ import { getStudentProfile } from '../db/queries/students';
 import { listSessionsWithTerms } from '../db/queries/sessions';
 import { computeClassResults } from './resultEngine';
 import type { ClassResult } from './resultEngine';
-import { getBrowser, ordinal, gradeClass, lookupGrade, buildSubjectPositions, REPORT_CARDS_BUCKET } from './reportCardService';
+import { getBrowser, ordinal, gradeCss, buildSubjectPositions, REPORT_CARDS_BUCKET } from './reportCardService';
+import { lookupGrade } from './resultEngine';
+import type { GradeBand } from './resultEngine';
 
 // ── Template compilation (lazy, once) ─────────────────────────────────────────
 
@@ -44,16 +46,13 @@ export async function generateTranscript(studentId: string, schoolId: string): P
   const identityConfig = (school.identity_config ?? {}) as Record<string, string | null>;
   const academicConfig = (school.academic_config ?? {}) as Record<string, unknown>;
 
-  const gradingScale: Array<{ min: number; max: number; grade: string }> =
-    Array.isArray(academicConfig.grading_scale)
-      ? (academicConfig.grading_scale as Array<{ min: number; max: number; grade: string }>)
-      : [
-          { min: 70, max: 100, grade: 'A' },
-          { min: 60, max: 69,  grade: 'B' },
-          { min: 50, max: 59,  grade: 'C' },
-          { min: 40, max: 49,  grade: 'D' },
-          { min: 0,  max: 39,  grade: 'F' },
-        ];
+  // Third copy of this scale, now removed — reportCardService had one too. A leaving
+  // transcript graded against a hard-coded 70/60/50/40 the school never configured is
+  // the worst place for this defect: it is the document a student carries to another
+  // school. No fallback: an empty scale yields no grade rather than a wrong one.
+  const gradingScale: GradeBand[] = Array.isArray(academicConfig.grading_scale)
+    ? (academicConfig.grading_scale as GradeBand[])
+    : [];
 
   const today = new Date();
 
@@ -63,8 +62,8 @@ export async function generateTranscript(studentId: string, schoolId: string): P
     classLevel: string;
     terms: Array<{
       termName: string;
-      subjects: Array<{ name: string; totalScore: string; grade: string; position: string; classAverage: string }>;
-      overall: { average: string; grade: string; position: string };
+      subjects: Array<{ name: string; totalScore: string; grade: string; gradeCss: string; position: string; classAverage: string }>;
+      overall: { average: string; grade: string; gradeCss: string; position: string };
     }>;
   }> = [];
 
@@ -96,7 +95,8 @@ export async function generateTranscript(studentId: string, schoolId: string): P
 
       const subjectRows = studentRecord.subjects.map(sub => {
         const totalScore = sub.result ? sub.result.total_score.toFixed(2) : '—';
-        const grade      = sub.result ? lookupGrade(sub.result.total_score, gradingScale) : '—';
+        const band       = sub.result ? lookupGrade(sub.result.total_score, gradingScale) : null;
+        const grade      = band ? band.grade : '—';
         const posMap     = subjectPositions.get(sub.subject_id);
         const posNum     = posMap?.get(studentId);
         const position   = posNum !== undefined ? ordinal(posNum) : '—';
@@ -112,21 +112,23 @@ export async function generateTranscript(studentId: string, schoolId: string): P
         return {
           name:         sub.subject_name,
           totalScore,
-          grade:        gradeClass(grade),
+          grade,
+          gradeCss:     gradeCss(band, gradingScale),
           position,
           classAverage,
         };
       });
 
       const overallAvg = scoredSubjects.reduce((sum, s) => sum + (s.result?.total_score ?? 0), 0) / scoredSubjects.length;
-      const overallGrade = lookupGrade(overallAvg, gradingScale);
+      const overallBand = lookupGrade(overallAvg, gradingScale);
 
       termRows.push({
         termName: term.name,
         subjects: subjectRows,
         overall: {
           average:  overallAvg.toFixed(2),
-          grade:    gradeClass(overallGrade),
+          grade:    overallBand ? overallBand.grade : '—',
+          gradeCss: gradeCss(overallBand, gradingScale),
           position: ordinal(studentRecord.position),
         },
       });

@@ -1,5 +1,20 @@
 # Chronix Edu — Changelog
 
+## Report Card Grades (2026-09-26)
+
+### An unscored subject no longer prints as a fail
+- A subject with no scores entered showed a dash in the score column and a bold red **F** in the grade column of the same row. The report card contradicted itself.
+- It now shows a dash in both, in neutral grey.
+
+### Schools on other grading scales get their own grades
+- The grade column could only ever print A, B, C, D or F. A school using the WAEC scale (A1–F9), a word scale (Excellent/Credit/Pass/Fail) or a numeric one had every grade replaced with F on the printed report card — including a score of 80.
+- Grades now print exactly as the school configured them, whatever the scale. Colour is chosen by where the grade sits in the school's own scale, so the best grade is always green and the lowest always red.
+- This did not affect Chronix High School, which uses the standard A–F scale.
+
+### Report cards and transcripts use the school's own scale, always
+- Both documents carried a built-in 70/60/50/40 scale used whenever a school's own scale could not be read — so a school could receive a report card graded against a scale it had never agreed to. That fallback is gone.
+- The overall average and grade on a report card now come from the same calculation as the approval screen and the principal's student list, so the three cannot disagree.
+
 ## Result Review for Principals (2026-09-26)
 
 ### Principals can now see the results they are approving
