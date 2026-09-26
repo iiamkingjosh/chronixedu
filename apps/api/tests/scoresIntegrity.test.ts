@@ -49,7 +49,7 @@ describe('Score write integrity', () => {
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ('Scores Integrity Test', $1, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ('Scores Integrity Test', $1, false) RETURNING id`,
       [`scores-integrity-${suffix}`]
     );
     schoolId = schoolResult.rows[0].id;

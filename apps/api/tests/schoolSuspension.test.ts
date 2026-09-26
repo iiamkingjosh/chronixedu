@@ -47,7 +47,7 @@ describe('School Suspension', () => {
     superAdminToken = makeToken(superAdminUserId, 'super_admin', null, saRow.rows[0].email);
 
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
       ['Suspension Test School', `test-suspension-${randomUUID()}`]
     );
     schoolId = schoolResult.rows[0].id;
@@ -74,6 +74,9 @@ describe('School Suspension', () => {
     principalUserId = pResult.rows[0].id;
     const pRow = await pool.query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [principalUserId]);
     principalToken = makeToken(principalUserId, 'principal', schoolId, pRow.rows[0].email);
+
+    // Migration 039: born dormant, activated once an active principal exists.
+    await pool.query(`UPDATE schools SET is_active = TRUE WHERE id = $1`, [schoolId]);
   }, 20000);
 
   afterAll(async () => {

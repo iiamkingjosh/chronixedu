@@ -63,13 +63,13 @@ describe('PATCH /:schoolId/users/:userId/email', () => {
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
       ['Email Change Test School', `test-email-change-${randomUUID()}`]
     );
     schoolId = schoolResult.rows[0].id;
 
     const otherSchoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
       ['Email Change Test School (Other Tenant)', `test-email-change-other-${randomUUID()}`]
     );
     otherSchoolId = otherSchoolResult.rows[0].id;

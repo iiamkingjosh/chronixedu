@@ -158,7 +158,7 @@ describe('reactivation requires a principal too', () => {
 
     await expect(
       pool.query(`UPDATE schools SET is_active = true WHERE id = $1`, [schoolId])
-    ).rejects.toThrow(/no principal/);
+    ).rejects.toThrow(/no active principal/);
   });
 
   it('allows reactivation once a principal exists', async () => {
@@ -178,6 +178,44 @@ describe('reactivation requires a principal too', () => {
 
     expect(res.status).toBe(200);
     expect(await isActive(schoolId)).toBe(true);
+  });
+
+  it('refuses to activate a school whose only principal has been deactivated', async () => {
+    // superAdmin.ts deactivates users, so checking role alone let a school reactivate
+    // into the same unadministerable state with a disabled principal on file.
+    const created = await request(app)
+      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Disabled Principal School' });
+    const schoolId = created.body.data.school.id;
+    await pool.query(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active)
+       VALUES ($1, $2, 'x', 'principal', 'Disabled', 'Principal', FALSE)`,
+      [schoolId, `disabled-${Date.now()}@example.com`]
+    );
+
+    await expect(
+      pool.query(`UPDATE schools SET is_active = true WHERE id = $1`, [schoolId])
+    ).rejects.toThrow(/no active principal/);
+  });
+
+  it('refuses to INSERT a school that is already active', async () => {
+    // This is the path that actually produced 29 active principalless schools in
+    // production; the UPDATE guard alone would not have stopped one of them. It cannot
+    // be conditional on having a principal — users.school_id references schools, so no
+    // principal can exist at insert time. A school is born dormant.
+    await expect(
+      pool.query(
+        `INSERT INTO schools (name, slug, is_active) VALUES ('Born Active', $1, TRUE)`,
+        [`born-active-${Date.now()}`]
+      )
+    ).rejects.toThrow(/cannot be created already active/);
+  });
+
+  it('defaults is_active to FALSE, so an INSERT that omits it is dormant', async () => {
+    const { rows } = await pool.query<{ is_active: boolean }>(
+      `INSERT INTO schools (name, slug) VALUES ('Default Dormant', $1) RETURNING is_active`,
+      [`default-dormant-${Date.now()}`]
+    );
+    expect(rows[0].is_active).toBe(false);
   });
 
   it('does not block suspending an active school', async () => {

@@ -13,7 +13,7 @@ describe('Subscription Trial Expiry', () => {
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
       ['Trial Expiry School', `test-trial-expiry-${randomUUID()}`]
     );
     trialSchoolId = schoolResult.rows[0].id;
