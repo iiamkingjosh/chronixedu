@@ -6,6 +6,9 @@ export interface CreatedStudentRecord {
   last_name: string;
   admission_no: string;
   email: string;
+  /** Per-account random password. Students have no email address of their own, so
+   *  this file is the only channel by which they receive their first credentials. */
+  temp_password: string;
 }
 
 export interface CreatedParentRecord {
@@ -24,7 +27,9 @@ export async function generateBulkImportResultsFile(
   summary.columns = [{ width: 90 }];
   summary.addRow(['Chronix Edu — Bulk Import Results']);
   summary.addRow([`${createdStudents.length} student(s) and ${newParents.length} new parent account(s) created.`]);
-  summary.addRow(['All accounts use the temporary password Password2$ — users are required to change it on first login.']);
+  summary.addRow(['Each account has its own temporary password — users are required to change it on first login.']);
+  summary.addRow(['Student passwords are listed below. Hand them out privately, then delete this file.']);
+  summary.addRow(['New parents receive their own password by email; it is not listed here.']);
 
   const studentsSheet = workbook.addWorksheet('Students Created');
   studentsSheet.columns = [
@@ -33,6 +38,7 @@ export async function generateBulkImportResultsFile(
     { header: 'Last Name', key: 'last_name', width: 20 },
     { header: 'Admission No.', key: 'admission_no', width: 20 },
     { header: 'Email', key: 'email', width: 32 },
+    { header: 'Temporary Password', key: 'temp_password', width: 20 },
   ];
   createdStudents.forEach(s => studentsSheet.addRow(s));
 

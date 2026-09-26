@@ -86,44 +86,99 @@ export interface RegistrationResult {
   new_parents: Array<{ email: string; temp_password: string }>;
 }
 
+/**
+ * Creates the Supabase Auth identity for one account and returns its id, which
+ * becomes `users.id`. Injected rather than imported so this query module stays free
+ * of Supabase (routes orchestrate, queries do DB access).
+ *
+ * Login goes through supabase.auth.signInWithPassword and then looks the local row
+ * up by the returned auth id — `users.password_hash` is only ever read to verify the
+ * CURRENT password during a change (routes/auth.ts). So a users row with no matching
+ * auth identity is an account that can never log in. Before this existed,
+ * registerStudent created exactly that for the student and for every new parent, and
+ * the route then emailed those parents a welcome message containing a password that
+ * could not work.
+ */
+export type CreateAuthAccount = (input: {
+  email: string;
+  password: string;
+  role: 'student' | 'parent';
+  first_name: string;
+  last_name: string;
+}) => Promise<string>;
+
 // ── Register (transaction) ─────────────────────────────────────────────────────
 
 export async function registerStudent(
   schoolId: string,
-  data: StudentInput & { passwordHash: string },
-  parents: Array<ParentInput & { passwordHash: string; tempPassword: string }>
+  data: StudentInput & { passwordHash: string; tempPassword: string },
+  parents: Array<ParentInput & { passwordHash: string; tempPassword: string }>,
+  createAuthAccount: CreateAuthAccount
 ): Promise<RegistrationResult> {
+  // ── Phase 1: resolve identifiers and create auth accounts OUTSIDE the transaction.
+  // users.ts:594-603 documents why the auth call must not sit inside one: an external
+  // API call in a transaction orphans the remote account whenever the DB later rolls
+  // back. The same accepted trade-off applies here — a failure after createAuthAccount
+  // leaves an orphaned Supabase identity, which is recoverable; the reverse (a local
+  // row with no identity) is the bug being fixed and is not.
+  const prefixResult = await pool.query<{ admission_prefix: string | null }>(
+    `SELECT identity_config->>'admission_prefix' AS admission_prefix FROM school_settings WHERE school_id = $1`,
+    [schoolId]
+  );
+  const prefixEarly = prefixResult.rows[0]?.admission_prefix?.trim() || 'SCH';
+  const yearEarly = new Date().getFullYear();
+  const seqEarly = await pool.query<{ next_seq: string }>(
+    `SELECT COALESCE(MAX(CAST(SUBSTRING(admission_no FROM '([0-9]{4})$') AS INTEGER)), 0) + 1 AS next_seq
+     FROM students WHERE school_id = $1 AND admission_no LIKE $2`,
+    [schoolId, `${prefixEarly}/${yearEarly}/%`]
+  );
+  // Reserved, not locked: a concurrent registration taking the same number is caught
+  // by UNIQUE(school_id, admission_no) and surfaces as 409 DUPLICATE in the route.
+  const reservedAdmissionNo = `${prefixEarly}/${yearEarly}/${String(parseInt(seqEarly.rows[0].next_seq, 10)).padStart(4, '0')}`;
+  const studentEmail = data.email ?? `${reservedAdmissionNo.toLowerCase().replace(/\//g, '-')}@students.internal`;
+
+  const studentAuthId = await createAuthAccount({
+    email: studentEmail,
+    password: data.tempPassword,
+    role: 'student',
+    first_name: data.first_name,
+    last_name: data.last_name,
+  });
+
+  // Only parents without an existing account need an identity created.
+  const parentAuthIds = new Map<string, string>();
+  for (const parent of parents) {
+    const existing = await pool.query(`SELECT 1 FROM users WHERE email = $1`, [parent.email]);
+    if (existing.rows.length > 0) continue;
+    parentAuthIds.set(
+      parent.email,
+      await createAuthAccount({
+        email: parent.email,
+        password: parent.tempPassword,
+        role: 'parent',
+        first_name: parent.first_name,
+        last_name: parent.last_name,
+      })
+    );
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const year = new Date().getFullYear();
+    // Reserved in phase 1, so the auth identity and this row agree on the number and
+    // the derived email. A concurrent registration that took it first trips
+    // UNIQUE(school_id, admission_no) below and surfaces as 409 DUPLICATE.
+    const admissionNo = reservedAdmissionNo;
+    const email = studentEmail;
 
-    // Admission number prefix is configurable per school (school_settings.identity_config.admission_prefix)
-    const prefixResult = await client.query<{ admission_prefix: string | null }>(
-      `SELECT identity_config->>'admission_prefix' AS admission_prefix FROM school_settings WHERE school_id = $1`,
-      [schoolId]
-    );
-    const prefix = prefixResult.rows[0]?.admission_prefix?.trim() || 'SCH';
-
-    // Generate admission_no — sequence is per school per year, format PREFIX/YEAR/seq
-    const seqResult = await client.query<{ next_seq: string }>(
-      `SELECT COALESCE(MAX(CAST(SUBSTRING(admission_no FROM '([0-9]{4})$') AS INTEGER)), 0) + 1 AS next_seq
-       FROM students
-       WHERE school_id = $1 AND admission_no LIKE $2`,
-      [schoolId, `${prefix}/${year}/%`]
-    );
-    const nextSeq = parseInt(seqResult.rows[0].next_seq, 10);
-    const admissionNo = `${prefix}/${year}/${String(nextSeq).padStart(4, '0')}`;
-
-    const email = data.email ?? `${admissionNo.toLowerCase().replace(/\//g, '-')}@students.internal`;
-
-    // Create student user account
+    // users.id MUST equal the Supabase Auth id — login resolves the local row by the
+    // id signInWithPassword returns, so a mismatch is as unusable as a missing row.
     const userResult = await client.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, phone)
-       VALUES ($1, $2, $3, 'student', $4, $5, $6)
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, phone)
+       VALUES ($1, $2, $3, $4, 'student', $5, $6, $7)
        RETURNING id`,
-      [schoolId, email, data.passwordHash, data.first_name, data.last_name, data.phone ?? null]
+      [studentAuthId, schoolId, email, data.passwordHash, data.first_name, data.last_name, data.phone ?? null]
     );
     const userId = userResult.rows[0].id;
 
@@ -155,11 +210,17 @@ export async function registerStudent(
       if (existingUser.rows.length > 0) {
         parentUserId = existingUser.rows[0].id;
       } else {
+        const authId = parentAuthIds.get(parent.email);
+        if (!authId) {
+          // Phase 1 saw this email as already taken but the row is gone now — bail
+          // rather than create a parent who cannot log in.
+          throw new Error(`No auth identity was created for parent ${parent.email}`);
+        }
         const newUser = await client.query<{ id: string }>(
-          `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, phone)
-           VALUES ($1, $2, $3, 'parent', $4, $5, $6)
+          `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, phone)
+           VALUES ($1, $2, $3, $4, 'parent', $5, $6, $7)
            RETURNING id`,
-          [schoolId, parent.email, parent.passwordHash, parent.first_name, parent.last_name, parent.phone ?? null]
+          [authId, schoolId, parent.email, parent.passwordHash, parent.first_name, parent.last_name, parent.phone ?? null]
         );
         parentUserId = newUser.rows[0].id;
         newParents.push({ email: parent.email, temp_password: parent.tempPassword });

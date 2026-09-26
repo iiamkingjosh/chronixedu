@@ -1,5 +1,19 @@
 # Chronix Edu — Changelog
 
+## Account Creation & Credentials (2026-09-26)
+
+### Newly registered students and parents can now actually log in
+- Registering a student created its login record **without creating the matching sign-in account**, so neither the student nor any parent created alongside them could ever log in — the password simply never worked.
+- The parent side was the visible failure: parents were emailed a welcome message with credentials that could not work.
+- Registration now creates the sign-in account first and links the record to it. Bulk import is fixed the same way.
+- Accounts created before this change are affected and need to be re-registered.
+
+### Every imported account now gets its own password
+- Bulk import previously gave every account — students, parents and staff, at every school — the same fixed temporary password. Anyone who knew it could sign into a freshly imported staff account before its owner did.
+- Each account now gets its own randomly generated temporary password, still requiring a change at first login.
+- Staff and parents receive theirs by email. Students, who have no email address of their own, now have theirs printed in the import results spreadsheet, which asks you to hand them out privately and then delete the file.
+- Bulk import is somewhat slower as a result — around 3.4 seconds per row, so a full 50-row file takes roughly three minutes to commit.
+
 ## Role-by-Role Audit — Result Visibility, Attendance & Behaviour Guards (2026-09-23)
 
 ### Results are no longer visible before publication

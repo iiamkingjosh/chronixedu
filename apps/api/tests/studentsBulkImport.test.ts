@@ -192,7 +192,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     expect(res.status).toBe(403);
   });
 
-  it('creates students and a new parent, sets the fixed password, and returns a downloadable results file', async () => {
+  it('creates students and a new parent, and the results file carries a working per-student password', async () => {
     const studentEmail = `commit-student-${randomUUID()}@test.com`;
     const parentEmail = `commit-parent-${randomUUID()}@test.com`;
     const buffer = await xlsxBuffer(
@@ -214,7 +214,17 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     const studentRow = await pool.query<{ password_hash: string }>(`SELECT password_hash FROM users WHERE email = $1`, [studentEmail]);
     expect(studentRow.rows).toHaveLength(1);
 
-    expect(bcrypt.compareSync('Password2$', studentRow.rows[0].password_hash)).toBe(true);
+    // Each account now gets its own random password instead of a repo-readable
+    // constant. Students have no email of their own, so the results workbook is the
+    // only channel that carries it — assert the password it prints actually works.
+    const resultsBook = new ExcelJS.Workbook();
+    await resultsBook.xlsx.load(Buffer.from(res.body.data.download_base64, 'base64') as unknown as ExcelJS.Buffer);
+    const printedPassword = String(
+      resultsBook.getWorksheet('Students Created')!.getRow(2).getCell(6).value ?? ''
+    );
+    expect(printedPassword.length).toBeGreaterThan(8);
+    expect(printedPassword).not.toBe('Password2$');
+    expect(bcrypt.compareSync(printedPassword, studentRow.rows[0].password_hash)).toBe(true);
 
     const parentRow = await pool.query(`SELECT id FROM users WHERE email = $1 AND role = 'parent'`, [parentEmail]);
     expect(parentRow.rows).toHaveLength(1);
@@ -330,8 +340,11 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     // stress-tests the JSON body size limit specifically — the limit is
     // still raised to 2mb globally as a defensive measure, just not
     // exercised by this smaller test. Each row is a real registerStudent()
-    // transaction against the (remote) test database, ~2.7s/row — see the
-    // timeout below.
+    // transaction against the (remote) test database. Measured ~3.4s/row since
+    // every student and every new parent now needs its own Supabase Auth call and
+    // its own bcrypt hash (cost 12) — the shared-password shortcut that made this
+    // ~2.7s/row handed every imported account the same repo-readable password and
+    // left students with no auth identity at all. See the timeout below.
     const ROW_COUNT = 50;
     const headers = [
       'First Name', 'Last Name', 'Email',
@@ -355,7 +368,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.created).toBe(ROW_COUNT);
     expect(res.body.data.failed).toBe(0);
-  }, 180000);
+  }, 300000);
 });
 
 // Closes the shared pg pool once, after every describe block in this file has

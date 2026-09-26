@@ -124,7 +124,7 @@ export default function StaffBulkImportPage() {
             Download the import template (.xlsx)
           </a>
           <p className="text-xs text-gray-500">
-            Every account created here gets the temporary password <span className="font-mono">Password2$</span> and a welcome email with their login details — they must change it on first login.
+            Every account created here gets its own randomly generated temporary password, sent to them in a welcome email with their login details — they must change it on first login.
           </p>
           <form onSubmit={handleUpload} className="space-y-4">
             <input
