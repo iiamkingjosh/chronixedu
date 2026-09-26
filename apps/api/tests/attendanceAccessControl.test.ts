@@ -73,7 +73,7 @@ describe('Attendance access control', () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM classes WHERE id = $1`, [unassignedClassId]);
-    await pool.query(`DELETE FROM users WHERE id IN ($1, $2)`, [studentUserId, unassignedTeacherUserId]);
+    await pool.query(`DELETE FROM users WHERE id IN ($1, $2) AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [studentUserId, unassignedTeacherUserId]);
     await pool.end();
   }, 20000);
 
@@ -172,7 +172,7 @@ describe('Attendance access control', () => {
         await pool.query(`DELETE FROM attendance WHERE student_id = $1`, [enrolledStudentId]);
         await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [enrolledStudentId]);
         await pool.query(`DELETE FROM students WHERE id = $1`, [enrolledStudentId]);
-        await pool.query(`DELETE FROM users WHERE id = $1`, [enrolledStudentUserId]);
+        await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [enrolledStudentUserId]);
       }
     });
 
@@ -214,11 +214,18 @@ describe('Attendance access control', () => {
         expect(res.status).toBe(201);
         expect(res.body.success).toBe(true);
       } finally {
-        await pool.query(`DELETE FROM audit_logs WHERE user_id = $1`, [principalUserId]);
+        // audit_logs is append-only (migrations 036/037), so these rows are deliberately NOT
+        // cleaned up. They are a few rows per run in a disposable test database, and the
+        // alternative — an escape hatch that lets tests delete audit rows — would put a
+        // hole in the guarantee for the sake of tidiness.
         await pool.query(`DELETE FROM attendance WHERE student_id = $1`, [principalStudentId]);
         await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [principalStudentId]);
         await pool.query(`DELETE FROM students WHERE id = $1`, [principalStudentId]);
-        await pool.query(`DELETE FROM users WHERE id IN ($1, $2)`, [principalStudentUserId, principalUserId]);
+        // principalUserId is left in place: marking attendance wrote an audit row that
+        // references it, and audit rows can no longer be deleted, so the user genuinely
+        // cannot be either. That is a real property of the system now, not a test quirk
+        // — nothing in the app deletes users, so it costs production nothing.
+        await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [principalStudentUserId]);
       }
     });
   });

@@ -69,9 +69,12 @@ describe('POST /api/auth/change-password', () => {
   });
 
   afterAll(async () => {
-    await pool.query(`DELETE FROM audit_logs WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM users WHERE school_id = $1`, [schoolId]);
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolId]);
+    // audit_logs is append-only (migrations 036/037), so these rows are deliberately NOT
+    // cleaned up. They are a few rows per run in a disposable test database, and the
+    // alternative — an escape hatch that lets tests delete audit rows — would put a
+    // hole in the guarantee for the sake of tidiness.
+    await pool.query(`DELETE FROM users WHERE school_id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [schoolId]);
+    await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [schoolId]);
     await pool.end();
   }, 30000);
 

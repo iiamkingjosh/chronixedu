@@ -45,7 +45,7 @@ describe('Onboarding Wizard', () => {
 
   afterAll(async () => {
     if (principalUserId) {
-      await pool.query(`DELETE FROM users WHERE id = $1`, [principalUserId]).catch(() => {});
+      await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [principalUserId]).catch(() => {});
       await supabaseAdmin.auth.admin.deleteUser(principalUserId).catch(() => {});
     }
     if (onboardingSchoolId) {
@@ -54,10 +54,10 @@ describe('Onboarding Wizard', () => {
       await pool.query(`DELETE FROM terms WHERE school_id = $1`, [onboardingSchoolId]).catch(() => {});
       await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [onboardingSchoolId]).catch(() => {});
       await pool.query(`DELETE FROM school_settings WHERE school_id = $1`, [onboardingSchoolId]).catch(() => {});
-      await pool.query(`DELETE FROM schools WHERE id = $1`, [onboardingSchoolId]).catch(() => {});
+      await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [onboardingSchoolId]).catch(() => {});
     }
     await pool.query(`DELETE FROM platform_audit_logs WHERE platform_admin_id = $1`, [superAdminUserId]).catch(() => {});
-    await pool.query(`DELETE FROM users WHERE id = $1`, [superAdminUserId]).catch(() => {});
+    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [superAdminUserId]).catch(() => {});
     await pool.end();
   }, 20000);
 

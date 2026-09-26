@@ -40,7 +40,7 @@ describe('Platform Auth Isolation', () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM platform_audit_logs WHERE platform_admin_id = $1`, [superAdminUserId]);
-    await pool.query(`DELETE FROM users WHERE id = $1`, [superAdminUserId]);
+    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [superAdminUserId]);
     await pool.end();
   });
 

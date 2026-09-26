@@ -102,7 +102,11 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Path alias `@/` in web. Keep files where their siblings are.
 - Record security fixes in `SECURITY.md` (next round, existing format) and
   user-visible changes in `docs/CHANGELOG.md`, in the same PR as the change.
-- New integration tests in `apps/api/tests/` must delete the rows they create in `afterAll`.
+- New integration tests in `apps/api/tests/` must delete the rows they create in `afterAll` —
+  **except `audit_logs`**, which migration 036 makes append-only at the database level.
+  Nine suites used to delete their audit rows and now cannot. Leave them: a few rows per
+  run in a disposable database costs nothing, and an escape hatch that let tests delete
+  audit rows would put a hole in the guarantee for the sake of tidiness.
 
 ## Primary vs secondary (teaching model)
 

@@ -1598,6 +1598,25 @@ router.post(
       const schoolResult = await pool.query(`SELECT * FROM schools WHERE id = $1`, [session.school_id]);
       const school = schoolResult.rows[0];
 
+      // A school with no principal is a school nobody can administer. This lookup
+      // already existed below, but only to find an address for the welcome email —
+      // the school went live first and the absence of a principal was silent. Step 6
+      // is completable without creating one, so the wizard could finish and hand over
+      // a tenant with no way in. Gate on it BEFORE activating anything.
+      const principalRow = await pool.query<{ email: string }>(
+        `SELECT email FROM users WHERE school_id = $1 AND role = 'principal' LIMIT 1`,
+        [session.school_id]
+      );
+      if (principalRow.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'NO_PRINCIPAL',
+            message: 'This school has no principal account. Create one in step 6 before completing onboarding — without it nobody can administer the school.',
+          },
+        });
+      }
+
       await pool.query(
         `UPDATE schools SET is_active = TRUE, legal_terms_accepted_at = NOW(), legal_terms_accepted_ip = $2 WHERE id = $1`,
         [session.school_id, req.ip]
@@ -1607,15 +1626,10 @@ router.post(
         [req.params.sessionId]
       );
 
+      // Resolved above as the activation gate; step 6's blob wins only because it is
+      // what the operator just typed.
       const step6Data = stepsCompleted['6'] ?? {};
-      let principalEmail = (step6Data.email as string | undefined) ?? null;
-      if (!principalEmail) {
-        const principalResult = await pool.query<{ email: string }>(
-          `SELECT email FROM users WHERE school_id = $1 AND role = 'principal' LIMIT 1`,
-          [session.school_id]
-        );
-        principalEmail = principalResult.rows[0]?.email ?? null;
-      }
+      const principalEmail = (step6Data.email as string | undefined) ?? principalRow.rows[0].email;
 
       if (principalEmail) {
         const firstName = (step6Data.first_name as string | undefined) ?? '';

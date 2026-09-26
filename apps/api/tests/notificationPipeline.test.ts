@@ -104,12 +104,15 @@ describe('Notification pipeline — suspension → audit log → worker → in-a
   afterAll(async () => {
     await pool.query(`DELETE FROM notification_logs WHERE user_id = $1`, [parentUserId]);
     await pool.query(`DELETE FROM notifications WHERE user_id = $1`, [parentUserId]);
-    await pool.query(`DELETE FROM audit_logs WHERE entity = 'behaviour_records' AND entity_id = $1`, [behaviourRecordId]);
+    // audit_logs is append-only (migrations 036/037), so these rows are deliberately NOT
+    // cleaned up. They are a few rows per run in a disposable test database, and the
+    // alternative — an escape hatch that lets tests delete audit rows — would put a
+    // hole in the guarantee for the sake of tidiness.
     await pool.query(`DELETE FROM behaviour_records WHERE id = $1`, [behaviourRecordId]);
     await pool.query(`DELETE FROM parent_students WHERE parent_id = $1`, [parentUserId]);
     await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [studentId]);
     await pool.query(`DELETE FROM students WHERE id = $1`, [studentId]);
-    await pool.query(`DELETE FROM users WHERE id IN ($1, $2)`, [parentUserId, studentUserId]);
+    await pool.query(`DELETE FROM users WHERE id IN ($1, $2) AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [parentUserId, studentUserId]);
     await pool.end();
   }, 20000);
 
