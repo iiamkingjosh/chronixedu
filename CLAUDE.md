@@ -128,6 +128,25 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   report-card generation — any new code serving grades must resolve per class, not
   per school.
 
+## Demo vs customer tenants
+
+- `schools.is_demo` marks a tenant that is not a customer (test fixture, sandbox, sales
+  demo). It is orthogonal to `is_active`, which is whether a real school's access is
+  currently enabled — a suspended school is still a customer and still counts in
+  `total_schools`. Every platform-level count in `superAdmin.ts` filters `is_demo`, and
+  the platform school list hides demo tenants unless `include_demo=true`.
+- **`is_demo` defaults to FALSE, so a new school is a customer from birth.** Nothing
+  re-evaluates it. The 44 fixture schools were classified once, on 26 Sep 2026, by a
+  one-off script whose rule was "no user holds an email outside the known test domains"
+  — chosen over name matching so a real school called "Testimony Academy" would survive.
+- **That rule must never be re-run as a periodic job.** `@students.internal` is in its
+  test-domain list, so a real school whose only users were students with generated
+  emails would be reclassified as a fixture and vanish from platform totals and the
+  super-admin list. A principal with a real address is *not* guaranteed: `createSchool`
+  inserts name and slug only, and the onboarding wizard's `POST /complete` treats
+  `principalEmail` as optional. If a tenant ever needs classifying again, do it by
+  explicit id list.
+
 ## Academic calendar
 
 - A session has **at most 3 terms**, but onboarding only requires the one the school

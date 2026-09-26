@@ -9,6 +9,11 @@
 - Both views are read-only. Approve, publish and return are unchanged and still live on the approval screen.
 - A dash means no score has been entered, which is deliberately shown differently from a zero.
 
+### The Students list shows academic standing to principals
+- Principals now see each student's term average and class position alongside the existing details, drawn from the same figures as the approval screen and report cards.
+- Registrars see the list exactly as before — the academic columns are principal-only.
+- Students with no scores yet still appear, with a dash rather than a zero, and the page works normally when no term is active.
+
 ## Platform Analytics Accuracy (2026-09-26)
 
 ### Platform totals now count customers, not database rows

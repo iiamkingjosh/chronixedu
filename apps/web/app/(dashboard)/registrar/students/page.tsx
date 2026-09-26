@@ -25,8 +25,16 @@ interface StudentListRow {
   first_name: string;
   last_name: string;
   email: string;
+  class_id: string | null;
   class_name: string | null;
   class_level: string | null;
+}
+
+/** Per-student academic figures, keyed by student id. Principal-only — see below. */
+interface AcademicRow {
+  overall_average: number;
+  position: number;
+  subjects_scored: number;
 }
 
 interface ClassRow {
@@ -428,7 +436,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function StudentRegistrationPage() {
-  const { schoolId } = useAuth();
+  const { schoolId, user } = useAuth();
   const { toast, show } = useToast();
 
   const [search, setSearch] = useState('');
@@ -438,6 +446,17 @@ export default function StudentRegistrationPage() {
   const [students, setStudents] = useState<StudentListRow[]>([]);
   const [meta, setMeta] = useState<{ total: number; page: number; limit: number; pages: number } | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // This one page serves BOTH the registrar and the principal (navigation.ts points
+  // both roles at /registrar/students). The academic endpoint refuses registrars, so
+  // the extra columns are fetched and rendered only for the roles allowed to see them
+  // — otherwise every registrar would get a 403 on page load. Same page, two shapes;
+  // forking into /principal/students would duplicate registration and import for
+  // nothing.
+  const canSeeAcademics = user?.role === 'principal' || user?.role === 'super_admin';
+  const [termId, setTermId] = useState<string | null>(null);
+  const [termName, setTermName] = useState<string | null>(null);
+  const [academics, setAcademics] = useState<Record<string, AcademicRow>>({});
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [registerOpen, setRegisterOpen] = useState(false);
@@ -463,6 +482,51 @@ export default function StudentRegistrationPage() {
   }, [schoolId, page, debouncedSearch]);
 
   useEffect(() => { loadStudents(); }, [loadStudents]);
+
+  // Current term, for the academic columns. A school between terms has none, and the
+  // page must stay fully usable then — the registrar registers students year-round.
+  useEffect(() => {
+    if (!schoolId || !canSeeAcademics) return;
+    apiFetch<{ success: boolean; data: { term: { id: string; name: string } | null } }>(
+      `/api/schools/${schoolId}/current-context`
+    )
+      .then(({ data }) => { setTermId(data.term?.id ?? null); setTermName(data.term?.name ?? null); })
+      .catch(() => { setTermId(null); setTermName(null); }); // silent: academics are additive
+  }, [schoolId, canSeeAcademics]);
+
+  // Academic figures for the students currently on screen. class-summary is keyed by
+  // class, so this fetches one per distinct class on the page — a handful, not one per
+  // student. Reusing that endpoint rather than adding a second aggregation is the point:
+  // the principal's list and the approval screen read the same numbers and cannot drift.
+  useEffect(() => {
+    if (!schoolId || !canSeeAcademics || !termId || students.length === 0) { setAcademics({}); return; }
+    const classIds = Array.from(new Set(students.map(s => s.class_id).filter((c): c is string => !!c)));
+    if (classIds.length === 0) { setAcademics({}); return; }
+
+    let cancelled = false;
+    Promise.all(classIds.map(classId =>
+      apiFetch<{ success: boolean; data: { students: Array<{ student_id: string; overall_average: number; position: number; subjects_scored: number }> } }>(
+        `/api/schools/${schoolId}/results/class-summary?class_id=${classId}&term_id=${termId}`
+      )
+        .then(({ data }) => data.students)
+        // One unreadable class must not blank the whole page; those rows just show dashes.
+        .catch(() => [] as Array<{ student_id: string; overall_average: number; position: number; subjects_scored: number }>)
+    )).then(groups => {
+      if (cancelled) return;
+      const map: Record<string, AcademicRow> = {};
+      for (const g of groups) {
+        for (const st of g) {
+          map[st.student_id] = {
+            overall_average: st.overall_average,
+            position: st.position,
+            subjects_scored: st.subjects_scored,
+          };
+        }
+      }
+      setAcademics(map);
+    });
+    return () => { cancelled = true; };
+  }, [schoolId, canSeeAcademics, termId, students]);
 
   useEffect(() => {
     if (!schoolId) return;
@@ -570,6 +634,14 @@ export default function StudentRegistrationPage() {
         </div>
       )}
 
+      {canSeeAcademics && (
+        <p className="mb-3 text-xs text-gray-500">
+          {termName
+            ? <>Average and position are for <span className="font-medium text-gray-700">{termName}</span>, across every subject scored so far. A dash means no scores have been entered yet.</>
+            : <>No term is currently active, so no academic figures are shown. Registration and search are unaffected.</>}
+        </p>
+      )}
+
       <div className="mb-4 max-w-sm">
         <input
           value={search}
@@ -604,6 +676,12 @@ export default function StudentRegistrationPage() {
                   <th className="text-left px-5 py-2.5 font-medium">Name</th>
                   <th className="text-left px-5 py-2.5 font-medium">Class</th>
                   <th className="text-left px-5 py-2.5 font-medium">Email</th>
+                  {canSeeAcademics && (
+                    <>
+                      <th className="text-right px-5 py-2.5 font-medium whitespace-nowrap">Average</th>
+                      <th className="text-right px-5 py-2.5 font-medium whitespace-nowrap">Position</th>
+                    </>
+                  )}
                   <th className="text-right px-5 py-2.5 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -614,6 +692,22 @@ export default function StudentRegistrationPage() {
                     <td className="px-5 py-3 text-gray-900 font-medium">{fullName(s)}</td>
                     <td className="px-5 py-3 text-gray-600">{s.class_name ? `${s.class_name} (${s.class_level})` : '—'}</td>
                     <td className="px-5 py-3 text-gray-600">{s.email}</td>
+                    {canSeeAcademics && (() => {
+                      // A student with no scores yet still belongs in this list — they
+                      // are simply not graded. Dashes, never zeroes.
+                      const a = academics[s.id];
+                      const has = a && a.subjects_scored > 0;
+                      return (
+                        <>
+                          <td className="px-5 py-3 text-right text-gray-900 font-medium">
+                            {has ? a.overall_average : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-5 py-3 text-right text-gray-600">
+                            {has ? a.position : <span className="text-gray-300">—</span>}
+                          </td>
+                        </>
+                      );
+                    })()}
                     <td className="px-5 py-3 text-right">
                       <Link href={`/registrar/students/${s.id}`} className="text-sm font-medium text-[#2472B4] hover:underline">
                         View Profile
