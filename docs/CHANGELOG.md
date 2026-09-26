@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Fee Payments (2026-09-26)
+
+### Paying the exact remaining balance is no longer refused
+- A parent or bursar paying off an invoice in full was sometimes told the amount was an overpayment and the payment was rejected — for example an invoice of ₦250,000 with ₦83,333.33 already paid would refuse the remaining ₦166,666.67.
+- Fee arithmetic is now exact, so an exact settlement is always accepted and an invoice reaches a balance of exactly zero.
+- Genuine overpayments are still refused for cash, bank transfer and waivers, down to the kobo. Paystack overpayments are still recorded as a credit, unchanged.
+
 ## Report Card Grades (2026-09-26)
 
 ### An unscored subject no longer prints as a fail

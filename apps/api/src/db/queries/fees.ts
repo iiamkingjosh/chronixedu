@@ -180,9 +180,38 @@ export interface PaymentInput {
   payment_date?: string | null;
 }
 
-export function deriveStatus(totalAmount: number, amountPaid: number): 'unpaid' | 'partial' | 'paid' {
-  if (amountPaid <= 0) return 'unpaid';
-  if (amountPaid >= totalAmount) return 'paid';
+/**
+ * Money arithmetic happens in integer kobo. Doctrine 7.
+ *
+ * Every money column is numeric(12,2), and the values come back from pg as exact 2-dp
+ * strings — so a single float addition per payment was laundered by the round-trip and
+ * never accumulated drift. The damage was elsewhere: the overpayment guard compared a
+ * float SUBTRACTION against the amount tendered.
+ *
+ *   total 250,000.00, paid 83,333.33, parent tenders the remaining 166,666.67
+ *   -> 250000 - 83333.33 = 166666.66999999998
+ *   -> 166666.67 > 166666.66999999998  -> rejected as an overpayment
+ *
+ * Three of six realistic settlement cases were refused at the counter. Kobo makes the
+ * comparison exact; naira never re-enters the arithmetic.
+ */
+export function toKobo(amount: number | string): number {
+  // toFixed(6) before rounding, because the multiply happens in float and its result
+  // can land just under the .5 boundary: 1.005 * 100 is 100.49999999999999, which
+  // Math.round sends DOWN to 100 — losing half a kobo on an input the route accepts
+  // (`amount: z.number().positive()` constrains no decimal places). Rounding the
+  // decimal value rather than its float shadow gives 101.
+  return Math.round(Number((Number(amount) * 100).toFixed(6)));
+}
+
+/** Back to the 2-dp string the numeric(12,2) columns take. */
+export function fromKobo(kobo: number): string {
+  return (kobo / 100).toFixed(2);
+}
+
+export function deriveStatus(totalAmountKobo: number, amountPaidKobo: number): 'unpaid' | 'partial' | 'paid' {
+  if (amountPaidKobo <= 0) return 'unpaid';
+  if (amountPaidKobo >= totalAmountKobo) return 'paid';
   return 'partial';
 }
 
@@ -232,7 +261,9 @@ export async function recordPayment(
       }
     }
 
-    const outstandingBalance = Number(invoiceRow.total_amount) - Number(invoiceRow.amount_paid);
+    // Exact: a float subtraction here refused parents paying their exact balance.
+    const outstandingBalanceKobo = toKobo(invoiceRow.total_amount) - toKobo(invoiceRow.amount_paid);
+    const amountKobo = toKobo(input.amount);
     // A verified Paystack payment is money Paystack has already captured and
     // settled to the school — rejecting it here would not return it, only
     // lose the app's only record of it (e.g. two guardians of the same child
@@ -241,7 +272,7 @@ export async function recordPayment(
     // credit, not an error. Staff-entered cash/bank_transfer/waiver amounts
     // are still rejected on overpayment below — no money has moved yet there,
     // so it's safe (and correct) to treat it as a data-entry mistake.
-    if (input.amount > outstandingBalance && input.method !== 'paystack') {
+    if (amountKobo > outstandingBalanceKobo && input.method !== 'paystack') {
       await client.query('ROLLBACK');
       throw new OverpaymentError();
     }
@@ -290,10 +321,12 @@ export async function recordPayment(
     );
     const payment = paymentResult.rows[0];
 
-    const totalAmount = Number(invoiceRow.total_amount);
-    const newAmountPaid = Number(invoiceRow.amount_paid) + input.amount;
-    const balance = totalAmount - newAmountPaid;
-    const status = deriveStatus(totalAmount, newAmountPaid);
+    const totalAmountKobo = toKobo(invoiceRow.total_amount);
+    const newAmountPaidKobo = toKobo(invoiceRow.amount_paid) + amountKobo;
+    const balanceKobo = totalAmountKobo - newAmountPaidKobo;
+    const status = deriveStatus(totalAmountKobo, newAmountPaidKobo);
+    const newAmountPaid = fromKobo(newAmountPaidKobo);
+    const balance = fromKobo(balanceKobo);
 
     const invoiceUpdateResult = await client.query<FeeInvoiceRow>(
       `UPDATE fee_invoices

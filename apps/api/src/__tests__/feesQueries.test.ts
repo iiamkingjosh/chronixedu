@@ -400,7 +400,9 @@ describe('recordPayment', () => {
     expect(client.query).toHaveBeenNthCalledWith(
       5,
       expect.stringContaining('UPDATE fee_invoices'),
-      [15000, 0, 'paid', 'inv-1']
+      // Exact 2-dp strings, not floats: the arithmetic happens in integer kobo and is
+      // formatted once on the way into numeric(12,2).
+      ['15000.00', '0.00', 'paid', 'inv-1']
     );
     expect(client.query).toHaveBeenLastCalledWith('COMMIT');
     expect(client.release).toHaveBeenCalled();
@@ -608,7 +610,7 @@ describe('recordPayment', () => {
     expect(client.query).toHaveBeenNthCalledWith(
       5,
       expect.stringContaining('UPDATE fee_invoices'),
-      [20000, -10000, 'paid', 'inv-1']
+      ['20000.00', '-10000.00', 'paid', 'inv-1']
     );
     expect(client.query).toHaveBeenLastCalledWith('COMMIT');
   });

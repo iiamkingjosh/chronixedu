@@ -35,6 +35,58 @@ async function payableInvoice(amount = 550): Promise<{ invoiceId: string; paymen
   return { invoiceId, paymentId: result.payment.id };
 }
 
+describe('settling an invoice to exactly zero', () => {
+  it('accepts a parent paying their exact remaining balance', async () => {
+    // The float guard computed 250000 - 83333.33 as 166666.66999999998 and refused
+    // 166666.67 as an overpayment. A bursar keying the exact closing balance was told
+    // it was too much.
+    const inv = await pool.query<{ id: string }>(
+      `INSERT INTO fee_invoices (school_id, student_id, term_id, total_amount, amount_paid, balance, status)
+       VALUES ($1, $2, $3, 250000.00, 83333.33, 166666.67, 'partial') RETURNING id`,
+      [I.schoolA, I.s1, I.termA]
+    );
+
+    const result = await recordPayment(I.schoolA, inv.rows[0].id, {
+      amount: 166666.67, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
+    });
+
+    expect(result).not.toBeNull();
+    expect(Number(result!.invoice.amount_paid)).toBe(250000);
+    expect(Number(result!.invoice.balance)).toBe(0);
+    expect(result!.invoice.status).toBe('paid');
+  });
+
+  it('settles to exactly zero across three uneven instalments', async () => {
+    const inv = await pool.query<{ id: string }>(
+      `INSERT INTO fee_invoices (school_id, student_id, term_id, total_amount, amount_paid, balance, status)
+       VALUES ($1, $2, $3, 100000.00, 0, 100000.00, 'unpaid') RETURNING id`,
+      [I.schoolA, I.s2, I.termA]
+    );
+    let last;
+    // Distinct amounts on purpose: two identical cash payments within five minutes trip
+    // the duplicate guard, which is intended behaviour and not what this test is about.
+    // 33333.31 + 33333.33 + 33333.36 = 100000.00 exactly.
+    for (const amount of [33333.31, 33333.33, 33333.36]) {
+      last = await recordPayment(I.schoolA, inv.rows[0].id, {
+        amount, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
+      });
+    }
+    expect(Number(last!.invoice.balance)).toBe(0);
+    expect(last!.invoice.status).toBe('paid');
+  });
+
+  it('still refuses a genuine overpayment by one kobo', async () => {
+    const inv = await pool.query<{ id: string }>(
+      `INSERT INTO fee_invoices (school_id, student_id, term_id, total_amount, amount_paid, balance, status)
+       VALUES ($1, $2, $3, 250000.00, 83333.33, 166666.67, 'partial') RETURNING id`,
+      [I.schoolA, I.s3OtherClass, I.termA]
+    );
+    await expect(recordPayment(I.schoolA, inv.rows[0].id, {
+      amount: 166666.68, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
+    })).rejects.toThrow();
+  });
+});
+
 describe('getPaymentById (receipt data)', () => {
   it('resolves a payment with student, class, term and session names', async () => {
     const { paymentId } = await payableInvoice();
