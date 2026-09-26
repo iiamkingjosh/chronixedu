@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { X509Certificate } from 'crypto';
 import { Pool, type PoolConfig } from 'pg';
 import { logger } from '../config/logger';
 
@@ -25,6 +26,28 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'postgres']);
  * unauthenticated, which stops passive interception but not an active MITM. That
  * gap is logged loudly at startup so it cannot be forgotten.
  */
+/** Warn this far ahead of CA expiry. Three months is enough to notice and rotate. */
+export const CA_EXPIRY_WARN_DAYS = 90;
+
+/**
+ * Reads the CA's expiry so the system reports it instead of relying on someone
+ * remembering.
+ *
+ * `resolveSsl()` fails CLOSED, so an expired or rotated CA is not a degraded
+ * connection — it is the API refusing to boot, with no advance warning. That was the
+ * one item in this work with nothing watching it, and a calendar entry is the weaker
+ * form: it depends on a human reading it four years from now. Putting `notAfter` on
+ * every `pg_tls_verified` line makes the expiry observable in any boot log without
+ * anyone going to look, and the warning fires on its own.
+ *
+ * Exported and pure so both branches are testable against a fixed clock, rather than
+ * being code that only runs in production and is therefore only correct in theory.
+ */
+export function inspectCa(pem: string, now: number = Date.now()): { notAfter: string; daysLeft: number } {
+  const notAfter = new X509Certificate(pem).validTo;
+  return { notAfter, daysLeft: Math.floor((Date.parse(notAfter) - now) / 86_400_000) };
+}
+
 /**
  * The CA that ships with the build. Resolves to apps/api/certs in the repo (from
  * src/db/) and to dist/certs in the image (from dist/db/), because the build copies
@@ -64,11 +87,18 @@ function resolveSsl(): PoolConfig['ssl'] {
       // into dist/ and why apps/api/certs/** belongs in the watch patterns.
       throw new Error(`PGSSLROOTCERT is set to "${caPath}" but no such file exists — refusing to fall back to an unverified connection.`);
     }
+    const ca = fs.readFileSync(caPath, 'utf8');
+    const { notAfter, daysLeft } = inspectCa(ca);
+    if (daysLeft < CA_EXPIRY_WARN_DAYS) {
+      // Not an error yet — the connection still verifies. But past notAfter the API
+      // stops booting, so this is the only warning anyone gets.
+      logger.warn('pg_tls_ca_expiring', { caPath, notAfter, daysLeft });
+    }
     // Logged on the SUCCESS branch too: a working config that says nothing is
-    // indistinguishable from one that never ran, which is the failure this session has
-    // hit four times.
-    logger.info('pg_tls_verified', { host, caPath });
-    return { ca: fs.readFileSync(caPath, 'utf8'), rejectUnauthorized: true };
+    // indistinguishable from one that never ran, which is the failure this work has
+    // hit four times. notAfter rides along so every boot log states the expiry.
+    logger.info('pg_tls_verified', { host, caPath, notAfter, daysLeft });
+    return { ca, rejectUnauthorized: true };
   }
 
   // Only reachable when the bundled CA is missing AND PGSSLROOTCERT is unset.
