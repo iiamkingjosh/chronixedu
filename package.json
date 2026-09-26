@@ -16,6 +16,7 @@
     "test": "npm --workspace=@chronixedu/api run test",
     "test:unit": "npm --workspace=@chronixedu/api run test:unit",
     "migrate": "npm --workspace=@chronixedu/api run migrate",
+    "migrate:prod": "npm --workspace=@chronixedu/api run migrate:prod",
     "test:isolation": "npm --workspace=@chronixedu/api run test -- --testPathPattern=tests/",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "prepare": "node -e \"if(!process.env.CI && require('fs').existsSync('.git')) process.exit(1)\" || husky install",
