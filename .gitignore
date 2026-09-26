@@ -37,6 +37,10 @@ dist/
 # One-off admin scripts — never commit
 apps/api/src/scripts/repairAuthUser.ts
 
+# Screenshots of a live system — real student names, parent emails, admission
+# numbers and scores. NDPR exposure in a public repo. Never commit.
+Screenshots/
+
 # Sensitive local docs — never commit
 chronixedu-test-credentials.html
 chronixedu-setup-instructions.html

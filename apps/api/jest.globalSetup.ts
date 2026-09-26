@@ -39,6 +39,27 @@ export default async function globalSetup(): Promise<void> {
     );
   }
 
+  // The same hazard, one layer over: several suites (staff bulk import, student
+  // registration) call supabaseAdmin.auth.admin.createUser, which creates REAL,
+  // loginable identities on whatever Supabase project SUPABASE_URL names — and via
+  // apps/api/.env that is production. A sweep on 2026-09-26 found 783 auth
+  // identities with no matching users row, every one of them left behind by a test
+  // run, and the ones predating c39e937 carry a password that was public in this
+  // repo. CI already points at a local stub (127.0.0.1:54321); this stops a local
+  // run from silently topping the pile up.
+  if (process.env.SUPABASE_URL) {
+    const sbHost = new URL(process.env.SUPABASE_URL).hostname;
+    const sbIsLocal = ['localhost', '127.0.0.1', '::1', 'supabase', 'kong'].includes(sbHost);
+    if (!sbIsLocal && process.env.ALLOW_REMOTE_TEST_SUPABASE !== sbHost) {
+      throw new Error(
+        `Refusing to run integration tests against remote Supabase Auth "${sbHost}". ` +
+        `These suites create real login identities and do not clean them up. ` +
+        `Point SUPABASE_URL at a local Supabase, or set ALLOW_REMOTE_TEST_SUPABASE=${sbHost} ` +
+        `if you are certain this is NOT production.`
+      );
+    }
+  }
+
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
 
