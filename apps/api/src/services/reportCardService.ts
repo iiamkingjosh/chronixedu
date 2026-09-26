@@ -12,8 +12,8 @@ import {
   upsertReportCard,
   fetchClassLevel,
 } from '../db/queries/reportCards';
-import { computeClassResults } from './resultEngine';
-import type { ClassResult } from './resultEngine';
+import { computeClassResults, lookupGrade } from './resultEngine';
+import type { ClassResult, GradeBand } from './resultEngine';
 
 // ── Template compilation (lazy, once per template) ────────────────────────────
 
@@ -166,15 +166,34 @@ export function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
 }
 
-export function gradeClass(grade: string): string {
-  return ['A', 'B', 'C', 'D', 'F'].includes(grade) ? grade : 'F';
-}
-
-export function lookupGrade(score: number, scale: Array<{ min: number; max: number; grade: string }>): string {
-  for (const band of scale) {
-    if (score >= band.min && score <= band.max) return band.grade;
-  }
-  return 'F';
+/**
+ * Colour tier for a grade cell, derived from the band's RANK in the resolved scale —
+ * never from the grade text.
+ *
+ * The templates define .grade-A through .grade-F and nothing else, and the old helper
+ * squeezed the grade into that set with
+ * `['A','B','C','D','F'].includes(grade) ? grade : 'F'`. Because the same value was
+ * used as BOTH the CSS class suffix and the printed text, the squeeze leaked onto the
+ * page: an unscored subject's em-dash printed as a bold red F, and every band of a
+ * WAEC A1–F9 scale printed F, including a score of 80.
+ *
+ * Deriving the class from the text instead — first character, say — rebuilds the same
+ * bug more quietly: it works for A1/F9 and then fails on the word scales
+ * (Excellent/Credit/Pass/Fail) and numeric 1–9 scales Nigerian schools also use. Rank
+ * exists for every scale whatever the labels say, so that is what this reads. The label
+ * is for reading; the colour is for ranking; they are different functions of one band.
+ */
+export function gradeCss(band: GradeBand | null, scale: GradeBand[]): string {
+  if (!band || scale.length === 0) return 'none';
+  const bestFirst = [...scale].sort((a, b) => b.min - a.min);
+  const rank = bestFirst.findIndex(b => b.min === band.min && b.max === band.max);
+  if (rank < 0) return 'none';
+  const tiers = ['A', 'B', 'C', 'D', 'F'];
+  // Anchored at both ends: the best band is always 'A' and the WORST is always 'F',
+  // whatever the scale's length. Scaling by length alone put the worst band of a
+  // four-band word scale ('Fail') on 'D'.
+  if (bestFirst.length === 1) return tiers[0];
+  return tiers[Math.round((rank * (tiers.length - 1)) / (bestFirst.length - 1))];
 }
 
 // Promotion decisions are only made at the end of the academic session (Third Term).
@@ -271,17 +290,14 @@ export async function generateReportCard(
     : baseAcademicConfig;
   const reportConfig = (school.report_config ?? {}) as ReportConfigOverrides;
 
-  // Grading scale from academic_config (or default)
-  const gradingScale: Array<{ min: number; max: number; grade: string }> =
-    Array.isArray(academicConfig.grading_scale)
-      ? (academicConfig.grading_scale as Array<{ min: number; max: number; grade: string }>)
-      : [
-          { min: 70, max: 100, grade: 'A' },
-          { min: 60, max: 69,  grade: 'B' },
-          { min: 50, max: 59,  grade: 'C' },
-          { min: 40, max: 49,  grade: 'D' },
-          { min: 0,  max: 39,  grade: 'F' },
-        ];
+  // The scale comes from academic_config, resolved per class level by
+  // fetchAcademicConfig. There is deliberately NO hard-coded fallback: a second scale
+  // living here meant a school whose config was missing got a report card graded
+  // against 70/60/50/40 that it had never agreed to, silently and differently from
+  // every other screen. An empty scale now yields no grade rather than a wrong one.
+  const gradingScale: GradeBand[] = Array.isArray(academicConfig.grading_scale)
+    ? (academicConfig.grading_scale as GradeBand[])
+    : [];
 
   const promotionCutoff =
     typeof academicConfig.promotion_cutoff === 'number'
@@ -314,7 +330,10 @@ export async function generateReportCard(
     });
 
     const totalScore = sub.result ? sub.result.total_score.toFixed(2) : '—';
-    const grade      = sub.result ? lookupGrade(sub.result.total_score, gradingScale) : '—';
+    // An unscored subject has no grade. It used to print a bold red F here, beside a
+    // total of '—' — the report card said "no score, F" about the same subject.
+    const band       = sub.result ? lookupGrade(sub.result.total_score, gradingScale) : null;
+    const grade      = band ? band.grade : '—';
     const posMap     = subjectPositions.get(sub.subject_id);
     const posNum     = posMap?.get(studentId);
     const position   = posNum !== undefined ? ordinal(posNum) : '—';
@@ -331,20 +350,24 @@ export async function generateReportCard(
       name:            sub.subject_name,
       componentScores,
       totalScore,
-      grade:           gradeClass(grade),
+      grade,                              // printed as configured: A, A1, Credit, 1…
+      gradeCss:        gradeCss(band, gradingScale), // colour only
       position,
       classAverage,
     };
   });
 
-  // Overall average
+  // Read, do not recompute. computeClassResults already produced overall_average for
+  // this student, and it is what the approval screen, the principal's student list and
+  // the class summary all show. A third derivation here is a third chance to disagree
+  // with the other two about the same number.
   const scoredSubjects = (studentRecord?.subjects ?? []).filter(s => s.result !== null);
-  const overallAvg =
-    scoredSubjects.length > 0
-      ? scoredSubjects.reduce((sum, s) => sum + (s.result?.total_score ?? 0), 0) /
-        scoredSubjects.length
-      : 0;
-  const overallGrade = overallAvg > 0 ? lookupGrade(overallAvg, gradingScale) : '—';
+  const overallAvg = studentRecord?.overall_average ?? 0;
+  // The grade comes from the engine too, not from a second lookup here. gradeCss still
+  // needs the band for its colour, so resolve that — but the printed grade is the
+  // engine's, which is what the approval screen and student list show.
+  const overallBand = scoredSubjects.length > 0 ? lookupGrade(overallAvg, gradingScale) : null;
+  const overallGradeText = studentRecord?.overall_grade ?? (overallBand ? overallBand.grade : null);
 
   const { promotionClass, promotionStatus } = computePromotionStatus(
     studentData.term_name,
@@ -377,8 +400,10 @@ export async function generateReportCard(
     overallColspan:   1 + componentHeaderSet.length,
     subjects:         subjectRows,
     overall: {
-      average:      overallAvg > 0 ? overallAvg.toFixed(2) : '—',
-      grade:        gradeClass(overallGrade),
+      average:      scoredSubjects.length > 0 ? overallAvg.toFixed(2) : '—',
+      grade:        overallGradeText ?? '—',
+      gradeCss:     gradeCss(overallBand, gradingScale),
+      remark:       studentRecord?.overall_remark ?? null,
       position:     studentRecord?.position !== undefined ? ordinal(studentRecord.position) : '—',
       totalStudents: classResult.students.length,
     },

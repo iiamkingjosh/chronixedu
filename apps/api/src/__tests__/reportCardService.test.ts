@@ -286,6 +286,8 @@ describe('generateReportCard', () => {
         last_name:   'Doe',
         subjects:    [],
         overall_average: 0,
+      overall_grade: null,
+      overall_remark: null,
         subjects_scored: 0,
         position:    1,
       },

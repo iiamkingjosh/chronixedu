@@ -157,6 +157,7 @@
   .grade-C { color: #f57c00; font-weight: bold; }
   .grade-D { color: #e64a19; font-weight: bold; }
   .grade-F { color: #c62828; font-weight: bold; }
+  .grade-none { color: #9e9e9e; font-weight: normal; }
   .overall-row {
     background: #e8f5e9 !important;
     font-weight: bold;
@@ -260,7 +261,7 @@
           <tr>
             <td class="left"><strong>{{name}}</strong></td>
             <td><strong>{{totalScore}}</strong></td>
-            <td class="grade-{{grade}}">{{grade}}</td>
+            <td class="grade-{{gradeCss}}">{{grade}}</td>
             <td>{{position}}</td>
             <td>{{classAverage}}</td>
           </tr>
@@ -268,7 +269,7 @@
           <tr class="overall-row">
             <td class="left"><strong>OVERALL AVERAGE</strong></td>
             <td><strong>{{overall.average}}</strong></td>
-            <td class="grade-{{overall.grade}}"><strong>{{overall.grade}}</strong></td>
+            <td class="grade-{{overall.gradeCss}}"><strong>{{overall.grade}}</strong></td>
             <td><strong>{{overall.position}}</strong></td>
             <td>—</td>
           </tr>
