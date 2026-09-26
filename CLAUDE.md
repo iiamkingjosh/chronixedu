@@ -162,6 +162,14 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   `/app`, not from the service directory** — which is why `build` and `start` both begin
   `cd apps/api &&`. The command currently set is `cd apps/api && npm run migrate:prod`;
   a root-level `migrate:prod` delegate also exists, so the bare form works too.
+- **Railway's build command must be `npm ci && npm run build --workspace=@chronixedu/api`.**
+  It was `cd apps/api && npm install && npm run build` — `npm install` inside a workspace
+  member bypasses the root lockfile, so production builds were not reproducible and could
+  drift from what CI tested. Verified by clean install into an empty tree: `npm ci` then
+  the workspace build produces `dist/scripts/migrate.js`, `dist/migrations` (36 .sql) and
+  `dist/templates`. Scoping the install with `--workspace` is not worth it — npm still
+  materialises the whole hoisted tree, so it installs the same 730 packages either way.
+  The build also reads the root `tsconfig.base.json`, so it needs the repo root present.
 - Every migrate run, including a no-op, writes a row to `migration_runs` (resolved dir,
   file count, applied count, `RAILWAY_GIT_COMMIT_SHA`). A pre-deploy step that silently
   never executes looks exactly like a healthy one from outside, and Railway does not
