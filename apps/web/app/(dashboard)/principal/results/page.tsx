@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { ClassSummaryPanel, SubjectSheetPanel } from './ReviewPanels';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -223,6 +224,11 @@ export default function PrincipalResultsPage() {
   // null = closed; { subject } = return one subject; { subject: null } = return whole class
   const [returnTarget, setReturnTarget] = useState<{ subject: SubjectStatusInfo | null } | null>(null);
   const [acting, setActing] = useState(false);
+  // Read-only review. Class level opens the students x subjects summary; a subject row
+  // opens that subject's per-component sheet. Separate pivots, so one is not nested
+  // inside the other.
+  const [summaryOpen, setSummaryOpen] = useState(false);
+  const [sheetSubject, setSheetSubject] = useState<SubjectStatusInfo | null>(null);
 
   const load = useCallback(() => {
     if (!schoolId) return;
@@ -382,6 +388,12 @@ export default function PrincipalResultsPage() {
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={() => setSummaryOpen(true)}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
+                  >
+                    Review results
+                  </button>
                   {selectedClass.status_summary.published === 0 &&
                     (selectedClass.status_summary.approved > 0 ||
                       selectedClass.subjects.some(s => s.submission_status === 'submitted')) && (
@@ -443,13 +455,19 @@ export default function PrincipalResultsPage() {
                             ? <span className={badgeClass('gray')}>Complete — not submitted</span>
                             : <span className={badgeClass('amber')}>Incomplete</span>}
                       </td>
-                      <td className="px-5 py-3 text-right">
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => setSheetSubject(subject)}
+                          className="text-xs font-medium text-slate-700 hover:underline"
+                        >
+                          View scores
+                        </button>
                         {subject.submission_status === 'submitted'
                           && selectedClass.status_summary.approved === 0
                           && selectedClass.status_summary.published === 0 && (
                           <button
                             onClick={() => setReturnTarget({ subject })}
-                            className="text-xs font-medium text-amber-700 hover:underline"
+                            className="text-xs font-medium text-amber-700 hover:underline ml-4"
                           >
                             Return
                           </button>
@@ -463,6 +481,28 @@ export default function PrincipalResultsPage() {
             </div>
           )}
         </>
+      )}
+
+      {summaryOpen && selectedClass && termId && schoolId && (
+        <ClassSummaryPanel
+          schoolId={schoolId}
+          classId={selectedClass.class_id}
+          termId={termId}
+          className={selectedClass.class_name}
+          onClose={() => setSummaryOpen(false)}
+        />
+      )}
+
+      {sheetSubject && selectedClass && termId && schoolId && (
+        <SubjectSheetPanel
+          schoolId={schoolId}
+          classId={selectedClass.class_id}
+          subjectId={sheetSubject.subject_id}
+          termId={termId}
+          subjectName={sheetSubject.subject_name}
+          className={selectedClass.class_name}
+          onClose={() => setSheetSubject(null)}
+        />
       )}
 
       {approveOpen && selectedClass && (

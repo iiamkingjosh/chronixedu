@@ -1,5 +1,14 @@
 # Chronix Edu — Changelog
 
+## Result Review for Principals (2026-09-26)
+
+### Principals can now see the results they are approving
+- The approval screen showed only subject name, teacher name and how many students had been scored. Approving from that confirmed the teacher had finished entering marks — it said nothing about whether the marks were right.
+- **Review results** on a class now opens every student against every subject, with weighted totals, grades, overall average and position.
+- **View scores** on a subject row opens that subject's marks as the teacher entered them, broken down by CA1, CA2 and Exam.
+- Both views are read-only. Approve, publish and return are unchanged and still live on the approval screen.
+- A dash means no score has been entered, which is deliberately shown differently from a zero.
+
 ## Platform Analytics Accuracy (2026-09-26)
 
 ### Platform totals now count customers, not database rows
