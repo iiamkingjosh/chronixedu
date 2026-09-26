@@ -201,13 +201,19 @@ export function computePromotionStatus(
   termName: string,
   scoredSubjectsCount: number,
   overallAvg: number,
-  promotionCutoff: number
+  promotionCutoff: number | null
 ): { promotionClass: 'promoted' | 'repeat' | 'pending' | 'not-applicable'; promotionStatus: string } {
   if (termName.trim().toLowerCase() !== 'third term') {
     return { promotionClass: 'not-applicable', promotionStatus: 'Term Completed' };
   }
   if (scoredSubjectsCount === 0) {
     return { promotionClass: 'pending', promotionStatus: 'Pending' };
+  }
+  // The school has not set a pass mark, so there is nothing to decide against.
+  // Refusing to assert is a case this function already knows how to express; printing
+  // "Repeat Class" from a default would be Chronix deciding a child's year.
+  if (promotionCutoff === null) {
+    return { promotionClass: 'pending', promotionStatus: 'Not determined' };
   }
   if (overallAvg >= promotionCutoff) {
     return { promotionClass: 'promoted', promotionStatus: 'Promoted' };
@@ -299,10 +305,10 @@ export async function generateReportCard(
     ? (academicConfig.grading_scale as GradeBand[])
     : [];
 
-  const promotionCutoff =
+  const promotionCutoff: number | null =
     typeof academicConfig.promotion_cutoff === 'number'
       ? (academicConfig.promotion_cutoff as number)
-      : 40;
+      : null;
 
   // Find this student's record in classResult
   const studentRecord = classResult.students.find(s => s.student_id === studentId);
@@ -403,7 +409,9 @@ export async function generateReportCard(
       average:      scoredSubjects.length > 0 ? overallAvg.toFixed(2) : '—',
       grade:        overallGradeText ?? '—',
       gradeCss:     gradeCss(overallBand, gradingScale),
-      remark:       studentRecord?.overall_remark ?? null,
+      // Same source and same fallback as grade above — a printed grade beside a blank
+      // remark is an asymmetry someone loses an hour to later.
+      remark:       studentRecord?.overall_remark ?? (overallBand ? overallBand.remark : null),
       position:     studentRecord?.position !== undefined ? ordinal(studentRecord.position) : '—',
       totalStudents: classResult.students.length,
     },

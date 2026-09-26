@@ -33,6 +33,8 @@ interface StudentListRow {
 /** Per-student academic figures, keyed by student id. Principal-only — see below. */
 interface AcademicRow {
   overall_average: number;
+  /** null when nothing is scored, or when the school has set no grading scale. */
+  overall_grade: string | null;
   position: number;
   subjects_scored: number;
 }
@@ -505,12 +507,12 @@ export default function StudentRegistrationPage() {
 
     let cancelled = false;
     Promise.all(classIds.map(classId =>
-      apiFetch<{ success: boolean; data: { students: Array<{ student_id: string; overall_average: number; position: number; subjects_scored: number }> } }>(
+      apiFetch<{ success: boolean; data: { students: Array<{ student_id: string; overall_average: number; overall_grade: string | null; position: number; subjects_scored: number }> } }>(
         `/api/schools/${schoolId}/results/class-summary?class_id=${classId}&term_id=${termId}`
       )
         .then(({ data }) => data.students)
         // One unreadable class must not blank the whole page; those rows just show dashes.
-        .catch(() => [] as Array<{ student_id: string; overall_average: number; position: number; subjects_scored: number }>)
+        .catch(() => [] as Array<{ student_id: string; overall_average: number; overall_grade: string | null; position: number; subjects_scored: number }>)
     )).then(groups => {
       if (cancelled) return;
       const map: Record<string, AcademicRow> = {};
@@ -518,6 +520,7 @@ export default function StudentRegistrationPage() {
         for (const st of g) {
           map[st.student_id] = {
             overall_average: st.overall_average,
+            overall_grade: st.overall_grade,
             position: st.position,
             subjects_scored: st.subjects_scored,
           };
@@ -637,7 +640,7 @@ export default function StudentRegistrationPage() {
       {canSeeAcademics && (
         <p className="mb-3 text-xs text-gray-500">
           {termName
-            ? <>Average and position are for <span className="font-medium text-gray-700">{termName}</span>, across every subject scored so far. A dash means no scores have been entered yet.</>
+            ? <>Average, grade and position are for <span className="font-medium text-gray-700">{termName}</span>, across every subject scored so far. A dash means no scores yet — or, in the grade column, that the school has not set a grading scale.</>
             : <>No term is currently active, so no academic figures are shown. Registration and search are unaffected.</>}
         </p>
       )}
@@ -679,6 +682,7 @@ export default function StudentRegistrationPage() {
                   {canSeeAcademics && (
                     <>
                       <th className="text-right px-5 py-2.5 font-medium whitespace-nowrap">Average</th>
+                      <th className="text-right px-5 py-2.5 font-medium whitespace-nowrap">Grade</th>
                       <th className="text-right px-5 py-2.5 font-medium whitespace-nowrap">Position</th>
                     </>
                   )}
@@ -701,6 +705,11 @@ export default function StudentRegistrationPage() {
                         <>
                           <td className="px-5 py-3 text-right text-gray-900 font-medium">
                             {has ? a.overall_average : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-5 py-3 text-right text-gray-700">
+                            {/* Blank for a school with no grading scale configured —
+                                correct, not a bug: there is no grade to show. */}
+                            {has && a.overall_grade ? a.overall_grade : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="px-5 py-3 text-right text-gray-600">
                             {has ? a.position : <span className="text-gray-300">—</span>}

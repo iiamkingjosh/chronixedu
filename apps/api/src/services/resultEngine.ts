@@ -18,7 +18,15 @@ export interface GradeBand {
 
 interface AcademicConfig {
   grading_scale: GradeBand[];
-  promotion_cutoff: number;
+  /**
+   * null when the school has not set a pass mark. It used to default to 40, which is
+   * the same mistake as the report card's hard-coded grading scale but with higher
+   * stakes: this number decides whether a Third Term report card prints "Promoted" or
+   * "Repeat Class". For a school that never set one, 40 was Chronix's number presented
+   * as the school's, on a document a parent keeps. Not hypothetical — 42 of 45 schools
+   * have no school_settings row at all and resolved through that default.
+   */
+  promotion_cutoff: number | null;
 }
 
 /**
@@ -180,7 +188,7 @@ async function fetchAcademicConfig(schoolId: string, classId?: string | null): P
 
   return {
     grading_scale:    override?.grading_scale    ?? cfg?.grading_scale    ?? [],
-    promotion_cutoff: override?.promotion_cutoff ?? cfg?.promotion_cutoff ?? 40,
+    promotion_cutoff: override?.promotion_cutoff ?? cfg?.promotion_cutoff ?? null,
   };
 }
 
@@ -417,6 +425,10 @@ export async function getStudentsAtRisk(
     // Resolved per class: a school running both a primary and a secondary section can
     // set a different pass mark for each via academic_config.level_overrides.
     const { promotion_cutoff } = await fetchAcademicConfig(schoolId, class_id);
+    // No pass mark configured means there is no threshold to be below. Listing
+    // students as at-risk against an invented 40 would be asserting a judgement the
+    // school never made.
+    if (promotion_cutoff === null) continue;
     const result = await computeClassResults(class_id, termId, schoolId);
     for (const student of result.students) {
       if (student.subjects_scored > 0 && student.overall_average < promotion_cutoff) {

@@ -127,6 +127,51 @@ describe('class-summary — the numbers a principal is approving', () => {
 
     const s1 = res.body.data.students.find((s: { student_id: string }) => s.student_id === I.s1);
     expect(s1.overall_average).toBe(85); // 25/30 + 60/70 weighted to a 100-point total
+    // The seed creates no school_settings row — the state 42 of 45 production schools
+    // are in. An average without a grade is the correct result there: the school has
+    // configured no scale, so there is no grade to report and none is invented.
+    expect(s1.overall_grade).toBeNull();
+    expect(s1.overall_remark).toBeNull();
+  });
+
+  it('reports no grade for a student with nothing scored, rather than the lowest one', async () => {
+    const res = await request(app).get(url()).set('Authorization', tokens.principalA());
+    const unscored = res.body.data.students.filter((s: { subjects_scored: number }) => s.subjects_scored === 0);
+    expect(unscored.length).toBeGreaterThan(0);
+    for (const s of unscored) {
+      expect(s.overall_grade).toBeNull();
+      expect(s.overall_remark).toBeNull();
+    }
+  });
+
+  it("grades against the school's own scale once one is configured", async () => {
+    await pool.query(
+      `INSERT INTO school_settings (school_id, identity_config, academic_config)
+       VALUES ($1, '{}'::jsonb, $2::jsonb)`,
+      [I.schoolA, JSON.stringify({
+        promotion_cutoff: 40,
+        grading_scale: [
+          { grade: 'A', min: 70, max: 100, label: 'A', remark: 'Excellent' },
+          { grade: 'B', min: 60, max: 69,  label: 'B', remark: 'Very Good' },
+          { grade: 'C', min: 50, max: 59,  label: 'C', remark: 'Good' },
+          { grade: 'D', min: 40, max: 49,  label: 'D', remark: 'Pass' },
+          { grade: 'F', min: 0,  max: 39,  label: 'F', remark: 'Fail' },
+        ],
+      })]
+    );
+    await pool.query(
+      `INSERT INTO scores (school_id, student_id, subject_id, term_id, component_id, score)
+       VALUES ($1,$2,$3,$4,$5,25), ($1,$2,$3,$4,$6,60)`,
+      [I.schoolA, I.s1, I.math, I.termA, I.ca1, I.exam]
+    );
+
+    const res = await request(app).get(url()).set('Authorization', tokens.principalA());
+    const s1 = res.body.data.students.find((s: { student_id: string }) => s.student_id === I.s1);
+    expect(s1.overall_average).toBe(85);
+    // Resolved from the SAME scale the report card uses, so the approval screen, the
+    // principal's student list and the PDF cannot disagree about this letter.
+    expect(s1.overall_grade).toBe('A');
+    expect(s1.overall_remark).toBe('Excellent');
   });
 
   it('ranks students by overall average, ties sharing a position', async () => {
