@@ -152,6 +152,13 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Every new table: `school_id` (if tenant data), `ENABLE ROW LEVEL SECURITY`, a
   `service_role_bypass` policy and a tenant policy. `tenantIsolation.db.test.ts` fails otherwise.
 - If code starts using a column, a migration must create it. CI rebuilds the schema from scratch.
+- **Railway auto-deploys from `main`, so pushing IS deploying.** The old runbook order
+  ("migrations first, then deploy the API") cannot be honoured by pushing — the code is
+  live the moment you push, schema ready or not. Either apply the migration before
+  pushing the code that needs it, or set the API service's **Pre-Deploy Command** to
+  `npm run migrate:prod` (`node dist/scripts/migrate.js` — plain JS, so it needs no
+  ts-node; it exits non-zero on failure, which aborts the deploy). Set it on the API
+  service only: the web service has no `dist/scripts`.
 
 ## Definition of done
 

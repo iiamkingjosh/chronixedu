@@ -10,6 +10,7 @@
     "test": "jest --runInBand",
     "seed:superadmin": "ts-node src/scripts/seedSuperAdmin.ts",
     "migrate": "ts-node src/scripts/migrate.ts",
+    "migrate:prod": "node dist/scripts/migrate.js",
     "test:db": "jest -c jest.db.config.js --runInBand",
     "test:integration:local": "jest --runInBand --testPathPattern=/tests/ --testPathIgnorePatterns=\"/tests/(isolation|onboardingWizard|phase4Integration|staffBulkImport)\\.test\\.ts\"",
     "test:unit": "jest -c jest.unit.config.js --runInBand"
