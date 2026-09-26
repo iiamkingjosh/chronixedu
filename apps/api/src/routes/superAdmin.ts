@@ -69,6 +69,10 @@ const listSchoolsQuerySchema = z.object({
   search: z.string().optional(),
   status: z.enum(['active', 'inactive']).optional(),
   plan: z.enum(['trial', 'basic', 'premium', 'enterprise']).optional(),
+  // Demo and fixture tenants are hidden by default: this list gets shown on a screen
+  // during sales calls, and "Bulk Import Commit Test School" sitting in it is its own
+  // kind of problem. Opt in explicitly to administer them.
+  include_demo: z.coerce.boolean().optional().default(false),
 });
 
 const schoolActionSchema = z.object({
@@ -557,11 +561,12 @@ router.get(
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
-      const { page, search, status, plan } = parsed.data;
+      const { page, search, status, plan, include_demo } = parsed.data;
 
       const params: unknown[] = [];
       const where: string[] = [];
 
+      if (!include_demo) { where.push('schools.is_demo = false'); }
       if (search) { params.push(`%${search}%`); where.push(`schools.name ILIKE $${params.length}`); }
       if (status) { params.push(status === 'active'); where.push(`schools.is_active = $${params.length}`); }
       if (plan) { params.push(plan); where.push(`platform_subscriptions.plan = $${params.length}`); }
@@ -588,6 +593,7 @@ router.get(
            schools.name,
            schools.slug,
            schools.is_active,
+           schools.is_demo,
            schools.payout_config->>'settlement_status' AS payout_status,
            platform_subscriptions.plan,
            platform_subscriptions.subscription_status,
@@ -1679,21 +1685,44 @@ router.get(
   ...guard,
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
+      // Every count here is platform scale — the number quoted to an investor or a
+      // prospective school — so each one excludes schools that are not customers
+      // (is_demo: test fixtures, sandbox and sales-demo tenants). Previously all of
+      // these counted every row regardless of state, which made 45 fixture schools
+      // read as platform scale. Filtering on is_active alone would not have fixed it:
+      // it would have made total_schools identical to active_schools, and it would
+      // have written off suspended real customers, who still belong in these totals.
+      //
+      // total_schools counts customers whatever their suspension state; the metrics
+      // that describe CURRENT activity (students, trials, MRR) additionally require
+      // is_active, because a suspended school is not contributing any of them today.
       const [totalSchools, activeSchools, totalStudents, mrr, trialCount, newSchoolsThisMonth, lastSnapshot] = await Promise.all([
-        pool.query<{ count: string }>(`SELECT COUNT(*) FROM schools`),
-        pool.query<{ count: string }>(`SELECT COUNT(*) FROM schools WHERE is_active = true`),
-        pool.query<{ count: string }>(`SELECT COUNT(*) FROM students`),
+        pool.query<{ count: string }>(`SELECT COUNT(*) FROM schools WHERE is_demo = false`),
+        pool.query<{ count: string }>(`SELECT COUNT(*) FROM schools WHERE is_active = true AND is_demo = false`),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*) FROM students st
+             JOIN schools s ON s.id = st.school_id
+            WHERE s.is_active = true AND s.is_demo = false`
+        ),
         pool.query<{ total: string }>(
           `SELECT COALESCE(SUM(
-             CASE WHEN billing_cycle = 'monthly' THEN amount_naira
-                  WHEN billing_cycle = 'annual' THEN amount_naira / 12
+             CASE WHEN ps.billing_cycle = 'monthly' THEN ps.amount_naira
+                  WHEN ps.billing_cycle = 'annual' THEN ps.amount_naira / 12
                   ELSE 0 END
            ), 0) AS total
-           FROM platform_subscriptions
-           WHERE subscription_status = 'active'`
+           FROM platform_subscriptions ps
+           JOIN schools s ON s.id = ps.school_id
+           WHERE ps.subscription_status = 'active' AND s.is_active = true AND s.is_demo = false`
         ),
-        pool.query<{ count: string }>(`SELECT COUNT(*) FROM platform_subscriptions WHERE subscription_status = 'trial'`),
-        pool.query<{ count: string }>(`SELECT COUNT(*) FROM schools WHERE created_at >= date_trunc('month', NOW())`),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*) FROM platform_subscriptions ps
+             JOIN schools s ON s.id = ps.school_id
+            WHERE ps.subscription_status = 'trial' AND s.is_active = true AND s.is_demo = false`
+        ),
+        pool.query<{ count: string }>(
+          `SELECT COUNT(*) FROM schools
+            WHERE created_at >= date_trunc('month', NOW()) AND is_demo = false`
+        ),
         pool.query<{ snapshot_date: string }>(`SELECT snapshot_date FROM platform_metrics_snapshots ORDER BY snapshot_date DESC LIMIT 1`),
       ]);
 

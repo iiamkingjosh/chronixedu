@@ -1,5 +1,17 @@
 # Chronix Edu — Changelog
 
+## Platform Analytics Accuracy (2026-09-26)
+
+### Platform totals now count customers, not database rows
+- The super-admin overview counted every school and every student in the database, including tenants created by automated tests. Total schools, total students, new schools this month, trials and MRR were all affected.
+- These figures now exclude non-customer tenants (test fixtures, sandbox and sales-demo schools), which are marked separately from suspended schools.
+- A suspended school still counts towards total schools — it is a customer whose access is paused — but no longer counts towards students, trials or revenue.
+- The platform school list hides demo tenants by default, so they no longer appear on screen when the dashboard is shown to a prospective school.
+
+### Audit logs cannot be deleted or edited
+- The audit trail was documented as append-only, but nothing in the database enforced it — the application's own connection could have removed or rewritten entries.
+- Deleting or updating an audit entry is now rejected by the database itself.
+
 ## Account Creation & Credentials (2026-09-26)
 
 ### Newly registered students and parents can now actually log in
