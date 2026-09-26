@@ -159,6 +159,15 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   `npm run migrate:prod` (`node dist/scripts/migrate.js` — plain JS, so it needs no
   ts-node; it exits non-zero on failure, which aborts the deploy). Set it on the API
   service only: the web service has no `dist/scripts`.
+- **The API service's `build.watchPatterns` must include `/migrations/**`.** It is
+  scoped to `/apps/api/**`, and `migrations/` sits at the repo root — so a commit that
+  adds only a migration triggers no build and no deploy, which is exactly the commit a
+  pre-deploy migrate gate exists to catch.
+- `npm run build` copies `migrations/` into `dist/migrations`, and the runner prefers
+  that copy, so the migrate step does not depend on the repo root surviving a
+  service-scoped container build. The runner requires the directory to actually contain
+  `.sql` files — an empty `apps/api/src/migrations/` exists in some working copies, and
+  matching it made the runner report success after reading zero files.
 
 ## Definition of done
 
