@@ -175,6 +175,15 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   never executes looks exactly like a healthy one from outside, and Railway does not
   surface pre-deploy output in the API's log streams — so `SELECT * FROM migration_runs
   ORDER BY id DESC LIMIT 5` is how you confirm the gate actually ran.
+- **Before changing the build, ask: what does this build read, and is all of it
+  watched?** Three separate inputs were found living outside the watched path, each
+  only when something forced it into the open — `migrations/`, the root manifests
+  (made build-critical by the switch to `npm ci`), and `tsconfig.base.json`. An
+  unwatched build input does not fail loudly: the change simply sits in the repo,
+  absent from the deployed image, until an unrelated commit drags it in. The current
+  set is `/apps/api/**`, `/migrations/**`, `/package.json`, `/package-lock.json`,
+  `/tsconfig.base.json`. Anything new the build reads goes in that list in the same
+  commit that makes it a dependency.
 - **The API service's `build.watchPatterns` must include `/migrations/**`.** It is
   scoped to `/apps/api/**`, and `migrations/` sits at the repo root — so a commit that
   adds only a migration triggers no build and no deploy, which is exactly the commit a
