@@ -215,6 +215,12 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   `dist/templates`. Scoping the install with `--workspace` is not worth it — npm still
   materialises the whole hoisted tree, so it installs the same 730 packages either way.
   The build also reads the root `tsconfig.base.json`, so it needs the repo root present.
+- **The Supabase CA ships in the repo at `apps/api/certs/supabase-ca.crt`**, is copied
+  into `dist/certs` by the build, and is the DEFAULT — `PGSSLROOTCERT` only overrides it.
+  So a deploy is TLS-verified without setting any variable, and `pg_tls_verified` is
+  logged at boot with the resolved path. `apps/api/certs/**` must be in the API service's
+  watch patterns: `resolveSsl()` fails closed, so a CA present in the repo and absent
+  from the image takes the API down at start.
 - Every migrate run, including a no-op, writes a row to `migration_runs` (resolved dir,
   file count, applied count, `RAILWAY_GIT_COMMIT_SHA`). A pre-deploy step that silently
   never executes looks exactly like a healthy one from outside, and Railway does not
