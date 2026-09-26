@@ -14,6 +14,7 @@ import {
   markSubjectSubmitted,
   returnSubjectsToDraft,
 } from '../db/queries/results';
+import { computeClassResults } from '../services/resultEngine';
 import { startReportCardBatch, getJob, signReportCardAsset } from '../services/reportCardService';
 import { getReportCardsForClass, publishReportCards } from '../db/queries/reportCards';
 import pool from '../db/client';
@@ -66,6 +67,13 @@ const submitSchema = z.object({
 });
 
 const classTermSchema = z.object({
+  class_id: z.string().uuid(),
+  term_id:  z.string().uuid(),
+});
+
+// Same shape as classTermSchema, named separately so the query-param route reads
+// clearly at its call site.
+const classSummaryQuerySchema = z.object({
   class_id: z.string().uuid(),
   term_id:  z.string().uuid(),
 });
@@ -204,6 +212,65 @@ router.get(
 
       const dashboard = await getApprovalDashboard(req.params.schoolId, termId);
       return res.json({ success: true, data: dashboard });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── (2b) GET /:schoolId/results/class-summary ─────────────────────────────────
+// The numbers behind an approval decision.
+//
+// getApprovalDashboard returns subject name, teacher name and a scored/total count.
+// A principal approving from that alone is confirming that entry is COMPLETE, not
+// that it is CORRECT — a clerical check presented as a judgement. The return dialog
+// even suggests "Exam scores for 3 students look swapped", a call the screen gave no
+// way to make. This serves the per-student weighted totals, grades and positions that
+// the question actually requires; computeClassResults already computes them for
+// report cards, so the same aggregation backs approval, the report card and the
+// principal's student list, and the three cannot disagree.
+//
+// Deliberately NOT publish-gated. Doctrine 5's gate exists to stop parents and
+// students seeing unapproved marks; a principal reviewing marks BEFORE approving
+// them must see exactly that unapproved state, which is why this route is restricted
+// to principal and super_admin at the call site rather than relying on the file's
+// permissive requireSchoolAccess (doctrine 1). Teachers are excluded on purpose: this
+// spans every subject in the class, while a teacher's own subject remains available
+// through GET /scores/class-sheet.
+
+router.get(
+  '/:schoolId/results/class-summary',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = classSummaryQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() },
+        });
+      }
+      const { class_id, term_id } = parsed.data;
+      const schoolId = req.params.schoolId;
+
+      // Validate the target, not just the caller (doctrine 3): computeClassResults
+      // filters by school_id, but a class or term from another tenant would otherwise
+      // come back as an empty result rather than a 404.
+      const [cls, term] = await Promise.all([
+        pool.query(`SELECT 1 FROM classes WHERE id = $1 AND school_id = $2`, [class_id, schoolId]),
+        pool.query(`SELECT 1 FROM terms WHERE id = $1 AND school_id = $2`, [term_id, schoolId]),
+      ]);
+      if (cls.rows.length === 0) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Class not found' } });
+      }
+      if (term.rows.length === 0) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Term not found' } });
+      }
+
+      const result = await computeClassResults(class_id, term_id, schoolId);
+      return res.json({ success: true, data: result });
     } catch (err) {
       return next(err);
     }
