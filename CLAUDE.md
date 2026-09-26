@@ -219,8 +219,12 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   into `dist/certs` by the build, and is the DEFAULT — `PGSSLROOTCERT` only overrides it.
   So a deploy is TLS-verified without setting any variable, and `pg_tls_verified` is
   logged at boot with the resolved path. `apps/api/certs/**` must be in the API service's
-  watch patterns: `resolveSsl()` fails closed, so a CA present in the repo and absent
-  from the image takes the API down at start.
+  watch patterns — already satisfied by the existing `/apps/api/**` pattern, so nothing
+  to add; the patterns that needed adding were the ones OUTSIDE `apps/api`.
+- **The bundled CA expires 26 Apr 2031** (Supabase Root 2021 CA). Because `resolveSsl()`
+  fails closed, expiry or an early Supabase rotation is an outage at boot with no
+  advance warning. That is the correct behaviour and it is also why the date needs a
+  calendar entry or a monitor — the fix is not code.
 - Every migrate run, including a no-op, writes a row to `migration_runs` (resolved dir,
   file count, applied count, `RAILWAY_GIT_COMMIT_SHA`). A pre-deploy step that silently
   never executes looks exactly like a healthy one from outside, and Railway does not
