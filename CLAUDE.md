@@ -102,11 +102,17 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Path alias `@/` in web. Keep files where their siblings are.
 - Record security fixes in `SECURITY.md` (next round, existing format) and
   user-visible changes in `docs/CHANGELOG.md`, in the same PR as the change.
-- New integration tests in `apps/api/tests/` must delete the rows they create in `afterAll` —
-  **except `audit_logs`**, which migration 036 makes append-only at the database level.
-  Nine suites used to delete their audit rows and now cannot. Leave them: a few rows per
-  run in a disposable database costs nothing, and an escape hatch that let tests delete
-  audit rows would put a hole in the guarantee for the sake of tidiness.
+- New integration tests in `apps/api/tests/` must delete the rows they create in `afterAll`,
+  with one family of exceptions that migrations 036/037 created. `audit_logs` is
+  append-only at the database level, so a test cannot delete its audit rows — and because
+  `audit_logs` holds FKs to both `users` and `schools`, it cannot delete an audited **user**
+  or their **school** either. Teardown therefore guards those deletes:
+  `AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)` and the
+  `school_id` equivalent, leaving the audited ones behind.
+- That is only safe because both runners refuse a non-local database (`ALLOW_REMOTE_TEST_DB`,
+  `ALLOW_REMOTE_TEST_SUPABASE`), so the leftovers land somewhere disposable. **Do not "fix"
+  it by letting tests delete audit rows** — a session flag or role that permits it converts
+  the invariant into a convention, which is what enforcing it was meant to prevent.
 
 ## Primary vs secondary (teaching model)
 
