@@ -87,7 +87,7 @@ describe('Payout settings', () => {
     process.env.ROOT_ADMIN_EMAIL = ROOT_ADMIN_EMAIL;
 
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active, email) VALUES ($1, $2, true, $3) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, email) VALUES ($1, $2, false, $3) RETURNING id`,
       ['Payout Test School', `test-payout-${randomUUID()}`, schoolEmail]
     );
     schoolId = schoolResult.rows[0].id;
@@ -123,7 +123,7 @@ describe('Payout settings', () => {
     // A completely separate school with its own bursar. Its token carries the
     // right ROLE but the wrong school_id — the exact cross-tenant case.
     const otherSchoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active, email) VALUES ($1, $2, true, $3) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, email) VALUES ($1, $2, false, $3) RETURNING id`,
       ['Other Payout Test School', `test-payout-other-${randomUUID()}`, 'other-office@test.com']
     );
     otherSchoolId = otherSchoolResult.rows[0].id;
@@ -143,6 +143,11 @@ describe('Payout settings', () => {
       [otherSchoolId, `other-principal-${randomUUID()}@test.com`]
     );
     otherPrincipalToken = makeToken(otherPrincipalResult.rows[0].id, 'principal', otherSchoolId, otherPrincipalResult.rows[0].email);
+
+    // Migration 039: schools are born dormant and activated once they have an active
+    // principal. Both principals exist by this point, so activate the same way the
+    // onboarding wizard does.
+    await pool.query(`UPDATE schools SET is_active = TRUE WHERE id = ANY($1::uuid[])`, [[schoolId, otherSchoolId]]);
   });
 
   beforeEach(() => {

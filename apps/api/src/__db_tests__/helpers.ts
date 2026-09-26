@@ -84,7 +84,10 @@ export async function seed(): Promise<void> {
 
   const q = (sql: string, p: unknown[]) => pool.query(sql, p);
   const I = IDS;
-  await q(`INSERT INTO schools (id, name, slug, is_active) VALUES ($1,'School A','school-a',true),($2,'School B','school-b',true)`, [I.schoolA, I.schoolB]);
+  // Migration 039: a school is born dormant and is activated once it has an active
+  // principal. The fixture follows the same path production does — inserting an active
+  // school here would be testing a system that is not shipped.
+  await q(`INSERT INTO schools (id, name, slug, is_active) VALUES ($1,'School A','school-a',FALSE),($2,'School B','school-b',FALSE)`, [I.schoolA, I.schoolB]);
   await q(`INSERT INTO academic_sessions (id, school_id, name, start_date, end_date, is_current)
            VALUES ($1,$2,'2026/2027','2026-09-01','2027-07-31',true),($3,$4,'2026/2027','2026-09-01','2027-07-31',true)`,
     [I.sessionA, I.schoolA, I.sessionB, I.schoolB]);
@@ -99,6 +102,11 @@ export async function seed(): Promise<void> {
   await user(I.engTeacher, I.schoolA, 'teacher', 'Eng');
   await user(I.principalA, I.schoolA, 'principal', 'PrinA');
   await user(I.principalB, I.schoolB, 'principal', 'PrinB');
+
+  // Activated only now, because migration 039 requires an ACTIVE principal on the
+  // FALSE -> TRUE transition and users.school_id references schools, so the principal
+  // cannot exist any earlier. This is the order the onboarding wizard uses.
+  await q(`UPDATE schools SET is_active = TRUE WHERE id = ANY($1::uuid[])`, [[I.schoolA, I.schoolB]]);
 
   await q(`INSERT INTO classes (id, school_id, name, level) VALUES ($1,$2,'JSS 2A','Junior'),($3,$2,'JSS 3B','Junior')`, [I.jss2a, I.schoolA, I.jss3b]);
   await q(`INSERT INTO subjects (id, school_id, name, code) VALUES ($1,$2,'Mathematics','MTH'),($3,$2,'English','ENG')`, [I.math, I.schoolA, I.english]);

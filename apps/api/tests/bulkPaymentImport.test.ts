@@ -47,7 +47,7 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
       ['Payment Bulk Preview Test School', `test-payment-preview-${randomUUID()}`]
     );
     schoolId = schoolResult.rows[0].id;
@@ -232,7 +232,7 @@ describe('POST /:schoolId/payments-bulk-import/commit', () => {
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
       ['Payment Bulk Commit Test School', `test-payment-commit-${randomUUID()}`]
     );
     schoolId = schoolResult.rows[0].id;

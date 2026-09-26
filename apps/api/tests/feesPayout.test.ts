@@ -41,7 +41,7 @@ describe('Fee payment initiate — payout gate', () => {
     process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
 
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
       ['Fees Payout Test School', `test-fees-payout-${randomUUID()}`]
     );
     schoolId = schoolResult.rows[0].id;
@@ -93,6 +93,16 @@ describe('Fee payment initiate — payout gate', () => {
       [schoolId, studentId, termResult.rows[0].id]
     );
     invoiceId = invoiceResult.rows[0].id;
+
+    // Migration 039: born dormant. This fixture has no principal of its own, so create
+    // one before activating — an active school with nobody able to administer it is the
+    // state the trigger exists to prevent.
+    await pool.query(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Fixture', 'Principal', 'subject', FALSE)`,
+      [schoolId, `fees-payout-principal-${randomUUID()}@test.com`]
+    );
+    await pool.query(`UPDATE schools SET is_active = TRUE WHERE id = $1`, [schoolId]);
   });
 
   afterAll(async () => {

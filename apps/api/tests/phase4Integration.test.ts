@@ -90,7 +90,7 @@ describe('Phase 4 Integration', () => {
 
     beforeAll(async () => {
       const result = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
         ['Phase4 Lifecycle School', lifecycleSlug]
       );
       lifecycleSchoolId = result.rows[0].id;
@@ -142,7 +142,7 @@ describe('Phase 4 Integration', () => {
 
     beforeAll(async () => {
       const schoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
         ['Phase4 Trial Expiry School', `test-phase4-trial-${randomUUID()}`]
       );
       trialSchoolId = schoolResult.rows[0].id;

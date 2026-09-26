@@ -48,7 +48,7 @@ describe('POST /api/auth/change-password', () => {
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, true) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
       ['Change Password Test School', `test-change-password-${randomUUID()}`]
     );
     schoolId = schoolResult.rows[0].id;

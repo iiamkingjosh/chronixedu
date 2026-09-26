@@ -74,7 +74,10 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    existing path" — true, and beside the point, because it banned DELETE *and UPDATE*
    while only DELETE had been checked. `audit_logs` is also the notification worker's
    queue, so the unchecked half silenced every parent notification, quietly. Enumerate
-   the forbidden operations in the migration header and grep for each separately.
+   the forbidden operations in the migration header and grep for each separately, and
+   ask which operation actually produced the rows you are trying to prevent. 038's own
+   activation guard failed this test: it covered UPDATE while all 29 offending rows in
+   production came from INSERT, so it guarded the path that produced none of them.
 8. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
    settings, payments, support-session actions. `audit_logs` has no DELETE.

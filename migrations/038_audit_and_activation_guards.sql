@@ -12,7 +12,13 @@
 --                                 That is why the TRUNCATE guard is not here (see 1).
 --   processed_at reset to NULL  — only notificationWorker.ts:115 writes the column, and
 --                                 it writes NOW(), never NULL.
---   schools.is_active FALSE->TRUE — exactly two writers, both in superAdmin.ts:
+--   schools.is_active FALSE->TRUE — exactly two writers, both in superAdmin.ts. NOTE:
+--                                 this enumeration was WRONG, and 039 fixes it. It
+--                                 listed the writers of the UPDATE and never asked
+--                                 which operation actually produced the bad rows: all
+--                                 29 active principalless schools in production came
+--                                 from INSERT, which this trigger exempts.
+--   (superseded, see 039)       — exactly two writers, both in superAdmin.ts:
 --                                 /onboarding/:id/complete (line ~1621) and
 --                                 /schools/:schoolId/reactivate (line ~733). INSERT is
 --                                 not covered by the trigger, so fixtures that insert an
