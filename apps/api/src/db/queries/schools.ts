@@ -51,6 +51,19 @@ export async function insertSchool(name: string, slug: string): Promise<SchoolRo
   return result.rows[0];
 }
 
+/**
+ * A school with no principal is one nobody can administer. Migration 038 enforces this
+ * on the FALSE -> TRUE transition of schools.is_active so a future writer cannot forget
+ * it; callers use this first so the caller gets a clean 400 instead of a trigger's 500.
+ */
+export async function schoolHasPrincipal(schoolId: string): Promise<boolean> {
+  const { rows } = await pool.query(
+    `SELECT 1 FROM users WHERE school_id = $1 AND role = 'principal' LIMIT 1`,
+    [schoolId]
+  );
+  return rows.length > 0;
+}
+
 export async function insertSchoolSettings(
   schoolId: string,
   identityConfig: Record<string, unknown>,

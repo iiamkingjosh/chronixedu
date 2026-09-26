@@ -62,16 +62,29 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
      and applies no workflow filter of its own, so any new caller that serves a
      parent or student must apply the gate itself. Gating only the report-card PDF
      is not sufficient — that was the Round 10 H-01 defect.
-6. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
+6. **Audit enforcement is accident-proofing, not tamper-proofing.** Migrations 036–038
+   block DELETE and content UPDATE on `audit_logs` for every caller including the table
+   owner, and make `processed_at` write-once. They do **not** block TRUNCATE (a
+   `BEFORE TRUNCATE` trigger is incompatible with the DB suite's `TRUNCATE … CASCADE`,
+   which reaches `audit_logs` through its FKs whatever the table list says), nor
+   `ALTER TABLE … DISABLE TRIGGER ALL`, nor `session_replication_role = 'replica'`. It
+   stops a cleanup script and a careless migration; it does not stop someone who means it.
+7. **A guard must be verified against every operation it forbids, one at a time.**
+   Migration 036's header said "nothing deletes from audit_logs, so this breaks no
+   existing path" — true, and beside the point, because it banned DELETE *and UPDATE*
+   while only DELETE had been checked. `audit_logs` is also the notification worker's
+   queue, so the unchecked half silenced every parent notification, quietly. Enumerate
+   the forbidden operations in the migration header and grep for each separately.
+8. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
    settings, payments, support-session actions. `audit_logs` has no DELETE.
-7. **Money:** Postgres `numeric(12,2)` naira today. Never add/subtract money in
+9. **Money:** Postgres `numeric(12,2)` naira today. Never add/subtract money in
    JS floats — do arithmetic in SQL, or convert to integer kobo first. New money
    columns should be `bigint` kobo.
-8. **Crons run through `runExclusive(name, fn)`** (Postgres advisory lock) and
+10. **Crons run through `runExclusive(name, fn)`** (Postgres advisory lock) and
    schedule with `{ timezone: CRON_TIMEZONE }` (Africa/Lagos). Any user-facing
    time-of-day logic on the server uses Africa/Lagos, not server time.
-9. **The service role key never leaves the API** and is never logged, not even a prefix.
+11. **The service role key never leaves the API** and is never logged, not even a prefix.
 
 ## Auth (as built)
 

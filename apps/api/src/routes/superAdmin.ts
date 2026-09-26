@@ -7,7 +7,7 @@ import { verifyToken, requireRole } from '../middleware/auth';
 import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
-import { insertSchoolSettings, updateIdentityConfig, updateAcademicConfig } from '../db/queries/schools';
+import { insertSchoolSettings, updateIdentityConfig, updateAcademicConfig, schoolHasPrincipal } from '../db/queries/schools';
 import { cache, schoolCacheKey } from '../services/cacheService';
 import { NIGERIAN_DEFAULTS } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
@@ -728,6 +728,21 @@ router.patch(
       }
       if (school.is_active) {
         return res.status(409).json({ success: false, error: { code: 'ALREADY_ACTIVE', message: 'School is already active' } });
+      }
+
+      // Same invariant as onboarding completion. Without this, a dormant school created
+      // by POST /api/schools could be reactivated one request later into a live tenant
+      // with no principal — the same hole, two calls instead of one. Migration 038
+      // enforces it on the column too; this is here so the caller gets a 400 rather
+      // than a trigger's 500.
+      if (!(await schoolHasPrincipal(req.params.schoolId))) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'NO_PRINCIPAL',
+            message: 'This school has no principal account and cannot be activated. Create one first — an active school with no principal is one nobody can administer.',
+          },
+        });
       }
 
       await pool.query(`UPDATE schools SET is_active = true WHERE id = $1`, [req.params.schoolId]);

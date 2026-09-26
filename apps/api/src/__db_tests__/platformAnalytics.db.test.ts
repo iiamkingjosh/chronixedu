@@ -108,26 +108,31 @@ describe('platform analytics exclude non-customer schools', () => {
 });
 
 describe('audit_logs is append-only in the database, not just in the docs', () => {
+  // audit_logs is not truncated between tests (migration 038 forbids TRUNCATE on it),
+  // so each test tags its own rows rather than assuming an empty table.
+  let marker = '';
+  beforeEach(() => { marker = `TEST_ACTION_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; });
+
   async function anAuditRow(): Promise<void> {
     await pool.query(
       `INSERT INTO audit_logs (school_id, user_id, action_type, entity, entity_id)
-       VALUES ($1, $2, 'TEST_ACTION', 'test', $2)`,
-      [I.schoolA, I.principalA]
+       VALUES ($1, $2, $3, 'test', $2)`,
+      [I.schoolA, I.principalA, marker]
     );
   }
 
   it('accepts inserts', async () => {
     await anAuditRow();
-    const { rows } = await pool.query(`SELECT 1 FROM audit_logs WHERE action_type = 'TEST_ACTION'`);
+    const { rows } = await pool.query(`SELECT 1 FROM audit_logs WHERE action_type = $1`, [marker]);
     expect(rows).toHaveLength(1);
   });
 
   it('rejects DELETE even as the table owner, which bypasses RLS', async () => {
     await anAuditRow();
     await expect(
-      pool.query(`DELETE FROM audit_logs WHERE action_type = 'TEST_ACTION'`)
+      pool.query(`DELETE FROM audit_logs WHERE action_type = $1`, [marker])
     ).rejects.toThrow(/append-only/);
-    const { rows } = await pool.query(`SELECT 1 FROM audit_logs WHERE action_type = 'TEST_ACTION'`);
+    const { rows } = await pool.query(`SELECT 1 FROM audit_logs WHERE action_type = $1`, [marker]);
     expect(rows).toHaveLength(1);
   });
 
@@ -140,7 +145,7 @@ describe('audit_logs is append-only in the database, not just in the docs', () =
   it('rejects an UPDATE that rewrites the record — that is what append-only means', async () => {
     await anAuditRow();
     await expect(
-      pool.query(`UPDATE audit_logs SET action_type = 'TAMPERED' WHERE action_type = 'TEST_ACTION'`)
+      pool.query(`UPDATE audit_logs SET action_type = 'TAMPERED' WHERE action_type = $1`, [marker])
     ).rejects.toThrow(/append-only/);
   });
 
@@ -150,17 +155,36 @@ describe('audit_logs is append-only in the database, not just in the docs', () =
     // have been a green deploy with no parent notifications. 037 narrowed it.
     await anAuditRow();
     await expect(
-      pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = 'TEST_ACTION'`)
+      pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker])
     ).resolves.toBeDefined();
     const { rows } = await pool.query<{ processed_at: string | null }>(
-      `SELECT processed_at FROM audit_logs WHERE action_type = 'TEST_ACTION'`);
+      `SELECT processed_at FROM audit_logs WHERE action_type = $1`, [marker]);
     expect(rows[0].processed_at).not.toBeNull();
+  });
+
+  it('refuses to clear processed_at once stamped — that would re-send delivered alerts', async () => {
+    // processed_at IS NULL is the notification worker's queue predicate, so clearing it
+    // re-queues every delivered notification. One plausible ops command would have
+    // mass-redelivered old alerts to parents.
+    await anAuditRow();
+    await pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker]);
+    await expect(
+      pool.query(`UPDATE audit_logs SET processed_at = NULL WHERE action_type = $1`, [marker])
+    ).rejects.toThrow(/write-once/);
+  });
+
+  it('refuses to re-stamp processed_at with a different time', async () => {
+    await anAuditRow();
+    await pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker]);
+    await expect(
+      pool.query(`UPDATE audit_logs SET processed_at = NOW() + interval '1 day' WHERE action_type = $1`, [marker])
+    ).rejects.toThrow(/write-once/);
   });
 
   it('still rejects a change that smuggles a content edit alongside processed_at', async () => {
     await anAuditRow();
     await expect(
-      pool.query(`UPDATE audit_logs SET processed_at = NOW(), entity = 'tampered' WHERE action_type = 'TEST_ACTION'`)
+      pool.query(`UPDATE audit_logs SET processed_at = NOW(), entity = 'tampered' WHERE action_type = $1`, [marker])
     ).rejects.toThrow(/append-only/);
   });
 });

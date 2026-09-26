@@ -57,16 +57,22 @@ describe('H-2: bulk score saves are audited', () => {
       { student_id: I.s2, component_id: I.exam, score: 40 },
     ];
     expect((await bulk(entries)).status).toBe(201);
+    // Delta, not absolute: audit rows are append-only, so an assertion of the form
+    // "the table contains exactly N" is one accumulated row away from a flake.
     const count = async () =>
       (await pool.query(`SELECT count(*)::int AS n FROM audit_logs WHERE entity = 'scores'`)).rows[0].n as number;
-    expect(await count()).toBe(2);
+    const afterFirst = await count();
+    expect(afterFirst).toBeGreaterThanOrEqual(2);
 
     expect((await bulk(entries)).status).toBe(201);
-    expect(await count()).toBe(2);
+    expect(await count()).toBe(afterFirst); // re-sending identical scores writes nothing
 
     expect((await bulk([{ student_id: I.s1, component_id: I.exam, score: 61 }])).status).toBe(201);
     const { rows } = await pool.query(
-      `SELECT action_type, old_value, new_value FROM audit_logs WHERE entity = 'scores' ORDER BY created_at DESC LIMIT 1`
+      // created_at alone is not a total order — rows written in the same statement can
+      // share a timestamp, making LIMIT 1 pick arbitrarily. id breaks the tie.
+      `SELECT action_type, old_value, new_value FROM audit_logs WHERE entity = 'scores'
+        ORDER BY created_at DESC, id DESC LIMIT 1`
     );
     expect(rows[0].action_type).toBe('SCORE_UPDATED');
     expect(Number(rows[0].old_value.score)).toBe(60);

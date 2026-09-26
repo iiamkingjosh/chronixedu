@@ -131,6 +131,74 @@ describe('onboarding completion requires a principal', () => {
   });
 });
 
+describe('reactivation requires a principal too', () => {
+  it('refuses to reactivate a suspended school that has no principal', async () => {
+    // Otherwise the hole simply moves: create a dormant school with POST /api/schools,
+    // reactivate it one request later, same live principalless tenant in two calls.
+    const created = await request(app)
+      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Dormant School' });
+    const schoolId = created.body.data.school.id;
+
+    const res = await request(app)
+      .patch(`/api/super-admin/schools/${schoolId}/reactivate`)
+      .set('Authorization', superToken())
+      .send({ reason: 'Testing reactivation without a principal present' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('NO_PRINCIPAL');
+    expect(await isActive(schoolId)).toBe(false);
+  });
+
+  it('is enforced on the column itself, so a future writer cannot forget it', async () => {
+    // The route check gives a clean 400; this is the backstop under it. The invariant
+    // was spread across routes, which is what produced the hole in the first place.
+    const created = await request(app)
+      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Trigger Backstop School' });
+    const schoolId = created.body.data.school.id;
+
+    await expect(
+      pool.query(`UPDATE schools SET is_active = true WHERE id = $1`, [schoolId])
+    ).rejects.toThrow(/no principal/);
+  });
+
+  it('allows reactivation once a principal exists', async () => {
+    const created = await request(app)
+      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Reactivatable School' });
+    const schoolId = created.body.data.school.id;
+    await pool.query(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
+       VALUES ($1, $2, 'x', 'principal', 'Head', 'Teacher')`,
+      [schoolId, `head-react-${Date.now()}@example.com`]
+    );
+
+    const res = await request(app)
+      .patch(`/api/super-admin/schools/${schoolId}/reactivate`)
+      .set('Authorization', superToken())
+      .send({ reason: 'Principal now exists, reactivating the school' });
+
+    expect(res.status).toBe(200);
+    expect(await isActive(schoolId)).toBe(true);
+  });
+
+  it('does not block suspending an active school', async () => {
+    // The trigger fires only on FALSE -> TRUE. Suspension must stay unaffected.
+    const { sessionId, schoolId } = await onboardingSession();
+    await pool.query(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
+       VALUES ($1, $2, 'x', 'principal', 'Head', 'Teacher')`,
+      [schoolId, `head-susp-${Date.now()}@example.com`]
+    );
+    await request(app).post(`/api/super-admin/onboarding/${sessionId}/complete`)
+      .set('Authorization', superToken()).send({ accepted_legal_terms: true });
+    expect(await isActive(schoolId)).toBe(true);
+
+    await expect(
+      pool.query(`UPDATE schools SET is_active = false WHERE id = $1`, [schoolId])
+    ).resolves.toBeDefined();
+    expect(await isActive(schoolId)).toBe(false);
+  });
+});
+
 describe('POST /api/schools creates a dormant school', () => {
   it('does not create a live tenant that nobody can administer', async () => {
     const res = await request(app)
