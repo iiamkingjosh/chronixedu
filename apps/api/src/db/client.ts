@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import { Pool, type PoolConfig } from 'pg';
 import { logger } from '../config/logger';
 
@@ -24,6 +25,19 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'postgres']);
  * unauthenticated, which stops passive interception but not an active MITM. That
  * gap is logged loudly at startup so it cannot be forgotten.
  */
+/**
+ * The CA that ships with the build. Resolves to apps/api/certs in the repo (from
+ * src/db/) and to dist/certs in the image (from dist/db/), because the build copies
+ * certs/ into dist/ the way it already copies templates and migrations.
+ *
+ * Returns undefined rather than a missing path, so a checkout without the bundle falls
+ * through to the warning instead of throwing.
+ */
+function defaultCaPath(): string | undefined {
+  const bundled = path.join(__dirname, '../certs/supabase-ca.crt');
+  return fs.existsSync(bundled) ? bundled : undefined;
+}
+
 function resolveSsl(): PoolConfig['ssl'] {
   const url = process.env.DATABASE_URL;
   if (!url) return undefined;
@@ -38,14 +52,26 @@ function resolveSsl(): PoolConfig['ssl'] {
   // Local Postgres (dev, CI, the DB test container) serves no TLS at all.
   if (LOCAL_HOSTS.has(host)) return undefined;
 
-  const caPath = process.env.PGSSLROOTCERT;
+  // PGSSLROOTCERT wins if set; otherwise the CA bundled with the build. Shipping the
+  // bundle means a fresh deploy is verified by default, rather than only once somebody
+  // remembers to set a variable.
+  const caPath = process.env.PGSSLROOTCERT ?? defaultCaPath();
   if (caPath) {
     if (!fs.existsSync(caPath)) {
+      // Fails closed: a path that resolves in the repo and not in the image takes the
+      // API down at boot. That is the intended trade — an unverified connection nobody
+      // notices is worse than a loud failure — and it is why the build copies certs/
+      // into dist/ and why apps/api/certs/** belongs in the watch patterns.
       throw new Error(`PGSSLROOTCERT is set to "${caPath}" but no such file exists — refusing to fall back to an unverified connection.`);
     }
+    // Logged on the SUCCESS branch too: a working config that says nothing is
+    // indistinguishable from one that never ran, which is the failure this session has
+    // hit four times.
+    logger.info('pg_tls_verified', { host, caPath });
     return { ca: fs.readFileSync(caPath, 'utf8'), rejectUnauthorized: true };
   }
 
+  // Only reachable when the bundled CA is missing AND PGSSLROOTCERT is unset.
   logger.warn('pg_tls_unverified', {
     host,
     detail: 'Connection is encrypted but the server certificate is not verified. Set PGSSLROOTCERT to Supabase\'s CA bundle for a verified connection.',
