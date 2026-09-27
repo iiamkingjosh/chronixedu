@@ -30,6 +30,7 @@ import feesPublicRoutes from './routes/feesPublic';
 import analyticsRoutes from './routes/analytics';
 import timetableRoutes from './routes/timetable';
 import classCommentsRoutes from './routes/classComments';
+import principalRemarksRoutes from './routes/principalRemarks';
 import superAdminRoutes from './routes/superAdmin';
 import { detectSupportSession } from './middleware/detectSupportSession';
 import { verifyToken, requirePasswordChanged } from './middleware/auth';
@@ -163,6 +164,7 @@ app.use('/api/schools', feesRoutes);
 app.use('/api/schools', analyticsRoutes);
 app.use('/api/schools', timetableRoutes);
 app.use('/api/schools', classCommentsRoutes);
+app.use('/api/schools', principalRemarksRoutes);
 
 // Super admin platform routes — guarded by requireRole('super_admin'),
 // must NOT have detectSupportSession applied.

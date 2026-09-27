@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
+import PrincipalRemarkCard from './PrincipalRemarkCard';
 import { apiFetch } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -308,7 +309,7 @@ function ClassCorrectionModal({ schoolId, studentId, currentClassId, classes, on
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function StudentProfilePage() {
-  const { schoolId } = useAuth();
+  const { schoolId, user } = useAuth();
   const params = useParams<{ id: string }>();
   const studentId = params.id;
   const { toast, show } = useToast();
@@ -616,6 +617,17 @@ export default function StudentProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Principal's remark — role-gated for the same reason the students list gates its
+          academic columns: this page is shared with the registrar, and the API refuses
+          them, so a box that 403s on save is worse than no box. */}
+      {(user?.role === 'principal' || user?.role === 'super_admin') && profile && schoolId && (
+        <PrincipalRemarkCard
+          schoolId={schoolId}
+          studentId={studentId}
+          studentName={`${profile.first_name} ${profile.last_name}`}
+        />
+      )}
 
       {/* Transcript */}
       <div className="card p-6 mb-6">

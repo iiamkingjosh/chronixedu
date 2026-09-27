@@ -1,5 +1,13 @@
 # Chronix Edu — Changelog
 
+## Principal's Remark (2026-09-27)
+
+### Principals can now write the remark that appears on report cards
+- The report card has always had a space for the principal's remark, but there was no way to write one — so it was blank on every report card ever issued, next to a form teacher's comment that worked.
+- Principals now write it from a student's profile. It appears on that student's report card for the current term.
+- Saving replaces the previous remark for the same term rather than adding another, and clearing it removes it, with a warning before you do.
+- Every change is recorded in the audit log, including what the remark said before.
+
 ## Part Payment for Parents (2026-09-27)
 
 ### Parents can now pay part of a term's fees online

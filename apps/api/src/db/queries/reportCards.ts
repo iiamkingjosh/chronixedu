@@ -115,6 +115,31 @@ export async function fetchPrincipalRemark(
   return result.rows[0] ?? null;
 }
 
+/**
+ * Writes the principal's remark for a student's term. Upserts on
+ * UNIQUE (student_id, term_id) — migration 041 — so editing rewrites one row rather
+ * than appending another for `fetchPrincipalRemark`'s ORDER BY created_at to pick
+ * between. Mirrors upsertClassTeacherComment exactly.
+ *
+ * Tenancy is the CALLER's job: principal_remarks carries no school_id and
+ * fetchPrincipalRemark is not school-scoped either, so the route checks the student
+ * belongs to the school with findStudentById before calling this.
+ */
+export async function upsertPrincipalRemark(
+  studentId: string,
+  termId: string,
+  authorId: string,
+  remarkText: string
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO principal_remarks (student_id, term_id, author_id, remark_text)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (student_id, term_id)
+     DO UPDATE SET remark_text = EXCLUDED.remark_text, author_id = EXCLUDED.author_id, updated_at = NOW()`,
+    [studentId, termId, authorId, remarkText]
+  );
+}
+
 export async function upsertReportCard(
   studentId: string,
   termId: string,
