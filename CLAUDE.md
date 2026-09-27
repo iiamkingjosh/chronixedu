@@ -87,16 +87,24 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    which told a school that chose ₦1,000 — the figure we recommend, so the likeliest
    choice — that it had not chosen one. The check is mechanical: ask whether a field
    answers *what* or *whether*, and record the second separately when you need it.
-9. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
+9. **Advisory output is indistinguishable from no output once you have decided to push.**
+   The corollary to doctrine 7: verifying what a guard *does* is useless if the guard only
+   reports. The lint scripts therefore carry `--max-warnings` pinned to the current count
+   (api 1, web 5), so an existing warning stays tolerated and a NEW one fails at the
+   moment of introduction rather than scrolling past in pre-commit hook output. The
+   numbers only ever go down; lower them when you remove a warning, never raise them.
+   Proof this was needed: a new unused-import warning was introduced and pushed in
+   86b0a18 with the hook reporting it the whole time.
+10. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
    settings, payments, support-session actions. `audit_logs` has no DELETE.
-10. **Money:** Postgres `numeric(12,2)` naira today. Never add/subtract money in
+11. **Money:** Postgres `numeric(12,2)` naira today. Never add/subtract money in
    JS floats — do arithmetic in SQL, or convert to integer kobo first. New money
    columns should be `bigint` kobo.
-11. **Crons run through `runExclusive(name, fn)`** (Postgres advisory lock) and
+12. **Crons run through `runExclusive(name, fn)`** (Postgres advisory lock) and
    schedule with `{ timezone: CRON_TIMEZONE }` (Africa/Lagos). Any user-facing
    time-of-day logic on the server uses Africa/Lagos, not server time.
-12. **The service role key never leaves the API** and is never logged, not even a prefix.
+13. **The service role key never leaves the API** and is never logged, not even a prefix.
 
 ## Auth (as built)
 
