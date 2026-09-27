@@ -12,6 +12,7 @@
  */
 import { seed, IDS as I, pool } from './helpers';
 import { getPaymentById, recordPayment } from '../db/queries/fees';
+import { toKobo } from '../services/money';
 
 beforeEach(seed);
 afterAll(() => pool.end());
@@ -25,7 +26,7 @@ async function payableInvoice(amount = 550): Promise<{ invoiceId: string; paymen
   );
   const invoiceId = inv.rows[0].id;
   const result = await recordPayment(I.schoolA, invoiceId, {
-    amount,
+    amountKobo: toKobo(amount),
     method: 'cash',
     reference: 'TEST-REF',
     paystack_reference: null,
@@ -47,7 +48,7 @@ describe('settling an invoice to exactly zero', () => {
     );
 
     const result = await recordPayment(I.schoolA, inv.rows[0].id, {
-      amount: 166666.67, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
+      amountKobo: 16666667, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
     });
 
     expect(result).not.toBeNull();
@@ -68,7 +69,7 @@ describe('settling an invoice to exactly zero', () => {
     // 33333.31 + 33333.33 + 33333.36 = 100000.00 exactly.
     for (const amount of [33333.31, 33333.33, 33333.36]) {
       last = await recordPayment(I.schoolA, inv.rows[0].id, {
-        amount, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
+        amountKobo: toKobo(amount), method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
       });
     }
     expect(Number(last!.invoice.balance)).toBe(0);
@@ -82,7 +83,7 @@ describe('settling an invoice to exactly zero', () => {
       [I.schoolA, I.s3OtherClass, I.termA]
     );
     await expect(recordPayment(I.schoolA, inv.rows[0].id, {
-      amount: 166666.68, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
+      amountKobo: 16666668, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
     })).rejects.toThrow();
   });
 });
@@ -121,7 +122,7 @@ describe('getPaymentById (receipt data)', () => {
     await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [I.s3OtherClass]);
 
     const paid = await recordPayment(I.schoolA, inv.rows[0].id, {
-      amount: 100, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
+      amountKobo: 10000, method: 'cash', reference: null, paystack_reference: null, recorded_by: I.principalA,
     });
     const row = await getPaymentById(I.schoolA, paid!.payment.id);
 

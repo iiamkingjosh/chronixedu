@@ -384,7 +384,7 @@ describe('recordPayment', () => {
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
     const result = await recordPayment('school-1', 'inv-1', {
-      amount: 10000,
+      amountKobo: 1000000,
       method: 'cash',
       reference: 'RCT-2',
       recorded_by: 'user-1',
@@ -417,7 +417,7 @@ describe('recordPayment', () => {
       .mockResolvedValueOnce({ rows: [] }) // SELECT FOR UPDATE - not found
       .mockResolvedValueOnce({ rows: [] }); // ROLLBACK
 
-    const result = await recordPayment('school-1', 'missing-inv', { amount: 1000, method: 'cash' });
+    const result = await recordPayment('school-1', 'missing-inv', { amountKobo: 100000, method: 'cash' });
 
     expect(result).toBeNull();
     expect(client.query).toHaveBeenLastCalledWith('ROLLBACK');
@@ -432,7 +432,7 @@ describe('recordPayment', () => {
       .mockResolvedValueOnce({ rows: [] }) // BEGIN
       .mockRejectedValueOnce(new Error('db error')); // SELECT FOR UPDATE fails
 
-    await expect(recordPayment('school-1', 'inv-1', { amount: 1000, method: 'cash' })).rejects.toThrow('db error');
+    await expect(recordPayment('school-1', 'inv-1', { amountKobo: 100000, method: 'cash' })).rejects.toThrow('db error');
 
     expect(client.query).toHaveBeenCalledWith('ROLLBACK');
     expect(client.release).toHaveBeenCalled();
@@ -448,7 +448,7 @@ describe('recordPayment', () => {
       .mockResolvedValueOnce({ rows: [] }); // ROLLBACK
 
     await expect(
-      recordPayment('school-1', 'inv-1', { amount: 10000.01, method: 'cash' })
+      recordPayment('school-1', 'inv-1', { amountKobo: 1000001, method: 'cash' })
     ).rejects.toThrow(OverpaymentError);
 
     expect(client.query).toHaveBeenLastCalledWith('ROLLBACK');
@@ -482,7 +482,7 @@ describe('recordPayment', () => {
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
     const result = await recordPayment('school-1', 'inv-1', {
-      amount: 5000,
+      amountKobo: 500000,
       method: 'cash',
       payment_date: '2026-01-15',
     });
@@ -523,7 +523,7 @@ describe('recordPayment', () => {
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
     const result = await recordPayment('school-1', 'inv-1', {
-      amount: 10000,
+      amountKobo: 1000000,
       method: 'paystack',
       paystack_reference: 'PSK-REF-1',
     });
@@ -561,7 +561,7 @@ describe('recordPayment', () => {
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
     const result = await recordPayment('school-1', 'inv-1', {
-      amount: 10000,
+      amountKobo: 1000000,
       method: 'paystack',
       paystack_reference: 'PSK-REF-1',
     });
@@ -601,7 +601,7 @@ describe('recordPayment', () => {
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
     const result = await recordPayment('school-1', 'inv-1', {
-      amount: 10000,
+      amountKobo: 1000000,
       method: 'paystack',
       paystack_reference: 'PSK-REF-2',
     });

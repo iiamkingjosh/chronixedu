@@ -19,7 +19,8 @@
  * A bursar keying in the exact closing balance was told it was an overpayment. Three of
  * six realistic settlement cases behaved that way.
  */
-import { toKobo, fromKobo, deriveStatus } from '../db/queries/fees';
+import { toKobo, fromKobo } from '../services/money';
+import { deriveStatus } from '../db/queries/fees';
 
 /** The float expression that used to guard overpayment, kept for contrast. */
 const floatOutstanding = (total: string, paid: string) => Number(total) - Number(paid);

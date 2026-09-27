@@ -443,12 +443,12 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: PAYMENT_AMOUNT, method: 'cash', reference: 'RCT-1' });
+      .send({ invoice_id: INVOICE_ID, amount: String(PAYMENT_AMOUNT), method: 'cash', reference: 'RCT-1' });
 
     expect(res.status).toBe(201);
     expect(res.body.data).toEqual(PAYMENT_RESULT);
     expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: PAYMENT_AMOUNT, method: 'cash', reference: 'RCT-1', paystack_reference: null, recorded_by: 'user-uuid-001',
+      amountKobo: PAYMENT_AMOUNT * 100, method: 'cash', reference: 'RCT-1', paystack_reference: null, recorded_by: 'user-uuid-001',
     });
     expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
       schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
@@ -462,7 +462,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 999999, method: 'cash' });
+      .send({ invoice_id: INVOICE_ID, amount: String(999999), method: 'cash' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('AMOUNT_EXCEEDS_BALANCE');
@@ -474,7 +474,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'cash' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'cash' });
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -484,7 +484,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
@@ -498,7 +498,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'cash', paystack_reference: 'some-real-ref' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'cash', paystack_reference: 'some-real-ref' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
@@ -511,7 +511,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack', paystack_reference: 'ref-123' });
 
     expect(res.status).toBe(503);
     expect(res.body.error.code).toBe('PAYSTACK_NOT_CONFIGURED');
@@ -525,7 +525,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack', paystack_reference: 'ref-123' });
 
     expect(res.status).toBe(502);
     expect(res.body.error.code).toBe('PAYSTACK_VERIFY_FAILED');
@@ -534,12 +534,12 @@ describe('POST /api/schools/:schoolId/payments', () => {
 
   it('returns 400 when the paystack transaction was not successful', async () => {
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'failed', amount: 10000, currency: 'NGN' });
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'failed', amountKobo: 1000000, currency: 'NGN' });
 
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack', paystack_reference: 'ref-123' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('PAYMENT_NOT_VERIFIED');
@@ -549,7 +549,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
   it('records a verified paystack payment whose metadata matches the school/invoice', async () => {
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
     mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
-      status: 'success', amount: 10000, currency: 'NGN',
+      status: 'success', amountKobo: 1000000, currency: 'NGN',
       metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID },
     });
     mockFees.recordPayment.mockResolvedValueOnce(PAYMENT_RESULT as never);
@@ -557,25 +557,25 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack', paystack_reference: 'ref-123' });
 
     expect(res.status).toBe(201);
     expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: 10000, method: 'paystack', reference: null, paystack_reference: 'ref-123', recorded_by: 'user-uuid-001',
+      amountKobo: 1000000, method: 'paystack', reference: null, paystack_reference: 'ref-123', recorded_by: 'user-uuid-001',
     });
   });
 
   it('returns 400 PAYMENT_MISMATCH when the paystack transaction belongs to a different school', async () => {
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
     mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
-      status: 'success', amount: 10000, currency: 'NGN',
+      status: 'success', amountKobo: 1000000, currency: 'NGN',
       metadata: { school_id: 'other-school-id', invoice_id: INVOICE_ID },
     });
 
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack', paystack_reference: 'ref-123' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('PAYMENT_MISMATCH');
@@ -585,14 +585,14 @@ describe('POST /api/schools/:schoolId/payments', () => {
   it('returns 400 PAYMENT_MISMATCH when the paystack transaction belongs to a different invoice', async () => {
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
     mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
-      status: 'success', amount: 10000, currency: 'NGN',
+      status: 'success', amountKobo: 1000000, currency: 'NGN',
       metadata: { school_id: SCHOOL_ID, invoice_id: 'other-invoice-id' },
     });
 
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack', paystack_reference: 'ref-123' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('PAYMENT_MISMATCH');
@@ -602,7 +602,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
   it('returns 409 when the paystack reference has already been recorded', async () => {
     mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
     mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
-      status: 'success', amount: 10000, currency: 'NGN',
+      status: 'success', amountKobo: 1000000, currency: 'NGN',
       metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID },
     });
     const dbError = new Error('duplicate key value violates unique constraint "payments_paystack_reference_key"') as Error & { code: string };
@@ -612,7 +612,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'paystack', paystack_reference: 'ref-123' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack', paystack_reference: 'ref-123' });
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('DUPLICATE_PAYSTACK_REFERENCE');
@@ -622,7 +622,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 10000, method: 'cash' });
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'cash' });
 
     expect(res.status).toBe(403);
     expect(mockFees.recordPayment).not.toHaveBeenCalled();
@@ -632,7 +632,7 @@ describe('POST /api/schools/:schoolId/payments', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 0, method: 'cash' });
+      .send({ invoice_id: INVOICE_ID, amount: String(0), method: 'cash' });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('VALIDATION_ERROR');
@@ -690,7 +690,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments/paystack/initiate`)
       .set('Authorization', `Bearer ${makeToken('parent', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 5000 });
+      .send({ invoice_id: INVOICE_ID, amount: String(5000) });
 
     expect(res.status).toBe(200);
     expect(mockPaystack.initializePaystackTransaction).toHaveBeenCalledWith(
@@ -794,7 +794,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments/paystack/initiate`)
       .set('Authorization', `Bearer ${makeToken('parent', SCHOOL_ID)}`)
-      .send({ invoice_id: INVOICE_ID, amount: 20000 });
+      .send({ invoice_id: INVOICE_ID, amount: String(20000) });
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('AMOUNT_EXCEEDS_BALANCE');

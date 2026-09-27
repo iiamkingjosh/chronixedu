@@ -1,4 +1,5 @@
 import pool from '../client';
+import { toKobo, fromKobo } from '../../services/money';
 
 export class DuplicatePaymentError extends Error {
   code = 'DUPLICATE_PAYMENT';
@@ -172,7 +173,12 @@ export interface InvoiceWithPayments extends FeeInvoiceRow {
 }
 
 export interface PaymentInput {
-  amount: number;
+  /**
+   * Integer kobo. Not naira, and deliberately not a float: the caller converts once at
+   * its boundary and the money path never sees a fractional value. Routes parse the
+   * client's decimal STRING straight to kobo; Paystack's verification is already kobo.
+   */
+  amountKobo: number;
   method: 'cash' | 'bank_transfer' | 'paystack' | 'waiver';
   reference?: string | null;
   paystack_reference?: string | null;
@@ -181,10 +187,10 @@ export interface PaymentInput {
 }
 
 /**
- * Money arithmetic happens in integer kobo. Doctrine 7.
+ * Money arithmetic happens in integer kobo (see services/money.ts). Doctrine 7.
  *
- * Every money column is numeric(12,2), and the values come back from pg as exact 2-dp
- * strings — so a single float addition per payment was laundered by the round-trip and
+ * Every money column is numeric(12,2), and values come back from pg as exact 2-dp
+ * strings — so the single float addition per payment was laundered by the round-trip and
  * never accumulated drift. The damage was elsewhere: the overpayment guard compared a
  * float SUBTRACTION against the amount tendered.
  *
@@ -192,23 +198,8 @@ export interface PaymentInput {
  *   -> 250000 - 83333.33 = 166666.66999999998
  *   -> 166666.67 > 166666.66999999998  -> rejected as an overpayment
  *
- * Three of six realistic settlement cases were refused at the counter. Kobo makes the
- * comparison exact; naira never re-enters the arithmetic.
+ * Three of six realistic settlement cases were refused at the counter.
  */
-export function toKobo(amount: number | string): number {
-  // toFixed(6) before rounding, because the multiply happens in float and its result
-  // can land just under the .5 boundary: 1.005 * 100 is 100.49999999999999, which
-  // Math.round sends DOWN to 100 — losing half a kobo on an input the route accepts
-  // (`amount: z.number().positive()` constrains no decimal places). Rounding the
-  // decimal value rather than its float shadow gives 101.
-  return Math.round(Number((Number(amount) * 100).toFixed(6)));
-}
-
-/** Back to the 2-dp string the numeric(12,2) columns take. */
-export function fromKobo(kobo: number): string {
-  return (kobo / 100).toFixed(2);
-}
-
 export function deriveStatus(totalAmountKobo: number, amountPaidKobo: number): 'unpaid' | 'partial' | 'paid' {
   if (amountPaidKobo <= 0) return 'unpaid';
   if (amountPaidKobo >= totalAmountKobo) return 'paid';
@@ -263,7 +254,7 @@ export async function recordPayment(
 
     // Exact: a float subtraction here refused parents paying their exact balance.
     const outstandingBalanceKobo = toKobo(invoiceRow.total_amount) - toKobo(invoiceRow.amount_paid);
-    const amountKobo = toKobo(input.amount);
+    const amountKobo = input.amountKobo;
     // A verified Paystack payment is money Paystack has already captured and
     // settled to the school — rejecting it here would not return it, only
     // lose the app's only record of it (e.g. two guardians of the same child
@@ -282,7 +273,7 @@ export async function recordPayment(
       const dupeResult = await client.query(
         `SELECT id FROM payments WHERE invoice_id = $1 AND method = $2 AND amount = $3
          AND created_at > NOW() - INTERVAL '5 minutes'`,
-        [invoiceId, input.method, input.amount]
+        [invoiceId, input.method, fromKobo(input.amountKobo)]
       );
       if (dupeResult.rows.length > 0) {
         await client.query('ROLLBACK');
@@ -302,7 +293,7 @@ export async function recordPayment(
         ? [
             invoiceId,
             schoolId,
-            input.amount,
+            fromKobo(input.amountKobo),
             input.method,
             input.reference ?? null,
             input.paystack_reference ?? null,
@@ -312,7 +303,7 @@ export async function recordPayment(
         : [
             invoiceId,
             schoolId,
-            input.amount,
+            fromKobo(input.amountKobo),
             input.method,
             input.reference ?? null,
             input.paystack_reference ?? null,

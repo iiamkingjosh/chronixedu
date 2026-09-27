@@ -34,6 +34,8 @@ const STUDENT_ID = '33333333-3333-4333-8333-333333333333';
 const INVOICE_ID = '44444444-4444-4444-8444-444444444444';
 const TERM_ID = '11111111-1111-4111-8111-111111111111';
 const PAYMENT_AMOUNT = 10000;
+/** Paystack reports kobo, and recordPayment now takes kobo. */
+const PAYMENT_AMOUNT_KOBO = PAYMENT_AMOUNT * 100;
 const INVOICE_TOTAL_AMOUNT = 15000;
 
 beforeEach(() => jest.clearAllMocks());
@@ -56,7 +58,7 @@ describe('GET /api/schools/:schoolId/payments/paystack/callback', () => {
 
   const SUCCESS_VERIFICATION = {
     status: 'success',
-    amount: PAYMENT_AMOUNT,
+    amountKobo: PAYMENT_AMOUNT_KOBO,
     currency: 'NGN',
     reference: 'ref-xyz',
     metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID, recorded_by: 'user-uuid-001' },
@@ -71,7 +73,7 @@ describe('GET /api/schools/:schoolId/payments/paystack/callback', () => {
     expect(res.status).toBe(302);
     expect(res.headers.location).toContain('payment=success');
     expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: PAYMENT_AMOUNT, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
+      amountKobo: PAYMENT_AMOUNT_KOBO, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
     });
     expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
       schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
@@ -205,7 +207,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
 
   it('records the payment on charge.success and logs audit', async () => {
     mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amount: PAYMENT_AMOUNT, currency: 'NGN' });
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amountKobo: PAYMENT_AMOUNT_KOBO, currency: 'NGN' });
     mockFees.recordPayment.mockResolvedValueOnce(PAYMENT_RESULT as never);
 
     const res = await request(app)
@@ -216,7 +218,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.processed).toBe(true);
     expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, {
-      amount: PAYMENT_AMOUNT, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
+      amountKobo: PAYMENT_AMOUNT_KOBO, method: 'paystack', reference: null, paystack_reference: 'ref-xyz', recorded_by: 'user-uuid-001',
     });
     expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
       schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
@@ -242,7 +244,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
 
   it('returns processed:false (duplicate) for an already-recorded paystack reference', async () => {
     mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
-    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amount: PAYMENT_AMOUNT, currency: 'NGN' });
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amountKobo: PAYMENT_AMOUNT_KOBO, currency: 'NGN' });
     const dbError = new Error('duplicate key value violates unique constraint "payments_paystack_reference_key"') as Error & { code: string };
     dbError.code = '23505';
     mockFees.recordPayment.mockRejectedValueOnce(dbError);

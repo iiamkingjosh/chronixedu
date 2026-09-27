@@ -29,6 +29,9 @@ import {
   DuplicatePaymentError,
   OverpaymentError,
 } from '../db/queries/fees';
+// From services/money, not db/queries/fees: route tests mock the query module wholesale,
+// which auto-mocked these pure helpers to undefined and turned a balance into NaN.
+import { toKobo } from '../services/money';
 import { generateReceipt } from '../services/receiptService';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
 import { signReportCardAsset } from '../services/reportCardService';
@@ -113,15 +116,38 @@ const listInvoicesQuerySchema = z.object({
   status: z.enum(['unpaid', 'partial', 'paid']).optional(),
 });
 
+/**
+ * Money arrives as a decimal string and leaves as integer kobo. Rejects a third decimal
+ * place instead of absorbing it.
+ *
+ * `z.number().positive()` constrained no decimal places, so ₦1.005 was accepted and
+ * silently became ₦1.01 — no error, no log, and a receipt that disagrees with the cash
+ * drawer. For a bursary counting cash that reconciliation gap erodes trust faster than
+ * a visible rejection would. Rounding in `toKobo` fixed the arithmetic and left the
+ * question of whose kobo it was unanswered; this answers it at the boundary.
+ *
+ * A string rather than a number because the browser already has one — the form field is
+ * text and the old client did `Number(amount)` before sending, discarding the exact
+ * value it held. The bulk-import path (`amount: z.string()`) was already right; this
+ * makes the single path match it, so no float exists on either side of the wire.
+ */
+const nairaToKobo = z
+  .string()
+  .trim()
+  .regex(/^\d+(\.\d{1,2})?$/, 'Amount must be a number with at most 2 decimal places, e.g. "1500.50"')
+  .transform(v => Math.round(Number(v) * 100))
+  .refine(k => k > 0, 'Amount must be greater than zero');
+
 const paystackInitiateSchema = z.object({
   invoice_id: z.string().uuid(),
-  amount: z.number().positive().optional(),
+  // Same boundary treatment as recordPayment: a 2-dp string in, integer kobo out.
+  amount: nairaToKobo.optional(),
 });
 
 const paymentSchema = z
   .object({
     invoice_id: z.string().uuid(),
-    amount: z.number().positive(),
+    amount: nairaToKobo,
     method: z.enum(['cash', 'bank_transfer', 'paystack', 'waiver']),
     reference: z.string().min(1).nullable().optional(),
     paystack_reference: z.string().min(1).nullable().optional(),
@@ -382,12 +408,12 @@ router.post(
         }
 
         // Always use Paystack's verified amount — never trust the client-supplied value.
-        // verifyPaystackTransaction already converts kobo → naira.
-        amount = verification.amount;
+        // Paystack reports kobo and we keep it as kobo.
+        amount = verification.amountKobo;
       }
 
       const result = await recordPayment(req.params.schoolId, invoice_id, {
-        amount,
+        amountKobo: amount,
         method,
         reference: reference ?? null,
         paystack_reference: paystack_reference ?? null,
@@ -527,13 +553,15 @@ router.post(
         return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
       }
 
-      const balance = Number(invoice.balance);
-      if (balance <= 0) {
+      const balanceKobo = toKobo(invoice.balance);
+      if (balanceKobo <= 0) {
         return res.status(400).json({ success: false, error: { code: 'INVOICE_ALREADY_SETTLED', message: 'This invoice has no outstanding balance' } });
       }
 
-      const payAmount = amount ?? balance;
-      if (payAmount > balance) {
+      // Kobo throughout: `Math.round(payAmount * 100)` below carried the same
+      // half-kobo rounding subtlety the recordPayment path had.
+      const payAmountKobo = amount ?? balanceKobo;
+      if (payAmountKobo > balanceKobo) {
         return res.status(400).json({ success: false, error: { code: 'AMOUNT_EXCEEDS_BALANCE', message: 'Amount exceeds the outstanding balance' } });
       }
 
@@ -549,7 +577,7 @@ router.post(
       const reference = crypto.randomUUID();
       const initialization = await initializePaystackTransaction({
         email: req.user!.email!,
-        amountKobo: Math.round(payAmount * 100),
+        amountKobo: payAmountKobo,
         reference,
         callbackUrl: `${getApiBaseUrl()}/api/schools/${schoolId}/payments/paystack/callback`,
         metadata: { school_id: schoolId, invoice_id, recorded_by: req.user!.user_id },
@@ -774,7 +802,8 @@ router.post(
         let paymentResult: Awaited<ReturnType<typeof recordPayment>>;
         try {
           paymentResult = await recordPayment(req.params.schoolId, row.resolved_invoice_id, {
-            amount: row.resolved_amount,
+            // resolved_amount is validated to 2 dp by the bulk-import preview.
+            amountKobo: toKobo(row.resolved_amount!),
             method: row.payment.method as 'cash' | 'bank_transfer' | 'waiver',
             reference: row.payment.reference,
             paystack_reference: null,

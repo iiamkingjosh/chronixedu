@@ -47,12 +47,14 @@ const SCHOOL_ID = 'school-uuid-001';
 const STUDENT_ID = '33333333-3333-4333-8333-333333333333';
 const INVOICE_ID = '44444444-4444-4444-8444-444444444444';
 const PAYMENT_AMOUNT = 10000;
+/** Paystack reports kobo on both the webhook payload and the verify response. */
+const PAYMENT_AMOUNT_KOBO = PAYMENT_AMOUNT * 100;
 
 const CHARGE_SUCCESS_EVENT = {
   event: 'charge.success',
   data: {
     reference: 'ref-xyz',
-    amount: PAYMENT_AMOUNT * 100,
+    amount: PAYMENT_AMOUNT_KOBO,
     metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID, recorded_by: 'user-uuid-001' },
   },
 };
@@ -101,7 +103,7 @@ beforeEach(() => jest.clearAllMocks());
 describe('POST /api/schools/:schoolId/payments/paystack/webhook (full middleware stack)', () => {
   it('reaches the handler with no Authorization header and credits the invoice', async () => {
     mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
-      status: 'success', amount: PAYMENT_AMOUNT, currency: 'NGN', reference: 'ref-xyz',
+      status: 'success', amountKobo: PAYMENT_AMOUNT_KOBO, currency: 'NGN', reference: 'ref-xyz',
       metadata: CHARGE_SUCCESS_EVENT.data.metadata,
     });
     mockFees.recordPayment.mockResolvedValueOnce(PAYMENT_RESULT as never);
@@ -118,7 +120,9 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook (full middleware
     expect(res.status).toBe(200);
     expect(res.body.data.processed).toBe(true);
     expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, expect.objectContaining({
-      amount: PAYMENT_AMOUNT,
+      // Kobo end to end: Paystack reports kobo, the webhook passes it through, and
+      // recordPayment takes kobo. Nothing divides by 100 and multiplies back.
+      amountKobo: PAYMENT_AMOUNT_KOBO,
       method: 'paystack',
       paystack_reference: 'ref-xyz',
     }));

@@ -4,7 +4,16 @@ const PAYSTACK_BASE_URL = 'https://api.paystack.co';
 
 export interface PaystackVerification {
   status: string;
-  amount: number;
+  /**
+   * Kobo, as Paystack sends it — an exact integer, passed through untouched.
+   *
+   * This used to be `json.data.amount / 100`, turning an exact integer into a naira
+   * float that something downstream converted back. It round-tripped correctly, but
+   * only because of the `toFixed(6)` guard in `toKobo`, which was added for an entirely
+   * unrelated reason and which nothing here knew it depended on. Two accidental
+   * protections stacked is not a design.
+   */
+  amountKobo: number;
   currency: string;
   reference?: string;
   metadata?: Record<string, unknown>;
@@ -153,7 +162,7 @@ export async function verifyPaystackTransaction(reference: string): Promise<Pays
 
     return {
       status: json.data.status,
-      amount: json.data.amount / 100,
+      amountKobo: json.data.amount,
       currency: json.data.currency,
       reference: json.data.reference,
       metadata: json.data.metadata,

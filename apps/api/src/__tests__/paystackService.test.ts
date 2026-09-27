@@ -55,7 +55,9 @@ describe('verifyPaystackTransaction', () => {
 
     const result = await verifyPaystackTransaction('ref-123');
 
-    expect(result).toEqual({ status: 'success', amount: 10000, currency: 'NGN' });
+    // Paystack sends kobo; the service passes it through untouched rather than
+    // dividing by 100 and letting something downstream multiply it back.
+    expect(result).toEqual({ status: 'success', amountKobo: 1000000, currency: 'NGN' });
     expect(global.fetch).toHaveBeenCalledWith(
       'https://api.paystack.co/transaction/verify/ref-123',
       expect.objectContaining({
@@ -103,7 +105,7 @@ describe('verifyPaystackTransaction', () => {
 
     expect(result).toEqual({
       status: 'success',
-      amount: 10000,
+      amountKobo: 1000000,
       currency: 'NGN',
       reference: 'ref-123',
       metadata: { school_id: 'school-1', invoice_id: 'invoice-1', recorded_by: 'user-1' },

@@ -234,8 +234,15 @@ function RecordPaymentModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const numericAmount = Number(amount);
-    if (!numericAmount || numericAmount <= 0) return;
+    // Send the exact decimal string the bursar typed. It used to go through
+    // Number(amount), discarding the precise value this field already holds, and the API
+    // then rebuilt a decimal from the float. The API now takes the string and converts
+    // once, to integer kobo, so no float exists on either side of the wire.
+    const typed = amount.trim();
+    if (!/^\d+(\.\d{1,2})?$/.test(typed) || Number(typed) <= 0) {
+      onError('Enter an amount in naira with at most 2 decimal places, e.g. 1500.50');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -243,7 +250,7 @@ function RecordPaymentModal({
         method: 'POST',
         body: JSON.stringify({
           invoice_id: invoice.id,
-          amount: numericAmount,
+          amount: typed,
           method,
           reference: reference.trim() || null,
         }),

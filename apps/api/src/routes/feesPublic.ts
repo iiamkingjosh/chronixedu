@@ -53,7 +53,8 @@ router.get(
 
       try {
         const result = await recordPayment(schoolId, invoiceId, {
-          amount: verification.amount,
+          // Paystack reports kobo; it stays kobo all the way to the column.
+          amountKobo: verification.amountKobo,
           method: 'paystack',
           reference: null,
           paystack_reference: reference,
@@ -148,7 +149,8 @@ router.post(
 
       try {
         const result = await recordPayment(req.params.schoolId, invoiceId, {
-          amount: verification.amount,
+          // Paystack reports kobo; it stays kobo all the way to the column.
+          amountKobo: verification.amountKobo,
           method: 'paystack',
           reference: null,
           paystack_reference: data.reference,
