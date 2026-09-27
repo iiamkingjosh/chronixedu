@@ -482,13 +482,15 @@ describe('superAdmin — platform school management', () => {
 
     // ── GET /subscriptions/mrr ─────────────────────────────────────────────
 
-    it('GET /subscriptions/mrr — super_admin token → 200, has total_mrr and by_plan array', async () => {
+    it('GET /subscriptions/mrr — super_admin token → 200, has integer-kobo total and by_plan array', async () => {
       const res = await request(app)
         .get('/api/super-admin/subscriptions/mrr')
         .set('Authorization', `Bearer ${superAdminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.total_mrr).toBeDefined();
+      expect(res.body.data.total_mrr_kobo).toBeDefined();
+      expect(Number.isInteger(res.body.data.total_mrr_kobo)).toBe(true);
+      expect(res.body.data.unit).toBe('kobo');
       expect(Array.isArray(res.body.data.by_plan)).toBe(true);
     });
   });

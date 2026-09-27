@@ -104,7 +104,9 @@ export default function SuperAdminSubscriptionsPage() {
 
   const chartData = (mrr?.by_plan ?? []).map((p) => ({
     plan: PLAN_LABELS[p.plan as SchoolPlan] ?? p.plan,
-    mrr: p.mrr,
+    // kobo → naira. The API carries integer kobo end to end; this is the display
+    // boundary and the only place the conversion is allowed to happen.
+    mrr: p.mrr_kobo / 100,
   }));
 
   return (

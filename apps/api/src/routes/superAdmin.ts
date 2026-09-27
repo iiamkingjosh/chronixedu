@@ -976,8 +976,8 @@ router.get(
       // cannot report different MRR. It also excludes demo and suspended schools, which
       // this route did not and /analytics/overview did — a latent disagreement between
       // two figures in the same product.
-      const { total_mrr, by_plan, currency } = await getPlatformRevenue();
-      return res.json({ success: true, data: { total_mrr, by_plan, currency } });
+      const revenue = await getPlatformRevenue();
+      return res.json({ success: true, data: revenue });
     } catch (err) {
       return next(err);
     }

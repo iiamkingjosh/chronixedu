@@ -188,14 +188,16 @@ export interface SubscriptionsListResponse {
 
 export interface MRRByPlan {
   plan: string;
-  mrr: number;
+  /** Integer kobo. Divide by 100 only where the figure is rendered. */
+  mrr_kobo: number;
   count: number;
 }
 
 export interface MRRResponse {
-  total_mrr: number;
+  total_mrr_kobo: number;
   by_plan: MRRByPlan[];
   currency: 'NGN';
+  unit: 'kobo';
 }
 
 export interface ListSubscriptionsParams {

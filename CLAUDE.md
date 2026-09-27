@@ -204,6 +204,16 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   route in that file carries `...guard` (human session + super_admin); mixing the two
   guards in one file makes "a route drifted past the wrong guard" a one-line mistake in
   either direction.
+- **Money crosses that boundary as integer kobo, never naira floats** — doctrine 11 applies
+  to a response body as much as to a column. `GET /revenue` returns `total_mrr_kobo` and
+  `by_plan[].mrr_kobo`, plus `unit: 'kobo'` in the payload so a consumer cannot read the
+  figure as naira and be wrong by 100× with nothing erroring. All of the arithmetic happens
+  in Postgres `numeric`: annual plans divide by 12 and round to whole kobo **per
+  subscription**, so a plan's MRR is the exact sum of its subscriptions' monthly
+  contributions and `total_mrr_kobo` is the exact sum of the plans. The first version did
+  `amount / 12` in JS floats and shipped `8.333333333333334` naira for a ₦100/yr plan —
+  measured, not theorised. Conversion to naira happens at the display boundary and nowhere
+  else.
 - Everything served there is aggregate and zero-PII — no school names, no identifiers the
   ERP could use to address an individual. Widening that is a conversation about
   entitlement, not a wider `SELECT`.

@@ -102,27 +102,32 @@ describe('what the ERP receives', () => {
 
     const res = await get(KEY);
     expect(res.status).toBe(200);
-    expect(res.body.data.total_mrr).toBe(expected.total_mrr);
+    expect(res.body.data.total_mrr_kobo).toBe(expected.total_mrr_kobo);
     expect(res.body.data.by_plan).toEqual(expected.by_plan);
     expect(res.body.data.currency).toBe('NGN');
+    expect(res.body.data.unit).toBe('kobo');
+  });
+
+  it('reports kobo, not naira — ₦50,000 is 5,000,000', async () => {
+    await subscribe(I.schoolA, 'premium', 'monthly', '50000.00');
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(5_000_000);
   });
 
   it('divides an annual subscription into a monthly figure', async () => {
     await subscribe(I.schoolA, 'enterprise', 'annual', '1200000.00');
-    const res = await get(KEY);
-    expect(res.body.data.total_mrr).toBe(100000);
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(10_000_000);
   });
 
   it('excludes a demo school — a fixture tenant is not revenue', async () => {
     await pool.query(`UPDATE schools SET is_demo = true WHERE id = $1`, [I.schoolA]);
     await subscribe(I.schoolA, 'premium', 'monthly', '50000.00');
-    expect((await get(KEY)).body.data.total_mrr).toBe(0);
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(0);
   });
 
   it('excludes a suspended school — not billing this month', async () => {
     await subscribe(I.schoolA, 'premium', 'monthly', '50000.00');
     await pool.query(`UPDATE schools SET is_active = false WHERE id = $1`, [I.schoolA]);
-    expect((await get(KEY)).body.data.total_mrr).toBe(0);
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(0);
   });
 
   it('carries an as_of timestamp, so a stale copy is distinguishable from a fresh read', async () => {
@@ -133,7 +138,7 @@ describe('what the ERP receives', () => {
   it('returns zero rather than erroring when nothing is subscribed', async () => {
     const res = await get(KEY);
     expect(res.status).toBe(200);
-    expect(res.body.data.total_mrr).toBe(0);
+    expect(res.body.data.total_mrr_kobo).toBe(0);
     expect(res.body.data.by_plan).toHaveLength(3);
   });
 
@@ -142,5 +147,73 @@ describe('what the ERP receives', () => {
     const body = JSON.stringify((await get(KEY)).body);
     expect(body).not.toContain('School A');
     expect(body).not.toContain(I.schoolA);
+  });
+});
+
+/**
+ * The contract is integer kobo because the float version shipped repeating decimals to a
+ * billing consumer. Measured against the old code on this same fixture, not reasoned
+ * about: a single ₦100.00/year subscription produced
+ *
+ *   {"total_mrr":8.333333333333334,"currency":"NGN"}
+ *
+ * where this one produces {"total_mrr_kobo":833,"unit":"kobo"}. The ERP would have had to
+ * decide what to do with the tail, and whatever it decided would have been its own
+ * rounding rule, applied where nobody here could see it.
+ */
+describe('the money contract', () => {
+  it('a naira amount with kobo in it arrives as whole kobo', async () => {
+    await subscribe(I.schoolA, 'basic', 'monthly', '1999.99');
+    const res = await get(KEY);
+    expect(res.body.data.total_mrr_kobo).toBe(199_999);
+    // An integer, not a float that happens to print cleanly — the consumer never has to
+    // ask which of the two it received.
+    expect(Number.isInteger(res.body.data.total_mrr_kobo)).toBe(true);
+  });
+
+  it('an annual amount that does not divide by 12 rounds to whole kobo', async () => {
+    // ₦100.00/yr = 10,000 kobo / 12 = 833.33… → 833. The old code produced
+    // 8.333333333333334 naira and left the consumer to guess what to do with it.
+    await subscribe(I.schoolA, 'basic', 'annual', '100.00');
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(833);
+  });
+
+  it('the parts add up to the total exactly, with awkward amounts in three plans', async () => {
+    // `platform_subscriptions` is unique on school_id — one subscription per school — so
+    // three plans needs three schools. schoolC is created here rather than seeded
+    // because no other test needs it.
+    const schoolC = 'c0000000-0000-4000-8000-000000000001';
+    const principalC = 'c0000000-0000-4000-8000-000000000002';
+    // Born dormant, then activated — migration 039 rejects a school created active, and
+    // rejects activating one with no active principal. Both guards are doing their job
+    // here; this is the shape every fixture uses.
+    await pool.query(`INSERT INTO schools (id, name, slug) VALUES ($1, 'School C', 'school-c')`, [schoolC]);
+    await pool.query(
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
+       VALUES ($1, $2, $3, 'x', 'principal', 'PrinC', 'Test', true, 'subject', false)`,
+      [principalC, schoolC, `${principalC}@test`]
+    );
+    await pool.query(`UPDATE schools SET is_active = true WHERE id = $1`, [schoolC]);
+    await subscribe(I.schoolA, 'basic', 'monthly', '333.33');
+    await subscribe(I.schoolB, 'premium', 'annual', '1000.00');
+    await subscribe(schoolC, 'enterprise', 'monthly', '0.01');
+
+    const { data } = (await get(KEY)).body;
+    const summed = data.by_plan.reduce((acc: number, p: { mrr_kobo: number }) => acc + p.mrr_kobo, 0);
+    // Not "close to" — equal. A consumer reconciling per-plan against the total must not
+    // have to allow a tolerance.
+    expect(summed).toBe(data.total_mrr_kobo);
+    expect(data.total_mrr_kobo).toBe(33_333 + 8_333 + 1);
+
+    await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [schoolC]);
+    await pool.query(`DELETE FROM users WHERE id = $1`, [principalC]);
+    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolC]);
+  });
+
+  it('every figure in the payload is an integer', async () => {
+    await subscribe(I.schoolA, 'premium', 'annual', '99999.99');
+    const { data } = (await get(KEY)).body;
+    const figures = [data.total_mrr_kobo, ...data.by_plan.map((p: { mrr_kobo: number }) => p.mrr_kobo)];
+    expect(figures.every(Number.isInteger)).toBe(true);
   });
 });

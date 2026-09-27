@@ -2,6 +2,10 @@
 
 ## ERP Integration (2026-09-27)
 
+### Revenue figures are exchanged in kobo
+- The ERP revenue endpoint and the super-admin MRR breakdown now report whole kobo rather than naira with decimals, so no figure can arrive with a repeating fraction attached.
+- Displayed amounts are unchanged.
+
 ### Chronix ERP can pull platform revenue
 - A new machine-to-machine endpoint reports current monthly recurring revenue by plan, for the Chronix ERP to read.
 - It is aggregate only — no school names, no student or parent data.

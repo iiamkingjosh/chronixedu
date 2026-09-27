@@ -26,9 +26,16 @@ import { logger } from '../config/logger';
 const router = Router();
 
 // ── GET /api/partner/revenue ───────────────────────────────────────────────────
-// Current platform MRR by plan. Same aggregate the super-admin dashboard shows —
-// getPlatformRevenue is the single source, so the figure Chronix quotes internally and
-// the figure the ERP pulls cannot drift apart.
+// Current platform MRR by plan, in integer kobo. Same aggregate the super-admin
+// dashboard shows — getPlatformRevenue is the single source, so the figure Chronix
+// quotes internally and the figure the ERP pulls cannot drift apart.
+//
+// Response: { as_of, total_mrr_kobo, by_plan: [{ plan, mrr_kobo, count }],
+//             currency: 'NGN', unit: 'kobo' }
+//
+// Kobo, not naira, and integers, not floats — matching every other money boundary in
+// this repo (doctrine 11). `unit` is in the payload so a consumer cannot read a kobo
+// figure as naira and be off by a factor of 100 without anything erroring.
 
 router.get(
   '/revenue',
@@ -36,7 +43,7 @@ router.get(
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const revenue = await getPlatformRevenue();
-      logger.info('erp_revenue_pulled', { total_mrr: revenue.total_mrr });
+      logger.info('erp_revenue_pulled', { total_mrr_kobo: revenue.total_mrr_kobo });
       return res.json({
         success: true,
         data: {
