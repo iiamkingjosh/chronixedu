@@ -1,8 +1,31 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 11 — 2026-09-26  
-**Scope:** Account creation and credential issuance (student registration, bulk import)  
-**Round 11 total findings:** 2 (0 Critical · 1 High · 1 Medium)
+**Latest audit:** Round 12 — 2026-09-27  
+**Scope:** RLS policy drift between `migrations/` and the deployed database  
+**Round 12 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+
+---
+
+## Round 12 — 2026-09-27
+
+**Scope:** Reconciling every RLS policy in production against what `migrations/` creates. A pre-C-4b step: C-4b turns these policies into the enforcement layer, and it cannot be sized against a policy set nobody has checked.
+
+### M-01 — 17 production RLS policies existed in no migration, one of them created by hand ✅ Fixed
+
+**Files:** `migrations/042_rls_policy_reconciliation.sql`, `scripts/sql/rls_policy_inventory.txt`, `scripts/sql/rls_drift_check.sql`, `scripts/sql/rls_policy_dump.sql`, `apps/api/src/__db_tests__/rlsPolicyDrift.db.test.ts`
+
+**Method:** Rebuilt the schema from `migrations/` into an empty database, then compared `md5(tablename|policyname|cmd|roles|qual|with_check)` against production, both directions.
+
+**Result:** 64 policies from migrations, 81 in production. Every one of the 64 matched production byte for byte — no policy had a different predicate in the two places. The gap was 17 policies that exist in production and in no file:
+
+- **16 × `service_role_bypass`** on the tables created by migration 001, which predates the convention that every table carries one. Codified by 042 rather than dropped: `service_role` holds the BYPASSRLS attribute today (`pg_roles.rolbypassrls = true`, verified), which makes them inert — but C-4a replaces BYPASSRLS with exactly this kind of per-table permissive policy, at which point the shape matters.
+- **1 × `"Users can read own notifications"`** on `notifications` — title-cased, `SELECT`, `TO authenticated`, `USING (user_id = auth.uid())` — created in the Supabase dashboard. Strictly a subset of `notifications_user` from `020_rls_policies.sql`, which is `FOR ALL`, `TO public`, on the identical predicate; both PERMISSIVE, so dropping it removes no access. No web code reads Supabase tables directly, so nothing referenced it by name. Dropped by 042.
+
+**Why this was invisible:** `tenantIsolation.db.test.ts` asserts that every public table has row level security *enabled*. That was true on both sides throughout — the guard is real, it passed honestly, and it measures a property that cannot fail when this fails. A rebuild from `migrations/` would have produced a database 17 policies short of production and nothing would have said so.
+
+**The guard now has two halves, because no single one reaches both databases.** `rlsPolicyDrift.db.test.ts` pins the migration side against a checked-in inventory, so any policy change fails CI until the inventory is regenerated and shows up in a diff. `scripts/sql/rls_drift_check.sql` is run by hand against a deployed database and is the only half that can see a policy created in the dashboard. Verified to fail against the pre-042 code, naming all 16 missing policies.
+
+**Not changed, deliberately:** six platform tables (`onboarding_sessions`, `platform_announcements`, `platform_audit_logs`, `platform_metrics_snapshots`, `platform_subscriptions`, `support_sessions`) carry no `service_role_bypass` in production *or* in migrations. They agree, so they are not drift. Giving them one would be a change to production's access surface dressed as a reconciliation.
 
 ---
 

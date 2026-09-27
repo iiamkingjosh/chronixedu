@@ -109,6 +109,20 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    schedule with `{ timezone: CRON_TIMEZONE }` (Africa/Lagos). Any user-facing
    time-of-day logic on the server uses Africa/Lagos, not server time.
 13. **The service role key never leaves the API** and is never logged, not even a prefix.
+14. **The deployed policy set must equal the one `migrations/` builds.** Measured once, the
+   hard way: a rebuild into an empty database produced 64 policies where production held 81.
+   All 64 matched production byte for byte — no divergence anywhere, 17 orphans. Sixteen
+   were `service_role_bypass` on the 001-era tables, which predate the convention; one,
+   `"Users can read own notifications"`, was created by hand in the Supabase dashboard and
+   existed in no file. Migration 042 codified the sixteen and dropped the one. CI could not
+   see any of it, and that is the part worth keeping: `tenantIsolation.db.test.ts` asserts
+   RLS is *enabled*, which was true on both sides the entire time — a real guard, passing
+   honestly, measuring a property that cannot fail when this fails.
+   `rlsPolicyDrift.db.test.ts` now pins the migration side against
+   `scripts/sql/rls_policy_inventory.txt`, and `scripts/sql/rls_drift_check.sql` is the
+   other half — the only one that can see a policy made in the dashboard, so run it against
+   production after any RLS work. Resolve an orphan by dropping it or by codifying it, but
+   in a migration either way.
 
 ## Auth (as built)
 
@@ -239,7 +253,10 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Idempotent where possible (`IF NOT EXISTS`, `DROP POLICY IF EXISTS`, find constraints by columns, not name —
   production constraints from 001–023 were partly applied by hand).
 - Every new table: `school_id` (if tenant data), `ENABLE ROW LEVEL SECURITY`, a
-  `service_role_bypass` policy and a tenant policy. `tenantIsolation.db.test.ts` fails otherwise.
+  `service_role_bypass` policy and a tenant policy, and the policy set must match
+  `scripts/sql/rls_policy_inventory.txt` — regenerate it in the same commit or
+  `rlsPolicyDrift.db.test.ts` fails. (`tenantIsolation.db.test.ts` checks only that RLS
+  is *enabled*; it stayed green through the whole 17-policy drift that 042 fixed.)
 - If code starts using a column, a migration must create it. CI rebuilds the schema from scratch.
 - **Railway auto-deploys from `main`, so pushing IS deploying.** The old runbook order
   ("migrations first, then deploy the API") cannot be honoured by pushing — the code is

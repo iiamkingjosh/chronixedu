@@ -27,7 +27,7 @@ export function requireErpApiKey(req: Request, res: Response, next: NextFunction
 
   const provided = req.headers['x-api-key'];
   if (typeof provided !== 'string') {
-    // Logged without any part of the key — doctrine 12's reasoning applies to every
+    // Logged without any part of the key — doctrine 13's reasoning applies to every
     // shared secret, not just the service role key. The path is enough to diagnose.
     logger.warn('erp_api_key_missing', { path: req.path });
     res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Invalid API key' } });
