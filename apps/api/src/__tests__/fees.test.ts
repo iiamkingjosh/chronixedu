@@ -74,7 +74,13 @@ const PAYMENT_ID = '55555555-5555-4555-8555-555555555555';
 const PAYMENT_AMOUNT = 10000;
 const INVOICE_TOTAL_AMOUNT = 15000;
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  // resolveMinPartPayment is auto-mocked by jest.mock('../db/queries/schools'), and the
+  // routes destructure its result — an unmocked call yields undefined and a 500. Default
+  // it here so each test opts into a specific minimum only when that is what it is about.
+  mockSchools.resolveMinPartPayment.mockResolvedValue({ kobo: 100_000, isConfigured: false });
+});
 
 // ── POST /:schoolId/fee-structures ──────────────────────────────────────────────
 
@@ -284,7 +290,7 @@ describe('GET /api/schools/:schoolId/fee-invoices/student/:studentId', () => {
 
   it('returns the invoice for staff, with the part-payment minimum alongside it', async () => {
     mockFees.getInvoiceByStudent.mockResolvedValueOnce(INVOICE as never);
-    mockSchools.getMinPartPaymentKobo.mockResolvedValueOnce(100_000);
+    mockSchools.resolveMinPartPayment.mockResolvedValueOnce({ kobo: 100_000, isConfigured: true });
 
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/fee-invoices/student/${STUDENT_ID}?term_id=${TERM_ID}`)

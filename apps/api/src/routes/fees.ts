@@ -13,7 +13,7 @@ import { getActiveTerm } from '../db/queries/roster';
 import { parseBulkPaymentImportFile, BulkPaymentImportParseError } from '../services/bulkPaymentImportParser';
 import { runFullPaymentValidation } from '../services/bulkPaymentImportValidation';
 import { generateBulkPaymentImportResultsFile, type CreatedPaymentRecord, type FailedPaymentRecord } from '../services/bulkPaymentImportResults';
-import { getSchoolPayoutConfig, getMinPartPaymentKobo } from '../db/queries/schools';
+import { getSchoolPayoutConfig, resolveMinPartPayment } from '../db/queries/schools';
 import { sendFeeRemindersForSchool } from '../services/feeReminderService';
 import {
   insertFeeStructure,
@@ -363,7 +363,7 @@ router.get(
       // Returned alongside the invoice so the parent portal can state the part-payment
       // rule up front rather than surfacing it as an error after they have typed an
       // amount. The route still enforces it — this is disclosure, not the guard.
-      const minPartPaymentKobo = await getMinPartPaymentKobo(schoolId);
+      const { kobo: minPartPaymentKobo } = await resolveMinPartPayment(schoolId);
 
       return res.json({
         success: true,
@@ -587,7 +587,7 @@ router.post(
       // Enforced here rather than only in the UI: a parent hitting this endpoint directly
       // with ₦1 would otherwise cost the school a fee per attempt.
       if (payAmountKobo < balanceKobo) {
-        const minKobo = await getMinPartPaymentKobo(schoolId);
+        const { kobo: minKobo } = await resolveMinPartPayment(schoolId);
         if (payAmountKobo < minKobo) {
           return res.status(400).json({
             success: false,

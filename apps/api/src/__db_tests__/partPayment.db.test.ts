@@ -13,11 +13,22 @@
  * because it looks like a corner case and is not.
  */
 import request from 'supertest';
+import express from 'express';
 import { buildApp, seed, IDS as I, tokens, pool } from './helpers';
+import schoolsRoutes from '../routes/schools';
+import { verifyToken } from '../middleware/auth';
+import { errorHandler } from '../middleware/errorHandler';
 import { DEFAULT_MIN_PART_PAYMENT_KOBO } from '../db/queries/schools';
 import { fromKobo } from '../services/money';
 
 const app = buildApp();
+
+// buildApp() does not mount routes/schools, where fee-config lives. A local app rather
+// than widening the shared helper, which every other DB test depends on.
+const settingsApp = express();
+settingsApp.use(express.json());
+settingsApp.use('/api/schools', verifyToken, schoolsRoutes);
+settingsApp.use(errorHandler);
 
 beforeEach(seed);
 afterAll(() => pool.end());
@@ -147,6 +158,52 @@ describe('the minimum part payment', () => {
     const res = await initiate(id, '500.00');
     expect(res.body.error.message).toContain('2000.00');
     expect(res.body.error.message).toContain('50000.00');
+  });
+});
+
+describe('whether the school chose the figure is recorded, not inferred', () => {
+  // is_default was computed as `minKobo === DEFAULT_MIN_PART_PAYMENT_KOBO`, so a school
+  // that deliberately set ₦1,000 — the figure we recommend, and therefore the likeliest
+  // choice — was told forever that it "has not set its own figure yet".
+  //
+  // Third instance of this shape tonight: is_demo inferred from an email domain,
+  // promotion_cutoff ?? 40 making an unset pass mark indistinguishable from a chosen 40,
+  // and this. "What is the value" and "did anyone choose it" are two facts.
+  function feeConfig() {
+    return request(settingsApp)
+      .get(`/api/schools/${I.schoolA}/fee-config`)
+      .set('Authorization', tokens.principalA());
+  }
+
+  it('reports is_default when the school has no settings row at all', async () => {
+    const res = await feeConfig();
+    expect(res.status).toBe(200);
+    expect(res.body.data.min_part_payment).toBe(fromKobo(DEFAULT_MIN_PART_PAYMENT_KOBO));
+    expect(res.body.data.is_default).toBe(true);
+  });
+
+  it('does NOT report is_default when the school deliberately chose the default figure', async () => {
+    await setMinimum(fromKobo(DEFAULT_MIN_PART_PAYMENT_KOBO));
+    const res = await feeConfig();
+    expect(res.body.data.min_part_payment).toBe(fromKobo(DEFAULT_MIN_PART_PAYMENT_KOBO));
+    expect(res.body.data.is_default).toBe(false);
+  });
+
+  it('does not report is_default for any other chosen figure either', async () => {
+    await setMinimum('2500.00');
+    const res = await feeConfig();
+    expect(res.body.data.min_part_payment).toBe('2500.00');
+    expect(res.body.data.is_default).toBe(false);
+  });
+
+  it('falls back to the default when a settings row exists with empty fee_config', async () => {
+    await pool.query(
+      `INSERT INTO school_settings (school_id, identity_config, academic_config)
+       VALUES ($1, '{}'::jsonb, '{}'::jsonb) ON CONFLICT (school_id) DO NOTHING`,
+      [I.schoolA]
+    );
+    const res = await feeConfig();
+    expect(res.body.data.is_default).toBe(true);
   });
 });
 

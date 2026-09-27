@@ -202,16 +202,23 @@ export async function updateFeeConfig(
   );
 }
 
-export async function getMinPartPaymentKobo(schoolId: string): Promise<number> {
+export async function resolveMinPartPayment(
+  schoolId: string
+): Promise<{ kobo: number; isConfigured: boolean }> {
   const { rows } = await pool.query<{ min_part_payment_kobo: number | null }>(
     `SELECT (fee_config->>'min_part_payment_kobo')::bigint AS min_part_payment_kobo
        FROM school_settings WHERE school_id = $1`,
     [schoolId]
   );
+  // `rows[0]?.` and not `rows[0].`: 42 of 45 schools have no school_settings row at all,
+  // so the settings-less case is the majority rather than an edge.
   const configured = rows[0]?.min_part_payment_kobo;
-  return configured !== null && configured !== undefined && Number(configured) > 0
-    ? Number(configured)
-    : DEFAULT_MIN_PART_PAYMENT_KOBO;
+  const isConfigured = configured !== null && configured !== undefined && Number(configured) > 0;
+  // isConfigured is RETURNED rather than recomputed by callers from the value. A school
+  // that deliberately sets ₦1,000 — the figure we recommend, so the likeliest choice —
+  // must not be told forever that it has not chosen one. "What is the value" and "did
+  // anyone choose it" are two facts, and the second cannot be derived from the first.
+  return { kobo: isConfigured ? Number(configured) : DEFAULT_MIN_PART_PAYMENT_KOBO, isConfigured };
 }
 
 export async function getSchoolPayoutConfig(schoolId: string): Promise<PayoutConfig | null> {

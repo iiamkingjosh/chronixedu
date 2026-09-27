@@ -18,7 +18,7 @@ import {
   getSchoolPayoutConfig,
   updateSchoolPayoutConfig,
   getSchoolNameAndEmail,
-  getMinPartPaymentKobo,
+  resolveMinPartPayment,
   updateFeeConfig,
   DEFAULT_MIN_PART_PAYMENT_KOBO,
   type PayoutConfig,
@@ -412,12 +412,14 @@ router.get(
   requireSchoolAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const minKobo = await getMinPartPaymentKobo(req.params.schoolId);
+      const { kobo, isConfigured } = await resolveMinPartPayment(req.params.schoolId);
       return res.json({
         success: true,
         data: {
-          min_part_payment: fromKobo(minKobo),
-          is_default: minKobo === DEFAULT_MIN_PART_PAYMENT_KOBO,
+          min_part_payment: fromKobo(kobo),
+          // Read from whether a value was stored, NOT from whether it equals the
+          // default — a school that chose ₦1,000 has chosen it.
+          is_default: !isConfigured,
         },
       });
     } catch (err) {

@@ -78,16 +78,25 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    ask which operation actually produced the rows you are trying to prevent. 038's own
    activation guard failed this test: it covered UPDATE while all 29 offending rows in
    production came from INSERT, so it guarded the path that produced none of them.
-8. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
+8. **Never infer "the user chose this" from "the value equals the default."** Whether a
+   value was set and what the value is are two different facts, and the second cannot
+   derive the first. Three instances so far, each with a different mechanism: `is_demo`
+   inferred from an email domain (which is why it is a one-time backfill and must never
+   be a live rule); `promotion_cutoff ?? 40`, where an unset pass mark was
+   indistinguishable from a deliberately chosen 40; and `is_default` on the fee minimum,
+   which told a school that chose ₦1,000 — the figure we recommend, so the likeliest
+   choice — that it had not chosen one. The check is mechanical: ask whether a field
+   answers *what* or *whether*, and record the second separately when you need it.
+9. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
    settings, payments, support-session actions. `audit_logs` has no DELETE.
-9. **Money:** Postgres `numeric(12,2)` naira today. Never add/subtract money in
+10. **Money:** Postgres `numeric(12,2)` naira today. Never add/subtract money in
    JS floats — do arithmetic in SQL, or convert to integer kobo first. New money
    columns should be `bigint` kobo.
-10. **Crons run through `runExclusive(name, fn)`** (Postgres advisory lock) and
+11. **Crons run through `runExclusive(name, fn)`** (Postgres advisory lock) and
    schedule with `{ timezone: CRON_TIMEZONE }` (Africa/Lagos). Any user-facing
    time-of-day logic on the server uses Africa/Lagos, not server time.
-11. **The service role key never leaves the API** and is never logged, not even a prefix.
+12. **The service role key never leaves the API** and is never logged, not even a prefix.
 
 ## Auth (as built)
 
