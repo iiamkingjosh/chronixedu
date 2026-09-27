@@ -35,10 +35,27 @@ export async function notifyPaymentReceipt(schoolId: string, paymentId: string, 
     const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
     const receiptLink = `${appUrl}/parent/fees`;
 
-    const subject = 'Payment receipt — Chronix Edu';
+    // The receipt must say what is LEFT, not only what was received.
+    //
+    // While an online payment was always the full balance, "we have received a payment
+    // of ₦X" was harmless — it could only mean settled. The moment a parent can pay part
+    // of a term's fees, that same sentence tells someone who paid a third of ₦150,000
+    // that their payment was received and nothing else, which reads as paid in full.
+    // Enabling partial payment turns a benign omission into a misleading one, and
+    // nothing in the partial-payment change itself points here.
+    const settled = Number(payment.balance) <= 0;
+    const outstanding = settled
+      ? 'This settles the fees for this term in full — there is no outstanding balance.'
+      : `Outstanding balance: ${formatCurrency(payment.balance)} of ${formatCurrency(payment.total_amount)}.\n` +
+        `You can pay the rest at any time from your Parent Portal.`;
+
+    const subject = settled
+      ? 'Payment receipt — fees settled — Chronix Edu'
+      : `Payment receipt — ${formatCurrency(payment.balance)} still outstanding — Chronix Edu`;
     const body =
       `Dear Parent,\n\n` +
       `We have received a payment of ${formatCurrency(payment.amount)} for ${payment.first_name} ${payment.last_name}.\n\n` +
+      `${outstanding}\n\n` +
       `Log in to your Parent Portal to view and download your receipt:\n${receiptLink}\n\n` +
       `Thank you,\nChronix Edu`;
 

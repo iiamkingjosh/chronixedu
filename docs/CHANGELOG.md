@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Payment Receipts (2026-09-27)
+
+### Receipt emails now say what is still owed
+- A payment confirmation told parents only the amount received. It now states the outstanding balance and the term total, or says plainly that the fees are settled.
+- The outstanding amount also appears in the subject line, so it is visible without opening the email.
+- An overpayment credit reads as settled rather than showing a negative balance.
+
 ## Fee Payments (2026-09-26)
 
 ### Paying the exact remaining balance is no longer refused

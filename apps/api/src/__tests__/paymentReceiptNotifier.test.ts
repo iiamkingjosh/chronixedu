@@ -49,12 +49,12 @@ describe('notifyPaymentReceipt', () => {
     expect(mockEmail.sendEmail).toHaveBeenCalledTimes(2);
     expect(mockEmail.sendEmail).toHaveBeenCalledWith(
       'parent1@example.com',
-      'Payment receipt — Chronix Edu',
+      'Payment receipt — fees settled — Chronix Edu',
       expect.stringContaining('/parent/fees')
     );
     expect(mockEmail.sendEmail).toHaveBeenCalledWith(
       'parent2@example.com',
-      'Payment receipt — Chronix Edu',
+      'Payment receipt — fees settled — Chronix Edu',
       expect.stringContaining('/parent/fees')
     );
   });
@@ -120,8 +120,65 @@ describe('notifyPaymentReceipt', () => {
     expect(mockEmail.sendEmail).toHaveBeenCalledTimes(2);
     expect(mockEmail.sendEmail).toHaveBeenCalledWith(
       'parent2@example.com',
-      'Payment receipt — Chronix Edu',
+      'Payment receipt — fees settled — Chronix Edu',
       expect.stringContaining('/parent/fees')
     );
+  });
+});
+
+describe('the receipt states what is still owed', () => {
+  // Partial payment is about to be offered to parents. While an online payment was
+  // always the whole balance, "we have received a payment of X" could only mean settled;
+  // once a parent can pay a third of a term's fees, the same sentence reads as paid in
+  // full. Nothing in the partial-payment change points at this file, which is why it is
+  // covered here rather than left to be noticed later.
+  const PARTIAL = {
+    ...PAYMENT_ROW,
+    amount: 50000, total_amount: 150000, amount_paid: 50000,
+    balance: 100000, invoice_status: 'partial',
+  };
+
+  async function emailFor(row: Record<string, unknown>) {
+    mockFees.getPaymentById.mockResolvedValueOnce(row as never);
+    mockParents.getParentsForStudent.mockResolvedValueOnce([
+      { parent_id: 'p1', email: 'parent1@example.com', first_name: 'A', last_name: 'B' },
+    ] as never);
+    await notifyPaymentReceipt(SCHOOL_ID, PAYMENT_ID, STUDENT_ID);
+    const call = (mockEmail.sendEmail as jest.Mock).mock.calls[0];
+    return { subject: call[1] as string, body: call[2] as string };
+  }
+
+  it('names the outstanding balance and the total in the body', async () => {
+    const { body } = await emailFor(PARTIAL);
+    expect(body).toContain('Outstanding balance');
+    expect(body).toContain('100,000.00');
+    expect(body).toContain('150,000.00');
+  });
+
+  it('puts the outstanding amount in the subject, visible without opening the email', async () => {
+    const { subject } = await emailFor(PARTIAL);
+    expect(subject).toContain('100,000.00');
+    expect(subject).toContain('outstanding');
+  });
+
+  it('does not tell a partially-paying parent the fees are settled', async () => {
+    const { body } = await emailFor(PARTIAL);
+    expect(body).not.toContain('in full');
+    expect(body).not.toContain('no outstanding balance');
+  });
+
+  it('says settled, and mentions no balance, when the invoice is settled', async () => {
+    const { subject, body } = await emailFor(PAYMENT_ROW);
+    expect(subject).toContain('fees settled');
+    expect(body).toContain('no outstanding balance');
+    expect(body).not.toContain('Outstanding balance');
+  });
+
+  it('treats an overpayment credit as settled rather than reporting a negative balance', async () => {
+    // Paystack overpayments are recorded in full and the balance goes negative by
+    // design. A parent must never be told they owe minus five hundred naira.
+    const { subject, body } = await emailFor({ ...PAYMENT_ROW, balance: -500 });
+    expect(subject).toContain('fees settled');
+    expect(body).not.toContain('-500');
   });
 });
