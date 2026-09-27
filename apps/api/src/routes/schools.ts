@@ -20,7 +20,6 @@ import {
   getSchoolNameAndEmail,
   resolveMinPartPayment,
   updateFeeConfig,
-  DEFAULT_MIN_PART_PAYMENT_KOBO,
   type PayoutConfig,
 } from '../db/queries/schools';
 import { toKobo, fromKobo } from '../services/money';
