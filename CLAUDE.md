@@ -222,6 +222,25 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   demo and suspended schools), agreeing only because no demo school had a subscription.
   The ERP would have made it three. Both routes now read the one function.
 
+## Notices vs announcements (two boards, one each)
+
+- **`announcements`** (migration 010) is the school-wide broadcast: principal-only,
+  rate-limited, targeted by **role** (`target_role`), and it fans out in-app notifications
+  and email. It cannot target a class.
+- **`notices`** (migration 007) is the **class** board: `class_id` nullable, read by
+  students at `GET /:schoolId/student/notices`. Class scoping is the only thing it does
+  that `announcements` cannot, so keep it that way rather than growing a second broadcast.
+- Posting: a teacher may post to a class they form-teach or are assigned to **this term**
+  (`form_teacher_id` OR `isTeacherAssignedToClass`, mirroring `routes/behaviour.ts`);
+  `class_id: null` is school-wide and is **principal/super_admin only**. Delete carries the
+  identical check — guarding the write and leaving the un-write open is half a guard.
+  The case that matters is a teacher on their OWN school's path posting to a class they do
+  not teach: `requireSchoolAccess` passes and only the class check stops them.
+- **Notices are immutable: create and delete, no edit, so no `updated_at`.** Correction is
+  delete + repost. Expiry was considered and rejected — an unset `expires_at` cannot be
+  told apart from an author who never thought about it (doctrine 9), and the filter it
+  would add to every reader fails by *hiding* notices, which nobody reports.
+
 ## Demo vs customer tenants
 
 - `schools.is_demo` marks a tenant that is not a customer (test fixture, sandbox, sales

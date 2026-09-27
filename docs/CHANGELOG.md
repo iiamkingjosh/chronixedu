@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Notices (2026-09-27)
+
+### Staff can post notices to the student board
+- The student Notices page had no way to be filled — nothing in the product could create a notice. Principals can now post to the whole school or to one class, and teachers to classes they teach.
+- Notices can be taken down again by whoever may post to that class, so a cancelled or mistaken notice does not sit there for the rest of the term.
+
 ## ERP Integration (2026-09-27)
 
 ### Revenue figures are exchanged in kobo

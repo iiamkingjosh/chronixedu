@@ -31,6 +31,7 @@ import analyticsRoutes from './routes/analytics';
 import timetableRoutes from './routes/timetable';
 import classCommentsRoutes from './routes/classComments';
 import principalRemarksRoutes from './routes/principalRemarks';
+import noticesRoutes from './routes/notices';
 import partnerRoutes from './routes/partner';
 import superAdminRoutes from './routes/superAdmin';
 import { detectSupportSession } from './middleware/detectSupportSession';
@@ -166,6 +167,7 @@ app.use('/api/schools', analyticsRoutes);
 app.use('/api/schools', timetableRoutes);
 app.use('/api/schools', classCommentsRoutes);
 app.use('/api/schools', principalRemarksRoutes);
+app.use('/api/schools', noticesRoutes);
 // Outside /api/schools on purpose: machine-to-machine, API-key gated, and none of that
 // chain's middleware (support sessions, password-change, active-school) applies.
 app.use('/api/partner', partnerRoutes);
