@@ -282,15 +282,18 @@ describe('GET /api/schools/:schoolId/fee-invoices/student/:studentId', () => {
     created_at: '', updated_at: '', payments: [],
   };
 
-  it('returns the invoice for staff', async () => {
+  it('returns the invoice for staff, with the part-payment minimum alongside it', async () => {
     mockFees.getInvoiceByStudent.mockResolvedValueOnce(INVOICE as never);
+    mockSchools.getMinPartPaymentKobo.mockResolvedValueOnce(100_000);
 
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/fee-invoices/student/${STUDENT_ID}?term_id=${TERM_ID}`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual(INVOICE);
+    // The minimum rides along so the parent portal can state the rule before a parent
+    // types an amount, rather than surfacing it as a refusal afterwards.
+    expect(res.body.data).toEqual({ ...INVOICE, min_part_payment: '1000.00' });
     expect(mockFees.getInvoiceByStudent).toHaveBeenCalledWith(SCHOOL_ID, STUDENT_ID, TERM_ID);
   });
 

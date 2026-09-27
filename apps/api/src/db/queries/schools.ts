@@ -172,6 +172,48 @@ export async function checkSubmittedResultsExist(schoolId: string): Promise<bool
   }
 }
 
+/** ₦1,000. Chronix's guardrail on transaction cost, not a claim about any school's
+ *  policy — the settings UI names it as ours so a school can see whose number it is. */
+export const DEFAULT_MIN_PART_PAYMENT_KOBO = 100_000;
+
+/**
+ * The smallest part payment a parent may make online, in kobo.
+ *
+ * Flat, never a percentage: partial payment exists for the parent who cannot pay the
+ * whole amount, and a percentage floor scales the barrier with the fee — 10% of a
+ * ₦500,000 term is ₦50,000, which is exactly the parent the feature is for.
+ *
+ * A payment that CLEARS the balance is always allowed regardless of this figure; the
+ * caller enforces that, and it is the case worth testing first. Returning the default
+ * rather than null on a missing row is deliberate: an unset minimum must not mean "no
+ * minimum", because the failure direction there is the school paying fees on ₦1 payments.
+ */
+/** Merges a patch into fee_config, like updateAcademicConfig does for academic_config. */
+export async function updateFeeConfig(
+  schoolId: string,
+  patch: Record<string, unknown>
+): Promise<void> {
+  await pool.query(
+    `UPDATE school_settings
+     SET fee_config = fee_config || $1::jsonb,
+         updated_at = NOW()
+     WHERE school_id = $2`,
+    [JSON.stringify(patch), schoolId]
+  );
+}
+
+export async function getMinPartPaymentKobo(schoolId: string): Promise<number> {
+  const { rows } = await pool.query<{ min_part_payment_kobo: number | null }>(
+    `SELECT (fee_config->>'min_part_payment_kobo')::bigint AS min_part_payment_kobo
+       FROM school_settings WHERE school_id = $1`,
+    [schoolId]
+  );
+  const configured = rows[0]?.min_part_payment_kobo;
+  return configured !== null && configured !== undefined && Number(configured) > 0
+    ? Number(configured)
+    : DEFAULT_MIN_PART_PAYMENT_KOBO;
+}
+
 export async function getSchoolPayoutConfig(schoolId: string): Promise<PayoutConfig | null> {
   const result = await pool.query<{ payout_config: PayoutConfig }>(
     `SELECT payout_config FROM schools WHERE id = $1`,

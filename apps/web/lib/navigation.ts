@@ -35,6 +35,7 @@ export const SETTINGS_NAV: NavItem[] = [
   { label: 'Assessment Config', href: '/settings/assessment-config' },
   { label: 'Report Card', href: '/settings/report-card' },
   { label: 'Notifications', href: '/settings/notifications' },
+  { label: 'Fee Settings', href: '/settings/fees' },
   { label: 'Payout Setup', href: '/settings/payout' },
   { label: 'Users', href: '/settings/users' },
 ];

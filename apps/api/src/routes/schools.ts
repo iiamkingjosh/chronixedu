@@ -18,8 +18,12 @@ import {
   getSchoolPayoutConfig,
   updateSchoolPayoutConfig,
   getSchoolNameAndEmail,
+  getMinPartPaymentKobo,
+  updateFeeConfig,
+  DEFAULT_MIN_PART_PAYMENT_KOBO,
   type PayoutConfig,
 } from '../db/queries/schools';
+import { toKobo, fromKobo } from '../services/money';
 import { findPrincipalsBySchool } from '../db/queries/users';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
 import { NIGERIAN_DEFAULTS, slugify, validateGradeBands } from '../services/schoolService';
@@ -379,6 +383,66 @@ router.patch(
       if (warnings.length > 0) responseData.warnings = warnings;
 
       return res.json({ success: true, data: responseData });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── GET / PATCH /api/schools/:schoolId/fee-config ─────────────────────────────
+// The school's own fee policy. Currently one field: the smallest part payment a parent
+// may make online. The default is Chronix's, and the UI says so — it is a guardrail on
+// transaction cost (bearer: 'subaccount' means the school pays the Paystack fee), not a
+// claim about any school's policy. A disclosed default is a different object from an
+// invented one; compare promotion_cutoff ?? 40, which asserted a school's pass mark on a
+// report card silently.
+
+const updateFeeConfigSchema = z.object({
+  // Naira, 2 dp, stored as kobo. Matches the payment routes' boundary treatment.
+  min_part_payment: z
+    .string()
+    .trim()
+    .regex(/^\d+(\.\d{1,2})?$/, 'Enter an amount in naira with at most 2 decimal places')
+    .refine(v => Number(v) > 0, 'Minimum part payment must be greater than zero'),
+});
+
+router.get(
+  '/:schoolId/fee-config',
+  verifyToken,
+  requireSchoolAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const minKobo = await getMinPartPaymentKobo(req.params.schoolId);
+      return res.json({
+        success: true,
+        data: {
+          min_part_payment: fromKobo(minKobo),
+          is_default: minKobo === DEFAULT_MIN_PART_PAYMENT_KOBO,
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.patch(
+  '/:schoolId/fee-config',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('principal', 'bursar', 'super_admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = updateFeeConfigSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+
+      const patch = { min_part_payment_kobo: toKobo(parsed.data.min_part_payment) };
+      await updateFeeConfig(req.params.schoolId, patch);
+      await logSettingsChange(req.params.schoolId, req.user!.user_id, 'min_part_payment_kobo', null, patch);
+
+      return res.json({ success: true, data: { message: 'Fee settings updated', min_part_payment: parsed.data.min_part_payment } });
     } catch (err) {
       return next(err);
     }

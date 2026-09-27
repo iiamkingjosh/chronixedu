@@ -1,5 +1,17 @@
 # Chronix Edu — Changelog
 
+## Part Payment for Parents (2026-09-27)
+
+### Parents can now pay part of a term's fees online
+- Previously every online payment had to be the whole outstanding balance, so a parent who could pay some of it had to go to the school office for a bursar to record cash.
+- The Parent Portal now offers **Pay in full** or **Pay part**, and shows what will still be owed before the parent commits.
+- Receipt emails state the outstanding balance, so a part payment is never mistaken for settling the fees.
+
+### Schools set their own smallest part payment
+- **Settings → Fee Settings** sets the least a parent may pay at a time. It starts at ₦1,000, and the page says plainly that this is the Chronix default rather than your school's figure.
+- Your school pays the card processing fee on each payment, so a very low minimum means paying that fee repeatedly for the same money. The page explains the trade-off in both directions.
+- **A parent settling the whole remaining balance can always do so**, even when that balance is smaller than the minimum.
+
 ## Payment Receipts (2026-09-27)
 
 ### Receipt emails now say what is still owed

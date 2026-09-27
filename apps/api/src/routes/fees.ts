@@ -13,7 +13,7 @@ import { getActiveTerm } from '../db/queries/roster';
 import { parseBulkPaymentImportFile, BulkPaymentImportParseError } from '../services/bulkPaymentImportParser';
 import { runFullPaymentValidation } from '../services/bulkPaymentImportValidation';
 import { generateBulkPaymentImportResultsFile, type CreatedPaymentRecord, type FailedPaymentRecord } from '../services/bulkPaymentImportResults';
-import { getSchoolPayoutConfig } from '../db/queries/schools';
+import { getSchoolPayoutConfig, getMinPartPaymentKobo } from '../db/queries/schools';
 import { sendFeeRemindersForSchool } from '../services/feeReminderService';
 import {
   insertFeeStructure,
@@ -31,7 +31,7 @@ import {
 } from '../db/queries/fees';
 // From services/money, not db/queries/fees: route tests mock the query module wholesale,
 // which auto-mocked these pure helpers to undefined and turned a balance into NaN.
-import { toKobo } from '../services/money';
+import { toKobo, fromKobo } from '../services/money';
 import { generateReceipt } from '../services/receiptService';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
 import { signReportCardAsset } from '../services/reportCardService';
@@ -360,7 +360,15 @@ router.get(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'No invoice found for this student/term' } });
       }
 
-      return res.json({ success: true, data: invoice });
+      // Returned alongside the invoice so the parent portal can state the part-payment
+      // rule up front rather than surfacing it as an error after they have typed an
+      // amount. The route still enforces it — this is disclosure, not the guard.
+      const minPartPaymentKobo = await getMinPartPaymentKobo(schoolId);
+
+      return res.json({
+        success: true,
+        data: { ...invoice, min_part_payment: fromKobo(minPartPaymentKobo) },
+      });
     } catch (err) {
       return next(err);
     }
@@ -563,6 +571,33 @@ router.post(
       const payAmountKobo = amount ?? balanceKobo;
       if (payAmountKobo > balanceKobo) {
         return res.status(400).json({ success: false, error: { code: 'AMOUNT_EXCEEDS_BALANCE', message: 'Amount exceeds the outstanding balance' } });
+      }
+
+      // A part payment has a floor, because `bearer: 'subaccount'` below means the SCHOOL
+      // pays the Paystack fee on every attempt — twenty ₦500 payments against a ₦10,000
+      // balance cost the school more than one payment would.
+      //
+      // But a payment that CLEARS the balance is always allowed, whatever the floor says.
+      // Balance ₦600 against a ₦1,000 minimum must still be settleable. Without this
+      // carve-out the guard refuses a parent paying exactly what they owe — which is
+      // precisely the defect fixed in fe222d2, rebuilt in a new guard with different
+      // arithmetic. The exact-balance case is tested before the enforcement case for that
+      // reason.
+      //
+      // Enforced here rather than only in the UI: a parent hitting this endpoint directly
+      // with ₦1 would otherwise cost the school a fee per attempt.
+      if (payAmountKobo < balanceKobo) {
+        const minKobo = await getMinPartPaymentKobo(schoolId);
+        if (payAmountKobo < minKobo) {
+          return res.status(400).json({
+            success: false,
+            error: {
+              code: 'BELOW_MIN_PART_PAYMENT',
+              message: `The smallest part payment for this school is ${fromKobo(minKobo)}. You can pay any amount from that up to the full balance of ${fromKobo(balanceKobo)}.`,
+              details: { min_part_payment: fromKobo(minKobo), balance: fromKobo(balanceKobo) },
+            },
+          });
+        }
       }
 
       if (!isPaystackConfigured()) {
