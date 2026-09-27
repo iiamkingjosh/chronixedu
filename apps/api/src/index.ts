@@ -31,6 +31,7 @@ import analyticsRoutes from './routes/analytics';
 import timetableRoutes from './routes/timetable';
 import classCommentsRoutes from './routes/classComments';
 import principalRemarksRoutes from './routes/principalRemarks';
+import partnerRoutes from './routes/partner';
 import superAdminRoutes from './routes/superAdmin';
 import { detectSupportSession } from './middleware/detectSupportSession';
 import { verifyToken, requirePasswordChanged } from './middleware/auth';
@@ -165,6 +166,9 @@ app.use('/api/schools', analyticsRoutes);
 app.use('/api/schools', timetableRoutes);
 app.use('/api/schools', classCommentsRoutes);
 app.use('/api/schools', principalRemarksRoutes);
+// Outside /api/schools on purpose: machine-to-machine, API-key gated, and none of that
+// chain's middleware (support sessions, password-change, active-school) applies.
+app.use('/api/partner', partnerRoutes);
 
 // Super admin platform routes — guarded by requireRole('super_admin'),
 // must NOT have detectSupportSession applied.

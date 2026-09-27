@@ -34,6 +34,11 @@ const envSchema = z.object({
   NEXT_PUBLIC_API_URL: z.string().url('NEXT_PUBLIC_API_URL must be a valid URL').optional(),
   CORS_ORIGIN: z.string().url('CORS_ORIGIN must be a valid URL').optional(),
   SENTRY_DSN: z.string().url('SENTRY_DSN must be a valid URL').optional(),
+  // Shared secret the Chronix ERP presents (X-API-Key) on /api/partner/*. Optional:
+  // unset means the integration is simply off, and those routes answer 503 rather than
+  // falling open. A minimum length is enforced because a short shared secret is the
+  // kind of thing that gets set to "test" during a deploy and never changed.
+  ERP_INTEGRATION_API_KEY: z.string().min(32, 'ERP_INTEGRATION_API_KEY must be at least 32 characters').optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

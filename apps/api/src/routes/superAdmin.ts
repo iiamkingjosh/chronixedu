@@ -8,6 +8,7 @@ import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { insertSchoolSettings, updateIdentityConfig, updateAcademicConfig, schoolHasPrincipal } from '../db/queries/schools';
+import { getPlatformRevenue } from '../db/queries/platformRevenue';
 import { cache, schoolCacheKey } from '../services/cacheService';
 import { NIGERIAN_DEFAULTS } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
@@ -971,29 +972,12 @@ router.get(
   ...guard,
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await pool.query<{ plan: string; billing_cycle: string; total_amount: string; count: string }>(
-        `SELECT plan, billing_cycle, COALESCE(SUM(amount_naira), 0) AS total_amount, COUNT(*) AS count
-         FROM platform_subscriptions
-         WHERE subscription_status = 'active'
-         GROUP BY plan, billing_cycle`
-      );
-
-      const PLANS = ['basic', 'premium', 'enterprise'] as const;
-      const byPlan = new Map<string, { mrr: number; count: number }>(PLANS.map(plan => [plan, { mrr: 0, count: 0 }]));
-
-      for (const row of result.rows) {
-        const entry = byPlan.get(row.plan);
-        if (!entry) continue;
-        const amount = Number(row.total_amount);
-        const mrr = row.billing_cycle === 'annual' ? amount / 12 : amount;
-        entry.mrr += mrr;
-        entry.count += parseInt(row.count, 10);
-      }
-
-      const by_plan = PLANS.map(plan => ({ plan, mrr: byPlan.get(plan)!.mrr, count: byPlan.get(plan)!.count }));
-      const total_mrr = by_plan.reduce((sum, p) => sum + p.mrr, 0);
-
-      return res.json({ success: true, data: { total_mrr, by_plan, currency: 'NGN' } });
+      // Single source, shared with /api/partner/revenue so the ERP and this dashboard
+      // cannot report different MRR. It also excludes demo and suspended schools, which
+      // this route did not and /analytics/overview did — a latent disagreement between
+      // two figures in the same product.
+      const { total_mrr, by_plan, currency } = await getPlatformRevenue();
+      return res.json({ success: true, data: { total_mrr, by_plan, currency } });
     } catch (err) {
       return next(err);
     }

@@ -175,6 +175,29 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   report-card generation — any new code serving grades must resolve per class, not
   per school.
 
+## Partner integration (Chronix ERP)
+
+- `/api/partner/*` is machine-to-machine: gated by `requireErpApiKey` (shared secret in
+  `X-API-Key`, compared with `timingSafeEqual` over BYTES — `String.length` counts UTF-16
+  units, so a character-length check followed by that comparison throws on a multi-byte
+  key and surfaces as a 500). Mounted OUTSIDE `/api/schools`, so none of
+  `detectSupportSession → verifyToken → requirePasswordChanged → requireActiveSchool`
+  applies — none of it has anything to say about a machine caller.
+- **Unset `ERP_INTEGRATION_API_KEY` means the integration is OFF: 503, never 200.** A
+  partner route that starts serving because a secret went missing is the failure the
+  middleware exists to prevent, and it is tested.
+- Keep partner routes in `routes/partner.ts`, never folded into `superAdmin.ts`. Every
+  route in that file carries `...guard` (human session + super_admin); mixing the two
+  guards in one file makes "a route drifted past the wrong guard" a one-line mistake in
+  either direction.
+- Everything served there is aggregate and zero-PII — no school names, no identifiers the
+  ERP could use to address an individual. Widening that is a conversation about
+  entitlement, not a wider `SELECT`.
+- **MRR has one source: `getPlatformRevenue`.** There were two figures before this
+  (`/subscriptions/mrr` counted every active subscription; `/analytics/overview` excluded
+  demo and suspended schools), agreeing only because no demo school had a subscription.
+  The ERP would have made it three. Both routes now read the one function.
+
 ## Demo vs customer tenants
 
 - `schools.is_demo` marks a tenant that is not a customer (test fixture, sandbox, sales

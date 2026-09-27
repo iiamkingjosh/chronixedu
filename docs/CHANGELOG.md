@@ -1,5 +1,16 @@
 # Chronix Edu — Changelog
 
+## ERP Integration (2026-09-27)
+
+### Chronix ERP can pull platform revenue
+- A new machine-to-machine endpoint reports current monthly recurring revenue by plan, for the Chronix ERP to read.
+- It is aggregate only — no school names, no student or parent data.
+- It stays switched off until a shared key is configured, and answers "not configured" rather than serving anything.
+
+### One revenue figure instead of two
+- The super-admin revenue snapshot counted every active subscription, while the platform overview excluded demo and suspended schools — so the same product could report two different MRR figures.
+- Both now read the same calculation, which excludes demo and suspended schools. The ERP reads it too.
+
 ## Principal's Remark (2026-09-27)
 
 ### Principals can now write the remark that appears on report cards
