@@ -124,6 +124,22 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    production after any RLS work. Resolve an orphan by dropping it or by codifying it, but
    in a migration either way.
 
+15. **A bug whose trigger is contention needs a loaded reproduction; a clean run is the
+   wrong instrument.** The DB-suite flake looked unreproducible for two days because every
+   attempt to reproduce it was a clean, quiet run. It fired twice in two runs the moment a
+   discriminator was accidentally run under load — re-reading a working tree mid-edit,
+   competing for CPU with other jest processes. A contaminated experiment that reproduces
+   the bug beats a clean one that cannot. The corollary is doctrine 9 applied to the test
+   harness: **a timeout that stops waiting is not a timeout that stops work.** Jest's
+   `testTimeout` abandoned `beforeEach(seed)` but Node does not cancel an in-flight query,
+   so the remaining INSERTs committed after the next test's TRUNCATE and surfaced as
+   `duplicate key` in an unrelated suite. Raising the number would have lowered the
+   frequency and kept the mechanism. The fix lives at the layer that can stop the work:
+   `seed()` is one transaction with `SET LOCAL statement_timeout` and
+   `idle_in_transaction_session_timeout` below Jest's, so Postgres rolls back and the
+   failure lands in the test that owns it. Jest's timeout is the outer backstop, not the
+   guard.
+
 ## Auth (as built)
 
 - Login: Supabase `signInWithPassword` verifies the password; the API then signs

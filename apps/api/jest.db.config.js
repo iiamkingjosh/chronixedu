@@ -18,8 +18,11 @@ module.exports = {
   // out a variable number of later tests in a variable suite, which is exactly why it read
   // as an unreproducible 1-in-8 flake for two days.
   //
-  // 30s is a budget matched to the work, not a number picked to make a failure go away:
-  // individual suites here already run for 45s+, and a seed that genuinely takes 30s is a
-  // real regression worth failing on.
+  // This is the OUTER BACKSTOP, not the guard. A Jest timeout stops waiting; it does not
+  // stop the work — raising this alone would lower the frequency of the cascade and keep
+  // the mechanism. The guard is in helpers.ts: seed() runs as one transaction with
+  // statement_timeout and idle_in_transaction_session_timeout set to 20s, BELOW this, so
+  // Postgres aborts and rolls back first and the failure lands in the test that owns it.
+  // Keep this value above those two, or the race goes back to Jest.
   testTimeout: 30000,
 };
