@@ -162,6 +162,11 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 
 ## Auth (as built)
 
+- **The login connection** (`routes/auth.ts getLoginClient`) serves POST /login and nothing
+  else — the one place the database is reached for an unauthenticated caller. Keep it that
+  way: C-4a gives it its own column-scoped role (`docs/c4a/grants.sql`), so anything added to
+  it widens that role. Its TLS resolves through `resolveSsl(url, 'login')` like the pool;
+  every connection the API opens must, and each logs its own `pg_tls_verified` line.
 - Login: Supabase `signInWithPassword` verifies the password; the API then signs
   its **own** HS256 JWT (`JWT_SECRET`, 1h) with `user_id, school_id, role, email,
   title, must_change_password, subscription_tier`. Supabase-issued tokens are
@@ -207,6 +212,13 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   fixture the test needs (preferred — `__db_tests__` has a deterministic `seed()`), or skip
   with `it.skip` / a probe whose stated reason reaches the output, as
   `studentsBulkImport` does. Never a `console.warn` and an early return.
+- **A test stub of a platform object must mirror production verbatim in every property a
+  test depends on** — not "equivalently". `scripts/sql/test_supabase_stubs.sql`'s `auth.uid()`
+  called `auth.jwt()` by schema-qualified name where production's names only
+  `current_setting()`. Both return the same values, but these are `LANGUAGE sql` functions the
+  planner inlines as the current role, so the stub failed with `permission denied for schema
+  auth` for any role without USAGE on `auth` — and the C-4a probe measured the stub, not the
+  system. Copy bodies from `pg_proc`, and grants too.
 - That is only safe because both runners refuse a non-local database (`ALLOW_REMOTE_TEST_DB`,
   `ALLOW_REMOTE_TEST_SUPABASE`), so the leftovers land somewhere disposable. **Do not "fix"
   it by letting tests delete audit rows** — a session flag or role that permits it converts

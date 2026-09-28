@@ -55,21 +55,23 @@ one probed like the REVOKEs above.
 | timetable_slots | UPDATE |
 | users | DELETE |
 
-## 3. The login client (routes/auth.ts) — 5 statements
+## 3. The login connection (routes/auth.ts, POST /login only) — 3 statements
 
-The plan gives this its own `AUTH_DATABASE_URL`. Whichever role that names needs:
+Checked above against `chronixedu_login`, its own column-scoped role — not the app role.
+It serves the one path reaching the database for an unauthenticated caller, so it holds
+only what that path reads and stamps:
 
-- SELECT on `users` — apps/api/src/routes/auth.ts:73
-- INSERT on `users` — apps/api/src/routes/auth.ts:101
-- SELECT on `users` — apps/api/src/routes/auth.ts:198
-- UPDATE on `users` — apps/api/src/routes/auth.ts:214
-- INSERT, UPDATE on `users` — apps/api/src/routes/auth.ts:300
+- SELECT on `schools` — apps/api/src/routes/auth.ts:229
+- SELECT on `users` — apps/api/src/routes/auth.ts:210
+- UPDATE on `users` — apps/api/src/routes/auth.ts:226
 
-**Open, unmeasured:** `getPgClient()` builds `new Client({ connectionString })` with no
-`ssl` option, bypassing `resolveSsl()` — the function that makes the pool TLS-verified
-by default. Whether logins travel over verified TLS therefore depends on what the
-connection string says. Not asserted either way until measured; step 5 of the plan is
-where it gets fixed.
+Granted (from information_schema): SELECT schools.id; SELECT schools.subscription_tier; SELECT users.email; SELECT users.first_name; SELECT users.id; SELECT users.is_active; SELECT users.last_name; SELECT users.must_change_password; SELECT users.role; SELECT users.school_id; SELECT users.support_code; SELECT users.title; UPDATE users.last_login_at.
+
+`/create-user` and `/seed-test-user` used this client too; they sit behind super_admin
+auth / are off in production, and moved to the app pool so the login role needs no
+INSERT on users. **TLS:** the client now takes `ssl` from `resolveSsl()` like the pool, and
+logs its own `pg_tls_verified` line (`connection: "login"`). It had no `ssl` option at
+all, so its TLS was whatever the URL implied while the boot log described the pool only.
 
 ## 4. Owner-only — 3 statements
 

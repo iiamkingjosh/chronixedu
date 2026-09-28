@@ -255,6 +255,21 @@
   "audit_logs_update_columns": [
     "processed_at"
   ],
+  "login_column_privileges": [
+    "SELECT schools.id",
+    "SELECT schools.subscription_tier",
+    "SELECT users.email",
+    "SELECT users.first_name",
+    "SELECT users.id",
+    "SELECT users.is_active",
+    "SELECT users.last_name",
+    "SELECT users.must_change_password",
+    "SELECT users.role",
+    "SELECT users.school_id",
+    "SELECT users.support_code",
+    "SELECT users.title",
+    "UPDATE users.last_login_at"
+  ],
   "app_bypass_policies": 42,
   "public_tables": 44
 }

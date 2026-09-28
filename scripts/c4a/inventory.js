@@ -139,12 +139,21 @@ function routes() {
 
 // ── SQL operations ───────────────────────────────────────────────────────────
 
+/**
+ * Which connection issues a statement, read from the RECEIVER of the `.query` call that
+ * the literal is the first argument of.
+ *
+ * The first version matched `pg.query(` immediately before the literal, and missed
+ * `pg.query<{ subscription_tier: string | null }>(` — a generic type argument sits in
+ * between — so the login route's read of `schools` was credited to the pool, and the
+ * artifact told the second reader the login connection touched `users` only. Found by
+ * that reader asking whether the login path should share the app role.
+ */
 function connectionFor(file, text, idx) {
   if (file.endsWith('scripts/migrate.ts')) return 'owner (migrate, DATABASE_URL)';
-  if (file.endsWith('routes/auth.ts')) {
-    const before = text.slice(Math.max(0, idx - 200), idx);
-    if (/\bpg\.query\s*\(\s*$/.test(before) || /\bpg\.query\(/.test(before.slice(-40))) return 'login client (routes/auth.ts getPgClient)';
-  }
+  const before = text.slice(Math.max(0, idx - 300), idx);
+  const call = /(\w+)\s*\.\s*query\s*(?:<[^()]*?>)?\s*\(\s*$/.exec(before);
+  if (file.endsWith('routes/auth.ts') && call && call[1] === 'pg') return 'login client (routes/auth.ts getLoginClient)';
   return 'pool (db/client.ts)';
 }
 

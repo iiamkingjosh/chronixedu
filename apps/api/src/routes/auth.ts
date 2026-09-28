@@ -5,6 +5,7 @@ import { supabase, supabaseAdmin } from '../supabaseClient';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Client } from 'pg';
+import pool, { resolveSsl } from '../db/client';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { findUserByEmail, updatePasswordHash, getPasswordHashById, changeOwnPassword } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
@@ -12,9 +13,23 @@ import { redis } from '../middleware/rateLimit';
 
 const router = express.Router();
 
-function getPgClient() {
-  const conn = process.env.DATABASE_URL || '';
-  return new Client({ connectionString: conn });
+/**
+ * The login connection — the one place the database is reached on behalf of an
+ * UNAUTHENTICATED caller. Used by POST /login and nothing else, so that C-4a can give it
+ * its own column-scoped role (docs/c4a/grants.sql): if a flaw on this path shares the app
+ * role it reaches scores, payments and audit rows; with its own role it reaches the ten
+ * user columns and one schools column that login actually reads.
+ *
+ * TLS resolved through resolveSsl() like the pool. It was `new Client({ connectionString })`
+ * with no `ssl` option, so its TLS was whatever the URL implied, verified or not — while
+ * the boot log's `pg_tls_verified` described only the pool. Resolved once at load, so the
+ * boot log states this connection's TLS too (connection: 'login').
+ */
+const LOGIN_DATABASE_URL = process.env.DATABASE_URL || '';
+const LOGIN_SSL = resolveSsl(LOGIN_DATABASE_URL, 'login');
+
+function getLoginClient() {
+  return new Client({ connectionString: LOGIN_DATABASE_URL, ssl: LOGIN_SSL });
 }
 
 const createUserSchema = z.object({
@@ -63,13 +78,12 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
 
   const effectiveSchoolId = school_id ?? req.user!.school_id;
 
-  // H-08: always release the pg client, even when an early return or exception occurs.
-  const pg = getPgClient();
+  // On the app pool, not the login connection: this route sits behind super_admin auth,
+  // and leaving it on the login client would have forced the login role to hold INSERT on
+  // users. Two independent statements, no transaction, so the move changes no behaviour.
   try {
-    await pg.connect();
-
     // Check for duplicate email scoped to this school only — prevents cross-school enumeration.
-    const existing = await pg.query(
+    const existing = await pool.query(
       'SELECT id FROM users WHERE email = $1 AND school_id = $2 LIMIT 1',
       [email, effectiveSchoolId]
     );
@@ -97,7 +111,7 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
 
     // insert into local users table
     const hashed = bcrypt.hashSync(password, 12);
-    await pg.query(
+    await pool.query(
       `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title, teacher_mode)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [userId, effectiveSchoolId, email, hashed, role, first_name || '', last_name || '', title || null, teacher_mode || 'subject']
@@ -109,8 +123,6 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
       success: false,
       error: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
     });
-  } finally {
-    await pg.end();
   }
 });
 
@@ -189,7 +201,7 @@ router.post('/login', async (req, res, next) => {
     const userId = data.user.id;
 
     // H-08: always release the pg client, even when an early return or exception occurs.
-    const pg = getPgClient();
+    const pg = getLoginClient();
     let local: { id: string; school_id: string; role: string; title: string; email: string; first_name: string; last_name: string; is_active: boolean; support_code: string; must_change_password: boolean } | undefined;
     let subscriptionTier: string | null = null;
     try {
@@ -265,10 +277,8 @@ if (process.env.NODE_ENV !== 'production' && process.env.SEED_SECRET) {
       });
     }
 
-    const pg = getPgClient();
+    // App pool, not the login connection — see create-user above.
     try {
-      await pg.connect();
-
       // Check whether a Supabase Auth user with this email already exists
       const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
       const existingAuthUser = listData?.users?.find((u: SupabaseUser) => u.email === email);
@@ -296,7 +306,7 @@ if (process.env.NODE_ENV !== 'production' && process.env.SEED_SECRET) {
 
       // Upsert the local users row — safe to run whether the row exists or not
       const hashed = bcrypt.hashSync(password, 12);
-      await pg.query(
+      await pool.query(
         `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (id) DO UPDATE
@@ -316,8 +326,6 @@ if (process.env.NODE_ENV !== 'production' && process.env.SEED_SECRET) {
         success: false,
         error: { code: 'INTERNAL_ERROR', message: err instanceof Error ? err.message : 'Internal server error' },
       });
-    } finally {
-      await pg.end();
     }
   });
 

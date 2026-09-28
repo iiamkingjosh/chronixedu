@@ -61,8 +61,17 @@ function defaultCaPath(): string | undefined {
   return fs.existsSync(bundled) ? bundled : undefined;
 }
 
-function resolveSsl(): PoolConfig['ssl'] {
-  const url = process.env.DATABASE_URL;
+/**
+ * TLS config for ONE connection string, labelled so the boot log accounts for every
+ * connection the API opens, not only the pool.
+ *
+ * It used to read DATABASE_URL itself and was called once, for the pool — while
+ * routes/auth.ts opened its own login Client with no `ssl` option at all, so whether
+ * logins travelled over verified TLS depended on whatever the connection string said.
+ * The single `pg_tls_verified` line at boot was true and incomplete. Now each connection
+ * resolves through here and logs its own line with `connection`.
+ */
+export function resolveSsl(url: string | undefined, connection: string): PoolConfig['ssl'] {
   if (!url) return undefined;
 
   let host: string;
@@ -92,17 +101,18 @@ function resolveSsl(): PoolConfig['ssl'] {
     if (daysLeft < CA_EXPIRY_WARN_DAYS) {
       // Not an error yet — the connection still verifies. But past notAfter the API
       // stops booting, so this is the only warning anyone gets.
-      logger.warn('pg_tls_ca_expiring', { caPath, notAfter, daysLeft });
+      logger.warn('pg_tls_ca_expiring', { connection, caPath, notAfter, daysLeft });
     }
     // Logged on the SUCCESS branch too: a working config that says nothing is
     // indistinguishable from one that never ran, which is the failure this work has
     // hit four times. notAfter rides along so every boot log states the expiry.
-    logger.info('pg_tls_verified', { host, caPath, notAfter, daysLeft });
+    logger.info('pg_tls_verified', { connection, host, caPath, notAfter, daysLeft });
     return { ca, rejectUnauthorized: true };
   }
 
   // Only reachable when the bundled CA is missing AND PGSSLROOTCERT is unset.
   logger.warn('pg_tls_unverified', {
+    connection,
     host,
     detail: 'Connection is encrypted but the server certificate is not verified. Set PGSSLROOTCERT to Supabase\'s CA bundle for a verified connection.',
   });
@@ -111,7 +121,7 @@ function resolveSsl(): PoolConfig['ssl'] {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: resolveSsl(),
+  ssl: resolveSsl(process.env.DATABASE_URL, 'pool'),
   max: Number(process.env.PG_POOL_MAX ?? 10),
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000,

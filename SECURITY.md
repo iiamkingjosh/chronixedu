@@ -1,8 +1,24 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 12 — 2026-09-27  
-**Scope:** RLS policy drift between `migrations/` and the deployed database  
-**Round 12 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+**Latest audit:** Round 13 — 2026-09-28  
+**Scope:** The login connection — TLS and privilege scope (C-4a second read)  
+**Round 13 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+
+---
+
+## Round 13 — 2026-09-28
+
+**Scope:** The one database connection opened on behalf of an unauthenticated caller. Surfaced by the second read of the C-4a artifacts.
+
+### M-01 — The login connection bypassed the verified-TLS configuration ✅ Fixed
+
+**Files:** `apps/api/src/routes/auth.ts`, `apps/api/src/db/client.ts`, `apps/api/src/__tests__/auth.test.ts`, `apps/api/src/__tests__/authSeedTestUserSecurity.test.ts`
+
+**Fix:** The pool's TLS is resolved by `resolveSsl()` — bundled Supabase CA, `rejectUnauthorized: true`, fail-closed — and every boot logs `pg_tls_verified`. POST /login does not use the pool: it opens its own `pg` Client, which was built as `new Client({ connectionString })` with **no `ssl` option at all**. Its TLS was therefore whatever the connection string implied, verified or not, while the boot log's single `pg_tls_verified` line described only the pool — true, and incomplete. That connection carries the user lookup (id, role, school, email) for every login.
+
+`resolveSsl()` now takes the URL and a connection label, and the login client resolves through it once at load, so it is verified exactly as the pool is and the boot log carries a `pg_tls_verified` line per connection (`connection: "pool"` / `"login"`). Both connections read the same `DATABASE_URL`, and the pool already verifies against it in production, so the change cannot introduce a handshake failure the pool does not already survive.
+
+Also: `/create-user` (super_admin) and `/seed-test-user` (off in production) used the same client. They moved to the app pool, so the login connection now serves POST /login alone — which is what lets C-4a give it a role holding ten `users` columns, one `schools` column and `UPDATE (last_login_at)`, and nothing else (`docs/c4a/grants.sql`, probed in `docs/c4a/probe.md`). The unit-test mocks were routed so both routes' success tests genuinely exercise the pool: unrouted, their duplicate checks would see the middleware's fixed row and return 409.
 
 ---
 

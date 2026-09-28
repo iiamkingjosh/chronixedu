@@ -16,10 +16,18 @@ const ROOT = path.resolve(__dirname, '../..');
 const ops = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs/c4a/operations.json'), 'utf8'));
 const eff = JSON.parse(fs.readFileSync(path.join(ROOT, 'docs/c4a/effective_privileges.json'), 'utf8'));
 
-const APP = o => !o.connection.startsWith('owner');
+const APP = o => o.connection.startsWith('pool');
+const LOGIN = o => o.connection.startsWith('login');
 const held = (table, op) => (eff.tables[table] ?? []).includes(op);
+// The login role is column-scoped: a statement is covered if the role holds that
+// privilege on at least one column of the table. Which columns, exactly, is the boundary
+// check's job (c4a_boundary_check.sql compares against POST /login's column list).
+const loginHeld = (table, op) => (eff.login_column_privileges ?? []).some(p => p.startsWith(`${op} ${table}.`));
 
 const violations = [];
+for (const o of ops.filter(LOGIN)) {
+  for (const op of o.ops) if (!loginHeld(o.table, op)) violations.push({ ...o, op });
+}
 const used = {}; // table -> Set(op) on app connections
 for (const o of ops.filter(APP)) {
   for (const op of o.ops) {
@@ -38,9 +46,9 @@ for (const [table, privs] of Object.entries(eff.tables)) {
   if (u.length) unused.push({ table, privs: u });
 }
 
-const ownerOnly = ops.filter(o => !APP(o));
+const ownerOnly = ops.filter(o => o.connection.startsWith('owner'));
 const dynamic = ops.filter(o => APP(o) && o.dynamic);
-const login = ops.filter(o => o.connection.startsWith('login'));
+const login = ops.filter(LOGIN);
 
 const md = [
   '# C-4a cross-check (generated — `node scripts/c4a/crosscheck.js`)',
@@ -72,17 +80,21 @@ const md = [
   '|---|---|',
   ...unused.sort((a, b) => a.table.localeCompare(b.table)).map(u => `| ${u.table} | ${u.privs.join(', ')} |`),
   '',
-  `## 3. The login client (routes/auth.ts) — ${login.length} statements`,
+  `## 3. The login connection (routes/auth.ts, POST /login only) — ${login.length} statements`,
   '',
-  'The plan gives this its own `AUTH_DATABASE_URL`. Whichever role that names needs:',
+  'Checked above against `chronixedu_login`, its own column-scoped role — not the app role.',
+  'It serves the one path reaching the database for an unauthenticated caller, so it holds',
+  'only what that path reads and stamps:',
   '',
   ...login.map(o => `- ${o.ops.join(', ')} on \`${o.table}\` — ${o.file}:${o.line}`),
   '',
-  '**Open, unmeasured:** `getPgClient()` builds `new Client({ connectionString })` with no',
-  '`ssl` option, bypassing `resolveSsl()` — the function that makes the pool TLS-verified',
-  'by default. Whether logins travel over verified TLS therefore depends on what the',
-  'connection string says. Not asserted either way until measured; step 5 of the plan is',
-  'where it gets fixed.',
+  `Granted (from information_schema): ${(eff.login_column_privileges ?? []).join('; ')}.`,
+  '',
+  '`/create-user` and `/seed-test-user` used this client too; they sit behind super_admin',
+  'auth / are off in production, and moved to the app pool so the login role needs no',
+  'INSERT on users. **TLS:** the client now takes `ssl` from `resolveSsl()` like the pool, and',
+  'logs its own `pg_tls_verified` line (`connection: "login"`). It had no `ssl` option at',
+  'all, so its TLS was whatever the URL implied while the boot log described the pool only.',
   '',
   `## 4. Owner-only — ${ownerOnly.length} statements`,
   '',

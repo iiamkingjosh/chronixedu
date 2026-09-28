@@ -3249,9 +3249,9 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 217,
+    "line": 229,
     "fn": "POST /login",
-    "connection": "pool (db/client.ts)",
+    "connection": "login client (routes/auth.ts getLoginClient)",
     "dynamic": false
   },
   {
@@ -6924,9 +6924,9 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 73,
+    "line": 87,
     "fn": "POST /create-user",
-    "connection": "login client (routes/auth.ts getPgClient)",
+    "connection": "pool (db/client.ts)",
     "dynamic": false
   },
   {
@@ -6935,9 +6935,9 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 101,
+    "line": 115,
     "fn": "POST /create-user",
-    "connection": "login client (routes/auth.ts getPgClient)",
+    "connection": "pool (db/client.ts)",
     "dynamic": false
   },
   {
@@ -6946,9 +6946,9 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 198,
+    "line": 210,
     "fn": "POST /login",
-    "connection": "login client (routes/auth.ts getPgClient)",
+    "connection": "login client (routes/auth.ts getLoginClient)",
     "dynamic": false
   },
   {
@@ -6957,9 +6957,9 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 214,
+    "line": 226,
     "fn": "POST /login",
-    "connection": "login client (routes/auth.ts getPgClient)",
+    "connection": "login client (routes/auth.ts getLoginClient)",
     "dynamic": false
   },
   {
@@ -6969,9 +6969,9 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 300,
+    "line": 310,
     "fn": "POST /seed-test-user",
-    "connection": "login client (routes/auth.ts getPgClient)",
+    "connection": "pool (db/client.ts)",
     "dynamic": false
   },
   {

@@ -14,14 +14,14 @@ mount stands between the internet and the handler.
 
 | Method | Path | Guards | Handler | requireSchoolAccess here | Source |
 |---|---|---|---|---|---|
-| POST | `/api/auth/change-password` | *authRateLimiter* → verifyToken | (inline) | — | apps/api/src/routes/auth.ts:495 |
-| POST | `/api/auth/confirm-reset` | *authRateLimiter* | (inline) | — | apps/api/src/routes/auth.ts:409 |
-| POST | `/api/auth/create-user` | *authRateLimiter* → verifyToken → requireRole('super_admin') | (inline) | — | apps/api/src/routes/auth.ts:34 |
-| POST | `/api/auth/forgot-password` | *authRateLimiter* | handleForgotPassword | — | apps/api/src/routes/auth.ts:405 |
-| POST | `/api/auth/login` | *authRateLimiter* | (inline) | — | apps/api/src/routes/auth.ts:126 |
-| POST | `/api/auth/reset-password` | *authRateLimiter* | handleForgotPassword | — | apps/api/src/routes/auth.ts:406 |
-| POST | `/api/auth/seed-test-user` ⚠ *conditionally registered — see source* | *authRateLimiter* | (inline) | — | apps/api/src/routes/auth.ts:256 |
-| GET | `/api/auth/test-role` ⚠ *conditionally registered — see source* | *authRateLimiter* → verifyToken → requireRole('principal') | (inline) | — | apps/api/src/routes/auth.ts:324 |
+| POST | `/api/auth/change-password` | *authRateLimiter* → verifyToken | (inline) | — | apps/api/src/routes/auth.ts:503 |
+| POST | `/api/auth/confirm-reset` | *authRateLimiter* | (inline) | — | apps/api/src/routes/auth.ts:417 |
+| POST | `/api/auth/create-user` | *authRateLimiter* → verifyToken → requireRole('super_admin') | (inline) | — | apps/api/src/routes/auth.ts:49 |
+| POST | `/api/auth/forgot-password` | *authRateLimiter* | handleForgotPassword | — | apps/api/src/routes/auth.ts:413 |
+| POST | `/api/auth/login` | *authRateLimiter* | (inline) | — | apps/api/src/routes/auth.ts:138 |
+| POST | `/api/auth/reset-password` | *authRateLimiter* | handleForgotPassword | — | apps/api/src/routes/auth.ts:414 |
+| POST | `/api/auth/seed-test-user` ⚠ *conditionally registered — see source* | *authRateLimiter* | (inline) | — | apps/api/src/routes/auth.ts:268 |
+| GET | `/api/auth/test-role` ⚠ *conditionally registered — see source* | *authRateLimiter* → verifyToken → requireRole('principal') | (inline) | — | apps/api/src/routes/auth.ts:332 |
 | GET | `/api/partner/revenue` | requireErpApiKey | (inline) | — | apps/api/src/routes/partner.ts:40 |
 | POST | `/api/schools/` | *detectSupportSession* → *verifyToken* → *requirePasswordChanged* → *requireActiveSchool* → verifyToken → requireRole('super_admin') | (inline) | — | apps/api/src/routes/schools.ts:216 |
 | GET | `/api/schools/:schoolId` | *detectSupportSession* → *verifyToken* → *requirePasswordChanged* → *requireActiveSchool* → verifyToken → requireSchoolAccess | (inline) | restrictive: super_admin, or own-school principal | apps/api/src/routes/schools.ts:252 |

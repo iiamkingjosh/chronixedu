@@ -470,7 +470,7 @@ added for `INSERT … ON CONFLICT DO UPDATE`, which needs that privilege.
 | SELECT | apps/api/src/db/queries/schools.ts:267 | `getSchoolPayoutConfig` | pool (db/client.ts) |
 | UPDATE | apps/api/src/db/queries/schools.ts:277 | `updateSchoolPayoutConfig` | pool (db/client.ts) |
 | SELECT | apps/api/src/db/queries/schools.ts:284 | `getSchoolNameAndEmail` | pool (db/client.ts) |
-| SELECT | apps/api/src/routes/auth.ts:217 | `POST /login` | pool (db/client.ts) |
+| SELECT | apps/api/src/routes/auth.ts:229 | `POST /login` | login client (routes/auth.ts getLoginClient) |
 | SELECT | apps/api/src/routes/superAdmin.ts:470 | `GET /support-sessions` | pool (db/client.ts) |
 | SELECT ⚠ dynamic | apps/api/src/routes/superAdmin.ts:526 | `GET /audit-logs` | pool (db/client.ts) |
 | SELECT ⚠ dynamic | apps/api/src/routes/superAdmin.ts:578 | `GET /schools` | pool (db/client.ts) |
@@ -853,11 +853,11 @@ added for `INSERT … ON CONFLICT DO UPDATE`, which needs that privilege.
 | SELECT | apps/api/src/middleware/auth.ts:100 | `verifyToken` | pool (db/client.ts) |
 | SELECT | apps/api/src/middleware/auth.ts:144 | `requirePasswordChanged` | pool (db/client.ts) |
 | SELECT | apps/api/src/middleware/auth.ts:149 | `requirePasswordChanged` | pool (db/client.ts) |
-| SELECT | apps/api/src/routes/auth.ts:73 | `POST /create-user` | login client (routes/auth.ts getPgClient) |
-| INSERT | apps/api/src/routes/auth.ts:101 | `POST /create-user` | login client (routes/auth.ts getPgClient) |
-| SELECT | apps/api/src/routes/auth.ts:198 | `POST /login` | login client (routes/auth.ts getPgClient) |
-| UPDATE | apps/api/src/routes/auth.ts:214 | `POST /login` | login client (routes/auth.ts getPgClient) |
-| INSERT, UPDATE | apps/api/src/routes/auth.ts:300 | `POST /seed-test-user` | login client (routes/auth.ts getPgClient) |
+| SELECT | apps/api/src/routes/auth.ts:87 | `POST /create-user` | pool (db/client.ts) |
+| INSERT | apps/api/src/routes/auth.ts:115 | `POST /create-user` | pool (db/client.ts) |
+| SELECT | apps/api/src/routes/auth.ts:210 | `POST /login` | login client (routes/auth.ts getLoginClient) |
+| UPDATE | apps/api/src/routes/auth.ts:226 | `POST /login` | login client (routes/auth.ts getLoginClient) |
+| INSERT, UPDATE | apps/api/src/routes/auth.ts:310 | `POST /seed-test-user` | pool (db/client.ts) |
 | SELECT | apps/api/src/routes/students.ts:935 | `POST /:schoolId/students/:studentId/parents` | pool (db/client.ts) |
 | INSERT | apps/api/src/routes/students.ts:967 | `POST /:schoolId/students/:studentId/parents` | pool (db/client.ts) |
 | SELECT | apps/api/src/routes/superAdmin.ts:343 | `POST /support-sessions` | pool (db/client.ts) |
