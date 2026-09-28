@@ -16,26 +16,33 @@
  */
 import { seed, IDS as I, pool } from './helpers';
 import { registerStudent, type CreateAuthAccount } from '../db/queries/students';
+import { Pool } from 'pg';
+// OWNER connection, for the statements in this file that are owner work by nature. In C-4a
+// role mode (jest.db.roles.config.js) the shared pool is chronixedu_app, which correctly
+// cannot do them; using the owner here keeps the test about what it says it is about.
+const owner = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+
 
 /** Stand-in for the Supabase-managed `auth.users` table. */
 beforeAll(async () => {
-  await pool.query(`CREATE SCHEMA IF NOT EXISTS auth`);
-  await pool.query(
+  await owner.query(`CREATE SCHEMA IF NOT EXISTS auth`);
+  await owner.query(
     `CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text UNIQUE NOT NULL)`
   );
 });
 beforeEach(async () => {
   await seed();
-  await pool.query(`DELETE FROM auth.users`);
+  await owner.query(`DELETE FROM auth.users`);
 });
 afterAll(async () => {
-  await pool.query(`DROP TABLE IF EXISTS auth.users`);
+  await owner.query(`DROP TABLE IF EXISTS auth.users`);
   await pool.end();
+  await owner.end();
 });
 
 /** Records the identity it issues, exactly as Supabase would. */
 const createAuthAccount: CreateAuthAccount = async ({ email }) => {
-  const { rows } = await pool.query<{ id: string }>(
+  const { rows } = await owner.query<{ id: string }>(
     `INSERT INTO auth.users (id, email) VALUES (gen_random_uuid(), $1) RETURNING id`,
     [email]
   );
@@ -63,7 +70,7 @@ function parent(email: string) {
 
 /** Every users row for these ids that has no auth identity. */
 async function orphanedLogins(userIds: string[]): Promise<string[]> {
-  const { rows } = await pool.query<{ email: string }>(
+  const { rows } = await owner.query<{ email: string }>(
     `SELECT u.email FROM users u
        LEFT JOIN auth.users a ON a.id = u.id
       WHERE u.id = ANY($1::uuid[]) AND a.id IS NULL`,
@@ -102,7 +109,7 @@ describe('registerStudent — auth identity binding', () => {
 
   it('reuses an existing parent account instead of issuing a second identity', async () => {
     await registerStudent(I.schoolA, student, [parent('dad@example.com')], createAuthAccount);
-    const before = await pool.query(`SELECT count(*)::int AS n FROM auth.users`);
+    const before = await owner.query(`SELECT count(*)::int AS n FROM auth.users`);
 
     const second = await registerStudent(
       I.schoolA,
@@ -112,7 +119,7 @@ describe('registerStudent — auth identity binding', () => {
     );
 
     // One new identity for the second student, none for the parent already on file.
-    const after = await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM auth.users`);
+    const after = await owner.query<{ n: number }>(`SELECT count(*)::int AS n FROM auth.users`);
     expect(after.rows[0].n).toBe(before.rows[0].n + 1);
     expect(second.new_parents).toEqual([]);
 

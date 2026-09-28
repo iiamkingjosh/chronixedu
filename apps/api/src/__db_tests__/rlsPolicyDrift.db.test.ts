@@ -41,7 +41,15 @@ afterAll(async () => {
   await pool.end();
 });
 
-describe('RLS policy drift', () => {
+// Skipped — at collection, so the runner reports it as skipped rather than passed — in C-4a
+// role mode. That mode applies docs/c4a/grants.sql, which adds app_bypass_* and login_*
+// policies that no migration creates yet, so a mismatch here would be a true statement
+// about an intentional difference and say nothing about the product. The derived check for
+// that mode is scripts/sql/c4a_boundary_check.sql. When grants.sql becomes a migration, the
+// inventory is regenerated and this skip is deleted.
+const describeUnlessRoleMode = process.env.C4A_ROLES === '1' ? describe.skip : describe;
+
+describeUnlessRoleMode('RLS policy drift', () => {
   it('the rebuilt schema holds exactly the policies in the inventory', async () => {
     const actual = (await pool.query<{ sig: string }>(DUMP)).rows.map(r => r.sig);
     const expected = expectedSigs();

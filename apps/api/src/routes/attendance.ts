@@ -1,4 +1,5 @@
 ﻿import { Router, Request, Response, NextFunction } from 'express';
+import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { logAudit } from '../db/queries/auditLog';
@@ -181,8 +182,10 @@ router.post(
         const alert = await insertAttendanceAlert(schoolId, entry.student_id, LOW_ATTENDANCE_ALERT_TYPE);
         alerts.push(alert);
 
-        // Fire-and-forget: queue parent notification job via audit_log (background worker dispatches)
-        logAudit({
+        // Queue the parent alert. Awaited: this row IS the notification queue, and the old
+        // fire-and-forget write swallowed its own failure — the alert simply never went.
+        // A failure is logged rather than failing the attendance save, which did happen.
+        await logAudit({
           supportSession: req.supportSession,
           schoolId,
           userId: markedBy,
@@ -194,8 +197,10 @@ router.post(
             notification_type: 'low_attendance',
             recent_absences: recentAbsences,
           },
-        }).catch(() => {
-          // Non-critical — do not surface notification errors to the caller
+        }).catch(err => {
+          logger.error('parent_notification_queue_failed', {
+            schoolId, alert_id: alert.id, notification_type: 'low_attendance', error: err instanceof Error ? err.message : String(err),
+          });
         });
       }
 

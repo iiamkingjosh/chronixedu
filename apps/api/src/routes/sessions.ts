@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { redis } from '../middleware/rateLimit';
@@ -153,7 +154,11 @@ router.post(
         entity: 'terms',
         entityId: term.id,
         newValue: { name, start_date, end_date, session_id: req.params.sessionId },
-      }).catch(() => {});
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be
+        // visible (doctrine 10). The write itself succeeded, so the request does too.
+        logger.error('audit_write_failed', { action: 'TERM_CREATED', error: err instanceof Error ? err.message : String(err) });
+      });
 
       return res.status(201).json({ success: true, data: term });
     } catch (err) {
@@ -207,7 +212,11 @@ router.patch(
         entityId: termId,
         oldValue: { name: existing.name, start_date: existing.start_date, end_date: existing.end_date },
         newValue: { name: term.name, start_date: term.start_date, end_date: term.end_date },
-      }).catch(() => {});
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be
+        // visible (doctrine 10). The write itself succeeded, so the request does too.
+        logger.error('audit_write_failed', { action: 'TERM_UPDATED', error: err instanceof Error ? err.message : String(err) });
+      });
 
       return res.json({ success: true, data: term });
     } catch (err) {

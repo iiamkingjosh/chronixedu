@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { logAudit } from '../db/queries/auditLog';
@@ -122,15 +123,20 @@ router.post(
       // Suspensions notify the parent immediately (parent_notified_at already set on the
       // record); other severities are queued via the audit log, mirroring the
       // PARENT_NOTIFICATION_QUEUED convention used for attendance alerts.
-      logAudit({
+      // Awaited: for non-suspension incidents this row IS the parent notification queue, and
+      // for every incident it is the audit record (doctrine 10). A failure is logged, never
+      // swallowed; the incident itself was recorded, so the request still succeeds.
+      await logAudit({
         schoolId,
         userId: req.user!.user_id,
         actionType: severity === 'suspension' ? 'PARENT_NOTIFICATION_SENT' : 'PARENT_NOTIFICATION_QUEUED',
         entity: 'behaviour_records',
         entityId: record.id,
         newValue: { student_id, notification_type: 'behaviour_incident', severity, incident_type },
-      }).catch(() => {
-        // Non-critical — do not surface notification errors to the caller
+      }).catch(err => {
+        logger.error('behaviour_audit_write_failed', {
+          schoolId, behaviour_record_id: record.id, error: err instanceof Error ? err.message : String(err),
+        });
       });
 
       return res.status(201).json({ success: true, data: record });

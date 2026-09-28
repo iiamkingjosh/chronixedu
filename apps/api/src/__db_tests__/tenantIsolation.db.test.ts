@@ -5,11 +5,17 @@
  */
 import request from 'supertest';
 import { buildApp, seed, tokens, IDS as I, pool } from './helpers';
+import { Pool } from 'pg';
+// OWNER connection, for the statements in this file that are owner work by nature. In C-4a
+// role mode (jest.db.roles.config.js) the shared pool is chronixedu_app, which correctly
+// cannot do them; using the owner here keeps the test about what it says it is about.
+const owner = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+
 
 const app = buildApp();
 
 beforeAll(seed);
-afterAll(() => pool.end());
+afterAll(async () => { await pool.end(); await owner.end(); });
 
 describe('RLS coverage', () => {
   it('every public table has row level security enabled', async () => {
@@ -27,7 +33,7 @@ describe('RLS coverage', () => {
   it.each(['payments', 'fee_invoices', 'report_cards', 'scores', 'students', 'users', 'email_queue', 'subject_result_status'])(
     'anon cannot read %s',
     async table => {
-      const c = await pool.connect();
+      const c = await owner.connect();
       try {
         await c.query('BEGIN');
         await c.query('SET LOCAL ROLE anon');
@@ -46,7 +52,7 @@ describe('RLS coverage', () => {
   );
 
   it('authenticated JWT for School B sees no School A students', async () => {
-    const c = await pool.connect();
+    const c = await owner.connect();
     try {
       await c.query('BEGIN');
       await c.query(`SELECT set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ school_id: I.schoolB, role: 'principal' })]);

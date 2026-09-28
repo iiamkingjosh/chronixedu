@@ -457,7 +457,11 @@ router.post(
         entity: 'teacher_assignments',
         entityId: teacher_id,
         newValue: { term_id: term.id, requested: resolved.length, created: created.length },
-      }).catch(() => {});
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be
+        // visible (doctrine 10). The write itself succeeded, so the request does too.
+        logger.error('audit_write_failed', { action: 'TEACHER_ASSIGNMENTS_BULK_CREATED', error: err instanceof Error ? err.message : String(err) });
+      });
 
       return res.status(201).json({
         success: true,
@@ -512,7 +516,11 @@ router.post(
         entity: 'teacher_assignments',
         entityId: to_term_id,
         newValue: { from_term_id, to_term_id, copied },
-      }).catch(() => {});
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be
+        // visible (doctrine 10). The write itself succeeded, so the request does too.
+        logger.error('audit_write_failed', { action: 'TEACHER_ASSIGNMENTS_COPIED', error: err instanceof Error ? err.message : String(err) });
+      });
 
       return res.json({ success: true, data: { copied } });
     } catch (err) {

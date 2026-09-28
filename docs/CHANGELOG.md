@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Honest notification messages (2026-09-28)
+
+### Publishing and returning results say whether notifications really went out
+- When results are published, the confirmation now reports whether parent notifications were actually queued. If they could not be, it says so plainly instead of claiming they were — so the school knows to tell parents another way.
+- The same for returning results to teachers.
+- Low-attendance and behaviour alerts, and several settings changes, no longer lose their record silently if saving it fails.
+
 ## Grading by Level (2026-09-28)
 
 ### Different pass marks and grading scales for different sections

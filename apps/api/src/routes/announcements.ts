@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { logger } from '../config/logger';
 import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
@@ -82,15 +83,19 @@ router.post(
 
       // AUDIT Round 10 L-04: a school-wide broadcast reaches every targeted user's
       // inbox and email, and previously left no record of who published it.
-      logAudit({
+      // Awaited, and a failure logged rather than swallowed: the broadcast still goes, but a
+      // missing audit record for a school-wide broadcast must be visible (doctrine 10).
+      await logAudit({
         schoolId,
         userId: req.user!.user_id,
         actionType: 'ANNOUNCEMENT_CREATED',
         entity: 'announcements',
         entityId: announcement.id,
         newValue: { title, target_role },
-      }).catch(() => {
-        // Non-critical — never fail the broadcast because logging failed.
+      }).catch(err => {
+        logger.error('announcement_audit_write_failed', {
+          schoolId, announcement_id: announcement.id, error: err instanceof Error ? err.message : String(err),
+        });
       });
 
       // Fan out in-app notifications + batched emails to everyone targeted (non-blocking).

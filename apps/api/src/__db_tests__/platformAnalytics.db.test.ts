@@ -22,6 +22,12 @@ import jwt from 'jsonwebtoken';
 import { seed, IDS as I, pool } from './helpers';
 import superAdminRoutes from '../routes/superAdmin';
 import { errorHandler } from '../middleware/errorHandler';
+import { Pool } from 'pg';
+// OWNER connection, for the statements in this file that are owner work by nature. In C-4a
+// role mode (jest.db.roles.config.js) the shared pool is chronixedu_app, which correctly
+// cannot do them; using the owner here keeps the test about what it says it is about.
+const owner = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+
 
 const app = express();
 app.use(express.json());
@@ -36,7 +42,7 @@ const superToken = () =>
   );
 
 beforeEach(seed);
-afterAll(() => pool.end());
+afterAll(async () => { await pool.end(); await owner.end(); });
 
 /** School B becomes a fixture tenant; School A stays a real customer. */
 async function markBAsDemo(): Promise<void> {
@@ -114,7 +120,7 @@ describe('audit_logs is append-only in the database, not just in the docs', () =
   beforeEach(() => { marker = `TEST_ACTION_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; });
 
   async function anAuditRow(): Promise<void> {
-    await pool.query(
+    await owner.query(
       `INSERT INTO audit_logs (school_id, user_id, action_type, entity, entity_id)
        VALUES ($1, $2, $3, 'test', $2)`,
       [I.schoolA, I.principalA, marker]
@@ -123,29 +129,29 @@ describe('audit_logs is append-only in the database, not just in the docs', () =
 
   it('accepts inserts', async () => {
     await anAuditRow();
-    const { rows } = await pool.query(`SELECT 1 FROM audit_logs WHERE action_type = $1`, [marker]);
+    const { rows } = await owner.query(`SELECT 1 FROM audit_logs WHERE action_type = $1`, [marker]);
     expect(rows).toHaveLength(1);
   });
 
   it('rejects DELETE even as the table owner, which bypasses RLS', async () => {
     await anAuditRow();
     await expect(
-      pool.query(`DELETE FROM audit_logs WHERE action_type = $1`, [marker])
+      owner.query(`DELETE FROM audit_logs WHERE action_type = $1`, [marker])
     ).rejects.toThrow(/append-only/);
-    const { rows } = await pool.query(`SELECT 1 FROM audit_logs WHERE action_type = $1`, [marker]);
+    const { rows } = await owner.query(`SELECT 1 FROM audit_logs WHERE action_type = $1`, [marker]);
     expect(rows).toHaveLength(1);
   });
 
   it('rejects a DELETE that matches no rows, so the rule cannot be probed', async () => {
     await expect(
-      pool.query(`DELETE FROM audit_logs WHERE action_type = 'NOTHING_MATCHES_THIS'`)
+      owner.query(`DELETE FROM audit_logs WHERE action_type = 'NOTHING_MATCHES_THIS'`)
     ).rejects.toThrow(/append-only/);
   });
 
   it('rejects an UPDATE that rewrites the record — that is what append-only means', async () => {
     await anAuditRow();
     await expect(
-      pool.query(`UPDATE audit_logs SET action_type = 'TAMPERED' WHERE action_type = $1`, [marker])
+      owner.query(`UPDATE audit_logs SET action_type = 'TAMPERED' WHERE action_type = $1`, [marker])
     ).rejects.toThrow(/append-only/);
   });
 
@@ -155,9 +161,9 @@ describe('audit_logs is append-only in the database, not just in the docs', () =
     // have been a green deploy with no parent notifications. 037 narrowed it.
     await anAuditRow();
     await expect(
-      pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker])
+      owner.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker])
     ).resolves.toBeDefined();
-    const { rows } = await pool.query<{ processed_at: string | null }>(
+    const { rows } = await owner.query<{ processed_at: string | null }>(
       `SELECT processed_at FROM audit_logs WHERE action_type = $1`, [marker]);
     expect(rows[0].processed_at).not.toBeNull();
   });
@@ -167,24 +173,34 @@ describe('audit_logs is append-only in the database, not just in the docs', () =
     // re-queues every delivered notification. One plausible ops command would have
     // mass-redelivered old alerts to parents.
     await anAuditRow();
-    await pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker]);
+    await owner.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker]);
     await expect(
-      pool.query(`UPDATE audit_logs SET processed_at = NULL WHERE action_type = $1`, [marker])
+      owner.query(`UPDATE audit_logs SET processed_at = NULL WHERE action_type = $1`, [marker])
     ).rejects.toThrow(/write-once/);
   });
 
   it('refuses to re-stamp processed_at with a different time', async () => {
     await anAuditRow();
-    await pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker]);
+    await owner.query(`UPDATE audit_logs SET processed_at = NOW() WHERE action_type = $1`, [marker]);
     await expect(
-      pool.query(`UPDATE audit_logs SET processed_at = NOW() + interval '1 day' WHERE action_type = $1`, [marker])
+      owner.query(`UPDATE audit_logs SET processed_at = NOW() + interval '1 day' WHERE action_type = $1`, [marker])
     ).rejects.toThrow(/write-once/);
   });
 
   it('still rejects a change that smuggles a content edit alongside processed_at', async () => {
     await anAuditRow();
     await expect(
-      pool.query(`UPDATE audit_logs SET processed_at = NOW(), entity = 'tampered' WHERE action_type = $1`, [marker])
+      owner.query(`UPDATE audit_logs SET processed_at = NOW(), entity = 'tampered' WHERE action_type = $1`, [marker])
     ).rejects.toThrow(/append-only/);
   });
+  // The C-4a layer, in the suite rather than only in scripts/c4a/probe.js. Role mode only:
+  // there the shared pool IS chronixedu_app, and a DELETE never reaches the trigger — it is
+  // refused by privilege. In an ordinary run the pool is the owner, so this is skipped, at
+  // collection, and reported as skipped.
+  (process.env.C4A_ROLES === '1' ? it : it.skip)(
+    'as chronixedu_app, a DELETE is refused by privilege before the trigger is reached', async () => {
+      await expect(pool.query(`DELETE FROM audit_logs WHERE action_type = 'NOTHING_MATCHES_THIS'`))
+        .rejects.toThrow(/permission denied for table audit_logs/);
+    });
 });
+

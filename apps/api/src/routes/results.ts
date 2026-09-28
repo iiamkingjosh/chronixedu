@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { logger } from '../config/logger';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { verifyToken, requireRole } from '../middleware/auth';
@@ -445,29 +446,43 @@ router.post(
         newValue:   { term_id, student_count: studentIds.length },
       });
 
-      // Fire-and-forget: queue parent notification job via audit_log
-      // A background worker reads PARENT_NOTIFICATION_QUEUED entries and dispatches messages
-      logAudit({
-        supportSession: req.supportSession,
-        schoolId,
-        userId,
-        actionType: 'PARENT_NOTIFICATION_QUEUED',
-        entity:     'result_status',
-        entityId:   class_id,
-        newValue: {
-          term_id,
-          notification_type: 'results_published',
-          student_ids: studentIds,
-        },
-      }).catch(() => {
-        // Non-critical — do not surface notification errors to the caller
-      });
+      // Queue the parent notification job. This row IS the queue — notificationWorker reads
+      // PARENT_NOTIFICATION_QUEUED entries — so it is awaited, and the response reports what
+      // actually happened. It used to be fire-and-forget with `.catch(() => {})` while the
+      // response said "Parent notifications have been queued" regardless: a failed write
+      // meant results published, parents never told, the principal told they were, and no
+      // record of the failure anywhere. Publishing is not undone if this fails — the results
+      // ARE published — but nobody is told parents were notified when they were not.
+      let notificationsQueued = true;
+      try {
+        await logAudit({
+          supportSession: req.supportSession,
+          schoolId,
+          userId,
+          actionType: 'PARENT_NOTIFICATION_QUEUED',
+          entity:     'result_status',
+          entityId:   class_id,
+          newValue: {
+            term_id,
+            notification_type: 'results_published',
+            student_ids: studentIds,
+          },
+        });
+      } catch (err) {
+        notificationsQueued = false;
+        logger.error('parent_notification_queue_failed', {
+          schoolId, class_id, term_id, student_count: studentIds.length, error: err instanceof Error ? err.message : String(err),
+        });
+      }
 
       return res.json({
         success: true,
         data: {
           published_students: studentIds.length,
-          message: 'Results published. Parent notifications have been queued.',
+          notifications_queued: notificationsQueued,
+          message: notificationsQueued
+            ? 'Results published. Parent notifications have been queued.'
+            : 'Results published, but parent notifications could not be queued. Parents have not been told — please notify them another way or contact support.',
         },
       });
     } catch (err) {
@@ -574,30 +589,42 @@ router.post(
         },
       });
 
-      // Fire-and-forget teacher notification job
-      logAudit({
-        supportSession: req.supportSession,
-        schoolId,
-        userId,
-        actionType: 'TEACHER_NOTIFICATION_QUEUED',
-        entity:     'result_status',
-        entityId:   class_id,
-        newValue: {
-          term_id,
-          notification_type: 'results_returned',
-          reason,
-          teacher_ids: teachers.map(t => t.teacher_id),
-        },
-      }).catch(() => {});
+      // Teacher notification job — awaited and reported truthfully, as for publish above.
+      let notificationsQueued = true;
+      try {
+        await logAudit({
+          supportSession: req.supportSession,
+          schoolId,
+          userId,
+          actionType: 'TEACHER_NOTIFICATION_QUEUED',
+          entity:     'result_status',
+          entityId:   class_id,
+          newValue: {
+            term_id,
+            notification_type: 'results_returned',
+            reason,
+            teacher_ids: teachers.map(t => t.teacher_id),
+          },
+        });
+      } catch (err) {
+        notificationsQueued = false;
+        logger.error('teacher_notification_queue_failed', {
+          schoolId, class_id, term_id, teacher_count: teachers.length, error: err instanceof Error ? err.message : String(err),
+        });
+      }
 
+      const notified = notificationsQueued
+        ? 'Teachers have been notified.'
+        : 'Teachers could NOT be notified automatically — please tell them directly.';
       return res.json({
         success: true,
         data: {
           reset_students: toResetIds.length,
           reset_subjects: resetSubjects.length,
+          notifications_queued: notificationsQueued,
           message: reason
-            ? `Results returned to draft. Teachers have been notified. Reason: ${reason}`
-            : 'Results returned to draft. Teachers have been notified.',
+            ? `Results returned to draft. ${notified} Reason: ${reason}`
+            : `Results returned to draft. ${notified}`,
         },
       });
     } catch (err) {

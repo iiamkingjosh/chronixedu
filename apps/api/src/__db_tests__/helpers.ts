@@ -1,5 +1,6 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
+import { Client } from 'pg';
 import pool from '../db/client';
 import { detectSupportSession } from '../middleware/detectSupportSession';
 import { verifyToken, requirePasswordChanged } from '../middleware/auth';
@@ -138,7 +139,13 @@ export function buildApp(): express.Express {
  * become too slow.
  */
 export async function seed(): Promise<void> {
-  const c = await pool.connect();
+  // The OWNER, always — not the app pool. seed() TRUNCATEs every table, which the C-4a app
+  // role correctly cannot do, and in role mode (jest.db.roles.config.js) the app pool IS
+  // that role. A short-lived client per seed rather than a second pool: nothing is left
+  // open for Jest to wait on, and in ordinary runs it is the same database and user the
+  // pool would have used.
+  const c = new Client({ connectionString: process.env.TEST_DATABASE_URL });
+  await c.connect();
   try {
     await c.query('BEGIN');
     // Below jest.db.config.js's testTimeout (30s) on purpose: whichever fires first
@@ -216,7 +223,7 @@ export async function seed(): Promise<void> {
     await c.query('ROLLBACK').catch(() => undefined);
     throw e;
   } finally {
-    c.release();
+    await c.end();
   }
 }
 

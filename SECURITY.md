@@ -1,8 +1,26 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 13 — 2026-09-28  
-**Scope:** The login connection — TLS and privilege scope (C-4a second read)  
-**Round 13 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+**Latest audit:** Round 14 — 2026-09-28  
+**Scope:** Writes that outlive their request — the notification queue and audit rows  
+**Round 14 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+
+---
+
+## Round 14 — 2026-09-28
+
+**Scope:** Found by running the DB suite under the C-4a app role: the next test's seed deadlocked with an `INSERT INTO audit_logs` from the previous test that was still running after its request had returned. Postgres's deadlock report named it.
+
+### M-01 — The notification queue was written fire-and-forget, and the response claimed it had been ✅ Fixed
+
+**Files:** `apps/api/src/routes/results.ts`, `attendance.ts`, `behaviour.ts`, `announcements.ts`, `roster.ts`, `sessions.ts`, `apps/api/src/__db_tests__/notificationQueue.db.test.ts`
+
+**Fix:** `audit_logs` rows with `PARENT_NOTIFICATION_QUEUED` / `TEACHER_NOTIFICATION_QUEUED` *are* the notification queue — `notificationWorker` reads them. `POST /results/publish` wrote that row with `logAudit(…).catch(() => {})`, not awaited, and answered *"Results published. Parent notifications have been queued."* regardless. If the write failed — a pool timeout, a deadlock, a constraint — results were published, the principal was told parents had been notified, no queue row existed, and nothing anywhere recorded the failure. `POST /results/return` did the same for teachers ("Teachers have been notified"). The low-attendance and behaviour alerts wrote their queue rows the same way.
+
+The two results routes now await the queue write and report it: `notifications_queued: true|false`, with a message that says plainly when parents or teachers could **not** be notified, and a `parent_notification_queue_failed` / `teacher_notification_queue_failed` error log. Publishing is not undone when the queue write fails — the results are published — but nobody is told a notification went out when it did not. The attendance, behaviour and announcement writes are awaited and their failures logged instead of swallowed. Four more audit writes (`TERM_CREATED`, `TERM_UPDATED`, `TEACHER_ASSIGNMENTS_BULK_CREATED`, `TEACHER_ASSIGNMENTS_COPIED`) were awaited but ended in `.catch(() => {})`: a sensitive write could lose its audit row with no trace (doctrine 10). Now logged.
+
+`notificationQueue.db.test.ts` forces the queue write to fail with a trigger that rejects exactly that row, so its tests fail on the old code deterministically rather than by losing a timing race — 4 of 4 on the old code, 4 of 4 passing on the new.
+
+**Not changed, named instead:** in-app message notifications and welcome emails (including the ones that carry a parent's first login credentials) are still sent fire-and-forget with failures swallowed. That belongs to the messaging audit on the standing list, where it is recorded.
 
 ---
 

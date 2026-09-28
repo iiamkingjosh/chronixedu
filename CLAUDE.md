@@ -212,6 +212,13 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   fixture the test needs (preferred — `__db_tests__` has a deterministic `seed()`), or skip
   with `it.skip` / a probe whose stated reason reaches the output, as
   `studentsBulkImport` does. Never a `console.warn` and an early return.
+- **Never write a queue row or an audit row fire-and-forget, and never swallow its failure.**
+  `audit_logs` doubles as the notification queue (`*_NOTIFICATION_QUEUED`), so a write that
+  outlives its request, or ends in `.catch(() => {})`, can lose a parent notification while
+  the response says it was queued — which `POST /results/publish` did. Await it; if the
+  write can fail without undoing the operation, log the failure and make the response say
+  so (`notifications_queued: false`). Found because an un-awaited INSERT deadlocked with
+  the next test's seed.
 - **A test stub of a platform object must mirror production verbatim in every property a
   test depends on** — not "equivalently". `scripts/sql/test_supabase_stubs.sql`'s `auth.uid()`
   called `auth.jwt()` by schema-qualified name where production's names only

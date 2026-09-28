@@ -96,11 +96,30 @@ before cutover** — the only step that turns "read" into "measured" here.
 - Neither role can `DISABLE TRIGGER` or set `session_replication_role` — doctrine 6's
   escape hatches stay the owner's.
 
+## Suites under the roles — done for the DB suite
+
+`npm run test:db:roles` (`jest.db.roles.config.js`) runs the whole DB suite with the app pool
+connected as `chronixedu_app`, holding exactly `grants.sql`. The seed connects as the owner
+through its own short-lived client (it TRUNCATEs, which the role correctly cannot).
+`c4aRoleMode.db.test.ts` asserts which user each connection actually is, in both modes — a
+role-mode run that had silently fallen back to the owner would otherwise report the same
+zero product failures as a correct one (doctrine 16).
+
+**Result: 212 passed, 3 skipped (the policy-drift test, skipped at collection in this mode
+by design), 0 failed.** No product route hit `permission denied`. The first run had 17
+failures, all tests doing owner work through the app pool — switching to `anon` /
+`authenticated`, proving the audit trigger fires *for the owner*, creating a stand-in
+`auth.users` — each now on an explicit `owner` connection named in the test.
+
+It also found a product defect: a deadlock between the next test's seed and an
+`INSERT INTO audit_logs` still in flight from the previous test. That INSERT was the parent
+notification queue row, written fire-and-forget while the publish response claimed it had
+been queued (SECURITY.md Round 14, fixed).
+
 ## Next
 
-- **Run the DB and integration suites under the roles** — the end-to-end proof. The harness
-  must seed through an owner connection (the seed TRUNCATEs, which the role correctly
-  cannot): step 5's separate connection strings, in the tests first.
+- **The integration suite under the roles**, including POST /login on `chronixedu_login` —
+  the DB suite does not exercise the login route.
 - Turn `grants.sql` into a migration: roles created NOLOGIN, `LOGIN PASSWORD` set by hand at
   cutover; the boundary check becomes a DB test in the same commit.
 - 40 granted-but-unused privileges (`crosscheck.md` §2): narrowing, per table, after cutover.

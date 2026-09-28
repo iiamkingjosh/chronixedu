@@ -33,6 +33,19 @@ export default async function globalSetup(): Promise<void> {
         throw new Error(`Migration ${file} failed: ${(err as Error).message}`);
       }
     }
+    if (process.env.C4A_ROLES === '1') {
+      // The proposed grant set, applied exactly as it would ship. The password is local-only
+      // and exists solely so the app pool can log in as the role; production's is set out of
+      // band at cutover and never lives in the repo. Both guards above (local host, *_test
+      // database) have already passed by this point.
+      for (const role of ['chronixedu_app', 'chronixedu_login']) {
+        await client.query(`DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN CREATE ROLE ${role}; END IF;
+        END $$`);
+        await client.query(`ALTER ROLE ${role} LOGIN PASSWORD 'c4a-local-test-only'`);
+      }
+      await client.query(fs.readFileSync(path.join(root, 'docs/c4a/grants.sql'), 'utf8'));
+    }
   } finally {
     await client.end();
   }
