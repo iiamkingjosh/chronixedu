@@ -138,7 +138,10 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    `seed()` is one transaction with `SET LOCAL statement_timeout` and
    `idle_in_transaction_session_timeout` below Jest's, so Postgres rolls back and the
    failure lands in the test that owns it. Jest's timeout is the outer backstop, not the
-   guard.
+   guard. A second instance surfaced the same day: `cronLock.db.test.ts` slept 100ms and
+   assumed the first job held a lock by then, and under load it deadlocked itself. **A
+   sleep in a test is a guess about scheduling standing in for a synchronisation** —
+   await a signal the code under test emits instead.
 
 ## Auth (as built)
 
@@ -176,6 +179,17 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   or their **school** either. Teardown therefore guards those deletes:
   `AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)` and the
   `school_id` equivalent, leaving the audited ones behind.
+- **A test that returns early counts as a pass.** `if (skip) return;` inside `it()` is
+  reported by Jest as PASSED, so a run where the assertions never executed is
+  indistinguishable from one where they held — doctrine 9 inside a test.
+  `tests/resultEngine.test.ts` did this for three and a half months: it needed a student's
+  scores to exist in whatever database it hit, the integration fixture never seeded them,
+  and the integration count carried three passes that tested nothing. Two of them would
+  also have *thrown*, because migration 028 had since removed the constraint their
+  `ON CONFLICT` named — the skip hid a broken test, not just an idle one. Either build the
+  fixture the test needs (preferred — `__db_tests__` has a deterministic `seed()`), or skip
+  with `it.skip` / a probe whose stated reason reaches the output, as
+  `studentsBulkImport` does. Never a `console.warn` and an early return.
 - That is only safe because both runners refuse a non-local database (`ALLOW_REMOTE_TEST_DB`,
   `ALLOW_REMOTE_TEST_SUPABASE`), so the leftovers land somewhere disposable. **Do not "fix"
   it by letting tests delete audit rows** — a session flag or role that permits it converts
