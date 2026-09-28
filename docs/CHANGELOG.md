@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Grading by Level (2026-09-28)
+
+### Different pass marks and grading scales for different sections
+- New **Grading by Level** settings page. A school running, say, a primary and a secondary section can give each its own pass mark, its own grading scale, or both — report cards and the at-risk list already use them.
+- A level left on *Same as school-wide* keeps following the school's Grading Scale settings, including later changes. A level given its own value keeps it.
+- The page warns about levels spelled two different ways (e.g. "JSS" and "jss"), which are treated as separate levels, and about saved settings for levels no class uses any more.
+
 ## Notices (2026-09-27)
 
 ### Staff can post class notices

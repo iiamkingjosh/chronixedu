@@ -34,6 +34,7 @@ export const SETTINGS_NAV: NavItem[] = [
   { label: 'Academic Structure', href: '/settings/academic-structure' },
   { label: 'Roster', href: '/settings/roster' },
   { label: 'Grading Scale', href: '/settings/grading-scale' },
+  { label: 'Grading by Level', href: '/settings/level-grading' },
   { label: 'Assessment Config', href: '/settings/assessment-config' },
   { label: 'Report Card', href: '/settings/report-card' },
   { label: 'Notifications', href: '/settings/notifications' },

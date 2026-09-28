@@ -141,7 +141,11 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    guard. A second instance surfaced the same day: `cronLock.db.test.ts` slept 100ms and
    assumed the first job held a lock by then, and under load it deadlocked itself. **A
    sleep in a test is a guess about scheduling standing in for a synchronisation** —
-   await a signal the code under test emits instead.
+   await a signal the code under test emits instead. And **a timeout reports where it was
+   waiting, which is rarely where the fault is**: `pg-pool`'s "timeout exceeded when trying
+   to connect" named the database while the process was being descheduled by a paging
+   host and Postgres sat idle. Of the three timeouts met this week, only
+   `statement_timeout` both stopped the work and named the cause.
 
 ## Auth (as built)
 
@@ -218,6 +222,17 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   that level. Resolved in `fetchAcademicConfig(schoolId, classId)` and mirrored in
   report-card generation — any new code serving grades must resolve per class, not
   per school.
+- **Set from `/settings/level-grading`**, which reads `GET /:schoolId/academic-config/levels`
+  (uncached; the levels real classes carry, plus `orphaned_overrides` for keys no class
+  has and `near_duplicate_levels` for "JSS"/"jss "-style splits) and saves with the
+  existing PATCH. Saving **replaces the whole `level_overrides` map**, so the screen sends
+  every override it intends to keep — orphans included, unless removed on purpose.
+- Each field is "same as school-wide" (absent) or "its own value" (present). They differ
+  even when the numbers match: absent follows later school-wide changes, present is
+  pinned (doctrine 8, tested in `levelOverrides.db.test.ts`). Never pre-fill an override
+  with the school-wide value — saving it would pin a setting nobody chose to pin.
+- `updateAcademicConfig` is an upsert. It was an UPDATE, which matched nothing for a
+  school without a `school_settings` row and still answered "updated".
 
 ## Partner integration (Chronix ERP)
 

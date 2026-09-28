@@ -103,17 +103,58 @@ export async function updateIdentityConfig(
   );
 }
 
+/**
+ * Merges `patch` into the school's academic_config at the top level — so a patch that
+ * carries only `level_overrides` replaces that key and leaves the school-wide scale and
+ * pass mark alone.
+ *
+ * An upsert, not an UPDATE. It was `UPDATE … WHERE school_id = $2`, which matches zero
+ * rows for a school with no school_settings row — and the route still answered
+ * "Academic config updated". A save that reports success and changes nothing. Measured
+ * 28 Sep 2026: every customer school has a row (only fixture schools created by raw
+ * INSERT lack one), so this was latent rather than live — but the level-overrides screen
+ * saves through here, and it should not inherit a success message that can be false.
+ * Every column has a default and school_id is UNIQUE, so the insert branch is complete.
+ */
 export async function updateAcademicConfig(
   schoolId: string,
   patch: Record<string, unknown>
 ): Promise<void> {
   await pool.query(
-    `UPDATE school_settings
-     SET academic_config = academic_config || $1::jsonb,
-         updated_at = NOW()
-     WHERE school_id = $2`,
+    `INSERT INTO school_settings (school_id, academic_config)
+     VALUES ($2, $1::jsonb)
+     ON CONFLICT (school_id) DO UPDATE
+       SET academic_config = school_settings.academic_config || EXCLUDED.academic_config,
+           updated_at = NOW()`,
     [JSON.stringify(patch), schoolId]
   );
+}
+
+export interface ClassLevelRow {
+  level: string;
+  class_names: string[];
+}
+
+/** Every distinct classes.level in the school, with the classes that carry it. */
+export async function listClassLevels(schoolId: string): Promise<ClassLevelRow[]> {
+  const result = await pool.query<ClassLevelRow>(
+    `SELECT level, array_agg(name ORDER BY name) AS class_names
+       FROM classes
+      WHERE school_id = $1 AND level IS NOT NULL AND level <> ''
+      GROUP BY level
+      ORDER BY level`,
+    [schoolId]
+  );
+  return result.rows;
+}
+
+/** academic_config read straight from the row — no cache, so a screen that just saved sees what it saved. */
+export async function findAcademicConfig(schoolId: string): Promise<Record<string, unknown>> {
+  const result = await pool.query<{ academic_config: Record<string, unknown> }>(
+    `SELECT academic_config FROM school_settings WHERE school_id = $1`,
+    [schoolId]
+  );
+  return result.rows[0]?.academic_config ?? {};
 }
 
 export async function updateNotificationConfig(

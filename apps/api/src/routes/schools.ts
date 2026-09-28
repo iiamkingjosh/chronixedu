@@ -11,6 +11,8 @@ import {
   findSchoolById,
   updateIdentityConfig,
   updateAcademicConfig,
+  listClassLevels,
+  findAcademicConfig,
   updateNotificationConfig,
   updateReportConfig,
   checkPublishedResultsExist,
@@ -300,6 +302,75 @@ router.patch(
       });
 
       return res.json({ success: true, data: { message: 'Identity updated' } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── GET /api/schools/:schoolId/academic-config/levels ─────────────────────────
+// Everything the level-overrides screen needs, in one uncached read.
+//
+// `classes.level` is free text matched EXACTLY by fetchAcademicConfig and the report
+// card, so an override keyed "Jss" or "JSS " for classes whose level is "JSS" silently
+// does nothing — no error, the school-wide values just keep applying. The screen
+// therefore offers only levels that real classes carry, from this list, and never a
+// free-text box. Two further things it could not otherwise see:
+//
+//   - `orphaned_overrides`: keys that match no class's level. They are live config that
+//     affects nothing, which is worse than no config because it looks like a decision.
+//   - `near_duplicate_levels`: levels that differ only in case or surrounding spaces
+//     ("JSS" / "jss "). Those are two different levels to the resolver, so an override
+//     on one does not reach the other's classes.
+//
+// Read from the row rather than GET /:schoolId, which is cached server-side for five
+// minutes and sent with max-age=60. level_overrides is replaced wholesale on save, so a
+// screen that re-read a stale copy would write old overrides back over new ones.
+//
+// Access is this file's requireSchoolAccess: super_admin, or the school's own principal
+// — the same people the PATCH admits, so nobody can see a screen they cannot save.
+
+router.get(
+  '/:schoolId/academic-config/levels',
+  verifyToken,
+  requireSchoolAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { schoolId } = req.params;
+      const [levels, config] = await Promise.all([listClassLevels(schoolId), findAcademicConfig(schoolId)]);
+
+      const overrides = (config.level_overrides ?? {}) as Record<string, unknown>;
+      const known = new Set(levels.map(l => l.level));
+      const orphaned_overrides = Object.keys(overrides).filter(k => !known.has(k));
+
+      const byNormalised = new Map<string, string[]>();
+      for (const { level } of levels) {
+        const key = level.trim().toLowerCase();
+        byNormalised.set(key, [...(byNormalised.get(key) ?? []), level]);
+      }
+      // Sorted here rather than trusting ORDER BY: collation decides whether 'junior '
+      // precedes 'Junior', and it differs between databases. The screen should not
+      // reorder itself depending on where it is deployed.
+      const near_duplicate_levels = [...byNormalised.values()]
+        .filter(group => group.length > 1)
+        .map(group => [...group].sort());
+
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({
+        success: true,
+        data: {
+          levels,
+          school_wide: {
+            // null means NOT SET, deliberately distinct from any number (doctrine 8): the
+            // screen says "no school-wide pass mark" rather than inventing one.
+            promotion_cutoff: typeof config.promotion_cutoff === 'number' ? config.promotion_cutoff : null,
+            grading_scale: Array.isArray(config.grading_scale) ? config.grading_scale : [],
+          },
+          level_overrides: overrides,
+          orphaned_overrides,
+          near_duplicate_levels,
+        },
+      });
     } catch (err) {
       return next(err);
     }

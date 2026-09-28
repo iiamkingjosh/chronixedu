@@ -83,13 +83,16 @@ describe('updateIdentityConfig', () => {
 });
 
 describe('updateAcademicConfig', () => {
-  it('merges patch into academic_config JSONB', async () => {
+  it('merges patch into academic_config JSONB, creating the row if the school has none', async () => {
+    // Upsert: the old UPDATE matched zero rows for a school with no school_settings row
+    // and the route still said "updated". This asserts the SQL's shape only; the
+    // behaviour is proven against a real database in levelOverrides.db.test.ts.
     mockQuery.mockResolvedValueOnce({ rows: [] });
     await updateAcademicConfig('abc', { promotion_cutoff: 45 });
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.stringContaining('academic_config = academic_config ||'),
-      [JSON.stringify({ promotion_cutoff: 45 }), 'abc']
-    );
+    const [sql, params] = mockQuery.mock.calls[mockQuery.mock.calls.length - 1];
+    expect(sql).toContain('ON CONFLICT (school_id) DO UPDATE');
+    expect(sql).toContain('school_settings.academic_config || EXCLUDED.academic_config');
+    expect(params).toEqual([JSON.stringify({ promotion_cutoff: 45 }), 'abc']);
   });
 });
 
