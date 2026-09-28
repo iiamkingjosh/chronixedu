@@ -10,7 +10,6 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import ExcelJS from 'exceljs';
 import bcrypt from 'bcryptjs';
-import { supabaseAdmin } from '../src/supabaseClient';
 
 import pool from '../src/db/client';
 import studentsRouter from '../src/routes/students';
@@ -142,17 +141,21 @@ describe('POST /:schoolId/students/bulk-import/preview', () => {
   });
 });
 
+/**
+ * Every commit test creates real Supabase Auth identities, so when Auth is unreachable
+ * or its key does not match SUPABASE_URL, every row fails with created: 0 and the suite
+ * looks exactly like a regression. Those tests are skipped — and skipped in the RUNNER,
+ * not with `console.warn` + `return`, which Jest counts as a pass. The probe lives in
+ * jest.globalSetup.ts because a skip must be decided at collection time, before any
+ * beforeAll can run. `rejects a teacher with 403` needs no Auth and uses plain `it`.
+ */
+const authUnavailable = process.env.TEST_AUTH_UNAVAILABLE ?? '';
+const itWithAuth = authUnavailable ? it.skip : it;
+
 describe('POST /:schoolId/students/bulk-import/commit', () => {
   let schoolId: string;
   let registrarToken: string;
   let teacherToken: string;
-  /**
-   * Set when Supabase Auth is unreachable or its key does not match SUPABASE_URL.
-   * Every commit here creates real auth identities, so in that case every row fails
-   * with created: 0 and the suite looks exactly like a regression. An environmental
-   * failure indistinguishable from a broken build is worse than an explicit skip.
-   */
-  let authUnavailable = '';
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
@@ -175,12 +178,6 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     );
     teacherToken = makeToken(teacherResult.rows[0].id, 'teacher', schoolId, teacherResult.rows[0].email);
 
-    const probe = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1 });
-    if (probe.error) {
-      authUnavailable = `Supabase Auth unusable at ${process.env.SUPABASE_URL}: ${probe.error.message}. `
-        + 'Point SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY at the same project.';
-      console.warn(`studentsBulkImport commit tests SKIPPED — ${authUnavailable}`);
-    }
   }, 30000);
 
   afterAll(async () => {
@@ -210,8 +207,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     expect(res.status).toBe(403);
   });
 
-  it('creates students and a new parent, and the results file carries a working per-student password', async () => {
-    if (authUnavailable) { console.warn(`SKIPPED: ${authUnavailable}`); return; }
+  itWithAuth('creates students and a new parent, and the results file carries a working per-student password', async () => {
     const studentEmail = `commit-student-${randomUUID()}@test.com`;
     const parentEmail = `commit-parent-${randomUUID()}@test.com`;
     const buffer = await xlsxBuffer(
@@ -249,8 +245,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     expect(parentRow.rows).toHaveLength(1);
   });
 
-  it('reuses an existing parent by email instead of creating a duplicate, for two siblings in the same file', async () => {
-    if (authUnavailable) { console.warn(`SKIPPED: ${authUnavailable}`); return; }
+  itWithAuth('reuses an existing parent by email instead of creating a duplicate, for two siblings in the same file', async () => {
     const sharedParentEmail = `shared-parent-${randomUUID()}@test.com`;
     const buffer = await xlsxBuffer(
       ['First Name', 'Last Name', 'Email', 'Parent 1 First Name', 'Parent 1 Last Name', 'Parent 1 Email', 'Parent 1 Relationship'],
@@ -267,14 +262,24 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
       .send({ rows });
 
     expect(res.status).toBe(200);
+    // Asserted as the failed rows WITH their reasons before the bare count. This test
+    // fails intermittently — roughly 1 run in 8, reproduced on code that predates the
+    // change that surfaced it — with created: 1 where 2 is expected. Rows are committed
+    // sequentially, so it is not a race inside the batch, and `created` alone never said
+    // which row failed or why. Now the next failure names its own cause. Open item in
+    // docs/AUDIT-2026-09.md: it may be a real product defect, since a school importing
+    // two siblings who share a parent would lose one registration.
+    const failedRows = (res.body.data.results as Array<{ status: string; row_number: number; reason?: string }>)
+      .filter(r => r.status === 'failed')
+      .map(r => ({ row_number: r.row_number, reason: r.reason }));
+    expect(failedRows).toEqual([]);
     expect(res.body.data.created).toBe(2);
 
     const parentRows = await pool.query(`SELECT id FROM users WHERE email = $1`, [sharedParentEmail]);
     expect(parentRows.rows).toHaveLength(1); // one parent account, not two
   });
 
-  it('re-validates at commit and rejects a row that conflicted after preview', async () => {
-    if (authUnavailable) { console.warn(`SKIPPED: ${authUnavailable}`); return; }
+  itWithAuth('re-validates at commit and rejects a row that conflicted after preview', async () => {
     const goodEmail = `good-${randomUUID()}@test.com`;
     const conflictEmail = `will-conflict-${randomUUID()}@test.com`;
 
@@ -311,8 +316,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     expect(goodRow.rows).toHaveLength(1);
   });
 
-  it('does not roll back other rows when registerStudent itself fails partway through the batch', async () => {
-    if (authUnavailable) { console.warn(`SKIPPED: ${authUnavailable}`); return; }
+  itWithAuth('does not roll back other rows when registerStudent itself fails partway through the batch', async () => {
     const goodEmail = `good-${randomUUID()}@test.com`;
     const failEmail = `will-fail-${randomUUID()}@test.com`;
     const buffer = await xlsxBuffer(
@@ -353,8 +357,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     }
   });
 
-  it('accepts a full 50-row batch', async () => {
-    if (authUnavailable) { console.warn(`SKIPPED: ${authUnavailable}`); return; }
+  itWithAuth('accepts a full 50-row batch', async () => {
     // MAX_BULK_IMPORT_ROWS was lowered from 200 to 50 (measured ~2.7s/row
     // end-to-end for the commit route, so a full 200-row commit would be an
     // unacceptably long ~9-minute synchronous HTTP request). At 50 rows the

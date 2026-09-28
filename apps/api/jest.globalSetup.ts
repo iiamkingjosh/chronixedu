@@ -4,6 +4,7 @@ import path from 'path';
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 import { Client } from 'pg';
+import { createClient } from '@supabase/supabase-js';
 
 // These fixture IDs are hardcoded across all integration tests.
 // They must exist in the database before tests run.
@@ -58,6 +59,25 @@ export default async function globalSetup(): Promise<void> {
         `if you are certain this is NOT production.`
       );
     }
+  }
+
+  // Is Supabase Auth usable? Decided HERE, before any test file is collected, because
+  // that is the only point at which a test can still be marked skipped. Jest chooses
+  // `it` vs `it.skip` synchronously while collecting a file — before any beforeAll runs —
+  // so a probe inside the suite can only ever produce `console.warn` + `return`, and an
+  // early return is reported as PASSED. tests/resultEngine.test.ts did exactly that for
+  // three and a half months; studentsBulkImport's five commit tests did it whenever Auth
+  // was down, inflating `passed` by five.
+  //
+  // Handed to the test files through process.env: test environments are created after
+  // globalSetup completes, from the parent's environment, so the value is visible at
+  // collection time. Always written, empty when Auth works, so a value left over from a
+  // previous shell cannot skip tests that could run.
+  process.env.TEST_AUTH_UNAVAILABLE = await probeAuth();
+  if (process.env.TEST_AUTH_UNAVAILABLE) {
+    console.warn(`
+[globalSetup] Supabase Auth unusable — Auth-dependent tests will be SKIPPED: ${process.env.TEST_AUTH_UNAVAILABLE}
+`);
   }
 
   const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -155,4 +175,33 @@ export default async function globalSetup(): Promise<void> {
   } finally {
     await client.end();
   }
+}
+
+/**
+ * Empty string when Auth is usable; otherwise the reason it is not.
+ *
+ * Retried, because a skip has to mean "Auth is unavailable", not "one connection
+ * dropped". Observed 28 Sep 2026 against a healthy local stack: a single probe returned
+ * `fetch failed` and skipped five tests that could have run. Three attempts 500ms apart
+ * separate a lost packet from a stack that is actually down, and the reason reported is
+ * the last attempt's, so a real outage still says what it is.
+ */
+async function probeAuth(): Promise<string> {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return 'SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set';
+  const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  let reason = '';
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const { error } = await admin.auth.admin.listUsers({ page: 1, perPage: 1 });
+      if (!error) return '';
+      reason = `${url}: ${error.message} (after ${attempt} attempt${attempt > 1 ? 's' : ''}). `
+        + 'Point SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY at the same project.';
+    } catch (err) {
+      reason = `${url}: ${(err as Error).message} (after ${attempt} attempt${attempt > 1 ? 's' : ''})`;
+    }
+    if (attempt < 3) await new Promise(r => setTimeout(r, 500));
+  }
+  return reason;
 }

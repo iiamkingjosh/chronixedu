@@ -33,7 +33,7 @@ describe('H-1: score targets are validated', () => {
   });
 
   it('rejects scores above max_score and duplicate bulk rows', async () => {
-    expect((await entry(I.s1, I.ca1, 31)).status).toBe(400);
+    expect((await entry(I.s1, I.ca1, 51)).status).toBe(400); // CA1 max is 50
     const b = await bulk([
       { student_id: I.s1, component_id: I.exam, score: 5 },
       { student_id: I.s1, component_id: I.exam, score: 6 },

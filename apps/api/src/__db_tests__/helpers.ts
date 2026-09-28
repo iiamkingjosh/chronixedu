@@ -76,9 +76,27 @@ export function buildApp(): express.Express {
 }
 
 /**
- * Wipes all tenant data and seeds two schools. School A: JSS 2A (s1, s2) taught Math +
- * English; JSS 3B (s3). School-wide default config with CA1 (max 30) and Exam (max 70)
- * shared by all subjects.
+ * Wipes all tenant data and seeds two schools. School A: JSS 2A (s1, s2, level Junior)
+ * taught Math + English; SSS 1B (s3, level Senior — still `IDS.jss3b`, kept for the
+ * dozens of references). School-wide default config with CA1 (max 50, weight 30) and
+ * Exam (max 100, weight 70) shared by all subjects.
+ *
+ * ## No accidental identities
+ *
+ * A fixture value that makes an operation equivalent to doing nothing makes every test of
+ * that operation unfalsifiable, however well written. Three were found and removed on
+ * 28 Sep 2026; keep it that way when editing this file:
+ *
+ *   - **Component max ≠ weight.** It was 30/30 and 70/70, so `score / max × weight` was
+ *     the identity and every test that entered scores would have passed with the
+ *     weighting deleted. Now ×0.6 for CA1 and ×0.7 for Exam, so a raw-score bug, a
+ *     max/weight swap and a CA/Exam mix-up each change the answer.
+ *   - **Classes differ in level.** Both were "Junior", so per-class level resolution —
+ *     `level_overrides`, class-level assessment configs — could not be told apart from
+ *     "use any class's level". Now Junior and Senior.
+ *   - **The two schools' terms differ in dates.** They were identical, so a date lookup
+ *     missing its `school_id` filter returned the wrong tenant's term only sometimes.
+ *     Different dates make that bug deterministic.
  *
  * ## Why this is one transaction on one connection
  *
@@ -141,7 +159,7 @@ export async function seed(): Promise<void> {
              VALUES ($1,$2,'2026/2027','2026-09-01','2027-07-31',true),($3,$4,'2026/2027','2026-09-01','2027-07-31',true)`,
       [I.sessionA, I.schoolA, I.sessionB, I.schoolB]);
     await q(`INSERT INTO terms (id, session_id, school_id, name, start_date, end_date, is_current)
-             VALUES ($1,$2,$3,'First Term','2026-09-01','2026-12-18',true),($4,$5,$6,'First Term','2026-09-01','2026-12-18',true)`,
+             VALUES ($1,$2,$3,'First Term','2026-09-01','2026-12-18',true),($4,$5,$6,'First Term','2026-09-08','2026-12-11',true)`,
       [I.termA, I.sessionA, I.schoolA, I.termB, I.sessionB, I.schoolB]);
 
     const user = (uid: string, school: string, role: string, first: string) =>
@@ -157,7 +175,7 @@ export async function seed(): Promise<void> {
     // cannot exist any earlier. This is the order the onboarding wizard uses.
     await q(`UPDATE schools SET is_active = TRUE WHERE id = ANY($1::uuid[])`, [[I.schoolA, I.schoolB]]);
 
-    await q(`INSERT INTO classes (id, school_id, name, level) VALUES ($1,$2,'JSS 2A','Junior'),($3,$2,'JSS 3B','Junior')`, [I.jss2a, I.schoolA, I.jss3b]);
+    await q(`INSERT INTO classes (id, school_id, name, level) VALUES ($1,$2,'JSS 2A','Junior'),($3,$2,'SSS 1B','Senior')`, [I.jss2a, I.schoolA, I.jss3b]);
     await q(`INSERT INTO subjects (id, school_id, name, code) VALUES ($1,$2,'Mathematics','MTH'),($3,$2,'English','ENG')`, [I.math, I.schoolA, I.english]);
 
     const student = async (sid: string, school: string, n: number) => {
@@ -185,7 +203,7 @@ export async function seed(): Promise<void> {
     // 002), so it fires once at the COMMIT below, after both rows exist.
     await q(`INSERT INTO assessment_configs (id, school_id, term_id, is_default) VALUES ($1,$2,$3,true)`, [I.configA, I.schoolA, I.termA]);
     await q(`INSERT INTO assessment_components (id, config_id, name, max_score, weight_percent, display_order)
-             VALUES ($1,$3,'CA1',30,30,1),($2,$3,'Exam',70,70,2)`, [I.ca1, I.exam, I.configA]);
+             VALUES ($1,$3,'CA1',50,30,1),($2,$3,'Exam',100,70,2)`, [I.ca1, I.exam, I.configA]);
 
     await c.query('COMMIT');
   } catch (e) {

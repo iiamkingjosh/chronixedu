@@ -123,7 +123,7 @@ describe('carrying assignments into a new term', () => {
 
 describe('per-level grading overrides', () => {
   /** The shared seed creates no school_settings row, so write the academic config
-   *  the test needs. jss2a and jss3b are both level "Junior". */
+   *  the test needs. jss2a is level "Junior"; jss3b is level "Senior". */
   async function setAcademicConfig(config: Record<string, unknown>) {
     await pool.query(
       `INSERT INTO school_settings (school_id, academic_config)
@@ -133,14 +133,14 @@ describe('per-level grading overrides', () => {
     );
   }
 
-  /** Scores both students to a 65% overall average (CA1 20/30 + Exam 45/70). */
+  /** Scores both students to a 65% overall average (CA1 50/50×30 + Exam 50/100×70 = 30 + 35). */
   async function enterMidRangeScores() {
     for (const [tok, subject] of [[tokens.math(), I.math], [tokens.english(), I.english]] as const) {
       await request(app).post(`${base}/scores/bulk-entry`).set('Authorization', tok).send({
         subject_id: subject, class_id: I.jss2a, term_id: I.termA,
         entries: [I.s1, I.s2].flatMap(student_id => [
-          { student_id, component_id: I.ca1, score: 20 },
-          { student_id, component_id: I.exam, score: 45 },
+          { student_id, component_id: I.ca1, score: 50 },
+          { student_id, component_id: I.exam, score: 50 },
         ]),
       });
     }
@@ -174,6 +174,41 @@ describe('per-level grading overrides', () => {
 
     // "Junior" has no override, so the school-wide 40 applies and 65% is not at risk.
     expect(await getStudentsAtRisk(I.termA, I.schoolA)).toEqual([]);
+  });
+
+  it('resolves the level PER CLASS — a Senior override reaches the Senior student and not the Junior one', async () => {
+    // Unwritable against the old seed, where every class was "Junior": any bug that took
+    // the level from the wrong class — the first class in the school, the first row
+    // returned — produced the right answer by coincidence. Two students, same 65%, same
+    // school, same term; only their class's level differs, so only the override can
+    // separate them.
+    await setAcademicConfig({
+      promotion_cutoff: 40,
+      level_overrides: { Senior: { promotion_cutoff: 90 } },
+    });
+    // computeClassResults takes a class's subjects from teacher_assignments, and the seed
+    // assigns nothing in jss3b — so without this, s3's score is (correctly) never counted
+    // and the test passes or fails for a reason unrelated to levels. The first draft of
+    // this test did exactly that. In the product a score can only be entered through an
+    // assignment, so this is the precondition the product enforces, not a workaround.
+    await pool.query(
+      `INSERT INTO teacher_assignments (teacher_id, class_id, subject_id, term_id, school_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [I.mathTeacher, I.jss3b, I.math, I.termA, I.schoolA]
+    );
+    for (const student of [I.s1, I.s3OtherClass]) {
+      await pool.query(
+        `INSERT INTO scores (school_id, student_id, subject_id, term_id, component_id, score)
+         VALUES ($1,$2,$3,$4,$5,50), ($1,$2,$3,$4,$6,50)`,
+        [I.schoolA, student, I.math, I.termA, I.ca1, I.exam]
+      );
+    }
+
+    const atRisk = await getStudentsAtRisk(I.termA, I.schoolA);
+    expect(atRisk.map(s => s.student_id)).toEqual([I.s3OtherClass]); // Senior, cut-off 90
+    expect(atRisk[0].promotion_cutoff).toBe(90);
+    expect(atRisk[0].deficit).toBe(25);
+    // s1 is Junior: the school-wide 40 applies, and 65 clears it.
   });
 
   it('uses the school-wide cut-off when no overrides are configured at all', async () => {

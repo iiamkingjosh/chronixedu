@@ -113,7 +113,7 @@ describe('class-summary — the numbers a principal is approving', () => {
     // useless — the principal would see an empty sheet and be asked to approve it.
     await pool.query(
       `INSERT INTO scores (school_id, student_id, subject_id, term_id, component_id, score)
-       VALUES ($1,$2,$3,$4,$5,25), ($1,$2,$3,$4,$6,60)`,
+       VALUES ($1,$2,$3,$4,$5,25), ($1,$2,$3,$4,$6,100)`,
       [I.schoolA, I.s1, I.math, I.termA, I.ca1, I.exam]
     );
     const published = await pool.query(
@@ -126,7 +126,7 @@ describe('class-summary — the numbers a principal is approving', () => {
     expect(scored).toBeGreaterThan(0);
 
     const s1 = res.body.data.students.find((s: { student_id: string }) => s.student_id === I.s1);
-    expect(s1.overall_average).toBe(85); // 25/30 + 60/70 weighted to a 100-point total
+    expect(s1.overall_average).toBe(85); // 25/50×30 + 100/100×70 = 15 + 70; raw sum would be 125
     // The seed creates no school_settings row — the state 42 of 45 production schools
     // are in. An average without a grade is the correct result there: the school has
     // configured no scale, so there is no grade to report and none is invented.
@@ -161,7 +161,7 @@ describe('class-summary — the numbers a principal is approving', () => {
     );
     await pool.query(
       `INSERT INTO scores (school_id, student_id, subject_id, term_id, component_id, score)
-       VALUES ($1,$2,$3,$4,$5,25), ($1,$2,$3,$4,$6,60)`,
+       VALUES ($1,$2,$3,$4,$5,25), ($1,$2,$3,$4,$6,100)`,
       [I.schoolA, I.s1, I.math, I.termA, I.ca1, I.exam]
     );
 

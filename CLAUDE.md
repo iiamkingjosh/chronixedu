@@ -400,9 +400,30 @@ npx tsc -p apps/api/tsconfig.json --noEmit
 npx tsc -p apps/web/tsconfig.json --noEmit
 npm run test:unit                       # mocked, no DB
 npm run test:db                         # needs TEST_DATABASE_URL=postgres://…/chronixedu_test (local)
+                                        # start it with durability OFF — see below
 npm run test:integration:local          # same local DB; runs after test:db
 (cd apps/web && npx next build)
 ```
+
+Run the local test database with durability off, as CI does — the seed truncates ~45
+tables per test and flushing them is most of the suite's time (225–242s → 99s measured):
+
+```bash
+docker run -d --name chronixedu-test -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=chronixedu_test   -p 5432:5432 postgres:16 -c fsync=off -c synchronous_commit=off -c full_page_writes=off
+```
+
+Only on a disposable container. `jest.db.globalSetup.ts` deliberately does NOT set these:
+its guard checks for a local host and a `_test` name, which a developer's native Postgres
+would also pass — and `fsync` is server-wide, so it would switch off crash safety for every
+other database on that server.
+
+**A flaky local run on Windows is not evidence about the code until the host is ruled out.**
+On 28 Sep 2026 a run of connection timeouts, `ECONNRESET` and two native `0xC0000409`
+crashes of the jest process was traced — after three wrong attributions — to the host
+paging (15.4 GB RAM, 36 GB committed): Postgres idle, TCP connects fast under load, and
+the client's own 10s timer firing through event-loop stalls. Check free memory before
+chasing a flake. The ERP project's Supabase stack runs in the same Docker VM; stop it when
+you are not using it.
 
 Workflow/data-integrity changes need a DB test in `apps/api/src/__db_tests__/`
 that **fails on the old code**. Never point any test at production: both test

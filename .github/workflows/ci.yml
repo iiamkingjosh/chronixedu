@@ -128,6 +128,25 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: '1'
 
+      # A throwaway database needs no crash safety, and the seed pays for it heavily:
+      # beforeEach(seed) TRUNCATEs ~45 tables, and TRUNCATE gives every one a new file that
+      # must be flushed (IO:DataFileImmediateSync). Measured 28 Sep 2026: single TRUNCATEs
+      # of up to 6.9s, against the seed's 20s statement_timeout, and the whole suite at
+      # 225–242s; with these three off, 99s and no I/O wait over a second. Service
+      # containers take no server flags, so this is ALTER SYSTEM + reload (all three are
+      # reloadable without a restart). The last line FAILS the step if fsync is still on,
+      # rather than reporting it: a setting that silently did not apply is doctrine 9.
+      - name: Disable durability on the throwaway test database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d chronixedu_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET fsync = off"
+          psql -h localhost -U postgres -d chronixedu_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET synchronous_commit = off"
+          psql -h localhost -U postgres -d chronixedu_test -v ON_ERROR_STOP=1 -c "ALTER SYSTEM SET full_page_writes = off"
+          psql -h localhost -U postgres -d chronixedu_test -v ON_ERROR_STOP=1 -c "SELECT pg_reload_conf()"
+          sleep 1
+          test "$(psql -h localhost -U postgres -d chronixedu_test -Atc "SELECT current_setting('fsync')")" = off
+
       - name: DB regression + tenant isolation suite
         run: npm run test:db
 
