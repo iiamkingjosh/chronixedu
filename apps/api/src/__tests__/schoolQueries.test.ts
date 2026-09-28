@@ -10,9 +10,16 @@ import {
   checkSubmittedResultsExist,
 } from '../db/queries/schools';
 
+const mockClientQuery = jest.fn();
+const mockRelease = jest.fn();
+
 jest.mock('../db/client', () => ({
   __esModule: true,
-  default: { query: jest.fn() },
+  default: {
+    query: jest.fn(),
+    // updateAcademicConfig runs its read-lock-write on one checked-out client.
+    connect: jest.fn(async () => ({ query: mockClientQuery, release: mockRelease })),
+  },
 }));
 
 const mockQuery = (pool as unknown as { query: jest.Mock }).query;
@@ -83,16 +90,23 @@ describe('updateIdentityConfig', () => {
 });
 
 describe('updateAcademicConfig', () => {
-  it('merges patch into academic_config JSONB, creating the row if the school has none', async () => {
-    // Upsert: the old UPDATE matched zero rows for a school with no school_settings row
-    // and the route still said "updated". This asserts the SQL's shape only; the
-    // behaviour is proven against a real database in levelOverrides.db.test.ts.
-    mockQuery.mockResolvedValueOnce({ rows: [] });
-    await updateAcademicConfig('abc', { promotion_cutoff: 45 });
-    const [sql, params] = mockQuery.mock.calls[mockQuery.mock.calls.length - 1];
-    expect(sql).toContain('ON CONFLICT (school_id) DO UPDATE');
-    expect(sql).toContain('school_settings.academic_config || EXCLUDED.academic_config');
-    expect(params).toEqual([JSON.stringify({ promotion_cutoff: 45 }), 'abc']);
+  it('ensures the row, reads the prior value under a lock, merges, and returns the prior', async () => {
+    // Shape only — the behaviour (a second save names the first's value; a concurrent
+    // save waits) is proven against a real database in settingsAudit.db.test.ts.
+    mockClientQuery.mockImplementation(async (sql: string) =>
+      /FOR UPDATE/.test(sql) ? { rows: [{ cfg: { promotion_cutoff: 40, grading_scale: [] } }] } : { rows: [] });
+
+    const prior = await updateAcademicConfig('abc', { promotion_cutoff: 45 });
+
+    const sqls = mockClientQuery.mock.calls.map(c => String(c[0]));
+    expect(sqls[0]).toBe('BEGIN');
+    expect(sqls[1]).toContain('ON CONFLICT (school_id) DO NOTHING');
+    expect(sqls[2]).toContain('FOR UPDATE');
+    expect(sqls[3]).toContain('academic_config = academic_config || $1::jsonb');
+    expect(sqls[4]).toBe('COMMIT');
+    // Only the patched key, with the value that was there — not the whole config.
+    expect(prior).toEqual({ promotion_cutoff: 40 });
+    expect(mockRelease).toHaveBeenCalled();
   });
 });
 

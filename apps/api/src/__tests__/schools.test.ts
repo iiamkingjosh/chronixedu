@@ -216,7 +216,7 @@ describe('PATCH /api/schools/:schoolId/academic-config', () => {
   it('updates config and returns 200 with no warnings', async () => {
     mockQueries.checkPublishedResultsExist.mockResolvedValueOnce(false);
     mockQueries.checkSubmittedResultsExist.mockResolvedValueOnce(false);
-    mockQueries.updateAcademicConfig.mockResolvedValueOnce(undefined);
+    mockQueries.updateAcademicConfig.mockResolvedValueOnce({}); // the prior values of the patched keys
 
     const res = await request(app)
       .patch('/api/schools/school-uuid-001/academic-config')
@@ -231,7 +231,7 @@ describe('PATCH /api/schools/:schoolId/academic-config', () => {
   it('returns 200 with published warning when published results exist', async () => {
     mockQueries.checkPublishedResultsExist.mockResolvedValueOnce(true);
     mockQueries.checkSubmittedResultsExist.mockResolvedValueOnce(false);
-    mockQueries.updateAcademicConfig.mockResolvedValueOnce(undefined);
+    mockQueries.updateAcademicConfig.mockResolvedValueOnce({}); // the prior values of the patched keys
 
     const res = await request(app)
       .patch('/api/schools/school-uuid-001/academic-config')
@@ -247,7 +247,7 @@ describe('PATCH /api/schools/:schoolId/academic-config', () => {
   it('returns 200 with warnings array when submitted results exist', async () => {
     mockQueries.checkPublishedResultsExist.mockResolvedValueOnce(false);
     mockQueries.checkSubmittedResultsExist.mockResolvedValueOnce(true);
-    mockQueries.updateAcademicConfig.mockResolvedValueOnce(undefined);
+    mockQueries.updateAcademicConfig.mockResolvedValueOnce({}); // the prior values of the patched keys
 
     const res = await request(app)
       .patch('/api/schools/school-uuid-001/academic-config')

@@ -144,7 +144,11 @@ export async function seed(): Promise<void> {
   // that role. A short-lived client per seed rather than a second pool: nothing is left
   // open for Jest to wait on, and in ordinary runs it is the same database and user the
   // pool would have used.
-  const c = new Client({ connectionString: process.env.TEST_DATABASE_URL });
+  // connectionTimeoutMillis matches the pool this replaced. Without it a connect that
+  // stalls on a starved host has no deadline of its own, so it surfaced only as Jest's
+  // 30s "hook timeout" — naming the hook, not the stalled connect — and the seed's
+  // statement_timeout cannot help because no statement has started yet.
+  const c = new Client({ connectionString: process.env.TEST_DATABASE_URL, connectionTimeoutMillis: 10_000 });
   await c.connect();
   try {
     await c.query('BEGIN');

@@ -438,14 +438,17 @@ router.patch(
       if (assessment_components) patch.assessment_components = assessment_components;
       if (level_overrides !== undefined) patch.level_overrides = level_overrides;
 
-      await updateAcademicConfig(req.params.schoolId, patch);
+      // The prior value of exactly the patched keys, read in the statement that writes —
+      // this was a literal null, so every grading change was audited as having no
+      // predecessor.
+      const prior = await updateAcademicConfig(req.params.schoolId, patch);
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logSettingsChange(
         req.params.schoolId,
         req.user!.user_id,
         Object.keys(patch).join(','),
-        null,
+        prior,
         patch
       );
 
@@ -511,8 +514,8 @@ router.patch(
       }
 
       const patch = { min_part_payment_kobo: toKobo(parsed.data.min_part_payment) };
-      await updateFeeConfig(req.params.schoolId, patch);
-      await logSettingsChange(req.params.schoolId, req.user!.user_id, 'min_part_payment_kobo', null, patch);
+      const prior = await updateFeeConfig(req.params.schoolId, patch);
+      await logSettingsChange(req.params.schoolId, req.user!.user_id, 'min_part_payment_kobo', prior, patch);
 
       return res.json({ success: true, data: { message: 'Fee settings updated', min_part_payment: parsed.data.min_part_payment } });
     } catch (err) {

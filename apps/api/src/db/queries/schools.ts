@@ -119,15 +119,65 @@ export async function updateIdentityConfig(
 export async function updateAcademicConfig(
   schoolId: string,
   patch: Record<string, unknown>
-): Promise<void> {
-  await pool.query(
-    `INSERT INTO school_settings (school_id, academic_config)
-     VALUES ($2, $1::jsonb)
-     ON CONFLICT (school_id) DO UPDATE
-       SET academic_config = school_settings.academic_config || EXCLUDED.academic_config,
-           updated_at = NOW()`,
-    [JSON.stringify(patch), schoolId]
-  );
+): Promise<Record<string, unknown>> {
+  return mergeSettingsColumn('academic_config', schoolId, patch);
+}
+
+/**
+ * Merge `patch` into one JSONB settings column and return the PRIOR value of exactly the
+ * keys patched — `null` for a key that had none — read under the lock the write holds.
+ *
+ * Every settings audit row records `{ field, value }` for old and new. The academic-config
+ * and fee-config routes passed a literal `null` as the old value, so the audit trail said
+ * "previous value: null" for every change to grading scales, pass marks, level overrides
+ * and the part-payment minimum, whatever had actually been there. A missing value
+ * announces itself; a recorded `null` reads as authoritative — the second of two saves
+ * eighteen seconds apart claimed its predecessor had set nothing.
+ *
+ * Three statements, one transaction, one connection:
+ *   1. ensure the row exists (so there is always something to lock);
+ *   2. SELECT … FOR UPDATE — waits for any concurrent writer, then reads the latest
+ *      committed value: exactly the state this write replaces;
+ *   3. merge.
+ * A first attempt did it in one statement — a FOR UPDATE CTE beside the upsert CTE. It
+ * returned nothing: the upsert CTE ran first, and FOR UPDATE skips a row already modified
+ * by the same command. The positive test (the second save must name the first's value)
+ * caught it on its first run; an assertion that the old value is null would have passed.
+ * Dropping FOR UPDATE instead would have let a concurrent save record a prior value from
+ * before a write that had already committed.
+ *
+ * Also an upsert rather than `UPDATE … WHERE school_id`, which matched zero rows for a
+ * school without a settings row and still let the route answer "updated".
+ */
+async function mergeSettingsColumn(
+  column: 'academic_config' | 'fee_config',
+  schoolId: string,
+  patch: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO school_settings (school_id) VALUES ($1) ON CONFLICT (school_id) DO NOTHING`,
+      [schoolId]
+    );
+    const { rows } = await client.query<{ cfg: Record<string, unknown> | null }>(
+      `SELECT ${column} AS cfg FROM school_settings WHERE school_id = $1 FOR UPDATE`,
+      [schoolId]
+    );
+    await client.query(
+      `UPDATE school_settings SET ${column} = ${column} || $1::jsonb, updated_at = NOW() WHERE school_id = $2`,
+      [JSON.stringify(patch), schoolId]
+    );
+    await client.query('COMMIT');
+    const prior = rows[0]?.cfg ?? {};
+    return Object.fromEntries(Object.keys(patch).map(k => [k, prior[k] ?? null]));
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export interface ClassLevelRow {
@@ -233,14 +283,8 @@ export const DEFAULT_MIN_PART_PAYMENT_KOBO = 100_000;
 export async function updateFeeConfig(
   schoolId: string,
   patch: Record<string, unknown>
-): Promise<void> {
-  await pool.query(
-    `UPDATE school_settings
-     SET fee_config = fee_config || $1::jsonb,
-         updated_at = NOW()
-     WHERE school_id = $2`,
-    [JSON.stringify(patch), schoolId]
-  );
+): Promise<Record<string, unknown>> {
+  return mergeSettingsColumn('fee_config', schoolId, patch);
 }
 
 export async function resolveMinPartPayment(

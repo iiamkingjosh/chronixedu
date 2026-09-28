@@ -1,8 +1,28 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 14 — 2026-09-28  
-**Scope:** Writes that outlive their request — the notification queue and audit rows  
-**Round 14 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+**Latest audit:** Round 15 — 2026-09-28  
+**Scope:** What the settings audit trail records as a change's prior value  
+**Round 15 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+
+---
+
+## Round 15 — 2026-09-28
+
+**Scope:** Surfaced by reading the audit rows behind the first production use of *Grading by Level*: two saves of the same level override eighteen seconds apart, the second recording its predecessor as having set nothing.
+
+### M-01 — Grading and fee settings changes were audited with a fabricated prior value ✅ Fixed
+
+**Files:** `apps/api/src/db/queries/schools.ts`, `apps/api/src/routes/schools.ts`, `apps/api/src/__db_tests__/settingsAudit.db.test.ts`, `apps/api/src/__tests__/schoolQueries.test.ts`, `apps/api/src/__tests__/schools.test.ts`
+
+**Fix:** `PATCH /academic-config` (grading scales, pass marks, level overrides) and `PATCH /fee-config` (the part-payment minimum) passed a **literal `null`** to `logSettingsChange` as the old value. The audit stores `{ field, value }`, so the column was never NULL — it read as a *recorded* prior value of "nothing", on every such change, whatever had actually been there. A missing value announces itself; a false one reads as authoritative, and it is the field an audit trail exists to answer — in a table that is append-only, trigger-enforced and, after C-4a, privilege-enforced precisely so its contents can be trusted. (The other four `logSettingsChange` call sites already passed real prior values.)
+
+Both paths now read the prior value of exactly the keys being changed **inside the transaction that writes them**: ensure the row exists, `SELECT … FOR UPDATE`, merge, commit — so the recorded prior is the state that immediately preceded this write, and a concurrent save waits on the lock and then records the other's result. Old and new line up key for key.
+
+A first attempt put the read in the same statement as the upsert (a `FOR UPDATE` CTE). It returned nothing: the upsert CTE ran first, and `FOR UPDATE` skips a row already modified by the same command. The positive test caught it on its first run — the second of two saves must name the first save's value — where an assertion that the old value is null would have passed against the broken code. A concurrency test holds the row lock, confirms both saves are waiting on it, then releases: removing `FOR UPDATE` fails it every time, not by chance. 6 tests, all 6 failing on the pre-fix code except the concurrency one, which was written against the fix and verified against a lockless variant.
+
+Also: `updateFeeConfig` was the same `UPDATE … WHERE school_id` that matched zero rows for a school without a settings row while the route answered "Fee settings updated" — the defect fixed for academic config in 28 Sep's grading-page change. Both now upsert.
+
+**What this means for existing rows:** every `SETTINGS_CHANGE` audit row for grading or fee settings written before this fix records `value: null` as its prior — not evidence of an empty prior. Reconstructing a history needs the sequence of `new_value`s, not the `old_value`s.
 
 ---
 

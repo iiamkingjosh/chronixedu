@@ -102,6 +102,10 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 10. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
    settings, payments, support-session actions. `audit_logs` has no DELETE.
+   **An old value is read, never assumed.** `logSettingsChange(…, null, patch)` recorded
+   "prior: null" for every grading and fee change (SECURITY.md Round 15); read the prior
+   value under the same lock as the write (`mergeSettingsColumn`), and test it positively —
+   the second of two saves must name the first's value.
 11. **Money:** Postgres `numeric(12,2)` naira today. Never add/subtract money in
    JS floats — do arithmetic in SQL, or convert to integer kobo first. New money
    columns should be `bigint` kobo.
