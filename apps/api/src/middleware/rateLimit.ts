@@ -1,5 +1,5 @@
 import rateLimit, { Options } from 'express-rate-limit';
-import { RedisStore } from 'rate-limit-redis';
+import { RedisStore, SendCommandFn } from 'rate-limit-redis';
 import Redis from 'ioredis';
 import { Request, Response } from 'express';
 
@@ -26,31 +26,45 @@ if (redisClient) {
   });
 }
 
-function makeStore() {
-  if (!redisClient) return undefined; // express-rate-limit defaults to MemoryStore
-  return new RedisStore({
-    // ioredis.call returns Promise<unknown>; rate-limit-redis expects Promise<RedisReply>.
-    // The actual runtime value is always a valid RedisReply — the cast is safe.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    sendCommand: (...args: string[]) => (redisClient as any).call(...args),
+/**
+ * Build both limiters. `sendCommand` is the Redis transport; omitted, each limiter falls
+ * back to its own in-process MemoryStore. Exported so tests can drive the Redis path —
+ * production's only path — with a fake transport.
+ */
+export function createRateLimiters(sendCommand?: SendCommandFn) {
+  // Each limiter needs its OWN prefix. Both key by client IP, and rate-limit-redis
+  // defaults every store to 'rl:', so with the default they shared one counter: every
+  // request anywhere under /api spent the 5-per-minute login allowance, and each login
+  // spent it twice. A principal who logged in, used the dashboard and logged in again
+  // was refused before their password was checked. See rateLimitRedis.test.ts.
+  const store = (prefix: string) => (sendCommand ? new RedisStore({ sendCommand, prefix }) : undefined);
+
+  // Agent File Rule S5: 100 req/min general, 5 req/min for auth
+  const general = rateLimit({
+    windowMs: 60_000,
+    max: 100,
+    store: store('rl:general:'),
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
   });
+
+  const auth = rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    store: store('rl:auth:'),
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+  });
+
+  return { general, auth };
 }
 
-// Agent File Rule S5: 100 req/min general, 5 req/min for auth
-export const generalRateLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 100,
-  store: makeStore(),
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-});
+// ioredis.call returns Promise<unknown>; rate-limit-redis expects Promise<RedisReply>.
+// The actual runtime value is always a valid RedisReply — the cast is safe.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const limiters = createRateLimiters(redisClient ? (...args: string[]) => (redisClient as any).call(...args) : undefined);
 
-export const authRateLimiter = rateLimit({
-  windowMs: 60_000,
-  max: 5,
-  store: makeStore(),
-  standardHeaders: true,
-  legacyHeaders: false,
-  handler: rateLimitHandler,
-});
+export const generalRateLimiter = limiters.general;
+export const authRateLimiter = limiters.auth;

@@ -1,8 +1,26 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 15 — 2026-09-28  
-**Scope:** What the settings audit trail records as a change's prior value  
-**Round 15 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+**Latest audit:** Round 16 — 2026-09-28  
+**Scope:** The auth rate limiter's counter, shared with the general limiter in Redis  
+**Round 16 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+
+---
+
+## Round 16 — 2026-09-28
+
+**Scope:** Reported from production: a principal logging in again seconds after a successful login was refused with "Too many requests, please try again later." The http logs showed one login from that IP in the preceding minute against a limit of five.
+
+### M-01 — The login limit was spent by ordinary use of the app ✅ Fixed
+
+**Files:** `apps/api/src/middleware/rateLimit.ts`, `apps/api/src/__tests__/rateLimitRedis.test.ts`
+
+**Fix:** `authRateLimiter` (5/min on `/api/auth`) and `generalRateLimiter` (100/min on `/api`) both used `rate-limit-redis` with its default prefix `rl:` and both key by client IP, so in production they read and wrote **one Redis key per client**. Every request anywhere under `/api` spent the login allowance, and a login — which passes both mounts — spent it twice. A principal who logged in, used the dashboard (four requests) and saved a setting was refused on the next login in 32 ms, before the password was checked. With no browsing at all, the third login in a minute was refused: the effective limit was about two, not five. This is availability, not exposure — the limiter only ever refused more than intended — but a limit that locks out legitimate users trains them to distrust the error, and hides the real one when it fires.
+
+Each limiter now has its own prefix (`rl:auth:`, `rl:general:`). The announcement and message limiters were already safe: their key generators namespace the key (`ann:`, `msg:`).
+
+The existing unit test could not see this: without `REDIS_URL` each limiter gets its own in-process MemoryStore, so the collision existed only on the path production runs. The limiters are now built by `createRateLimiters(sendCommand?)`, and `rateLimitRedis.test.ts` drives the Redis path with one fake Redis (implementing the store's two Lua scripts) shared by both stores, as the one real Redis is. 3 tests, all 3 failing on the old prefixes: browsing does not spend the login allowance; the 6th auth request in a minute is still refused; the two counters live under distinct keys.
+
+**Not changed, and worth a decision:** the auth limit is 5 per minute **per IP**, counting successful logins. Staff behind one school router, or parents on a carrier-grade-NAT mobile network, share an IP. `skipSuccessfulRequests` would count only failures, but `/api/auth` also serves `forgot-password`, which answers 200 whatever the email — so it would stop counting the requests that send email. A per-route limit is the shape of that change, not a flag.
 
 ---
 

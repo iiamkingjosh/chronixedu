@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Logging in again no longer says "Too many requests" (2026-09-28)
+
+### Normal use of the app no longer uses up the login limit
+- Logging in, using the app, then logging in again within a minute could be refused with "Too many requests, please try again later." Every page you opened was being counted against the login limit. Now only sign-in requests count towards it.
+- The protection against repeated password guessing is unchanged.
+
 ## Honest notification messages (2026-09-28)
 
 ### Publishing and returning results say whether notifications really went out
