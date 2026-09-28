@@ -170,6 +170,17 @@ async function checkAfter(c, ddl) {
     `CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
        $f$ SELECT nullif(auth.jwt() ->> 'sub', '')::uuid $f$`);
 
+  // Property (b): a body that RAISES on an absent setting (no missing_ok flag). The check
+  // must not come back clean — it must error, because it evaluates the function.
+  let raiseResult;
+  try {
+    raiseResult = { violations: await checkAfter(c,
+      `CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS
+         $f$ select current_setting('request.jwt.claim.sub')::uuid $f$`) };
+  } catch (err) {
+    raiseResult = { error: err.message.split('\n')[0] };
+  }
+
   const privs = await c.query(
     `SELECT table_name, privilege_type FROM information_schema.role_table_grants
       WHERE grantee = 'chronixedu_app' AND table_schema = 'public' ORDER BY 1, 2`);
@@ -214,6 +225,9 @@ async function checkAfter(c, ddl) {
     ['+ auth.uid() rewritten to reference schema auth', authBody,
       authBody.length === 1 && /auth\.uid\(\) body references schema auth/.test(authBody[0]),
       'the platform dependency is named, not discovered at cutover as failed logins'],
+    ['+ auth.uid() rewritten to RAISE on an absent setting', raiseResult.error ? [`check errored: ${raiseResult.error}`] : raiseResult.violations,
+      Boolean(raiseResult.error),
+      'the check errors instead of reporting a clean result — property (b) is evaluated, not inspected'],
     ['REVOKEs undone (Phase A)', dirty,
       dirty.some(v => /schema_migrations: owner-only/.test(v)) && dirty.some(v => /audit_logs: append-only/.test(v)),
       'the check notices both kinds of loosening'],

@@ -13,7 +13,7 @@ artifacts against the code and against each other, not against this README.**
 | `operations.md` / `.json` | All 659 table references in SQL under `apps/api/src`: op, table, file:line, function, connection | same |
 | `tables.txt` | The 44 public tables | `pg_tables` on a rebuild of `migrations/` |
 | `grants.sql` | The proposed grant set — two roles | written by hand |
-| `probe.md` | 19 probes × 2 phases, attempted as each role; the boundary check in 7 states | `scripts/c4a/probe.js` on the rebuild |
+| `probe.md` | 19 probes × 2 phases, attempted as each role; the boundary check in 8 states | `scripts/c4a/probe.js` on the rebuild |
 | `effective_privileges.json` | What `information_schema` says the roles hold after `grants.sql` | same run |
 | `crosscheck.md` | operations vs effective privileges, both directions, per connection | `scripts/c4a/crosscheck.js` |
 | `../../scripts/sql/c4a_boundary_check.sql` | The derived boundary check — every row a violation | written by hand |
@@ -60,15 +60,27 @@ Regenerate: `node scripts/c4a/inventory.js`, then
 
 - **The local stub differed from production in exactly the property under test.** The first
   login probes failed with `permission denied for schema auth`. `auth.uid()` is
-  `LANGUAGE sql`, which the planner inlines by re-parsing the body as the current role; the
-  stub's body called `auth.jwt()` by schema-qualified name, and the new roles have no USAGE
-  on schema `auth`. Production's bodies (read from `pg_proc`) name only `current_setting()`,
-  so they cannot fail this way — **a reading, not a measurement**. The stub now copies
-  production verbatim, and the boundary check carries a row for it: if a platform upgrade
-  ever made those bodies reference schema `auth`, every query under the tenant policies —
-  every login included — would fail, and the check names that instead of the incident.
-  **Re-run the boundary check against production's real roles before cutover**; this is the
-  row most worth seeing come back empty there.
+  `LANGUAGE sql`, which the planner inlines by re-parsing its body as the current role; the
+  stub's body *named* `auth.jwt()`, and the new roles have no USAGE on schema `auth`. (Not a
+  missing missing_ok flag — the stub's `auth.jwt()` had `current_setting(…, true)` and never
+  raised.) The stub now copies production verbatim.
+
+### The platform dependency, stated precisely
+
+A first summary of this ("if a Supabase upgrade changed them, every login would break") was
+too broad and was corrected on review. C-4a depends on **two specific properties** of
+Supabase's `auth.*` functions, which fail differently:
+
+| Property | If violated | Does an OR'd `USING (true)` rescue it? | Checked |
+|---|---|---|---|
+| **(a)** bodies never *name* schema `auth` | error at **planning**, on every query under a policy calling the function — both roles, logins included | **No** — measured: the login probes failed with `login_read_users` in place, because inlining happens before policies are combined and folded | boundary check inspects `prosrc` |
+| **(b)** bodies never *raise* on an absent setting (`missing_ok`) | error at **runtime** | **Yes** — `true OR f()` is folded away before `f()` runs, so our roles' bypass policies cover it | boundary check *calls* them; the probe shows the check erroring when a body raises |
+
+Production satisfies both today: its bodies name only `current_setting(…, true)` (read from
+`pg_proc`). Both are properties of SQL this project does not control — which is an argument
+for C-4b beyond tenant isolation: `current_setting('app.school_id', true)` is our own setting
+with our own missing_ok flag. **Re-run the boundary check against production's real roles
+before cutover** — the only step that turns "read" into "measured" here.
 
 ## Where to look hardest
 

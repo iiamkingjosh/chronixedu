@@ -18,7 +18,12 @@
 -- ALTER DEFAULT PRIVILEGES hands every new table DML, so a new bookkeeping table is
 -- flagged here until its migration marks it owner-only AND revokes — a deliberate act.
 
-WITH roles AS (
+WITH auth_eval AS MATERIALIZED (
+  -- Property (b) below: evaluated, not inspected. MATERIALIZED so it cannot be optimised
+  -- away; if either function raised on an absent setting, the check errors here.
+  SELECT auth.uid() AS uid, auth.jwt() AS jwt
+),
+roles AS (
   SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'chronixedu_app')   AS app_ok,
          EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'chronixedu_login') AS login_ok
 ),
@@ -61,13 +66,28 @@ login_actual AS (
 )
 SELECT 'role chronixedu_app does not exist' AS violation FROM roles WHERE NOT app_ok
 UNION ALL
--- A dependency C-4a takes on the platform, made visible. The tenant policies call
--- auth.uid() / auth.jwt(), which are LANGUAGE sql and get INLINED — their body re-parsed
--- as the current role. Production's bodies name only current_setting(), so roles with no
--- USAGE on schema auth (both of ours) can plan those queries. If a Supabase upgrade ever
--- made a body reference schema auth, every query under those policies — every login
--- included — would fail with "permission denied for schema auth". Found when the local
--- stub differed from production in exactly this way (see test_supabase_stubs.sql).
+SELECT 'auth.uid()/auth.jwt() returned a value with no request.jwt setting present — they no longer read only the settings C-4a assumes'
+  FROM auth_eval WHERE uid IS NOT NULL OR jwt IS NOT NULL
+UNION ALL
+-- Two properties of Supabase's auth.* functions that C-4a depends on. They fail in
+-- different ways, so they are checked in different ways.
+--
+-- (a) The bodies must not NAME schema auth. These are LANGUAGE sql and get INLINED: the
+--     planner re-parses the body as the current role, so a body referring to auth.jwt()
+--     needs USAGE on schema auth, which neither of our roles holds. That fails at PLANNING
+--     — before permissive policies are OR'd and folded — so a USING (true) policy does not
+--     rescue it: measured, the login probes failed with login_read_users in place. Every
+--     query under a policy calling the function would fail, for both roles. This is the
+--     failure the old local stub produced; its auth.jwt() had missing_ok and never raised.
+--
+-- (b) The bodies must not RAISE on an absent setting (they use current_setting(…, true)).
+--     That would fail at RUNTIME, and a permissive USING (true) for the same command does
+--     rescue it, since `true OR f()` is folded away before f() runs. Checked by calling
+--     them below with no request.jwt settings present: if one ever raised, this whole
+--     check errors — loud, which is the point.
+--
+-- Both are properties of SQL this project does not own. C-4b removes the dependency:
+-- current_setting('app.school_id', true) is our own setting with our own missing_ok flag.
 SELECT format('auth.%s() body references schema auth — roles without USAGE on it cannot plan queries under policies that call it', p.proname)
   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
  WHERE n.nspname = 'auth' AND p.proname IN ('uid', 'jwt', 'role', 'email')

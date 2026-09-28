@@ -6,7 +6,7 @@ each probe in its own rolled-back transaction. **Phase B** is `grants.sql` as pr
 none of the semantics probed changed between them, but the plan requires re-running this
 against the real roles before cutover.
 
-**38 of 38 probe expectations held; 7 of 7 boundary-check expectations held.** 42 `app_bypass_*` policies for 44 tables (the owner-only ones excluded, by their comment).
+**38 of 38 probe expectations held; 8 of 8 boundary-check expectations held.** 42 `app_bypass_*` policies for 44 tables (the owner-only ones excluded, by their comment).
 
 ## Privilege probes
 
@@ -46,4 +46,5 @@ something when something is wrong.
 | + a new bookkeeping table marked owner-only | ✅ | flagged: default privileges handed it DML, and owner-only must hold nothing | c4a_future_bookkeeping: owner-only, but chronixedu_app holds privileges on it — REVOKE ALL in the migration that created it |
 | + that table marked AND revoked | ✅ | the deliberate act clears it | *(none)* |
 | + auth.uid() rewritten to reference schema auth | ✅ | the platform dependency is named, not discovered at cutover as failed logins | auth.uid() body references schema auth — roles without USAGE on it cannot plan queries under policies that call it |
+| + auth.uid() rewritten to RAISE on an absent setting | ✅ | the check errors instead of reporting a clean result — property (b) is evaluated, not inspected | check errored: unrecognized configuration parameter "request.jwt.claim.sub" |
 | REVOKEs undone (Phase A) | ✅ | the check notices both kinds of loosening | audit_logs: append-only, but chronixedu_app holds table-level UPDATE; holds DELETE<br>migration_runs: owner-only, but chronixedu_app holds privileges on it — REVOKE ALL in the migration that created it<br>schema_migrations: owner-only, but chronixedu_app holds privileges on it — REVOKE ALL in the migration that created it |
