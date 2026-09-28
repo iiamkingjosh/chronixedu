@@ -2,9 +2,11 @@
 
 ## Notices (2026-09-27)
 
-### Staff can post notices to the student board
-- The student Notices page had no way to be filled — nothing in the product could create a notice. Principals can now post to the whole school or to one class, and teachers to classes they teach.
-- Notices can be taken down again by whoever may post to that class, so a cancelled or mistaken notice does not sit there for the rest of the term.
+### Staff can post class notices
+- New **Class Notices** page for principals and teachers. The student Notices page had no way to be filled — nothing in the product could create a notice.
+- A notice goes to one class and appears on those students' Notices page. Teachers can post to classes they teach; principals to any class.
+- Notices can be taken down by anyone who may post to that class, so a cancelled or mistaken notice does not sit there for the rest of the term. They cannot be edited, and the form says so before you post.
+- To reach the whole school, use Announcements — that is the one that notifies and emails. The notices page links to it.
 
 ## ERP Integration (2026-09-27)
 

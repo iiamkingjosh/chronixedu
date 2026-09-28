@@ -14,6 +14,7 @@ export const PRINCIPAL_NAV: NavItem[] = [
   { label: 'Behaviour', href: '/principal/behaviour' },
   { label: 'Messages', href: '/principal/messages' },
   { label: 'Announcements', href: '/principal/announcements' },
+  { label: 'Class Notices', href: '/notices' },
 ];
 
 export const TEACHER_NAV: NavItem[] = [
@@ -24,6 +25,7 @@ export const TEACHER_NAV: NavItem[] = [
   { label: 'Attendance', href: '/teacher/attendance' },
   { label: 'Assignments', href: '/teacher/assignments' },
   { label: 'Behaviour', href: '/teacher/behaviour' },
+  { label: 'Class Notices', href: '/notices' },
   { label: 'Messages', href: '/teacher/messages' },
 ];
 

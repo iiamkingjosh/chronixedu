@@ -230,16 +230,29 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - **`notices`** (migration 007) is the **class** board: `class_id` nullable, read by
   students at `GET /:schoolId/student/notices`. Class scoping is the only thing it does
   that `announcements` cannot, so keep it that way rather than growing a second broadcast.
+- **There is no school-wide notice.** Migration 043 made `class_id` NOT NULL. Keeping one
+  gave the product two mechanisms for one intent with materially different delivery — an
+  announcement notifies and emails, a school-wide notice appeared on a page and told
+  nobody — with nothing at the moment of posting to distinguish them, and both returning
+  success. Anything addressed to the whole school is an announcement.
 - Posting: a teacher may post to a class they form-teach or are assigned to **this term**
-  (`form_teacher_id` OR `isTeacherAssignedToClass`, mirroring `routes/behaviour.ts`);
-  `class_id: null` is school-wide and is **principal/super_admin only**. Delete carries the
-  identical check — guarding the write and leaving the un-write open is half a guard.
-  The case that matters is a teacher on their OWN school's path posting to a class they do
-  not teach: `requireSchoolAccess` passes and only the class check stops them.
+  (`form_teacher_id` OR `isTeacherAssignedToClass`, mirroring `routes/behaviour.ts`).
+  Delete carries the identical check — guarding the write and leaving the un-write open is
+  half a guard. The case that matters is a teacher on their OWN school's path posting to a
+  class they do not teach: `requireSchoolAccess` passes and only the class check stops them.
+- `GET /:schoolId/notices` returns `{ notices, classes }` — the postable classes come from
+  the same request that lists the notices, so the picker on `/notices` cannot offer a class
+  the guard will refuse. Build any future notices UI from that list, not from a roster
+  endpoint.
+- The staff screen is `/notices`, shared by principals and teachers. One page, because the
+  API already decides what each role sees; two would be two places for that to drift.
 - **Notices are immutable: create and delete, no edit, so no `updated_at`.** Correction is
-  delete + repost. Expiry was considered and rejected — an unset `expires_at` cannot be
-  told apart from an author who never thought about it (doctrine 9), and the filter it
-  would add to every reader fails by *hiding* notices, which nobody reports.
+  delete + repost, and the form says so before you post. Expiry was considered and
+  rejected — an unset `expires_at` cannot be told apart from an author who never thought
+  about it (doctrine 9), and the filter it would add to every reader fails by *hiding*
+  notices, which nobody reports. Staleness is already handled by
+  `ORDER BY created_at DESC LIMIT 20`; what needed a mechanism was removing a notice that
+  is *wrong*, and a clock cannot express intent.
 
 ## Demo vs customer tenants
 

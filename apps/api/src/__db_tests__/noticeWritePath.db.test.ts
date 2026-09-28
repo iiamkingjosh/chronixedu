@@ -11,9 +11,11 @@
  * and every student in that class. It is the same shape as the behaviour-record defect
  * (AUDIT R10-M2) one level over, so those cases are written first and deliberately.
  *
- * `class_id IS NULL` means school-wide, which is a second privilege inside the same
- * route: a teacher addressing the entire school is not a class notice at all, and
- * school-wide broadcast already exists, principal-gated, as `announcements`.
+ * There is no school-wide notice: migration 043 made `class_id` NOT NULL. Keeping one
+ * meant two mechanisms for one intent with different delivery — an announcement notifies
+ * and emails, a school-wide notice told nobody — and both returned success. School-wide
+ * is `announcements`, and a request here without a class is a 400, not a privilege
+ * question.
  */
 import request from 'supertest';
 import { seed, IDS as I, tokens, buildApp, pool } from './helpers';
@@ -46,12 +48,19 @@ describe('who may post to a class', () => {
     expect((await pool.query(`SELECT count(*) FROM notices`)).rows[0].count).toBe('0');
   });
 
-  it('REFUSES a teacher posting a school-wide notice', async () => {
-    // class_id: null addresses every student in the school. That is a principal's act,
-    // and it already has a home in `announcements`.
-    const res = await post(I.schoolA, tokens.math(), { class_id: null, title: 'All', body: 'Everyone read this.' });
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('SCHOOL_WIDE_FORBIDDEN');
+  it('REFUSES a notice with no class — from a teacher AND from a principal', async () => {
+    // Not a privilege question any more. A notice without a class has no meaning: that
+    // intent is an announcement, which is a different endpoint with real delivery. The
+    // principal case is asserted too, because the old failure mode was precisely that a
+    // principal COULD do this and reach nobody.
+    for (const tok of [tokens.math(), tokens.principalA()]) {
+      const res = await post(I.schoolA, tok, { class_id: null, title: 'All', body: 'Everyone read this.' });
+      expect(res.status).toBe(400);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+    }
+    const omitted = await post(I.schoolA, tokens.principalA(), { title: 'All', body: 'Everyone.' });
+    expect(omitted.status).toBe(400);
+    expect((await pool.query(`SELECT count(*) FROM notices`)).rows[0].count).toBe('0');
   });
 
   it('allows a teacher assigned to the class for the current term', async () => {
@@ -75,10 +84,17 @@ describe('who may post to a class', () => {
     expect(res.status).toBe(201);
   });
 
-  it('allows a principal to post school-wide', async () => {
-    const res = await post(I.schoolA, tokens.principalA(), { class_id: null, title: 'PTA', body: 'PTA meeting Friday.' });
-    expect(res.status).toBe(201);
-    expect(res.body.data.class_id).toBeNull();
+  it('the database refuses a school-wide notice even if a route ever stopped doing so', async () => {
+    // Migration 043. The route's zod schema is the first line and this is the last one:
+    // a convention living in one route file is one edit away from gone, and the failure
+    // it would let back in is invisible — a notice that reaches a page and notifies
+    // nobody.
+    await expect(
+      pool.query(
+        `INSERT INTO notices (school_id, class_id, title, body, created_by) VALUES ($1, NULL, 'x', 'y', $2)`,
+        [I.schoolA, I.principalA]
+      )
+    ).rejects.toThrow();
   });
 
   it('REFUSES a class that belongs to another school — 404, not 403', async () => {
@@ -103,8 +119,7 @@ describe('who may post to a class', () => {
 });
 
 describe('what reaches the student', () => {
-  it('a class notice reaches that class and a school-wide notice reaches everyone', async () => {
-    await post(I.schoolA, tokens.principalA(), { class_id: null, title: 'PTA', body: 'Friday.' });
+  it('a student sees their own class and nothing else', async () => {
     await post(I.schoolA, tokens.principalA(), { ...CLASS_NOTICE, class_id: I.jss2a });
     await post(I.schoolA, tokens.principalA(), { ...CLASS_NOTICE, class_id: I.jss3b, title: 'Other class' });
 
@@ -114,7 +129,6 @@ describe('what reaches the student', () => {
 
     expect(res.status).toBe(200);
     const titles = res.body.data.map((n: { title: string }) => n.title);
-    expect(titles).toContain('PTA');
     expect(titles).toContain('Textbooks');
     // s1 is in jss2a. The other class's notice must not reach them.
     expect(titles).not.toContain('Other class');
@@ -152,11 +166,6 @@ describe('taking a notice down', () => {
     expect((await pool.query(`SELECT count(*) FROM notices`)).rows[0].count).toBe('1');
   });
 
-  it('REFUSES a teacher deleting a school-wide notice', async () => {
-    const id = await postAs(tokens.principalA(), { class_id: null, title: 'PTA', body: 'Friday.' });
-    expect((await del(I.schoolA, id, tokens.math())).status).toBe(403);
-  });
-
   it('404s on a notice belonging to another school, leaving it in place', async () => {
     const id = await postAs(tokens.principalA(), CLASS_NOTICE);
     const res = await del(I.schoolB, id, tokens.principalB());
@@ -190,8 +199,7 @@ describe('the audit trail', () => {
 });
 
 describe('staff can see what they may take down', () => {
-  it('a teacher lists school-wide notices and their own classes, not other classes', async () => {
-    await post(I.schoolA, tokens.principalA(), { class_id: null, title: 'PTA', body: 'Friday.' });
+  it('a teacher lists their own classes and not other classes', async () => {
     await post(I.schoolA, tokens.principalA(), { ...CLASS_NOTICE, class_id: I.jss2a });
     await post(I.schoolA, tokens.principalA(), { ...CLASS_NOTICE, class_id: I.jss3b, title: 'Other class' });
 
@@ -200,10 +208,13 @@ describe('staff can see what they may take down', () => {
       .set('Authorization', tokens.math());
 
     expect(res.status).toBe(200);
-    const titles = res.body.data.map((n: { title: string }) => n.title);
-    expect(titles).toContain('PTA');
+    const titles = res.body.data.notices.map((n: { title: string }) => n.title);
     expect(titles).toContain('Textbooks');
     expect(titles).not.toContain('Other class');
+    // The picker offers exactly what the guard accepts — jss2a yes, jss3b no.
+    const classIds = res.body.data.classes.map((c: { id: string }) => c.id);
+    expect(classIds).toContain(I.jss2a);
+    expect(classIds).not.toContain(I.jss3b);
   });
 
   it('a principal lists every notice in the school', async () => {
@@ -211,6 +222,6 @@ describe('staff can see what they may take down', () => {
     const res = await request(app)
       .get(`/api/schools/${I.schoolA}/notices`)
       .set('Authorization', tokens.principalA());
-    expect(res.body.data.map((n: { title: string }) => n.title)).toContain('Other class');
+    expect(res.body.data.notices.map((n: { title: string }) => n.title)).toContain('Other class');
   });
 });

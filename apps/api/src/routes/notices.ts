@@ -34,9 +34,16 @@
  * disclose. If editing is ever wanted, it needs `updated_at` in the same migration and
  * the student read needs to surface it.
  *
- * **Teachers may post to their own classes; only principals may post school-wide.**
- * Class scoping is the whole point of this table, and a principal-only route would leave
- * it nearly unused while duplicating `announcements` for the school-wide case.
+ * **Teachers may post to their own classes. There is no school-wide notice at all.**
+ * Keeping `class_id: null` for principals left the product with two mechanisms for one
+ * intent and materially different delivery — an announcement notifies and emails; a
+ * school-wide notice appeared on a page and told nobody — with nothing at the moment of
+ * posting to tell them apart. Both returned success; only one made "I've told the school"
+ * true. Migration 043 makes `class_id` NOT NULL, so this is enforced in the column rather
+ * than asserted in this file, and `getNoticesForClass` lost its `class_id IS NULL` branch
+ * in the same change: a reader keeping a case nothing can write is the same defect as a
+ * writer nothing can read. School-wide has one home, `announcements`, where the fan-out
+ * lives; the posting screen links to it rather than explaining its absence.
  *
  * ## The guard that matters
  *
@@ -74,9 +81,9 @@ function requireSchoolAccess(req: Request, res: Response, next: NextFunction): v
 }
 
 const createSchema = z.object({
-  // null (or absent) means school-wide, which the role check below treats as a separate
-  // privilege rather than as one more class.
-  class_id: z.string().uuid().nullable().optional().default(null),
+  // Required. A notice without a class has no meaning here any more — that intent is an
+  // announcement, and it is a different endpoint with different delivery.
+  class_id: z.string().uuid(),
   title: z.string().min(1).max(200),
   body: z.string().min(1).max(5000),
 });
@@ -101,18 +108,9 @@ function isStaffAdmin(role: string | undefined): boolean {
 async function classAccessError(
   req: Request,
   schoolId: string,
-  classId: string | null
+  classId: string
 ): Promise<{ status: number; code: string; message: string } | null> {
   const role = req.user!.role;
-
-  if (classId === null) {
-    if (isStaffAdmin(role)) return null;
-    return {
-      status: 403,
-      code: 'SCHOOL_WIDE_FORBIDDEN',
-      message: 'Only a principal may post a notice to the whole school',
-    };
-  }
 
   // Validate the target, not just the caller (doctrine 3): the class must be in THIS
   // school before any question about the caller's relationship to it is meaningful.
@@ -138,7 +136,12 @@ async function classAccessError(
   };
 }
 
-// ── GET /:schoolId/notices — what this member of staff may take down ────────────
+// ── GET /:schoolId/notices — what this member of staff may post to and take down ─
+
+// Returns the postable CLASSES alongside the notices, deliberately. If the screen built
+// its class picker from some other endpoint, the form could offer a class the API will
+// refuse — the caller would meet the NOT_ASSIGNED guard as a bug report rather than as a
+// rule. One source means the picker cannot disagree with the guard.
 
 router.get(
   '/:schoolId/notices',
@@ -148,22 +151,28 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
+      const classes = await listClasses(schoolId);
 
       if (isStaffAdmin(req.user!.role)) {
-        return res.json({ success: true, data: await listNoticesForStaff(schoolId, null) });
+        return res.json({
+          success: true,
+          data: { notices: await listNoticesForStaff(schoolId, null), classes },
+        });
       }
 
-      // A teacher sees exactly the set they may post to: school-wide notices plus the
-      // classes they form-teach or are assigned to this term.
+      // A teacher sees exactly the set they may post to: the classes they form-teach or
+      // are assigned to this term.
       const userId = req.user!.user_id;
       const term = await getActiveTerm(schoolId);
-      const classes = await listClasses(schoolId);
-      const mine: string[] = [];
+      const mine = [];
       for (const cls of classes) {
-        if (cls.form_teacher_id === userId) { mine.push(cls.id); continue; }
-        if (term && (await isTeacherAssignedToClass(userId, cls.id, schoolId, term.id))) mine.push(cls.id);
+        if (cls.form_teacher_id === userId) { mine.push(cls); continue; }
+        if (term && (await isTeacherAssignedToClass(userId, cls.id, schoolId, term.id))) mine.push(cls);
       }
-      return res.json({ success: true, data: await listNoticesForStaff(schoolId, mine) });
+      return res.json({
+        success: true,
+        data: { notices: await listNoticesForStaff(schoolId, mine.map(c => c.id)), classes: mine },
+      });
     } catch (err) {
       return next(err);
     }
