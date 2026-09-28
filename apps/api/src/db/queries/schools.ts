@@ -111,8 +111,8 @@ export async function updateIdentityConfig(
  * An upsert, not an UPDATE. It was `UPDATE … WHERE school_id = $2`, which matches zero
  * rows for a school with no school_settings row — and the route still answered
  * "Academic config updated". A save that reports success and changes nothing. Measured
- * 28 Sep 2026: every customer school has a row (only fixture schools created by raw
- * INSERT lack one), so this was latent rather than live — but the level-overrides screen
+ * 28 Sep 2026: the one customer school has a row; 42 of the 44 fixture schools, created
+ * by raw INSERT, do not — so this was latent rather than live. But the level-overrides screen
  * saves through here, and it should not inherit a success message that can be false.
  * Every column has a default and school_id is UNIQUE, so the insert branch is complete.
  */

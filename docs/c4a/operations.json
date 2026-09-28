@@ -1,0 +1,7285 @@
+[
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 211,
+    "fn": "listSchoolsWithCurrentTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 35,
+    "fn": "getDashboardStats",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 358,
+    "fn": "getPaymentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 56,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 23,
+    "fn": "getLinkedChildren",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 46,
+    "fn": "fetchStudentReportData",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 130,
+    "fn": "getActiveTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 33,
+    "fn": "insertSession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 43,
+    "fn": "listSessionsWithTerms",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 74,
+    "fn": "findSessionById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 189,
+    "fn": "activateSession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 194,
+    "fn": "activateSession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 211,
+    "fn": "getCurrentContext",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 217,
+    "fn": "getCurrentContext",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 240,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 293,
+    "fn": "listStudents",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 363,
+    "fn": "getStudentProfile",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 536,
+    "fn": "findEnrollmentForCurrentSession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 685,
+    "fn": "POST /:schoolId/students/:studentId/promote",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 850,
+    "fn": "POST /:schoolId/students/promote-bulk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1448,
+    "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "announcements",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/announcements.ts",
+    "line": 33,
+    "fn": "createAnnouncement",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "announcements",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/announcements.ts",
+    "line": 51,
+    "fn": "listAnnouncementsForRole",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 58,
+    "fn": "computeOverallPerformance",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 95,
+    "fn": "computeSubjectPerformance",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 66,
+    "fn": "insertAssessmentConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 90,
+    "fn": "listAssessmentConfigs",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 142,
+    "fn": "fetchConfigWithComponents",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 200,
+    "fn": "resolveAssessmentConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 242,
+    "fn": "updateAssessmentConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 249,
+    "fn": "updateAssessmentConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 50,
+    "fn": "getDashboardStats",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 227,
+    "fn": "getStudentsInClassWithAverages",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 409,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 51,
+    "fn": "getComponentInfo",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/scores.ts",
+    "line": 264,
+    "fn": "POST /:schoolId/scores/bulk-entry",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 56,
+    "fn": "insertAssessmentConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 90,
+    "fn": "listAssessmentConfigs",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 125,
+    "fn": "findConfigById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 137,
+    "fn": "fetchConfigWithComponents",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 175,
+    "fn": "resolveAssessmentConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 214,
+    "fn": "scoresExistForConfigTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 275,
+    "fn": "updateAssessmentConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 409,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 365,
+    "fn": "subjectHasReferences",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 51,
+    "fn": "getComponentInfo",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/scores.ts",
+    "line": 264,
+    "fn": "POST /:schoolId/scores/bulk-entry",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignment_submissions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 102,
+    "fn": "listAssignmentsForTeacher",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignment_submissions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 125,
+    "fn": "listAssignmentsForSchool",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignment_submissions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 169,
+    "fn": "listAssignmentsForStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignment_submissions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 226,
+    "fn": "listSubmissionsForAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignment_submissions",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 275,
+    "fn": "upsertSubmission",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignment_submissions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 304,
+    "fn": "gradeSubmission",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 68,
+    "fn": "createAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 82,
+    "fn": "updateAssignmentAttachment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 90,
+    "fn": "findAssignmentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 102,
+    "fn": "listAssignmentsForTeacher",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 125,
+    "fn": "listAssignmentsForSchool",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 169,
+    "fn": "listAssignmentsForStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1851,
+    "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 130,
+    "fn": "computeAttendanceSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 129,
+    "fn": "bulkUpsertAttendance",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 154,
+    "fn": "countRecentAbsences",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 195,
+    "fn": "getClassAttendanceForDate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 231,
+    "fn": "getStudentAttendanceHistory",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 238,
+    "fn": "getStudentAttendanceHistory",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 277,
+    "fn": "getMonthlySummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 316,
+    "fn": "getClassTermSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1779,
+    "fn": "GET /analytics/schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1852,
+    "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance_alerts",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 165,
+    "fn": "hasUnresolvedAlert",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance_alerts",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 174,
+    "fn": "insertAttendanceAlert",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance_alerts",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 352,
+    "fn": "listUnresolvedAlerts",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/auditLog.ts",
+    "line": 32,
+    "fn": "logAudit",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 261,
+    "fn": "getTeacherNotifications",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 304,
+    "fn": "bulkUpsertScores",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 592,
+    "fn": "GET /schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 646,
+    "fn": "GET /schools/:schoolId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1779,
+    "fn": "GET /analytics/schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/notificationWorker.ts",
+    "line": 103,
+    "fn": "processNotificationQueue",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/services/notificationWorker.ts",
+    "line": 115,
+    "fn": "processNotificationQueue",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false,
+    "setColumns": [
+      "processed_at"
+    ]
+  },
+  {
+    "table": "behaviour_records",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 57,
+    "fn": "createBehaviourRecord",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "behaviour_records",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 92,
+    "fn": "getStudentBehaviourHistory",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "behaviour_records",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 108,
+    "fn": "getStudentIncidentCount",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "behaviour_records",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 117,
+    "fn": "getSchoolBehaviourSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "behaviour_records",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 129,
+    "fn": "getSchoolBehaviourSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "class_teacher_comments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/classComments.ts",
+    "line": 32,
+    "fn": "listClassStudentsForComments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "class_teacher_comments",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/classComments.ts",
+    "line": 59,
+    "fn": "upsertClassTeacherComment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "class_teacher_comments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 84,
+    "fn": "fetchClassTeacherComment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 168,
+    "fn": "resolveAssessmentConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 102,
+    "fn": "listAssignmentsForTeacher",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 125,
+    "fn": "listAssignmentsForSchool",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 316,
+    "fn": "getClassTermSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 92,
+    "fn": "getStudentBehaviourHistory",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 129,
+    "fn": "getSchoolBehaviourSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/classComments.ts",
+    "line": 20,
+    "fn": "findClassByFormTeacher",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 28,
+    "fn": "getDashboardStats",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 191,
+    "fn": "getTeacherScoreEntryStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 358,
+    "fn": "getPaymentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 437,
+    "fn": "listInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 491,
+    "fn": "getOutstandingBalances",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notices.ts",
+    "line": 78,
+    "fn": "findNoticeById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 23,
+    "fn": "getLinkedChildren",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 46,
+    "fn": "fetchStudentReportData",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 94,
+    "fn": "fetchFormTeacher",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 216,
+    "fn": "fetchClassLevel",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 341,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 16,
+    "fn": "findClassByName",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 30,
+    "fn": "insertClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 44,
+    "fn": "updateClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 54,
+    "fn": "listClasses",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 235,
+    "fn": "copyAssignmentsBetweenTerms",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 263,
+    "fn": "listTeacherAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 328,
+    "fn": "findClassById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 348,
+    "fn": "deleteClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 405,
+    "fn": "listClassNamesAndIds",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 141,
+    "fn": "listClassLevels",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 86,
+    "fn": "findStudentsNotInClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 365,
+    "fn": "getClassSheet",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 458,
+    "fn": "getMyPendingAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 363,
+    "fn": "getStudentProfile",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 75,
+    "fn": "findClassClash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 97,
+    "fn": "findTeacherClash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 128,
+    "fn": "getTeacherTimetable",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/results.ts",
+    "line": 262,
+    "fn": "GET /:schoolId/results/class-summary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 686,
+    "fn": "POST /:schoolId/students/:studentId/promote",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 859,
+    "fn": "POST /:schoolId/students/promote-bulk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 779,
+    "fn": "GET /schools/:schoolId/export",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 179,
+    "fn": "fetchAcademicConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 257,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 412,
+    "fn": "getStudentsAtRisk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "email_queue",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/emailQueue.ts",
+    "line": 13,
+    "fn": "enqueueEmail",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "email_queue",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/emailQueue.ts",
+    "line": 21,
+    "fn": "getPendingEmails",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "email_queue",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/emailQueue.ts",
+    "line": 30,
+    "fn": "markEmailSent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "email_queue",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/emailQueue.ts",
+    "line": 36,
+    "fn": "markEmailRetryFailed",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 129,
+    "fn": "generateInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 223,
+    "fn": "recordPayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 246,
+    "fn": "recordPayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 323,
+    "fn": "recordPayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 358,
+    "fn": "getPaymentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 386,
+    "fn": "getInvoiceByStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 437,
+    "fn": "listInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 456,
+    "fn": "getInvoiceById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 491,
+    "fn": "getOutstandingBalances",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 539,
+    "fn": "getCollectionSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "fee_structures",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 43,
+    "fn": "insertFeeStructure",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_structures",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 64,
+    "fn": "listFeeStructures",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "fee_structures",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 110,
+    "fn": "generateInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "messages",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 146,
+    "fn": "createMessage",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "messages",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 156,
+    "fn": "isThreadParticipant",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "messages",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 165,
+    "fn": "getInbox",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "messages",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 177,
+    "fn": "getInbox",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "messages",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 193,
+    "fn": "getThreadMessages",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "messages",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 207,
+    "fn": "markThreadRead",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "migration_runs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/scripts/migrate.ts",
+    "line": 50,
+    "fn": "recordRun",
+    "connection": "owner (migrate, DATABASE_URL)",
+    "dynamic": false
+  },
+  {
+    "table": "notices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notices.ts",
+    "line": 37,
+    "fn": "getNoticesForClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notices.ts",
+    "line": 57,
+    "fn": "findNoticeById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notices.ts",
+    "line": 78,
+    "fn": "findNoticeById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notices",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/notices.ts",
+    "line": 118,
+    "fn": "createNotice",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notices",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notices.ts",
+    "line": 135,
+    "fn": "deleteNotice",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notification_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/notificationLogs.ts",
+    "line": 14,
+    "fn": "insertNotificationLog",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notification_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notificationLogs.ts",
+    "line": 24,
+    "fn": "hasReachedSmsLimit",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notification_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1848,
+    "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notifications",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/notifications.ts",
+    "line": 28,
+    "fn": "createNotification",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notifications",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/notifications.ts",
+    "line": 47,
+    "fn": "createNotificationsBulk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "notifications",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notifications.ts",
+    "line": 57,
+    "fn": "listNotifications",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notifications",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notifications.ts",
+    "line": 63,
+    "fn": "listNotifications",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notifications",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/notifications.ts",
+    "line": 72,
+    "fn": "markNotificationRead",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "notifications",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/notifications.ts",
+    "line": 79,
+    "fn": "markAllNotificationsRead",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "onboarding_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1269,
+    "fn": "GET /onboarding",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "onboarding_sessions",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1313,
+    "fn": "POST /onboarding",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "onboarding_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1341,
+    "fn": "GET /onboarding/:sessionId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "onboarding_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1385,
+    "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "onboarding_sessions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1554,
+    "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "onboarding_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1582,
+    "fn": "POST /onboarding/:sessionId/complete",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "onboarding_sessions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1624,
+    "fn": "POST /onboarding/:sessionId/complete",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 60,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 76,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 23,
+    "fn": "getLinkedChildren",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 56,
+    "fn": "isParentLinkedToStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 77,
+    "fn": "getParentsForStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 230,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 373,
+    "fn": "getStudentProfile",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 39,
+    "fn": "checkParentStudentLink",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 974,
+    "fn": "POST /:schoolId/students/:studentId/parents",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 982,
+    "fn": "POST /:schoolId/students/:studentId/parents",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 851,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "parent_students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/notificationWorker.ts",
+    "line": 58,
+    "fn": "processRow",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 240,
+    "fn": "recordPayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 274,
+    "fn": "recordPayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 286,
+    "fn": "recordPayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 289,
+    "fn": "recordPayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 358,
+    "fn": "getPaymentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 395,
+    "fn": "getInvoiceByStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1849,
+    "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_announcements",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2001,
+    "fn": "POST /announcements",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_announcements",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2038,
+    "fn": "GET /announcements",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_announcements",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2060,
+    "fn": "PATCH /announcements/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_announcements",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2087,
+    "fn": "PATCH /announcements/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_announcements",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2106,
+    "fn": "DELETE /announcements/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_announcements",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2115,
+    "fn": "DELETE /announcements/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_announcements",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2132,
+    "fn": "POST /announcements/:id/publish",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_announcements",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2142,
+    "fn": "POST /announcements/:id/publish",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 403,
+    "fn": "POST /support-sessions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 449,
+    "fn": "PATCH /support-sessions/:id/end",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 526,
+    "fn": "GET /audit-logs",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 696,
+    "fn": "PATCH /schools/:schoolId/suspend",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 753,
+    "fn": "PATCH /schools/:schoolId/reactivate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 857,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1026,
+    "fn": "POST /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1081,
+    "fn": "PATCH /subscriptions/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1129,
+    "fn": "POST /subscriptions/:id/extend-trial",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1168,
+    "fn": "POST /subscriptions/:id/record-payment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1321,
+    "fn": "POST /onboarding",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1672,
+    "fn": "appUrl",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1936,
+    "fn": "GET /health/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2171,
+    "fn": "POST /announcements/:id/publish",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2255,
+    "fn": "POST /admins",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2334,
+    "fn": "POST /admins/:id/resend-welcome",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2427,
+    "fn": "PATCH /admins/:id/suspend",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2469,
+    "fn": "PATCH /admins/:id/reactivate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2522,
+    "fn": "DELETE /admins/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/platformAnalyticsService.ts",
+    "line": 53,
+    "fn": "runPlatformAnalyticsSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/services/subscriptionService.ts",
+    "line": 46,
+    "fn": "runTrialExpiryCheck",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_metrics_snapshots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1739,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_metrics_snapshots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1935,
+    "fn": "GET /health/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_metrics_snapshots",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/services/platformAnalyticsService.ts",
+    "line": 62,
+    "fn": "runPlatformAnalyticsSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/platformRevenue.ts",
+    "line": 76,
+    "fn": "getPlatformRevenue",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 578,
+    "fn": "GET /schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 592,
+    "fn": "GET /schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 640,
+    "fn": "GET /schools/:schoolId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 900,
+    "fn": "GET /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 914,
+    "fn": "GET /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 942,
+    "fn": "GET /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1007,
+    "fn": "POST /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1015,
+    "fn": "POST /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1051,
+    "fn": "PATCH /subscriptions/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1070,
+    "fn": "PATCH /subscriptions/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1108,
+    "fn": "POST /subscriptions/:id/extend-trial",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1120,
+    "fn": "POST /subscriptions/:id/extend-trial",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1156,
+    "fn": "POST /subscriptions/:id/record-payment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1721,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1731,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1779,
+    "fn": "GET /analytics/schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2148,
+    "fn": "POST /announcements/:id/publish",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/platformAnalyticsService.ts",
+    "line": 43,
+    "fn": "runPlatformAnalyticsSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/subscriptionService.ts",
+    "line": 19,
+    "fn": "runTrialExpiryCheck",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/services/subscriptionService.ts",
+    "line": 41,
+    "fn": "runTrialExpiryCheck",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "principal_remarks",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 108,
+    "fn": "fetchPrincipalRemark",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "principal_remarks",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 135,
+    "fn": "upsertPrincipalRemark",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 157,
+    "fn": "upsertReportCard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 190,
+    "fn": "publishReportCards",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 203,
+    "fn": "getReportCardsForClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/parent.ts",
+    "line": 74,
+    "fn": "findPublishedReportCard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/student.ts",
+    "line": 80,
+    "fn": "findPublishedReportCard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 750,
+    "fn": "GET /:schoolId/students/:studentId/report-card",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 845,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 157,
+    "fn": "upsertReportCard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 115,
+    "fn": "getStudentsInClassWithStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 209,
+    "fn": "batchUpsertStatuses",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 218,
+    "fn": "batchUpsertStatuses",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 363,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 189,
+    "fn": "checkPublishedResultsExist",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 203,
+    "fn": "checkSubmittedResultsExist",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 66,
+    "fn": "getResultStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 137,
+    "fn": "getFinalisedStudents",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 844,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1853,
+    "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schema_migrations",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/scripts/migrate.ts",
+    "line": 95,
+    "fn": "migrate",
+    "connection": "owner (migrate, DATABASE_URL)",
+    "dynamic": false
+  },
+  {
+    "table": "schema_migrations",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/scripts/migrate.ts",
+    "line": 120,
+    "fn": "migrate",
+    "connection": "owner (migrate, DATABASE_URL)",
+    "dynamic": false
+  },
+  {
+    "table": "school_analytics_snapshots",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 165,
+    "fn": "upsertSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_analytics_snapshots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 189,
+    "fn": "getLatestSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_analytics_snapshots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 200,
+    "fn": "getPreviousSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 73,
+    "fn": "insertSchoolSettings",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 83,
+    "fn": "findSchoolById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 98,
+    "fn": "updateIdentityConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 124,
+    "fn": "updateAcademicConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 154,
+    "fn": "findAcademicConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 165,
+    "fn": "updateNotificationConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 178,
+    "fn": "updateReportConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 238,
+    "fn": "updateFeeConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 250,
+    "fn": "resolveMinPartPayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 125,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 639,
+    "fn": "GET /schools/:schoolId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1222,
+    "fn": "ensureSchoolSettings",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 179,
+    "fn": "fetchAcademicConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/termiiService.ts",
+    "line": 12,
+    "fn": "getSmsSenderName",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/platformRevenue.ts",
+    "line": 76,
+    "fn": "getPlatformRevenue",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 48,
+    "fn": "insertSchool",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 83,
+    "fn": "findSchoolById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 267,
+    "fn": "getSchoolPayoutConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 277,
+    "fn": "updateSchoolPayoutConfig",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 284,
+    "fn": "getSchoolNameAndEmail",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/auth.ts",
+    "line": 217,
+    "fn": "POST /login",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 470,
+    "fn": "GET /support-sessions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 526,
+    "fn": "GET /audit-logs",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 578,
+    "fn": "GET /schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 592,
+    "fn": "GET /schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 630,
+    "fn": "GET /schools/:schoolId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 681,
+    "fn": "PATCH /schools/:schoolId/suspend",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 692,
+    "fn": "PATCH /schools/:schoolId/suspend",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 723,
+    "fn": "PATCH /schools/:schoolId/reactivate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 749,
+    "fn": "PATCH /schools/:schoolId/reactivate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 773,
+    "fn": "GET /schools/:schoolId/export",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 828,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 900,
+    "fn": "GET /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 914,
+    "fn": "GET /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1002,
+    "fn": "POST /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1022,
+    "fn": "POST /subscriptions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1076,
+    "fn": "PATCH /subscriptions/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1156,
+    "fn": "POST /subscriptions/:id/record-payment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1269,
+    "fn": "GET /onboarding",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1297,
+    "fn": "POST /onboarding",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1305,
+    "fn": "POST /onboarding",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1350,
+    "fn": "GET /onboarding/:sessionId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1394,
+    "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1407,
+    "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1597,
+    "fn": "POST /onboarding/:sessionId/complete",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1620,
+    "fn": "POST /onboarding/:sessionId/complete",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1713,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1714,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1716,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1721,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1731,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1736,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1779,
+    "fn": "GET /analytics/schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1844,
+    "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1886,
+    "fn": "GET /analytics/growth",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2148,
+    "fn": "POST /announcements/:id/publish",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/planFeatures.ts",
+    "line": 23,
+    "fn": "schoolAllowsFeature",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/platformAnalyticsService.ts",
+    "line": 39,
+    "fn": "runPlatformAnalyticsSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/platformAnalyticsService.ts",
+    "line": 40,
+    "fn": "runPlatformAnalyticsSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/platformAnalyticsService.ts",
+    "line": 51,
+    "fn": "runPlatformAnalyticsSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/services/subscriptionService.ts",
+    "line": 44,
+    "fn": "runTrialExpiryCheck",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/welcomeEmail.ts",
+    "line": 4,
+    "fn": "getSchoolName",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 58,
+    "fn": "computeOverallPerformance",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 95,
+    "fn": "computeSubjectPerformance",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 90,
+    "fn": "listAssessmentConfigs",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 214,
+    "fn": "scoresExistForConfigTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 50,
+    "fn": "getDashboardStats",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 135,
+    "fn": "getTeacherOverview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 191,
+    "fn": "getTeacherScoreEntryStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 227,
+    "fn": "getStudentsInClassWithAverages",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 283,
+    "fn": "getTeacherActivity",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 162,
+    "fn": "checkSubjectCompletion",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 391,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 302,
+    "fn": "scoresExistForAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 365,
+    "fn": "subjectHasReferences",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 153,
+    "fn": "getExistingScore",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 172,
+    "fn": "upsertScore",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 268,
+    "fn": "bulkUpsertScores",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 406,
+    "fn": "getClassSheet",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 458,
+    "fn": "getMyPendingAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 843,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 221,
+    "fn": "computeStudentSubjectResult",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 312,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 102,
+    "fn": "listAssignmentsForTeacher",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 125,
+    "fn": "listAssignmentsForSchool",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 226,
+    "fn": "listSubmissionsForAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 57,
+    "fn": "getClassRoster",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 195,
+    "fn": "getClassAttendanceForDate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 277,
+    "fn": "getMonthlySummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/classComments.ts",
+    "line": 32,
+    "fn": "listClassStudentsForComments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/classComments.ts",
+    "line": 46,
+    "fn": "findStudentClassForTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 135,
+    "fn": "getTeacherOverview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 191,
+    "fn": "getTeacherScoreEntryStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 227,
+    "fn": "getStudentsInClassWithAverages",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 119,
+    "fn": "generateInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 358,
+    "fn": "getPaymentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 437,
+    "fn": "listInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 491,
+    "fn": "getOutstandingBalances",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 528,
+    "fn": "getCollectionSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 60,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 76,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 94,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 23,
+    "fn": "getLinkedChildren",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 46,
+    "fn": "fetchStudentReportData",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 203,
+    "fn": "getReportCardsForClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 115,
+    "fn": "getStudentsInClassWithStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 148,
+    "fn": "checkSubjectCompletion",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 363,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 302,
+    "fn": "scoresExistForAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 336,
+    "fn": "classHasReferences",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 86,
+    "fn": "findStudentsNotInClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 392,
+    "fn": "getClassSheet",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 458,
+    "fn": "getMyPendingAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 246,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 363,
+    "fn": "getStudentProfile",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 509,
+    "fn": "findEnrollmentForSession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 521,
+    "fn": "insertStudentClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 536,
+    "fn": "findEnrollmentForCurrentSession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 548,
+    "fn": "updateEnrollmentClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 164,
+    "fn": "getStudentClassIds",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 779,
+    "fn": "GET /schools/:schoolId/export",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 847,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 197,
+    "fn": "getStudentClassId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 265,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 412,
+    "fn": "getStudentsAtRisk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 54,
+    "fn": "computeOverallPerformance",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 226,
+    "fn": "listSubmissionsForAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 57,
+    "fn": "getClassRoster",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 195,
+    "fn": "getClassAttendanceForDate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 277,
+    "fn": "getMonthlySummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 352,
+    "fn": "listUnresolvedAlerts",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 129,
+    "fn": "getSchoolBehaviourSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/classComments.ts",
+    "line": 32,
+    "fn": "listClassStudentsForComments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 28,
+    "fn": "getDashboardStats",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 227,
+    "fn": "getStudentsInClassWithAverages",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 119,
+    "fn": "generateInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 358,
+    "fn": "getPaymentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 437,
+    "fn": "listInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 491,
+    "fn": "getOutstandingBalances",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 60,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 94,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 23,
+    "fn": "getLinkedChildren",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 56,
+    "fn": "isParentLinkedToStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 46,
+    "fn": "fetchStudentReportData",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 115,
+    "fn": "getStudentsInClassWithStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 148,
+    "fn": "checkSubjectCompletion",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 363,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 86,
+    "fn": "findStudentsNotInClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 392,
+    "fn": "getClassSheet",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 131,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 187,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 355,
+    "fn": "getStudentProfile",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 427,
+    "fn": "updateStudentBio",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 441,
+    "fn": "updateStudentBio",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "students",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 464,
+    "fn": "updateStudentPhotoUrl",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 484,
+    "fn": "findStudentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 496,
+    "fn": "findStudentByUserId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 536,
+    "fn": "findEnrollmentForCurrentSession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 577,
+    "fn": "findStudentsByAdmissionNumbers",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 164,
+    "fn": "getStudentClassIds",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 39,
+    "fn": "checkParentStudentLink",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 566,
+    "fn": "GET /:schoolId/students/:studentId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 592,
+    "fn": "GET /schools",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 779,
+    "fn": "GET /schools/:schoolId/export",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 847,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 851,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 854,
+    "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1716,
+    "fn": "GET /analytics/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1892,
+    "fn": "GET /analytics/growth",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/platformAnalyticsService.ts",
+    "line": 41,
+    "fn": "runPlatformAnalyticsSnapshot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 265,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 412,
+    "fn": "getStudentsAtRisk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 135,
+    "fn": "getTeacherOverview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 191,
+    "fn": "getTeacherScoreEntryStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 283,
+    "fn": "getTeacherActivity",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 241,
+    "fn": "getClassSubjectStatuses",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 258,
+    "fn": "markSubjectSubmitted",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 281,
+    "fn": "returnSubjectsToDraft",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 399,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 203,
+    "fn": "checkSubmittedResultsExist",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 122,
+    "fn": "getSubjectSubmissionStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 95,
+    "fn": "computeSubjectPerformance",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 90,
+    "fn": "listAssessmentConfigs",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 102,
+    "fn": "listAssignmentsForTeacher",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 125,
+    "fn": "listAssignmentsForSchool",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 169,
+    "fn": "listAssignmentsForStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 191,
+    "fn": "getTeacherScoreEntryStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 298,
+    "fn": "getClassSubjectAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 376,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 75,
+    "fn": "findSubjectByCode",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 87,
+    "fn": "insertSubject",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 101,
+    "fn": "updateSubject",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 111,
+    "fn": "listActiveSubjects",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 235,
+    "fn": "copyAssignmentsBetweenTerms",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 263,
+    "fn": "listTeacherAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 357,
+    "fn": "findSubjectById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 379,
+    "fn": "deleteSubject",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 417,
+    "fn": "listSubjectCodesAndIds",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 369,
+    "fn": "getClassSheet",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 458,
+    "fn": "getMyPendingAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 75,
+    "fn": "findClassClash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 97,
+    "fn": "findTeacherClash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 113,
+    "fn": "getClassTimetable",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 128,
+    "fn": "getTeacherTimetable",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 275,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "support_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/middleware/detectSupportSession.ts",
+    "line": 67,
+    "fn": "detectSupportSession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "support_sessions",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 356,
+    "fn": "POST /support-sessions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "support_sessions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 424,
+    "fn": "PATCH /support-sessions/:id/end",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "support_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 470,
+    "fn": "GET /support-sessions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "support_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1934,
+    "fn": "GET /health/overview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "support_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2363,
+    "fn": "terminateActiveSupportSessions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "support_sessions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2379,
+    "fn": "terminateActiveSupportSessions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 79,
+    "fn": "isTeacherAssignedToClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 100,
+    "fn": "isTeacherAssignedToClassAnyTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 135,
+    "fn": "getTeacherOverview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 191,
+    "fn": "getTeacherScoreEntryStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 283,
+    "fn": "getTeacherActivity",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 60,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 76,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 94,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 298,
+    "fn": "getClassSubjectAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 320,
+    "fn": "getTeachersForClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 341,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 376,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 170,
+    "fn": "findDuplicateAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 185,
+    "fn": "insertTeacherAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "INSERT",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 209,
+    "fn": "insertTeacherAssignmentsBulk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "INSERT",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 235,
+    "fn": "copyAssignmentsBetweenTerms",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 263,
+    "fn": "listTeacherAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 287,
+    "fn": "findAssignmentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 319,
+    "fn": "deleteTeacherAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 336,
+    "fn": "classHasReferences",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 365,
+    "fn": "subjectHasReferences",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 39,
+    "fn": "checkTeacherAssigned",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 458,
+    "fn": "getMyPendingAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/assignments.ts",
+    "line": 152,
+    "fn": "POST /:schoolId/assignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/results.ts",
+    "line": 114,
+    "fn": "POST /:schoolId/results/submit",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/teacherDashboard.ts",
+    "line": 113,
+    "fn": "GET /:schoolId/dashboard/teacher/my-students",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 275,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/analytics.ts",
+    "line": 211,
+    "fn": "listSchoolsWithCurrentTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assessmentConfig.ts",
+    "line": 90,
+    "fn": "listAssessmentConfigs",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 45,
+    "fn": "findTermForDate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 92,
+    "fn": "getStudentBehaviourHistory",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 129,
+    "fn": "getSchoolBehaviourSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 35,
+    "fn": "getDashboardStats",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 135,
+    "fn": "getTeacherOverview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 191,
+    "fn": "getTeacherScoreEntryStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 227,
+    "fn": "getStudentsInClassWithAverages",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 100,
+    "fn": "generateInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 358,
+    "fn": "getPaymentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 437,
+    "fn": "listInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 491,
+    "fn": "getOutstandingBalances",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 46,
+    "fn": "fetchStudentReportData",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 115,
+    "fn": "getStudentsInClassWithStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 148,
+    "fn": "checkSubjectCompletion",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 352,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 130,
+    "fn": "getActiveTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 86,
+    "fn": "findStudentsNotInClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 373,
+    "fn": "getClassSheet",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 458,
+    "fn": "getMyPendingAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 43,
+    "fn": "listSessionsWithTerms",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 90,
+    "fn": "insertTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 102,
+    "fn": "listTermsBySession",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 138,
+    "fn": "updateTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 152,
+    "fn": "findTermById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 166,
+    "fn": "activateTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 171,
+    "fn": "activateTerm",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/sessions.ts",
+    "line": 217,
+    "fn": "getCurrentContext",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/results.ts",
+    "line": 263,
+    "fn": "GET /:schoolId/results/class-summary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/roster.ts",
+    "line": 498,
+    "fn": "POST /:schoolId/teacher-assignments/copy-from-term",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1458,
+    "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 197,
+    "fn": "getStudentClassId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 261,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 265,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 412,
+    "fn": "getStudentsAtRisk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 59,
+    "fn": "insertSlot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 75,
+    "fn": "findClassClash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 97,
+    "fn": "findTeacherClash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 113,
+    "fn": "getClassTimetable",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 128,
+    "fn": "getTeacherTimetable",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 143,
+    "fn": "findSlotById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 152,
+    "fn": "deleteSlot",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1850,
+    "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/announcements.ts",
+    "line": 33,
+    "fn": "createAnnouncement",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/announcements.ts",
+    "line": 51,
+    "fn": "listAnnouncementsForRole",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/announcements.ts",
+    "line": 69,
+    "fn": "getTargetUsers",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/assignments.ts",
+    "line": 226,
+    "fn": "listSubmissionsForAssignment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 57,
+    "fn": "getClassRoster",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 195,
+    "fn": "getClassAttendanceForDate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 277,
+    "fn": "getMonthlySummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/attendance.ts",
+    "line": 352,
+    "fn": "listUnresolvedAlerts",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 92,
+    "fn": "getStudentBehaviourHistory",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/behaviour.ts",
+    "line": 129,
+    "fn": "getSchoolBehaviourSummary",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/classComments.ts",
+    "line": 32,
+    "fn": "listClassStudentsForComments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 28,
+    "fn": "getDashboardStats",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 82,
+    "fn": "getUserName",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 135,
+    "fn": "getTeacherOverview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 227,
+    "fn": "getStudentsInClassWithAverages",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/dashboard.ts",
+    "line": 283,
+    "fn": "getTeacherActivity",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 358,
+    "fn": "getPaymentById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 437,
+    "fn": "listInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/fees.ts",
+    "line": 491,
+    "fn": "getOutstandingBalances",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 60,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 76,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 94,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 109,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 117,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 165,
+    "fn": "getInbox",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/messages.ts",
+    "line": 193,
+    "fn": "getThreadMessages",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/notices.ts",
+    "line": 78,
+    "fn": "findNoticeById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 23,
+    "fn": "getLinkedChildren",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 56,
+    "fn": "isParentLinkedToStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/parents.ts",
+    "line": 77,
+    "fn": "getParentsForStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 46,
+    "fn": "fetchStudentReportData",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/reportCards.ts",
+    "line": 94,
+    "fn": "fetchFormTeacher",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 115,
+    "fn": "getStudentsInClassWithStatus",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 148,
+    "fn": "checkSubjectCompletion",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 298,
+    "fn": "getClassSubjectAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 320,
+    "fn": "getTeachersForClass",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 363,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/results.ts",
+    "line": 376,
+    "fn": "getApprovalDashboard",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 235,
+    "fn": "copyAssignmentsBetweenTerms",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 259,
+    "fn": "listTeacherAssignments",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/roster.ts",
+    "line": 394,
+    "fn": "findTeachersByEmails",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 61,
+    "fn": "schoolHasPrincipal",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/scores.ts",
+    "line": 392,
+    "fn": "getClassSheet",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 151,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 178,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 205,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 220,
+    "fn": "registerStudent",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 355,
+    "fn": "getStudentProfile",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 373,
+    "fn": "getStudentProfile",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 441,
+    "fn": "updateStudentBio",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 559,
+    "fn": "findUsersRolesByEmails",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/students.ts",
+    "line": 577,
+    "fn": "findStudentsByAdmissionNumbers",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 75,
+    "fn": "findClassClash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 97,
+    "fn": "findTeacherClash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/timetable.ts",
+    "line": 113,
+    "fn": "getClassTimetable",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 80,
+    "fn": "findUserById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 88,
+    "fn": "findUserByEmail",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 96,
+    "fn": "updatePasswordHash",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 104,
+    "fn": "getPasswordHashById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 128,
+    "fn": "changeOwnPassword",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 174,
+    "fn": "reassignUserEmail",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 216,
+    "fn": "insertUser",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 243,
+    "fn": "updateUserProfile",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 255,
+    "fn": "updateUserSignature",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 264,
+    "fn": "setUserActive",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 274,
+    "fn": "findPrincipalsBySchool",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/middleware/auth.ts",
+    "line": 95,
+    "fn": "verifyToken",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/middleware/auth.ts",
+    "line": 100,
+    "fn": "verifyToken",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/middleware/auth.ts",
+    "line": 144,
+    "fn": "requirePasswordChanged",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/middleware/auth.ts",
+    "line": 149,
+    "fn": "requirePasswordChanged",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/auth.ts",
+    "line": 73,
+    "fn": "POST /create-user",
+    "connection": "login client (routes/auth.ts getPgClient)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/auth.ts",
+    "line": 101,
+    "fn": "POST /create-user",
+    "connection": "login client (routes/auth.ts getPgClient)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/auth.ts",
+    "line": 198,
+    "fn": "POST /login",
+    "connection": "login client (routes/auth.ts getPgClient)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/auth.ts",
+    "line": 214,
+    "fn": "POST /login",
+    "connection": "login client (routes/auth.ts getPgClient)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT",
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/auth.ts",
+    "line": 300,
+    "fn": "POST /seed-test-user",
+    "connection": "login client (routes/auth.ts getPgClient)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 935,
+    "fn": "POST /:schoolId/students/:studentId/parents",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/students.ts",
+    "line": 967,
+    "fn": "POST /:schoolId/students/:studentId/parents",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 343,
+    "fn": "POST /support-sessions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 470,
+    "fn": "GET /support-sessions",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 526,
+    "fn": "GET /audit-logs",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 642,
+    "fn": "GET /schools/:schoolId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 779,
+    "fn": "GET /schools/:schoolId/export",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1513,
+    "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1532,
+    "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1606,
+    "fn": "POST /onboarding/:sessionId/complete",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1892,
+    "fn": "GET /analytics/growth",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2038,
+    "fn": "GET /announcements",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2148,
+    "fn": "POST /announcements/:id/publish",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2200,
+    "fn": "GET /admins",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2249,
+    "fn": "POST /admins",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2300,
+    "fn": "POST /admins/:id/resend-welcome",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2352,
+    "fn": "countOtherActiveAdmins",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2398,
+    "fn": "PATCH /admins/:id/suspend",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2415,
+    "fn": "PATCH /admins/:id/suspend",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2452,
+    "fn": "PATCH /admins/:id/reactivate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2466,
+    "fn": "PATCH /admins/:id/reactivate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2507,
+    "fn": "DELETE /admins/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2534,
+    "fn": "DELETE /admins/:id",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/scripts/seedSuperAdmin.ts",
+    "line": 19,
+    "fn": "main",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/scripts/seedSuperAdmin.ts",
+    "line": 40,
+    "fn": "main",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/notificationWorker.ts",
+    "line": 58,
+    "fn": "processRow",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/resultEngine.ts",
+    "line": 265,
+    "fn": "computeClassResults",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/subscriptionService.ts",
+    "line": 12,
+    "fn": "getSystemAdminId",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  }
+]

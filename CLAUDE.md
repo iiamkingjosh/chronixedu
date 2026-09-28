@@ -147,6 +147,19 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    host and Postgres sat idle. Of the three timeouts met this week, only
    `statement_timeout` both stopped the work and named the cause.
 
+16. **An assertion whose expected outcome is "nothing" cannot tell "did the right thing"
+   from "did nothing."** For every assertion of zero, empty, absent, null or unchanged,
+   ask what *else* produces that result; if a no-op does, establish the non-empty state
+   first and assert it. Four instances in four days, each a different mechanism:
+   `total_mrr: 0` (no subscriptions, or a broken query); the lint ratchet's baseline
+   (passing whether or not it would bite); "no 5000ms timeouts" across four concurrent runs,
+   three of which destroyed each other's evidence; and "overrides empty after clearing",
+   which a save that silently never happened also produces — that test passed against the
+   broken UPDATE until it was made to assert the override existed first. More mechanical
+   than doctrine 7, and it would have caught all four without anyone needing to be clever.
+   223 such assertions exist across the three suites as of 28 Sep 2026; the sweep is an
+   open item in `docs/AUDIT-2026-09.md`.
+
 ## Auth (as built)
 
 - Login: Supabase `signInWithPassword` verifies the password; the API then signs
