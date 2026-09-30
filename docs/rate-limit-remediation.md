@@ -11,7 +11,11 @@ narrower §2.1/§2.3: `POST /login` has its own limiter (`rl:login:`) that count
 failed attempts; every other `/api/auth` route keeps the counting-everything limiter.
 `max` stays **5** — the raise to 20 waits for test 5 (below), as §4 says it should.
 Mounting lives in `mountRateLimiters()`, which index.ts and `rateLimitRedis.test.ts`
-both call. Tests 1, 2 and the scope half of 4 are in `rateLimitRedis.test.ts`.
+both call. Tests 1, 2 and the scope half of 4 are in `rateLimitRedis.test.ts`; **test 5
+(corrected form, below) is `authLockout.test.ts`** — the lockout had no test before, since
+`auth.test.ts` runs with `redis` null. `rateLimitRedis.test.ts` also pins the known limit
+in the last paragraph: six correct passwords *arriving together* → one 429; six in
+sequence → all admitted.
 
 **Corrections to the text below, verified against code:**
 

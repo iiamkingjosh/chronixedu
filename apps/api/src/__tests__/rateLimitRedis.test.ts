@@ -138,3 +138,33 @@ describe('the other auth routes keep counting every request', () => {
     expect((await login(app)).status).toBe(200);
   });
 });
+
+describe('what the failures-only count still cannot tell apart', () => {
+  // express-rate-limit increments on arrival and takes a success back off the count
+  // when its response FINISHES. So N correct logins in flight at once from one address
+  // are N on the counter until they start answering. A login takes ~2s in production.
+  it('six correct passwords arriving together from one address: the sixth is refused while the first five are still being checked', async () => {
+    const redis = fakeRedis();
+    const app = express();
+    mountRateLimiters(app, createRateLimiters(redis.send));
+    let release!: () => void;
+    const gate = new Promise<void>(r => { release = r; });
+    let arrived = 0;
+    app.post('/api/auth/login', async (_req, res) => { arrived++; await gate; res.json({ success: true }); });
+
+    // supertest sends lazily — .then() is what starts each request.
+    const inFlight = Array.from({ length: 6 }, () => request(app).post('/api/auth/login').then(r => r));
+    // Precondition: five reached the handler and are waiting; the sixth never did.
+    while (arrived < 5) await new Promise(r => setTimeout(r, 5));
+    await new Promise(r => setTimeout(r, 20));
+    expect(arrived).toBe(5);
+    release();
+    const statuses = (await Promise.all(inFlight)).map(r => r.status).sort();
+    expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+  });
+
+  it('…but six correct passwords one after another are all admitted', async () => {
+    const { app } = buildApp();
+    for (let i = 0; i < 6; i++) expect((await login(app)).status).toBe(200);
+  });
+});
