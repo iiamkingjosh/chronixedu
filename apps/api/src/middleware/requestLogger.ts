@@ -14,6 +14,14 @@ internal.addAddress('::1', 'ipv6');
 internal.addSubnet('fc00::', 7, 'ipv6');
 internal.addSubnet('fe80::', 10, 'ipv6');
 
+// RFC 5737 documentation ranges: never a real client, so "is it one of these" can be
+// logged. Probes send them in forged headers to learn which headers the edge overwrites.
+const testnet = new BlockList();
+testnet.addSubnet('192.0.2.0', 24, 'ipv4');
+testnet.addSubnet('198.51.100.0', 24, 'ipv4');
+testnet.addSubnet('203.0.113.0', 24, 'ipv4');
+const isTestnet = (ip: string) => isIP(ip) === 4 && testnet.check(ip, 'ipv4');
+
 function unmap(ip: string): string {
   return ip.startsWith('::ffff:') && isIP(ip.slice(7)) === 4 ? ip.slice(7) : ip;
 }
@@ -26,9 +34,13 @@ function unmap(ip: string): string {
  * through one Railway edge, landing on two different limiter keys about one time in five;
  * these fields say what the second key is without recording anyone's address.
  */
-function realIpRelation(req: Request, xff: string[], ip: string): 'none' | 'eq_ip' | 'eq_first' | 'other' {
+function realIpHeader(req: Request): string {
   const raw = req.headers['x-real-ip'];
-  const real = unmap(String(Array.isArray(raw) ? raw[0] : raw ?? '').trim());
+  return unmap(String(Array.isArray(raw) ? raw[0] : raw ?? '').trim());
+}
+
+function realIpRelation(req: Request, xff: string[], ip: string): 'none' | 'eq_ip' | 'eq_first' | 'other' {
+  const real = realIpHeader(req);
   if (!real) return 'none';
   if (real === ip) return 'eq_ip';
   if (xff.length && real === xff[0]) return 'eq_first';
@@ -58,6 +70,10 @@ export function describeClientIp(req: Request) {
     // relative to req.ip and the first forwarded hop says which header names the client
     // -- and, probed with a forged X-Real-IP, whether the edge overwrites it.
     real_ip: realIpRelation(req, xff.map(unmap), ip),
+    // Production: two DISTINCT forwarded hops, X-Real-IP equal to neither. Whether a
+    // forged header survives the edge decides which header can be trusted as the client.
+    xff_first_testnet: xff.length > 0 && isTestnet(unmap(xff[0])),
+    real_ip_testnet: isTestnet(realIpHeader(req)),
   };
 }
 
