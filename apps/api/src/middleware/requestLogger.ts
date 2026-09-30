@@ -34,6 +34,10 @@ export function describeClientIp(req: Request) {
   const index = xff.map(unmap).lastIndexOf(ip);
   return {
     xff_hops: xff.length,
+    // Production shows two hops on every request. Whether the last (= req.ip) is the
+    // client again or a different address decides whether the per-IP keys are clients
+    // or proxies — and it can be told from a count alone.
+    xff_distinct: new Set(xff.map(unmap)).size,
     ip_family: family === 4 ? 'v4' : family === 6 ? 'v6' : 'none',
     ip_internal: family ? internal.check(ip, family === 4 ? 'ipv4' : 'ipv6') : false,
     // Which entry req.ip was taken from: 'last' is what trust proxy = 1 intends;

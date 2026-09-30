@@ -39,15 +39,19 @@ describe('describeClientIp — the shape of the client address, never the addres
   }
 
   it('a public client behind one proxy: taken from the last hop, not internal', async () => {
-    expect(await seen('129.18.153.138')).toEqual({ xff_hops: 1, ip_family: 'v4', ip_internal: false, ip_from: 'last', edge: null });
+    expect(await seen('129.18.153.138')).toEqual({ xff_hops: 1, xff_distinct: 1, ip_family: 'v4', ip_internal: false, ip_from: 'last', edge: null });
   });
 
   it('an extra platform hop appended after the client shows up as an internal last hop', async () => {
-    expect(await seen('129.18.153.138, 100.64.0.7')).toEqual({ xff_hops: 2, ip_family: 'v4', ip_internal: true, ip_from: 'last', edge: null });
+    expect(await seen('129.18.153.138, 100.64.0.7')).toEqual({ xff_hops: 2, xff_distinct: 2, ip_family: 'v4', ip_internal: true, ip_from: 'last', edge: null });
   });
 
   it('no forwarded header: the socket peer, which in tests is loopback', async () => {
-    expect(await seen(undefined)).toEqual({ xff_hops: 0, ip_family: 'v4', ip_internal: true, ip_from: 'socket', edge: null });
+    expect(await seen(undefined)).toEqual({ xff_hops: 0, xff_distinct: 0, ip_family: 'v4', ip_internal: true, ip_from: 'socket', edge: null });
+  });
+
+  it('the client repeated by a proxy is one distinct address in two hops', async () => {
+    expect(await seen('129.18.153.138, ::ffff:129.18.153.138')).toMatchObject({ xff_hops: 2, xff_distinct: 1, ip_from: 'last' });
   });
 
   it('never includes an address in its output', async () => {
