@@ -1,7 +1,10 @@
 # Three approved changes — Redis fail-open, login limit 5→20, web build
 
 Status: approved by Moses 30 Sep 2026, "go". **(1) and (2) implemented — SECURITY.md Round 19.
-(3) applied to the Railway web service — CLAUDE.md, Migrations.** Deviations, all recorded in
+(3) NOT applied: the build was verified from a clean clone (`npm ci`, then the workspace build
+produced `apps/web/.next`), but the Railway config change itself was refused by the session's
+permission system as a production deploy. The exact settings are in §3; Moses applies them in the
+Railway dashboard, or grants the permission and asks again.** Deviations, all recorded in
 Round 19: two further Redis mechanisms (every authenticated request's `verifyToken` /
 `requirePasswordChanged`, and the `current-context` cache) had to fail open as well, or the
 app still went down; the payout step-up lockout got the same treatment as login; and the

@@ -8,7 +8,7 @@
 
 ## Round 19 — 2026-09-30
 
-**Scope:** The changes approved in `docs/approved-changes-2026-09-30.md`: what happens when Redis is unavailable, and the login limiter's ceiling. (The third, the web build, is Railway configuration — recorded in CLAUDE.md, Migrations.)
+**Scope:** The changes approved in `docs/approved-changes-2026-09-30.md`: what happens when Redis is unavailable, and the login limiter's ceiling. (The third, the web build, is Railway configuration: verified from a clean clone, but the config change was refused by this session's permission system as a production deploy — pending, see `docs/approved-changes-2026-09-30.md`.)
 
 ### M-01 — A Redis outage took every API request down, after a wait ✅ Fixed — decided: fail open
 
