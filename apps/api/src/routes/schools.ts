@@ -37,6 +37,7 @@ import { listBanks, resolveBankAccount, createPaystackSubaccount, PaystackServic
 import { sendTermiiSms } from '../services/termiiService';
 import { logger } from '../config/logger';
 import { findSubscriptionGate } from '../db/queries/schools';
+import { exportSummary, exportDatasetCsv } from '../db/queries/schoolExport';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -250,6 +251,54 @@ router.post(
 );
 
 // ── GET /api/schools/:schoolId ─────────────────────────────────────────────────
+
+// ── GET /:schoolId/export, GET /:schoolId/export/:dataset ─────────────────────
+// The school's own complete data export (db/queries/schoolExport.ts): the DPA and Terms §22
+// promise it, and the read-only notice tells a lapsed school it can still take its data.
+// GETs, so they work while read-only. This file's requireSchoolAccess admits the principal
+// and super_admin only — deliberately: this is every child's record in one place. Each
+// download is audited (doctrine 10: a bulk export of personal data is a sensitive act).
+router.get(
+  '/:schoolId/export',
+  verifyToken,
+  requireSchoolAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      return res.json({ success: true, data: { datasets: await exportSummary(req.params.schoolId) } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.get(
+  '/:schoolId/export/:dataset',
+  verifyToken,
+  requireSchoolAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const out = await exportDatasetCsv(req.params.schoolId, req.params.dataset);
+      if (!out) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'No such export' } });
+      }
+      await logAudit({
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'SCHOOL_DATA_EXPORTED',
+        entity: 'school_export',
+        entityId: req.params.schoolId,
+        oldValue: null,
+        newValue: { dataset: req.params.dataset, rows: out.rows },
+      });
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${out.filename}"`);
+      return res.send(out.csv);
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 
 // ── GET /:schoolId/subscription-status ──────────────────────────────────────
 // The trial gate's state, for the in-app notice (migration 046). Every member of the

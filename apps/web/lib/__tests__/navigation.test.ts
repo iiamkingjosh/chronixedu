@@ -19,9 +19,9 @@ describe('the principal sidebar', () => {
     expect(PRINCIPAL_NAV_GROUPS.map((g) => g.items.length)).toEqual([2, 3, 3, 3]);
   });
 
-  it('keeps settings as eleven links in three groups', () => {
-    expect(SETTINGS_NAV).toHaveLength(11);
-    expect(SETTINGS_NAV_GROUPS.map((g) => g.items.length)).toEqual([5, 4, 2]);
+  it('keeps settings as twelve links in three groups', () => {
+    expect(SETTINGS_NAV).toHaveLength(12);
+    expect(SETTINGS_NAV_GROUPS.map((g) => g.items.length)).toEqual([6, 4, 2]);
   });
 
   it('has no two labels naming the same thing, singular or plural, across both sections', () => {

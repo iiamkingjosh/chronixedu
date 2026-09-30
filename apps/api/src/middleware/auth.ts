@@ -30,7 +30,9 @@ declare module 'express-serve-static-core' {
 function tagSentry(user: AuthUser) {
   Sentry.setTag('school_id', user.school_id ?? 'none');
   Sentry.setTag('user_role', user.role ?? 'anonymous');
-  Sentry.setUser({ id: user.user_id, email: user.email });
+  // Id only. The DPA names Sentry for "technical/diagnostic data only"; the email that was
+  // sent here was personal data. The id still traces an error to a user through our own DB.
+  Sentry.setUser({ id: user.user_id });
 }
 
 export async function verifyToken(req: Request, res: Response, next: NextFunction) {

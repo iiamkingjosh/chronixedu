@@ -342,8 +342,12 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   `/api/schools/:id` get 423 `SCHOOL_READ_ONLY` (`middleware/requireWritableSubscription.ts`), extras off.
   **Never touches `schools.is_active`** — that is an administrator's decision with its own route. The
   status rides on the cached school row (`findSchoolById`); anything that changes it clears
-  `schoolCacheKey(id, 'data')`. `READ_ONLY_WRITE_ALLOWLIST` is where routes that let a school pay go —
-  empty until the payment system exists, pinned by a test. Recovery: a recorded payment (which also
+  `schoolCacheKey(id, 'data')`. `READ_ONLY_WRITE_ALLOWLIST` is where routes that let a school pay go,
+  empty until the payment system exists. **Name a subscription-payment route with a
+  `platform-billing`, `subscription`, `renew` or `checkout` path segment** (`PLATFORM_PAYMENT_PATH`):
+  `carveOut.test.ts` walks every write route mounted behind the guard and fails if one matching that
+  contract is not carved out. A payment route named otherwise escapes the test, so the name is the
+  contract. Recovery: a recorded payment (which also
   moves a trial to premium), extending the trial (status recomputed from the new date), or a PATCH.
   Read-only schools send no fee reminders; queued notifications still deliver in-app and by email,
   without SMS.
@@ -351,6 +355,21 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   any member of the school may read it, and it answers while read-only.
 - Not built yet, deliberately: checkout and webhooks. They wait on a rate being set and a real
   school's amount looking right.
+
+## A school's data: export and deletion (DPA §11, Terms §22)
+
+- **The legal pages are accepted text** (`legal_terms_accepted_at`). Never edit them to match the
+  code; change the code, or raise it with Moses. Public claims elsewhere (`home-page.tsx`) must be
+  things the code does today; they were audited against it on 1 Oct 2026 (SECURITY.md Round 21).
+- **Export:** principal → Settings → Data Export (`GET /:schoolId/export[/:dataset]`,
+  `db/queries/schoolExport.ts`). Every public table is either an `EXPORT_DATASETS` source or in
+  `NOT_EXPORTED` with a reason, and `schoolExport.db.test.ts` fails on a table that is neither. A new
+  table needs that decision in the same commit. Files in Storage are not in the export yet.
+- **Deletion:** `apps/api/scripts/delete-school-data.js` and `docs/data-deletion-runbook.md`. Same
+  ratchet: every table is in `STEPS` or `NOT_DELETED` (`schoolDeletion.db.test.ts`). A new upload
+  path goes in `storagePrefixes()`. It keeps `audit_logs`, and the users and school rows those
+  reference, until the **[MOSES] (a)/(b) decision** in the runbook is made. Do not "fix" that by
+  deleting around the trigger (doctrine 6).
 
 ## Partner integration (Chronix ERP)
 

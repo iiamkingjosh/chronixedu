@@ -180,9 +180,9 @@ describe('the trial gate: trial, 14 days of grace, then read-only', () => {
   });
 
   it('the payment carve-out lets a listed route write while read-only, and nothing else', async () => {
-    // No route lets a school pay Chronix yet, so the real list is empty — pinned here so
-    // the payment system has to add its routes deliberately, each with its own test.
-    expect(READ_ONLY_WRITE_ALLOWLIST).toEqual([]);
+    // The mechanism, end to end through the real guard. That a platform payment route cannot
+    // EXIST without being carved out is carveOut.test.ts — this file used to assert the list
+    // was empty, which is true until someone edits it and proves nothing.
     await trialEndedDaysAgo(I.schoolA, 15);
     await runTrialExpiryCheck();
     expect((await postNotice(tokens.principalA())).status).toBe(423);

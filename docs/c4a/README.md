@@ -116,6 +116,19 @@ It also found a product defect: a deadlock between the next test's seed and an
 notification queue row, written fire-and-forget while the publish response claimed it had
 been queued (SECURITY.md Round 14, fixed).
 
+## When C-4a lands: a sentence to put back
+
+The home page used to say *"Every school is isolated at the database level. Not just a filter —
+a hard technical boundary."* It was withdrawn on 1 Oct 2026 because it was not true of the
+system as built: the API connects as the table owner and bypasses RLS, so isolation is the route
+guards and `WHERE school_id` (CLAUDE.md doctrine 2). It now says what is true — every request is
+checked against its school and every query scoped to it, tested on every change.
+
+Once the app connects as `chronixedu_app` and the tenant policies enforce (C-4b), the database
+boundary is real and the stronger sentence can go back in `apps/web/app/home-page.tsx`, under
+"Schools can't see each other's data". Not before: it is a security claim made to schools
+deciding whether to trust us with children's records.
+
 ## Next
 
 - **The integration suite under the roles**, including POST /login on `chronixedu_login` —

@@ -11,6 +11,7 @@ import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { insertSchoolSettings, updateIdentityConfig, updateAcademicConfig, schoolHasPrincipal } from '../db/queries/schools';
 import { getPlatformRevenue } from '../db/queries/platformRevenue';
 import { planEnum } from '../services/planFeatures';
+import { csvCell } from '../services/csv';
 import { cache, schoolCacheKey } from '../services/cacheService';
 import { NIGERIAN_DEFAULTS } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
@@ -347,23 +348,9 @@ function parseExpectedIntervalHours(schedule: string): number {
   return 1; // hourly
 }
 
-// Escapes a value for inclusion in a CSV cell.
-// Exported so it can be unit-tested directly for formula-injection handling.
-export function csvCell(value: unknown): string {
-  let str = value === null || value === undefined ? '' : String(value);
-  // Prevent formula/DDE injection: a cell whose first character is =, +, -, @, tab, or
-  // CR can be interpreted as a formula by Excel/LibreOffice when the CSV is opened.
-  // Prefixing with a leading apostrophe forces it to be read back as literal text.
-  // This must run before the quote-escaping below so the apostrophe is included in
-  // whatever gets quoted.
-  if (/^[=+\-@\t\r]/.test(str)) {
-    str = `'${str}`;
-  }
-  if (/[",\n\r]/.test(str)) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
+// csvCell moved to services/csv.ts (the school export uses it too); re-exported here
+// because its unit test imports it from this module.
+export { csvCell };
 
 // ── POST /support-sessions ──────────────────────────────────────────────────────
 // Starts an impersonation session against a user in another school.

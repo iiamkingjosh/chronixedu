@@ -20,6 +20,22 @@ const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 export const READ_ONLY_WRITE_ALLOWLIST: Array<{ method: string; path: RegExp; why: string }> = [];
 
 /**
+ * THE CONTRACT for any route that lets a school pay Chronix: its path must match this, so
+ * it can be recognised as one. carveOut.test.ts walks every write route mounted under
+ * /api/schools and fails if a route matching this is NOT admitted by the allowlist — so the
+ * payment system cannot ship a checkout that read-only then blocks, which would leave a
+ * lapsed school unable to pay to restore its own access. The test can only see what the
+ * path says; a payment route named some other way escapes it, which is why the convention
+ * is written here and in CLAUDE.md.
+ */
+export const PLATFORM_PAYMENT_PATH = /\/(platform-billing|subscription|renew|checkout)(\/|$)/i;
+
+/** Whether a write to this path (relative to the /api/schools mount) is carved out. */
+export function isAllowedWhileReadOnly(method: string, path: string): boolean {
+  return READ_ONLY_WRITE_ALLOWLIST.some(e => e.method === method && e.path.test(path));
+}
+
+/**
  * The trial gate's read-only state (migration 046): every GET works, every write under
  * /api/schools/:schoolId is refused with 423 SCHOOL_READ_ONLY. Keyed on the SUBSCRIPTION
  * status carried on res.locals.school by requireActiveSchool — never on schools.is_active,
@@ -36,7 +52,7 @@ export function requireWritableSubscription(req: Request, res: Response, next: N
   const school = res.locals.school as { subscription_status?: string | null } | undefined;
   if (school?.subscription_status !== 'read_only') { next(); return; }
 
-  if (READ_ONLY_WRITE_ALLOWLIST.some(e => e.method === req.method && e.path.test(req.path))) { next(); return; }
+  if (isAllowedWhileReadOnly(req.method, req.path)) { next(); return; }
 
   res.status(423).json({
     success: false,

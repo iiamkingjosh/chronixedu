@@ -432,7 +432,7 @@ export default function HomePage() {
             <div className="feat-text reveal-left">
               <span className="eyebrow" style={{ background: 'var(--orange-l)', color: 'var(--orange)' }}>Communication</span>
               <h3>Parents find out the same day, not at the next PTA meeting.</h3>
-              <p>When a student is absent three days running, a parent gets an SMS. When results are published, they get a notification. No one calls the office asking questions that are already answered in the app.</p>
+              <p>When a student has been absent three times in a week, a parent gets an SMS. When results are published, they get a notification. No one calls the office asking questions that are already answered in the app.</p>
               <ul className="feat-list">
                 <li><CheckIcon /> Staff and parents message each other directly in the app</li>
                 <li><CheckIcon /> School-wide announcements reach everyone at once</li>
@@ -537,7 +537,7 @@ export default function HomePage() {
             <div className="trust-card reveal">
               <div className="trust-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z" /></svg></div>
               <h4>Schools can&apos;t see each other&apos;s data</h4>
-              <p>Every school is isolated at the database level. Not just a filter — a hard technical boundary. One school&apos;s data is invisible to every other school on the platform.</p>
+              <p>Every request is checked against the school it belongs to, and every query is scoped to that school. No school can read another school&apos;s data — and we test that on every change we ship.</p>
             </div>
             <div className="trust-card reveal stagger-1">
               <div className="trust-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" /></svg></div>
@@ -546,8 +546,8 @@ export default function HomePage() {
             </div>
             <div className="trust-card reveal stagger-2">
               <div className="trust-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg></div>
-              <h4>Monitored around the clock</h4>
-              <p>Automated backups, real-time error monitoring, and uptime alerts. If something breaks at 2am, we know before your staff starts their morning.</p>
+              <h4>Monitored</h4>
+              <p>Error monitoring and uptime checks on both the app and its API, so problems are spotted and fixed quickly.</p>
             </div>
           </div>
         </div>

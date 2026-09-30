@@ -1,5 +1,16 @@
 # Chronix Edu — Changelog
 
+## Principals can export their school's data (2026-10-01)
+
+### For schools
+- Principals have a new **Settings → Data Export** page: every record the school holds, one spreadsheet (CSV) per kind: students, parents and staff, classes, attendance, scores, results, report-card records, fees and payments, timetables, assignments, notices, messages and more. Each download is recorded in the school's audit log.
+- It keeps working when a school is read-only after its trial, and the read-only notice now points principals to it.
+- The home page now describes what we actually do. Parents get an SMS when a student is absent **three times within a week** (the page said "three days running"); school data is kept separate by checks on every request (not "at the database level"); and we describe monitoring and uptime checks rather than round-the-clock monitoring or automated backups.
+
+### For Chronix administrators
+- Error reports sent to Sentry no longer include users' email addresses, only their user id.
+- A school's data can now be deleted with a tested script, following `docs/data-deletion-runbook.md`. It also fixes a database rule that made deleting a school's assessment setup impossible.
+
 ## One plan, termly billing, and a gentler end to the free trial (2026-09-30)
 
 ### For schools

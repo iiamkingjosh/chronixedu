@@ -50,7 +50,7 @@ export default function SubscriptionNotice({ schoolId, isPrincipal }: { schoolId
   return (
     <div role="alert" className="shrink-0 bg-red-50 border-b border-red-200 text-red-900 text-sm px-4 py-2">
       <strong>This school is read-only.</strong>{' '}
-      The trial has ended, so saving changes is paused. Every record is still here and can be viewed and exported. {renew}
+      The trial has ended, so saving changes is paused. Every record is still here and can be viewed{isPrincipal ? <>, and exported from <a className="underline font-medium" href="/settings/export">Settings → Data Export</a></> : null}. {renew}
     </div>
   );
 }

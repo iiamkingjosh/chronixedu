@@ -1,8 +1,38 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 20 — 2026-09-30  
-**Scope:** The plan gate after Basic's removal; the trial gate replaces suspension  
-**Round 20 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+**Latest audit:** Round 21 — 2026-10-01  
+**Scope:** Public claims checked against the code; the school's own export; the deletion process  
+**Round 21 total findings:** 2 (0 Critical · 0 High · 2 Medium) + 2 Info
+
+---
+
+## Round 21 — 2026-10-01
+
+**Scope:** "Public claims and the retention commitment" (approved 30 Sep 2026): every statement on the public pages about security, data handling and deletion, checked against the code. The legal pages (DPA, Terms) were accepted by schools and were **not** edited; where they and the code disagreed, the code was changed.
+
+### M-01 — Sentry received every signed-in user's email address ✅ Fixed
+
+**Files:** `apps/api/src/middleware/auth.ts`, `apps/web/sentry.client.config.ts`
+
+The DPA names Sentry as a sub-processor for "technical/diagnostic data only". `tagSentry` called `Sentry.setUser({ id, email })` on every authenticated request, so every error event carried the user's email address to a third party outside the stated purpose. **Fix:** id only (an opaque UUID that still traces an error through our own database). Session replay was checked at the same time: SDK 10.58's defaults mask all text and inputs and block media, so replays did not carry screen contents. Those three options are now stated explicitly in the config, so the DPA's claim no longer rests on an upstream default. Events sent before this deploy still carry emails and age out under Sentry's retention (`docs/data-deletion-runbook.md`).
+
+### M-02 — The read-only carve-out's test could not fail on the failure it existed for ✅ Fixed
+
+**Files:** `middleware/requireWritableSubscription.ts`, `__tests__/carveOut.test.ts` (new), `__db_tests__/trialGate.db.test.ts`
+
+Round 20 pinned `READ_ONLY_WRITE_ALLOWLIST` to `[]`. That caught someone widening the list, but not the failure the list exists to prevent: a subscription-payment route added under `/api/schools` and forgotten, so a read-only school is refused the one write that would restore it. The test passed whether or not such a route existed (doctrine 16). **Fix:** a naming contract (`PLATFORM_PAYMENT_PATH`: `platform-billing`, `subscription`, `renew`, `checkout` path segments) and a structural test. It parses `index.ts` for the routers actually mounted behind the guard, walks every non-GET route in them, and fails if one matches the contract and is not carved out. Controls: at least 20 routers and 60 write routes are read, and a known POST is found; a synthetic uncarved checkout route is caught and a carved one is not; no existing route matches (the parent-fee `/payments/paystack/initiate` must not).
+
+### I-01 — A principal could not take their school's data ✅ Built
+
+**Files:** `db/queries/schoolExport.ts` (new), `services/csv.ts` (new), `routes/schools.ts`; web `settings/export`; test `schoolExport.db.test.ts`
+
+The DPA promises "a complete export … (CSV or PDF)". The only export was a super-admin students CSV. **Built:** `GET /:schoolId/export` (counts) and `/export/:dataset` (CSV), 30 datasets. They use this file's `requireSchoolAccess`, which admits principal and super_admin only (a teacher gets 403, tested). Every query is scoped on `$1 = school_id`, and tables without a `school_id` column go through the school's students, terms, configs or assignments. The `people` dataset names its columns, so the password hash is never selected. Each download is audited (`SCHOOL_DATA_EXPORTED`). It is a GET, so it works while read-only (tested next to a refused POST). **Completeness ratchet:** every table in `pg_tables` must be an export source or be named in `NOT_EXPORTED` with a reason. A new table fails the test until someone decides. Every dataset is checked for School B's ids.
+
+### I-02 — Deleting a school: a tested script; the audit log is the open decision
+
+**Files:** `apps/api/scripts/delete-school-data.js` (new), `migrations/047_component_total_skips_deleted_config.sql` (new), `__db_tests__/schoolDeletion.db.test.ts` (new), `docs/data-deletion-runbook.md` (new)
+
+The deletion promise had no process. The script is dry-run by default. It refuses a non-local database unless `--allow-host` names the URL's host, and refuses `--execute` without `--confirm <slug>` and an explicit Supabase choice. It deletes Supabase Auth accounts and Storage files first (stopping, with the database untouched, if any fails), then every table in one transaction. It never prints the service key (verified with a sentinel). Writing its test found that **no school could ever have been deleted**: the component-weight trigger re-checked, at COMMIT, configs the same transaction had deleted. Migration 047 skips configs that no longer exist; emptying or unbalancing a live config is still refused (tested). **Not deleted, by design:** `audit_logs` (append-only since 036/037) and the users and school rows it references. Both routes the spec named, delete or anonymise, need the audit trigger relaxed, because anonymising is an UPDATE. The trade-off is in the runbook, **[MOSES]**.
 
 ---
 

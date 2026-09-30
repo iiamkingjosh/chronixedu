@@ -76,6 +76,7 @@ export const SETTINGS_NAV_GROUPS: NavGroup[] = [
       { label: 'Roster', href: '/settings/roster', description: 'Classes, subjects, and which teacher takes which subject in which class, per term.' },
       { label: 'Users', href: '/settings/users', description: 'Accounts, roles and access.' },
       { label: 'Notifications', href: '/settings/notifications', description: 'How staff and parents are notified about school events.' },
+      { label: 'Data Export', href: '/settings/export', description: 'Download all of the school’s records as spreadsheets (CSV).' },
     ],
   },
   {
