@@ -177,6 +177,14 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   (SECURITY.md Round 18). Rate-limit keys, lockout keys and the audit `ip_address` column all
   go through `clientIp`. A new `req.ip` reader is a regression; `audit_logs.ip_address` rows
   before 30 Sep 2026 hold proxy addresses.
+- **Redis is best-effort on the request path** (SECURITY.md Round 19, decided: fail open).
+  The shared client has `commandTimeout: 500`; every read or write of a limit, lockout or
+  cache goes through `bestEffort(event, op)` in `middleware/rateLimit.ts`, which logs and
+  returns `undefined`, and all five limiters carry `passOnStoreError: true`. A bare
+  `await redis.x()` on a request path is a regression: it turns a Redis outage back into
+  500s and 503s. The exceptions are the support-session token store and blacklist writers
+  in `superAdmin.ts`. While Redis is down both brute-force controls are off and nothing
+  alarms — open item in `docs/AUDIT-2026-09.md`.
 - Login: Supabase `signInWithPassword` verifies the password; the API then signs
   its **own** HS256 JWT (`JWT_SECRET`, 1h) with `user_id, school_id, role, email,
   title, must_change_password, subscription_tier`. Supabase-issued tokens are
@@ -498,5 +506,5 @@ a deliberate staging run.
 | `packages/shared`, Axios, Zustand | Not present. Types live per app; `fetch` wrapper in `lib/api.ts` |
 | Launch 7 Sep 2025 (PRD) | Launched 7 Sep 2026 |
 | Flat subscription tiers | trial / basic / premium / enterprise, per student per term |
-| Rule S5: `app.use('/api/auth', rateLimit({ windowMs: 60000, max: 5 }))` | **Amended 30 Sep 2026.** That counted *successful* logins, so a principal's sixth correct password in 35s was refused, and it keyed the whole staff room's router as one client. `POST /login` now counts failed attempts only (`rl:login:`); the other `/api/auth` routes keep counting everything, because forgot-password answers 200 for every email. The guessing control is the per-email lockout in `routes/auth.ts`. Do not "restore" S5 — see `docs/rate-limit-remediation.md`, SECURITY.md Round 17 |
+| Rule S5: `app.use('/api/auth', rateLimit({ windowMs: 60000, max: 5 }))` | **Amended 30 Sep 2026.** That counted *successful* logins, so a principal's sixth correct password in 35s was refused, and it keyed the whole staff room's router as one client. `POST /login` now counts failed attempts only (`rl:login:`; 20/min since Round 19); the other `/api/auth` routes keep counting everything, because forgot-password answers 200 for every email. The guessing control is the per-email lockout in `routes/auth.ts`. Do not "restore" S5 — see `docs/rate-limit-remediation.md`, SECURITY.md Round 17 |
 | Migrations live in `apps/api/src/migrations/` (Agent File folder structure) | Repo-root `migrations/`. The empty `apps/api/src/migrations/` left behind was a fossil of this and silently matched the migrate runner's directory lookup — deleted |

@@ -1,8 +1,41 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 18 — 2026-09-30  
-**Scope:** Which address the app takes as the client's  
-**Round 18 total findings:** 1 (0 Critical · 1 High · 0 Medium)
+**Latest audit:** Round 19 — 2026-09-30  
+**Scope:** Redis as a dependency of every request; the login limiter's ceiling  
+**Round 19 total findings:** 1 (0 Critical · 0 High · 1 Medium) + 1 recorded change
+
+---
+
+## Round 19 — 2026-09-30
+
+**Scope:** The changes approved in `docs/approved-changes-2026-09-30.md`: what happens when Redis is unavailable, and the login limiter's ceiling. (The third, the web build, is Railway configuration — recorded in CLAUDE.md, Migrations.)
+
+### M-01 — A Redis outage took every API request down, after a wait ✅ Fixed — decided: fail open
+
+**Files:** `apps/api/src/middleware/rateLimit.ts`, `middleware/auth.ts`, `routes/auth.ts`, `routes/schools.ts`, `routes/sessions.ts`, `routes/announcements.ts`, `routes/messages.ts`; tests `rateLimitRedis.test.ts`, `authLockout.test.ts`, `authMiddlewareRedis.test.ts`
+
+**The decision.** Rate limiting is a mitigation; the per-email lockout is the control; taking every school offline to preserve either is the wrong trade at 07:50 on a Monday. So while Redis is unavailable the app runs without it. Chosen, not defaulted: `passOnStoreError: true` is the opposite of the library's default and is set on purpose (doctrine 8).
+
+**Four mechanisms, not two.** The handover named two; verification found four, and the last two would have kept the app down on their own:
+
+1. *The limiter stores.* `express-rate-limit` 8.5.2 fails closed by default (`passOnStoreError: false`): a store error threw, and the general limiter sits on every `/api` request. Now `passOnStoreError: true` on all **five** limiters (general, auth, login, announcements, messages), with the library's own logger routed to winston as `rate_limit_store_unavailable` instead of the console.
+2. *The lockouts' own Redis calls* — login (`routes/auth.ts`) and the payout step-up (`routes/schools.ts`; not in the handover, same shape). A rejection went to `next(err)` and became a 500. Each read, increment and delete is now best-effort (`bestEffort()`): a failed read skips the pre-check; a failed increment after a wrong password still answers 401 — never 500, never a lockout; a failed delete after a correct password still issues the token. Logged as `login_lockout_unavailable` / `step_up_lockout_unavailable`.
+3. *Every authenticated request.* `verifyToken` reads the token blacklist and the `user_active` cache, and `requirePasswordChanged` the `must_change_password` cache, inside a try/catch that deliberately answered **503**. With 1 and 2 fixed, a Redis outage would still have refused every authenticated request. The two caches are now best-effort — a failure is a miss answered by the database, which decides anyway (a suspended user is refused with Redis down: tested). The blacklist check is best-effort on the reasoning `detectSupportSession` already fails open on the same key: the blacklist only ever holds support-session tokens, and those are also gated on the DB's `ended_at`. **This is the one extension beyond the handover's letter**, taken because its intent — the app keeps working — is not reachable without it. One hunk, easily reversed if the owner disagrees.
+4. *The `current-context` cache* (`routes/sessions.ts`): best-effort; a failed invalidation leaves a stale entry for at most 60 s.
+
+**Failing fast.** ioredis parks commands in an offline queue and rejects them only after 20 reconnect attempts, so "fail open" alone would have meant "wait tens of seconds, then pass". The shared client now has `commandTimeout: 500`: a command against a dead or hung Redis rejects within 500 ms (a healthy private-network Redis answers in under 10). During an outage a login costs about two extra seconds, not a refusal.
+
+**The residual, stated plainly.** While Redis is unavailable, **both brute-force controls are inactive** — the per-address limiter and the per-email lockout — and so are the token blacklist and the caches. The condition is logged at `error` (`redis_client_error` on each failed reconnect, roughly every 2 s, plus the events above) and **is not currently alarmed**: nothing reads Railway's log stream. Wiring an alert is an open item in `docs/AUDIT-2026-09.md`; it was deliberately not built here.
+
+**Not made best-effort:** the support-session token store and blacklist *writers* in `superAdmin.ts` (starting or ending an impersonation session needs Redis and may fail closed), and the cache invalidations after a suspension or password change in `users.ts`, `superAdmin.ts` and `routes/auth.ts` — a failure there is a 500 after a committed write, pre-existing and rare; listed rather than silently widened.
+
+**Tests, doctrine 16.** Each proves the control bites first, then breaks Redis, then proves the request survives: the limiter (5 forgot-password requests then 429; broken → 200 and logged; repaired → 429 again); the lockout (5 wrong passwords lock the account; broken → the correct password signs in and a wrong one is 401 not 500, logged); the middleware (a second request is served from cache; broken → answered from the database with three events logged; a suspended user is still 403). Five new tests, and three rewritten to the new ceiling. Of those eight, six fail on the pre-change code — verified by stashing the seven source files and rerunning, not by inspection; the other two (the cache-in-use precondition, and the "once refused" guard, which 20 wrong passwords trip on either ceiling) pass on both by design.
+
+### I-01 — Login limiter ceiling raised from 5 to 20 wrong passwords per minute per address ✅ Changed
+
+**Files:** `apps/api/src/middleware/rateLimit.ts`, `rateLimitRedis.test.ts`
+
+Both prerequisites recorded in Round 17 now hold: the per-email lockout has a test (`authLockout.test.ts`), and since Round 18 the address is the client's, so one school's router is one key — what the limit was always meant to measure. With `skipSuccessfulRequests` it counts only wrong passwords; twenty a minute from one school is Monday-morning typos and still a flood backstop. The `auth` limiter (forgot-password, reset, change-password) stays at 5: it counts successes by necessity. The per-email lockout (5 failures / 15 min) is untouched and remains the control; its test passes unchanged. The concurrency boundary (correct passwords in flight at once count until they answer) moves from 6 to 21 and is pinned.
 
 ---
 

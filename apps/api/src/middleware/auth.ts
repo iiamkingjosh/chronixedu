@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import * as Sentry from '@sentry/node';
-import { redis } from './rateLimit';
+import { redis, bestEffort } from './rateLimit';
 import pool from '../db/client';
 import { logger } from '../config/logger';
 
@@ -74,12 +74,18 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
   }
 
   // Step 2: check if the user is still active and whether the token has been revoked.
-  // Separate try/catch so DB or Redis errors return 503 rather than a misleading 401 —
-  // the request is rejected, not passed through.
+  // Separate try/catch so a DB error returns 503 rather than a misleading 401 — the
+  // request is rejected, not passed through. Redis, by contrast, is best-effort here
+  // (SECURITY.md Round 19, decided: fail open): user_active is a cache in front of the
+  // query below, so a Redis failure costs a query, and the blacklist only ever holds
+  // support-session tokens, which detectSupportSession also gates on the DB's ended_at —
+  // the same reasoning under which it already fails open on this key. Without this, a
+  // Redis outage answered every authenticated request with 503.
   try {
     // Check the token blacklist (revoked support session tokens).
     if (redis) {
-      const isBlacklisted = await redis.get(`blacklisted_token:${token}`);
+      const r = redis;
+      const isBlacklisted = await bestEffort('token_blacklist_unavailable', () => r.get(`blacklisted_token:${token}`));
       if (isBlacklisted) {
         return res.status(401).json({ success: false, error: { code: 'TOKEN_REVOKED', message: 'Token has been revoked' } });
       }
@@ -87,18 +93,21 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
 
     const cacheKey = `user_active:${payload.user_id}`;
     let isActive = true;
+    let cached: string | null | undefined = null;
     if (redis) {
-      const cached = await redis.get(cacheKey);
-      if (cached !== null) {
-        isActive = cached === '1';
-      } else {
-        const result = await pool.query('SELECT is_active FROM users WHERE id = $1', [payload.user_id]);
-        isActive = result.rows[0]?.is_active !== false;
-        await redis.set(cacheKey, isActive ? '1' : '0', 'EX', 300);
-      }
+      const r = redis;
+      cached = await bestEffort('user_active_cache_unavailable', () => r.get(cacheKey));
+    }
+    if (cached !== null && cached !== undefined) {
+      isActive = cached === '1';
     } else {
       const result = await pool.query('SELECT is_active FROM users WHERE id = $1', [payload.user_id]);
       isActive = result.rows[0]?.is_active !== false;
+      if (redis) {
+        const r = redis;
+        const value = isActive ? '1' : '0';
+        await bestEffort('user_active_cache_unavailable', () => r.set(cacheKey, value, 'EX', 300));
+      }
     }
 
     if (!isActive) {
@@ -134,20 +143,25 @@ export async function requirePasswordChanged(req: Request, res: Response, next: 
   }
 
   try {
-    const cacheKey = `must_change_password:${req.user.user_id}`;
+    const userId = req.user.user_id;
+    const cacheKey = `must_change_password:${userId}`;
     let mustChange: boolean;
+    // Cache in front of the query; Redis best-effort (SECURITY.md Round 19).
+    let cached: string | null | undefined = null;
     if (redis) {
-      const cached = await redis.get(cacheKey);
-      if (cached !== null) {
-        mustChange = cached === '1';
-      } else {
-        const result = await pool.query('SELECT must_change_password FROM users WHERE id = $1', [req.user.user_id]);
-        mustChange = result.rows[0]?.must_change_password === true;
-        await redis.set(cacheKey, mustChange ? '1' : '0', 'EX', 300);
-      }
+      const r = redis;
+      cached = await bestEffort('must_change_password_cache_unavailable', () => r.get(cacheKey));
+    }
+    if (cached !== null && cached !== undefined) {
+      mustChange = cached === '1';
     } else {
-      const result = await pool.query('SELECT must_change_password FROM users WHERE id = $1', [req.user.user_id]);
+      const result = await pool.query('SELECT must_change_password FROM users WHERE id = $1', [userId]);
       mustChange = result.rows[0]?.must_change_password === true;
+      if (redis) {
+        const r = redis;
+        const value = mustChange ? '1' : '0';
+        await bestEffort('must_change_password_cache_unavailable', () => r.set(cacheKey, value, 'EX', 300));
+      }
     }
 
     if (mustChange) {

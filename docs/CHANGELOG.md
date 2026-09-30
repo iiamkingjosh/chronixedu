@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Sign-in keeps working through a hiccup in its supporting service (2026-09-30)
+
+### The app no longer goes down if the attempt-counting service does
+- If the service that counts sign-in attempts and remembers recent lookups is briefly unavailable, sign-in and the rest of the app now carry on instead of failing. During such a moment the "too many attempts" protection is paused; the moment is recorded for review.
+- The limit on wrong passwords from one school's connection is now 20 a minute (it was 5). After five wrong passwords for one account, that account still locks for 15 minutes.
+
 ## Limits apply to each visitor, not to everyone at once (2026-09-30)
 
 ### Sign-in protection now counts each person separately

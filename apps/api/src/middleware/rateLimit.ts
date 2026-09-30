@@ -1,4 +1,5 @@
-import rateLimit, { Options, ipKeyGenerator } from 'express-rate-limit';
+import rateLimit, { Options, Logger, ipKeyGenerator } from 'express-rate-limit';
+import { logger } from '../config/logger';
 import { clientIp } from './clientIp';
 import { RedisStore, SendCommandFn } from 'rate-limit-redis';
 import Redis from 'ioredis';
@@ -20,16 +21,53 @@ function rateLimitHandler(_req: Request, res: Response, _next: unknown, options:
 // maintains independent counters. The per-email Redis lockout in the login route is the
 // stronger control and remains effective. If horizontal scaling is enabled, ensure
 // REDIS_URL is always set so counters are shared across all instances.
-const redisClient = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL) : null;
+//
+// Redis is best-effort (SECURITY.md Round 19, decided: fail open). A dead Redis must
+// therefore FAIL FAST: by default ioredis parks each command in an offline queue and
+// rejects it only after 20 reconnect attempts, so "fail open" would have meant "hang for
+// tens of seconds, then pass". With a command timeout, a command against a dead or hung
+// Redis rejects within 500ms — far above the sub-10ms a healthy private-network Redis
+// answers in — and the caller carries on. Every caller on a request path goes through
+// bestEffort() below; the exceptions are the support-session token store and blacklist
+// writers in superAdmin.ts, which are allowed to fail closed.
+const redisClient = process.env.REDIS_URL ? new Redis(process.env.REDIS_URL, { commandTimeout: 500 }) : null;
 
 /** Shared Redis client — null in dev when REDIS_URL is unset. Used by auth lockout and rate limiting. */
 export const redis = redisClient;
 
 if (redisClient) {
+  // Emitted on every failed (re)connect, so during an outage this line repeats every
+  // ~2s. That is the signal; nothing reads it yet (docs/AUDIT-2026-09.md, open items).
   redisClient.on('error', (err) => {
-    console.error('Redis rate-limit client error:', err);
+    logger.error('redis_client_error', { error: err.message });
   });
 }
+
+/**
+ * Run a Redis operation whose failure must not fail the request — a cache, a counter, a
+ * limit. A rejection is logged at error under `event` (message only: no key, no
+ * credential, no address) and becomes `undefined`, which every caller treats as "not
+ * known". The one thing this must never wrap is an operation whose failure should stop
+ * the request; none of those live on the request path today.
+ */
+export async function bestEffort<T>(event: string, op: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await op();
+  } catch (err) {
+    logger.error(event, { error: err instanceof Error ? err.message : String(err) });
+    return undefined;
+  }
+}
+
+/**
+ * express-rate-limit reports a failing store through this, then (passOnStoreError) lets
+ * the request through. Routed to winston under one greppable name rather than the
+ * console it would otherwise use.
+ */
+export const rateLimitStoreLogger: Logger = {
+  error: (error, message) => logger.error('rate_limit_store_unavailable', { error: error instanceof Error ? error.message : String(error), detail: message }),
+  warn: (error, message) => logger.warn('rate_limit_store_warning', { error: error instanceof Error ? error.message : String(error), detail: message }),
+};
 
 /**
  * Build both limiters. `sendCommand` is the Redis transport; omitted, each limiter falls
@@ -55,6 +93,8 @@ export function createRateLimiters(sendCommand?: SendCommandFn) {
     max: 100,
     keyGenerator,
     store: store('rl:general:'),
+    passOnStoreError: true,
+    logger: rateLimitStoreLogger,
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,
@@ -70,6 +110,8 @@ export function createRateLimiters(sendCommand?: SendCommandFn) {
     keyGenerator,
     store: store('rl:auth:'),
     skip: (req) => isLogin(req),
+    passOnStoreError: true,
+    logger: rateLimitStoreLogger,
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,
@@ -79,14 +121,19 @@ export function createRateLimiters(sendCommand?: SendCommandFn) {
   // count once it is sent. Counting successes refused a principal's sixth correct
   // password in 35 seconds in production — and six teachers behind one staff-room router
   // are the same event. Guessing one account is stopped by the per-email lockout in
-  // routes/auth.ts (5 failures, 15 minutes); this is the per-address backstop. Rule S5
-  // as amended: CLAUDE.md, "Spec drift".
+  // routes/auth.ts (5 failures, 15 minutes); this is the per-address flood backstop.
+  // 20 rather than 5 because, since clientIp(), the address IS one school's router: twenty
+  // wrong passwords a minute from one school is Monday-morning typos, and the per-email
+  // lockout carries the guessing case (authLockout.test.ts). Rule S5 as amended:
+  // CLAUDE.md, "Spec drift"; the raise is SECURITY.md Round 19.
   const login = rateLimit({
     windowMs: 60_000,
-    max: 5,
+    max: 20,
     skipSuccessfulRequests: true,
     keyGenerator,
     store: store('rl:login:'),
+    passOnStoreError: true,
+    logger: rateLimitStoreLogger,
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,

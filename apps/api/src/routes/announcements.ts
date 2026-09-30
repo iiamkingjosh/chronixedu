@@ -5,7 +5,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
-import { redis } from '../middleware/rateLimit';
+import { redis, rateLimitStoreLogger } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
 import { createNotificationsBulk } from '../db/queries/notifications';
 import { sendEmail } from '../services/emailService';
@@ -26,6 +26,8 @@ const announcementLimiter = rateLimit({
         sendCommand: (...args: string[]) => (redis as any).call(...args),
       })
     : undefined,
+  passOnStoreError: true, // Redis is best-effort — SECURITY.md Round 19
+  logger: rateLimitStoreLogger,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (_req, res, _next, options) =>

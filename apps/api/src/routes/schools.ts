@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { verifyToken, requireRole, type SupportSessionContext } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
 import { requireFeature } from '../middleware/requireFeature';
-import { redis } from '../middleware/rateLimit';
+import { redis, bestEffort } from '../middleware/rateLimit';
 import {
   insertSchool,
   insertSchoolSettings,
@@ -990,11 +990,12 @@ router.put(
       const stepUpEmailKey = `payout_step_up_attempts:${callerEmail.toLowerCase()}`;
       const stepUpIp = clientIp(req) ?? 'unknown';
       const stepUpIpKey = `payout_step_up_attempts_ip:${stepUpIp}`;
+      // Best-effort, like the login lockout (SECURITY.md Round 19): a Redis failure is
+      // logged as step_up_lockout_unavailable and the password check decides alone.
       if (redis) {
-        const [emailCount, ipCount] = await Promise.all([
-          redis.get(stepUpEmailKey),
-          redis.get(stepUpIpKey),
-        ]);
+        const r = redis;
+        const counts = await bestEffort('step_up_lockout_unavailable', () => Promise.all([r.get(stepUpEmailKey), r.get(stepUpIpKey)]));
+        const [emailCount, ipCount] = counts ?? [null, null];
         if (
           (emailCount !== null && parseInt(emailCount, 10) >= MAX_STEP_UP_ATTEMPTS) ||
           (ipCount !== null && parseInt(ipCount, 10) >= MAX_STEP_UP_IP_ATTEMPTS)
@@ -1009,12 +1010,12 @@ router.put(
       const { error: stepUpError } = await supabase.auth.signInWithPassword({ email: callerEmail, password: current_password });
       if (stepUpError) {
         if (redis) {
-          const [emailAttempts, ipAttempts] = await Promise.all([
-            redis.incr(stepUpEmailKey),
-            redis.incr(stepUpIpKey),
-          ]);
-          if (emailAttempts === 1) await redis.expire(stepUpEmailKey, STEP_UP_LOCK_WINDOW_SECONDS);
-          if (ipAttempts === 1) await redis.expire(stepUpIpKey, STEP_UP_LOCK_WINDOW_SECONDS);
+          const r = redis;
+          await bestEffort('step_up_lockout_unavailable', async () => {
+            const [emailAttempts, ipAttempts] = await Promise.all([r.incr(stepUpEmailKey), r.incr(stepUpIpKey)]);
+            if (emailAttempts === 1) await r.expire(stepUpEmailKey, STEP_UP_LOCK_WINDOW_SECONDS);
+            if (ipAttempts === 1) await r.expire(stepUpIpKey, STEP_UP_LOCK_WINDOW_SECONDS);
+          });
         }
         return res.status(401).json({
           success: false,

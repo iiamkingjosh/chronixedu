@@ -9,7 +9,7 @@ Depends on: `3a4d1e7` (separate Redis prefixes) — already deployed, keep it
 **Shipped (SECURITY.md Round 17):** §0 — S5 amended in `CLAUDE.md` "Spec drift". A
 narrower §2.1/§2.3: `POST /login` has its own limiter (`rl:login:`) that counts only
 failed attempts; every other `/api/auth` route keeps the counting-everything limiter.
-`max` stays **5** — the raise to 20 waits for test 5 (below), as §4 says it should.
+`max` is **20** since SECURITY.md Round 19 — test 5 exists and, since Round 18, the key is the client.
 Mounting lives in `mountRateLimiters()`, which index.ts and `rateLimitRedis.test.ts`
 both call. Tests 1, 2 and the scope half of 4 are in `rateLimitRedis.test.ts`; **test 5
 (corrected form, below) is `authLockout.test.ts`** — the lockout had no test before, since

@@ -1,6 +1,11 @@
 # Three approved changes — Redis fail-open, login limit 5→20, web build
 
-Status: approved by Moses 30 Sep 2026, "go". Implement all three.
+Status: approved by Moses 30 Sep 2026, "go". **(1) and (2) implemented — SECURITY.md Round 19.
+(3) applied to the Railway web service — CLAUDE.md, Migrations.** Deviations, all recorded in
+Round 19: two further Redis mechanisms (every authenticated request's `verifyToken` /
+`requirePasswordChanged`, and the `current-context` cache) had to fail open as well, or the
+app still went down; the payout step-up lockout got the same treatment as login; and the
+client gained a 500 ms command timeout, without which "fail open" meant "hang, then pass".
 Order matters only in that (3) is independent — do it first or last, not interleaved.
 Prior rounds: 16 (`3a4d1e7`), 17 (`c07c0b4`), 18 (`13c1157`).
 

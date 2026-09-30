@@ -17,6 +17,13 @@ import request from 'supertest';
 import express from 'express';
 import type { RedisReply } from 'rate-limit-redis';
 import { createRateLimiters, mountRateLimiters } from '../middleware/rateLimit';
+import { logger } from '../config/logger';
+
+jest.mock('../config/logger', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+}));
+const mockLogger = logger as jest.Mocked<typeof logger>;
+beforeEach(() => jest.clearAllMocks());
 
 /**
  * Just enough Redis for rate-limit-redis: SCRIPT LOAD, and EVALSHA of its two scripts
@@ -30,7 +37,9 @@ function fakeRedis() {
     if (e && e.expiresAt <= Date.now()) keys.delete(k);
     return keys.get(k);
   };
+  let broken = false;
   const send = async (...args: string[]): Promise<RedisReply> => {
+    if (broken) throw new Error('fake redis: connection refused');
     const [cmd, ...rest] = args;
     switch (cmd.toUpperCase()) {
       case 'SCRIPT': {
@@ -58,7 +67,7 @@ function fakeRedis() {
       default: throw new Error(`fake redis: unsupported ${cmd}`);
     }
   };
-  return { send, keys };
+  return { send, keys, get broken() { return broken; }, set broken(v: boolean) { broken = v; } };
 }
 
 /**
@@ -107,9 +116,9 @@ describe('the login limiter counts guesses, not logins', () => {
     for (let i = 0; i < 30; i++) expect((await login(app)).status).toBe(200);
   });
 
-  it('wrong passwords are: the 6th attempt in a minute is refused before it is checked', async () => {
+  it('wrong passwords are: the 21st attempt in a minute is refused before it is checked, the 20th is not', async () => {
     const { app } = buildApp();
-    for (let i = 0; i < 5; i++) expect((await login(app, 401)).status).toBe(401);
+    for (let i = 0; i < 20; i++) expect((await login(app, 401)).status).toBe(401);
     const blocked = await login(app, 401);
     expect(blocked.status).toBe(429);
     expect(blocked.body.error.code).toBe('RATE_LIMIT_EXCEEDED');
@@ -117,7 +126,7 @@ describe('the login limiter counts guesses, not logins', () => {
 
   it('once refused, a correct password from the same address is refused too', async () => {
     const { app } = buildApp();
-    for (let i = 0; i < 5; i++) await login(app, 401);
+    for (let i = 0; i < 20; i++) await login(app, 401);
     expect((await login(app, 200)).status).toBe(429);
   });
 });
@@ -143,7 +152,7 @@ describe('what the failures-only count still cannot tell apart', () => {
   // express-rate-limit increments on arrival and takes a success back off the count
   // when its response FINISHES. So N correct logins in flight at once from one address
   // are N on the counter until they start answering. A login takes ~2s in production.
-  it('six correct passwords arriving together from one address: the sixth is refused while the first five are still being checked', async () => {
+  it('twenty-one correct passwords arriving together from one address: the 21st is refused while the first twenty are still being checked', async () => {
     const redis = fakeRedis();
     const app = express();
     mountRateLimiters(app, createRateLimiters(redis.send));
@@ -153,19 +162,19 @@ describe('what the failures-only count still cannot tell apart', () => {
     app.post('/api/auth/login', async (_req, res) => { arrived++; await gate; res.json({ success: true }); });
 
     // supertest sends lazily — .then() is what starts each request.
-    const inFlight = Array.from({ length: 6 }, () => request(app).post('/api/auth/login').then(r => r));
-    // Precondition: five reached the handler and are waiting; the sixth never did.
-    while (arrived < 5) await new Promise(r => setTimeout(r, 5));
+    const inFlight = Array.from({ length: 21 }, () => request(app).post('/api/auth/login').then(r => r));
+    // Precondition: twenty reached the handler and are waiting; the 21st never did.
+    while (arrived < 20) await new Promise(r => setTimeout(r, 5));
     await new Promise(r => setTimeout(r, 20));
-    expect(arrived).toBe(5);
+    expect(arrived).toBe(20);
     release();
     const statuses = (await Promise.all(inFlight)).map(r => r.status).sort();
-    expect(statuses).toEqual([200, 200, 200, 200, 200, 429]);
+    expect(statuses).toEqual([...Array(20).fill(200), 429]);
   });
 
-  it('…but six correct passwords one after another are all admitted', async () => {
+  it('…but twenty-one correct passwords one after another are all admitted', async () => {
     const { app } = buildApp();
-    for (let i = 0; i < 6; i++) expect((await login(app)).status).toBe(200);
+    for (let i = 0; i < 21; i++) expect((await login(app)).status).toBe(200);
   });
 });
 
@@ -205,5 +214,24 @@ describe('the limiter key is the client, whichever proxy the request came throug
     for (let i = 0; i < 100; i++) expect((await via(app, '198.51.100.7', `203.0.113.${1 + (i % 50)}`)).status).toBe(200);
     // the 101st through that proxy — refused on the old keying, admitted now
     expect((await via(app, '198.51.100.7', '203.0.113.99')).status).toBe(200);
+  });
+});
+
+describe('when Redis is unavailable, the limiters fail open', () => {
+  // Doctrine 16: "requests pass with Redis down" is also what a limiter that never worked
+  // produces. So first prove the limit bites, then break the store, then prove they pass.
+  it('the limit bites while Redis works; once every command throws, requests pass and it is logged', async () => {
+    const { app, redis } = buildApp();
+    for (let i = 0; i < 5; i++) expect((await request(app).post('/api/auth/forgot-password')).status).toBe(200);
+    expect((await request(app).post('/api/auth/forgot-password')).status).toBe(429); // it bites
+
+    redis.broken = true;
+    expect((await request(app).post('/api/auth/forgot-password')).status).toBe(200);
+    expect((await request(app).get('/api/schools/x/dashboard')).status).toBe(200);
+    expect(mockLogger.error).toHaveBeenCalledWith('rate_limit_store_unavailable', expect.objectContaining({ error: expect.any(String) }));
+
+    // and it recovers on its own once Redis answers again — the 429 is still there
+    redis.broken = false;
+    expect((await request(app).post('/api/auth/forgot-password')).status).toBe(429);
   });
 });

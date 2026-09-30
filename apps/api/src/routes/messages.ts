@@ -5,7 +5,7 @@ import { RedisStore } from 'rate-limit-redis';
 import { verifyToken } from '../middleware/auth';
 import { findUserById } from '../db/queries/users';
 import { createNotification } from '../db/queries/notifications';
-import { redis } from '../middleware/rateLimit';
+import { redis, rateLimitStoreLogger } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
 import {
   getMessageContacts,
@@ -29,6 +29,8 @@ const messageLimiter = rateLimit({
         sendCommand: (...args: string[]) => (redis as any).call(...args),
       })
     : undefined,
+  passOnStoreError: true, // Redis is best-effort — SECURITY.md Round 19
+  logger: rateLimitStoreLogger,
   standardHeaders: true,
   legacyHeaders: false,
   handler: (_req, res, _next, options) =>

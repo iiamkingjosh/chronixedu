@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
-import { redis } from '../middleware/rateLimit';
+import { redis, bestEffort } from '../middleware/rateLimit';
 import { logAudit } from '../db/queries/auditLog';
 import {
   insertSession,
@@ -249,7 +249,11 @@ router.patch(
       await activateSession(req.params.schoolId, req.params.sessionId);
 
       // Bust the cache so the next current-context request is fresh
-      if (redis) await redis.del(`ctx:${req.params.schoolId}`);
+      if (redis) {
+        const r = redis;
+        const key = `ctx:${req.params.schoolId}`;
+        await bestEffort('ctx_cache_unavailable', () => r.del(key)); // a stale entry lives at most 60s
+      }
 
       await logAudit({
         schoolId:   req.params.schoolId,
@@ -304,7 +308,11 @@ router.patch(
       await activateTerm(req.params.schoolId, req.params.sessionId, req.params.termId);
 
       // Bust the cache so the next current-context request is fresh
-      if (redis) await redis.del(`ctx:${req.params.schoolId}`);
+      if (redis) {
+        const r = redis;
+        const key = `ctx:${req.params.schoolId}`;
+        await bestEffort('ctx_cache_unavailable', () => r.del(key)); // a stale entry lives at most 60s
+      }
 
       await logAudit({
         schoolId:   req.params.schoolId,
@@ -331,15 +339,20 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const cacheKey = `ctx:${req.params.schoolId}`;
+      // A cache, so Redis is best-effort (SECURITY.md Round 19): a failure is a miss.
       if (redis) {
-        const hit = await redis.get(cacheKey);
-        if (hit !== null) {
+        const r = redis;
+        const hit = await bestEffort('ctx_cache_unavailable', () => r.get(cacheKey));
+        if (hit !== null && hit !== undefined) {
           return res.json({ success: true, data: JSON.parse(hit) });
         }
       }
 
       const context = await getCurrentContext(req.params.schoolId);
-      if (redis) await redis.set(cacheKey, JSON.stringify(context), 'EX', 60);
+      if (redis) {
+        const r = redis;
+        await bestEffort('ctx_cache_unavailable', () => r.set(cacheKey, JSON.stringify(context), 'EX', 60));
+      }
       return res.json({ success: true, data: context });
     } catch (err) {
       return next(err);
