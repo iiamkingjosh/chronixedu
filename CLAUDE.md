@@ -532,7 +532,7 @@ On 28 Sep 2026 a run of connection timeouts, `ECONNRESET` and two native `0xC000
 crashes of the jest process was traced — after three wrong attributions — to the host
 paging (15.4 GB RAM, 36 GB committed): Postgres idle, TCP connects fast under load, and
 the client's own 10s timer firing through event-loop stalls. Check free memory before
-chasing a flake. The ERP project's Supabase stack runs in the same Docker VM; stop it when
+chasing a flake. A run that prints NO summary line is not a pass either: treat it as failed and keep the whole log (a scripted `test:db` printed nothing on 30 Sep 2026 and the cause was not recorded — `docs/AUDIT-2026-09.md`). The ERP project's Supabase stack runs in the same Docker VM; stop it when
 you are not using it.
 
 **The security gate carries a dated exception list** (`scripts/audit-allowlist.json`, enforced by
