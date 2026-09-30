@@ -5,7 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import pool from './db/client';
-import { generalRateLimiter, authRateLimiter } from './middleware/rateLimit';
+import { mountRateLimiters } from './middleware/rateLimit';
 import authRoutes from './routes/auth';
 import schoolsRoutes from './routes/schools';
 import sessionsRoutes from './routes/sessions';
@@ -118,9 +118,8 @@ app.use(express.json({
 }));
 app.use(requestLogger);
 
-// Rate limiting (Agent File Rule S5: 5/min for auth, 100/min general)
-app.use('/api/auth', authRateLimiter);
-app.use('/api',      generalRateLimiter);
+// Rate limiting — see middleware/rateLimit.ts (Agent File Rule S5, as amended in CLAUDE.md)
+mountRateLimiters(app);
 
 // Routes
 app.use('/api/auth', authRoutes);

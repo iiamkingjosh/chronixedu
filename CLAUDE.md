@@ -492,4 +492,5 @@ a deliberate staging run.
 | `packages/shared`, Axios, Zustand | Not present. Types live per app; `fetch` wrapper in `lib/api.ts` |
 | Launch 7 Sep 2025 (PRD) | Launched 7 Sep 2026 |
 | Flat subscription tiers | trial / basic / premium / enterprise, per student per term |
+| Rule S5: `app.use('/api/auth', rateLimit({ windowMs: 60000, max: 5 }))` | **Amended 30 Sep 2026.** That counted *successful* logins, so a principal's sixth correct password in 35s was refused, and it keyed the whole staff room's router as one client. `POST /login` now counts failed attempts only (`rl:login:`); the other `/api/auth` routes keep counting everything, because forgot-password answers 200 for every email. The guessing control is the per-email lockout in `routes/auth.ts`. Do not "restore" S5 — see `docs/rate-limit-remediation.md`, SECURITY.md Round 17 |
 | Migrations live in `apps/api/src/migrations/` (Agent File folder structure) | Repo-root `migrations/`. The empty `apps/api/src/migrations/` left behind was a fossil of this and silently matched the migrate runner's directory lookup — deleted |

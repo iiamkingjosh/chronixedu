@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Correct passwords are never refused for "too many requests" (2026-09-30)
+
+### Signing in several times in a row works
+- Signing in successfully no longer counts towards the sign-in limit. Only wrong passwords do. Before, the sixth correct sign-in within a minute from the same internet connection was refused — which a staff room sharing one router would hit at the start of the day.
+- Protection against password guessing is unchanged: after five wrong passwords for an account, it is locked for 15 minutes.
+
 ## Logging in again no longer says "Too many requests" (2026-09-28)
 
 ### Normal use of the app no longer uses up the login limit

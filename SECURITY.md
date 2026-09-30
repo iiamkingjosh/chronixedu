@@ -1,8 +1,31 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 16 — 2026-09-28  
-**Scope:** The auth rate limiter's counter, shared with the general limiter in Redis  
-**Round 16 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+**Latest audit:** Round 17 — 2026-09-30  
+**Scope:** The login rate limit counted correct passwords; Agent File Rule S5 amended  
+**Round 17 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+
+---
+
+## Round 17 — 2026-09-30
+
+**Scope:** Round 16's fix went live at 15:57:31 on 28 Sep. Railway's logs for the next minute: five correct passwords from one address in 35 seconds, then 429 in 28 ms on the sixth. Specified by the second reader in `docs/rate-limit-remediation.md`; three of its points corrected on verification (recorded at the top of that document).
+
+### M-01 — The login rate limit refused correct passwords ✅ Fixed
+
+**Files:** `apps/api/src/middleware/rateLimit.ts`, `apps/api/src/index.ts`, `apps/api/src/__tests__/rateLimitRedis.test.ts`, `CLAUDE.md`
+
+**Fix:** The auth limiter counted every request, so a limit whose only job is stopping guesses spent itself on logins that were not guesses. It was not a deviation from the spec: Agent File Rule S5 prescribes `app.use('/api/auth', rateLimit({ windowMs: 60000, max: 5 }))` verbatim. So the rule is amended (CLAUDE.md "Spec drift"), or a later pass would read the fix as a violation and restore it.
+
+`POST /login` now has its own limiter (`rl:login:`) with `skipSuccessfulRequests`: a response under 400 is taken back off the count once sent, so wrong passwords (401), lockouts (429) and malformed requests (400) count, and correct passwords do not. Every other `/api/auth` route keeps the counting-everything limiter — deliberately: `forgot-password` answers 200 whether or not the account exists, so a failures-only limiter would never count it, and it sends email. The spec as written put the failures-only limiter on `forgot-password` too; that is the one change here that would have opened something.
+
+Mounting moved into `mountRateLimiters()`, called by both `index.ts` and the test, so the test drives the production mounting rather than a copy that can drift. 7 tests on the fake-Redis harness; the two describing the defect (30 correct passwords all admitted; logins and forgot-password not sharing an allowance) fail on the old code. The other five pass on both and are there to fail if a later change loosens the wrong thing: the sixth wrong password is refused; a correct password after five wrong ones from the same address is refused; the sixth forgot-password request is refused though all five "succeeded".
+
+**Deliberately not done yet:** raising `max` from 5 to 20. It is defensible only with a test that the per-email lockout carries the load (five wrong passwords for one email from five addresses, then the correct password from a sixth, refused) — not written yet. Until then, six correct logins from one address *in flight at the same moment* still count six, because the count is decremented when a response is sent.
+
+**Found while verifying, not fixed here:**
+- *A Redis outage fails every `/api` request, not just login.* `passOnStoreError` defaults to `false` in express-rate-limit 8.5.2, and ioredis retries each command 20 times first. Whether an outage should take the product down or suspend rate limiting is a policy decision, open with the product owner.
+- *Per-address counting is not fully stable.* One client, one address in Railway's logs, one edge: about one request in five was counted under a different key. Not client-spoofable (a forged `X-Forwarded-For` opened no new key); cause under instrumentation (`http_request.client_ip`, which logs the shape of the address and never the address).
+- *The per-IP login lockout resets on any successful login from that address,* so anyone holding one valid account can clear it between guesses. The per-email lockout is the control that holds.
 
 ---
 

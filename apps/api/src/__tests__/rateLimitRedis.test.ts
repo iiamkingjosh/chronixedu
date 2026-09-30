@@ -16,7 +16,7 @@
 import request from 'supertest';
 import express from 'express';
 import type { RedisReply } from 'rate-limit-redis';
-import { createRateLimiters } from '../middleware/rateLimit';
+import { createRateLimiters, mountRateLimiters } from '../middleware/rateLimit';
 
 /**
  * Just enough Redis for rate-limit-redis: SCRIPT LOAD, and EVALSHA of its two scripts
@@ -61,41 +61,80 @@ function fakeRedis() {
   return { send, keys };
 }
 
-/** Mounted exactly as index.ts mounts them. */
+/**
+ * Mounted by the same function index.ts calls. Route stand-ins answer with the status in
+ * `x-status` (default 200), so a test can play a correct password (200) or a wrong one (401).
+ */
 function buildApp() {
   const redis = fakeRedis();
-  const { general, auth } = createRateLimiters(redis.send);
   const app = express();
-  app.use('/api/auth', auth);
-  app.use('/api', general);
-  app.post('/api/auth/login', (_req, res) => res.json({ success: true }));
-  app.get('/api/schools/x/dashboard', (_req, res) => res.json({ success: true }));
+  mountRateLimiters(app, createRateLimiters(redis.send));
+  const answer = (req: express.Request, res: express.Response) =>
+    res.status(Number(req.header('x-status') ?? 200)).json({ success: true });
+  app.post('/api/auth/login', answer);
+  app.post('/api/auth/forgot-password', answer);
+  app.get('/api/schools/x/dashboard', answer);
   return { app, redis };
 }
+
+const login = (app: express.Express, status = 200) =>
+  request(app).post('/api/auth/login').set('x-status', String(status));
 
 describe('auth and general limiters on one Redis', () => {
   it('browsing the app does not use up the login allowance', async () => {
     const { app } = buildApp();
-    expect((await request(app).post('/api/auth/login')).status).toBe(200);
+    expect((await login(app)).status).toBe(200);
     // What the principal did between logins: dashboard, settings screen, a save.
     for (let i = 0; i < 7; i++) {
       expect((await request(app).get('/api/schools/x/dashboard')).status).toBe(200);
     }
-    expect((await request(app).post('/api/auth/login')).status).toBe(200);
+    expect((await login(app)).status).toBe(200);
   });
 
-  it('still refuses the 6th auth request in a minute — the separation did not remove the limit', async () => {
+  it('keeps each limiter under its own Redis key', async () => {
+    const { app, redis } = buildApp();
+    await request(app).post('/api/auth/forgot-password');
+    // One key per limiter for this client — two, not one shared.
+    expect(redis.keys.size).toBe(2);
+  });
+});
+
+describe('the login limiter counts guesses, not logins', () => {
+  // Production, 28 Sep 15:57:45–15:58:25: five correct passwords in 35 seconds, the sixth
+  // refused in 28 ms before the password was checked. Six teachers on one staff-room router.
+  it('a correct password is never spent against the allowance', async () => {
     const { app } = buildApp();
-    for (let i = 0; i < 5; i++) expect((await request(app).post('/api/auth/login')).status).toBe(200);
-    const blocked = await request(app).post('/api/auth/login');
+    for (let i = 0; i < 30; i++) expect((await login(app)).status).toBe(200);
+  });
+
+  it('wrong passwords are: the 6th attempt in a minute is refused before it is checked', async () => {
+    const { app } = buildApp();
+    for (let i = 0; i < 5; i++) expect((await login(app, 401)).status).toBe(401);
+    const blocked = await login(app, 401);
     expect(blocked.status).toBe(429);
     expect(blocked.body.error.code).toBe('RATE_LIMIT_EXCEEDED');
   });
 
-  it('keeps the two counters under distinct Redis keys', async () => {
-    const { app, redis } = buildApp();
-    await request(app).post('/api/auth/login');
-    // One key per limiter for this client — two, not one shared.
-    expect(redis.keys.size).toBe(2);
+  it('once refused, a correct password from the same address is refused too', async () => {
+    const { app } = buildApp();
+    for (let i = 0; i < 5; i++) await login(app, 401);
+    expect((await login(app, 200)).status).toBe(429);
+  });
+});
+
+describe('the other auth routes keep counting every request', () => {
+  // forgot-password answers 200 whether or not the account exists, so as not to reveal
+  // which emails are registered. Counting only failures would never count it at all,
+  // and it sends email.
+  it('the 6th forgot-password request in a minute is refused, though all five "succeeded"', async () => {
+    const { app } = buildApp();
+    for (let i = 0; i < 5; i++) expect((await request(app).post('/api/auth/forgot-password')).status).toBe(200);
+    expect((await request(app).post('/api/auth/forgot-password')).status).toBe(429);
+  });
+
+  it('logins and forgot-password do not share an allowance', async () => {
+    const { app } = buildApp();
+    for (let i = 0; i < 5; i++) await request(app).post('/api/auth/forgot-password');
+    expect((await login(app)).status).toBe(200);
   });
 });

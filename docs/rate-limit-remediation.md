@@ -1,8 +1,48 @@
 # Sign-in rate limiting — remediation spec
 
-Status: proposed, not implemented
+Status: **partly implemented** — see "Where this stands" below (updated 2026-09-30)
 Supersedes: Agent File **Rule S5** (see §0 — the rule must be amended, not worked around)
 Depends on: `3a4d1e7` (separate Redis prefixes) — already deployed, keep it
+
+## Where this stands
+
+**Shipped (SECURITY.md Round 17):** §0 — S5 amended in `CLAUDE.md` "Spec drift". A
+narrower §2.1/§2.3: `POST /login` has its own limiter (`rl:login:`) that counts only
+failed attempts; every other `/api/auth` route keeps the counting-everything limiter.
+`max` stays **5** — the raise to 20 waits for test 5 (below), as §4 says it should.
+Mounting lives in `mountRateLimiters()`, which index.ts and `rateLimitRedis.test.ts`
+both call. Tests 1, 2 and the scope half of 4 are in `rateLimitRedis.test.ts`.
+
+**Corrections to the text below, verified against code:**
+
+1. **§2.3 as written reopens forgot-password.** It puts the `skipSuccessfulRequests`
+   limiter on `/forgot-password`, which answers 200 whether or not the account exists —
+   so it would never be counted, and it sends email. That is why only `/login` got the
+   failures-only limiter.
+2. **§3.2 understates the Redis dependency.** express-rate-limit 8.5.2 defaults
+   `passOnStoreError: false`, and ioredis defaults `maxRetriesPerRequest: 20` with an
+   offline queue: during a Redis outage *every* `/api` request waits through the retries
+   and then fails through the general limiter — not just login. Two dependencies, two
+   fixes, one fail-open/fail-closed decision (still open, Moses's call).
+3. **Test 5's arithmetic.** The lockout refuses on the 5th failure itself
+   (`emailAttempts >= MAX_ATTEMPTS`), not the 6th. The test that proves the widening
+   safe: 5 wrong passwords for one email from 5 addresses, then the **correct**
+   password from a 6th address — refused with `ACCOUNT_LOCKED`.
+4. **§1a's per-IP lockout is weaker than it reads.** A successful login `DEL`s
+   `login_attempts_ip:<ip>` (auth.ts), so anyone holding one valid account — any parent
+   or student — resets their address's failure count between guesses. The per-email
+   lockout is the guessing control; the per-IP one is not.
+
+**§3.1, measured 30 Sep:** from one client (IPv4 forced; no IPv6 on the machine),
+one address in Railway's logs, one edge (`jnb1`), about one request in five landed on a
+different limiter key. Not dual-stack: `ipKeyGenerator` unmaps `::ffff:` addresses.
+A forged `X-Forwarded-For` did not open a new key, so the limit is not client-spoofable.
+`http_request` logs `client_ip` (shape only, no address) to identify the second key.
+
+**Known limit of the shipped change:** the failures-only count is decremented when a
+response is *sent*. Six correct logins from one address in flight at once (login takes
+~2s) still count six while in flight, so the sixth is refused. Rarer than the defect it
+replaces; the raise to 20 would remove it.
 
 ---
 
