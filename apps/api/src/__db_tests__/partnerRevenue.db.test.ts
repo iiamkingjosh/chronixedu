@@ -161,7 +161,7 @@ describe('what the ERP receives', () => {
     const res = await get(KEY);
     expect(res.status).toBe(200);
     expect(res.body.data.total_mrr_kobo).toBe(0);
-    expect(res.body.data.by_plan).toHaveLength(3);
+    expect(res.body.data.by_plan).toHaveLength(2); // premium, enterprise — trial is never revenue
   });
 
   it('exposes no school names or identifiers — aggregate only', async () => {
@@ -187,7 +187,7 @@ describe('what the ERP receives', () => {
 describe('the money contract', () => {
   it('a naira amount with kobo in it arrives as whole kobo', async () => {
     await setRate(66_633); // three students × ₦666.33 = ₦1,998.99
-    await subscribe(I.schoolA, 'basic', 'monthly');
+    await subscribe(I.schoolA, 'premium', 'monthly');
     const res = await get(KEY);
     expect(res.body.data.total_mrr_kobo).toBe(199_899);
     // An integer, not a float that happens to print cleanly — the consumer never has to
@@ -199,7 +199,7 @@ describe('the money contract', () => {
     // Three students × ₦33.33 = ₦99.99/yr = 9,999 kobo / 12 = 833.25 → 833. The old code
     // produced a repeating float here and left the consumer to guess what to do with it.
     await setRate(3_333);
-    await subscribe(I.schoolA, 'basic', 'annual');
+    await subscribe(I.schoolA, 'premium', 'annual');
     expect((await get(KEY)).body.data.total_mrr_kobo).toBe(833);
   });
 
@@ -237,16 +237,16 @@ describe('the money contract', () => {
     await pool.query(`INSERT INTO student_classes (student_id, class_id, session_id) VALUES ($1, $2, $3)`, [I.sOtherSchool, classB, I.sessionB]);
 
     await setRate(33_333); // ₦333.33 a student
-    await subscribe(I.schoolA, 'basic', 'monthly');      // 3 × 33,333 = 99,999
-    await subscribe(I.schoolB, 'premium', 'annual');     // 1 × 33,333 / 12 = 2,777.75 → 2,778
-    await subscribe(schoolC, 'enterprise', 'monthly');   // 2 × 33,333 = 66,666
+    await subscribe(I.schoolA, 'premium', 'monthly');    // 3 × 33,333 = 99,999
+    await subscribe(I.schoolB, 'enterprise', 'annual');  // 1 × 33,333 / 12 = 2,777.75 → 2,778
+    await subscribe(schoolC, 'premium', 'termly');       // 2 × 33,333 / 4 = 16,666.5 → 16,667
 
     const { data } = (await get(KEY)).body;
     const summed = data.by_plan.reduce((acc: number, p: { mrr_kobo: number }) => acc + p.mrr_kobo, 0);
     // Not "close to" — equal. A consumer reconciling per-plan against the total must not
     // have to allow a tolerance.
     expect(summed).toBe(data.total_mrr_kobo);
-    expect(data.total_mrr_kobo).toBe(99_999 + 2_778 + 66_666);
+    expect(data.total_mrr_kobo).toBe(99_999 + 2_778 + 16_667);
   });
 
   it('every figure in the payload is an integer', async () => {

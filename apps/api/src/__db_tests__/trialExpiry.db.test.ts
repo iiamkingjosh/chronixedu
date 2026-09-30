@@ -10,7 +10,9 @@
  *   trial "ending 8 Sep" died on the morning of the 8th. The end date is now inclusive.
  *
  * Doctrine 16 throughout: every "survives" and "unchanged" is preceded by the state it must
- * keep, and every "not suspended" sits beside a control that IS suspended by the same run.
+ * keep, and every "not gated" sits beside a control that IS moved into grace by the same run.
+ * Since migration 046 the job moves an expired trial into grace, never suspends it, and
+ * never touches schools.is_active (trialGate.db.test.ts covers the whole gate).
  */
 import request from 'supertest';
 import express from 'express';
@@ -57,7 +59,7 @@ async function setEndsDaysAgo(subId: string, daysAgo: number) {
       WHERE id = $1`, [subId, daysAgo]);
 }
 async function trialFor(schoolId: string, daysAgo: number): Promise<string> {
-  const res = await create({ school_id: schoolId, plan: 'trial', billing_cycle: 'monthly' });
+  const res = await create({ school_id: schoolId, plan: 'trial' });
   expect(res.status).toBe(201);
   await setEndsDaysAgo(res.body.data.id, daysAgo);
   return res.body.data.id;
@@ -88,10 +90,10 @@ describe('leaving trial for a paid plan', () => {
     await patch(id, { plan: 'premium' });
     expect((await state(id))).toMatchObject({ subscription_status: 'active', is_active: true }); // before the run
     const control = await trialFor(I.schoolB, 1); // a genuine expired trial, in the same run
-    const suspended = await runTrialExpiryCheck();
-    expect(suspended).toBe(1);
+    const r = await runTrialExpiryCheck();
+    expect(r.entered_grace).toBe(1);
     expect((await state(id))).toMatchObject({ plan: 'premium', subscription_status: 'active', is_active: true });
-    expect((await state(control))).toMatchObject({ subscription_status: 'suspended', is_active: false });
+    expect((await state(control))).toMatchObject({ subscription_status: 'grace', is_active: true });
   });
 });
 
@@ -101,23 +103,23 @@ describe('the expiry run and a paid plan already in trial status', () => {
     // Written directly — the state the route now refuses, as production held it for five days.
     await pool.query(`UPDATE platform_subscriptions SET plan = 'premium' WHERE id = $1`, [id]);
     expect((await state(id))).toMatchObject({ plan: 'premium', subscription_status: 'trial', is_active: true });
-    const before = await audits('TRIAL_EXPIRED_AUTO_SUSPEND');
-    const suspended = await runTrialExpiryCheck();
-    expect(suspended).toBe(0);
+    const before = await audits('TRIAL_ENTERED_GRACE');
+    const r = await runTrialExpiryCheck();
+    expect(r).toMatchObject({ entered_grace: 0, healed: 1 });
     expect((await state(id))).toMatchObject({ plan: 'premium', subscription_status: 'active', is_active: true });
     expect(await audits('TRIAL_STATUS_CLEARED_PAID_PLAN')).toBe(1);
-    expect(await audits('TRIAL_EXPIRED_AUTO_SUSPEND')).toBe(before);
+    expect(await audits('TRIAL_ENTERED_GRACE')).toBe(before);
   });
 });
 
 describe('the end date is inclusive, in Africa/Lagos', () => {
-  it('a trial ending today is still usable; one that ended yesterday is suspended by the same run', async () => {
+  it('a trial ending today is still usable; one that ended yesterday enters grace in the same run', async () => {
     const today = await trialFor(I.schoolA, 0);
     const yesterday = await trialFor(I.schoolB, 1);
-    const suspended = await runTrialExpiryCheck();
-    expect(suspended).toBe(1);
+    const r = await runTrialExpiryCheck();
+    expect(r.entered_grace).toBe(1);
     expect((await state(today))).toMatchObject({ subscription_status: 'trial', is_active: true });
-    expect((await state(yesterday))).toMatchObject({ subscription_status: 'suspended', is_active: false });
+    expect((await state(yesterday))).toMatchObject({ subscription_status: 'grace', is_active: true });
   });
 });
 

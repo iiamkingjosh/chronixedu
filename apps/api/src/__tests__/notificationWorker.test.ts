@@ -119,7 +119,7 @@ describe('processNotificationQueue — SMS delivery', () => {
     expect(mockInsertLog).not.toHaveBeenCalled();
   });
 
-  it('skips SMS but still creates the notification and sends email when the school is on basic', async () => {
+  it('skips SMS but still creates the notification and sends email when the school is read-only', async () => {
     mockQuery.mockImplementation((sql: string) => {
       if (sql.includes('FROM audit_logs') && sql.includes('SELECT id')) {
         return Promise.resolve({ rows: [AUDIT_ROW] });
@@ -128,7 +128,7 @@ describe('processNotificationQueue — SMS delivery', () => {
         return Promise.resolve({ rows: [{ parent_id: PARENT_ID, email: 'p@test.com', phone: '+2348011111111' }] });
       }
       if (sql.includes('FROM schools')) {
-        return Promise.resolve({ rows: [{ subscription_tier: 'basic' }] });
+        return Promise.resolve({ rows: [{ subscription_tier: 'trial', subscription_status: 'read_only' }] });
       }
       if (sql.includes('UPDATE audit_logs')) {
         return Promise.resolve({ rows: [] });

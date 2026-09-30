@@ -37,6 +37,7 @@ import superAdminRoutes from './routes/superAdmin';
 import { detectSupportSession } from './middleware/detectSupportSession';
 import { verifyToken, requirePasswordChanged } from './middleware/auth';
 import { requireActiveSchool } from './middleware/requireActiveSchool';
+import { requireWritableSubscription } from './middleware/requireWritableSubscription';
 import { closeReportCardBrowser } from './services/reportCardService';
 import { startNotificationWorker, stopNotificationWorker } from './services/notificationWorker';
 import { startAnalyticsCron, stopAnalyticsCron } from './services/analyticsService';
@@ -142,6 +143,8 @@ app.use('/api/schools', verifyToken);
 app.use('/api/schools', requirePasswordChanged);
 // Block non-super_admin access to any suspended school before any handler runs.
 app.use('/api/schools', requireActiveSchool);
+// A read-only subscription (the trial gate, migration 046) may read but not write.
+app.use('/api/schools', requireWritableSubscription);
 
 app.use('/api/schools', schoolsRoutes);
 app.use('/api/schools', sessionsRoutes);

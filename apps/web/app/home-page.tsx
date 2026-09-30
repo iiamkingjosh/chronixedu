@@ -497,38 +497,30 @@ export default function HomePage() {
             <p>Per-student, per-term pricing in Naira. No setup fees, no per-teacher charges, no surprise invoices at the end of term.</p>
           </div>
           <div className="pricing-grid">
-            <div className="price-card reveal">
-              <div className="price-name">Basic</div>
-              <div className="price-desc">Everything a school needs to run day to day</div>
-              <div className="price-amount"><span className="price-num">₦400</span><span className="price-per">/student/term</span></div>
+            <div className="price-card featured reveal">
+              <span className="price-featured-badge">One plan, everything included</span>
+              <div className="price-name">Premium</div>
+              <div className="price-desc">Every feature, for every school, at one per-student price</div>
+              <div className="price-amount"><span className="price-num">₦800</span><span className="price-per">/student/term</span></div>
               <ul className="price-feats">
                 <li><CheckIcon /> Results &amp; report cards</li>
                 <li><CheckIcon /> Attendance &amp; behaviour tracking</li>
                 <li><CheckIcon /> Timetable</li>
                 <li><CheckIcon /> Parent &amp; student portals</li>
-                <li><CheckIcon /> Fee invoicing &amp; manual payment recording</li>
+                <li><CheckIcon /> Fee invoicing &amp; payment recording</li>
                 <li><CheckIcon /> In-app messaging &amp; announcements</li>
-              </ul>
-              <a href="mailto:support@chronixtechnology.com" className="lp-btn lp-btn-ghost">Get Started</a>
-            </div>
-            <div className="price-card featured reveal stagger-1">
-              <span className="price-featured-badge">Recommended</span>
-              <div className="price-name">Premium</div>
-              <div className="price-desc">Everything in Basic, plus SMS and online payments</div>
-              <div className="price-amount"><span className="price-num">₦600</span><span className="price-per">/student/term</span></div>
-              <ul className="price-feats">
-                <li><CheckIcon /> Everything in Basic</li>
                 <li><CheckIcon /> SMS reminders for attendance &amp; fees</li>
                 <li><CheckIcon /> Online fee collection via Paystack — settles directly to your school&apos;s bank account</li>
                 <li><CheckIcon /> Analytics dashboard</li>
               </ul>
-              <a href="mailto:support@chronixtechnology.com" className="lp-btn lp-btn-primary">Get Started</a>
+              <p className="price-desc">Billed per term for the students enrolled that term. Start with a 30-day free trial with every feature switched on.</p>
+              <a href="mailto:support@chronixtechnology.com" className="lp-btn lp-btn-primary">Start your free trial</a>
             </div>
-          </div>
-          <div className="price-card reveal stagger-2" style={{ maxWidth: 640, margin: '32px auto 0' }}>
-            <div className="price-name">Enterprise</div>
-            <div className="price-desc">Boarding schools &amp; multi-campus groups — custom pricing</div>
-            <a href="mailto:edu@chronixtechnology.com" className="lp-btn lp-btn-ghost">Talk to Sales</a>
+            <div className="price-card reveal stagger-1">
+              <div className="price-name">Enterprise</div>
+              <div className="price-desc">Boarding schools and multi-campus groups. Tell us how your school is organised and we&apos;ll talk through what a rollout looks like.</div>
+              <a href="mailto:edu@chronixtechnology.com" className="lp-btn lp-btn-ghost">Talk to us</a>
+            </div>
           </div>
         </div>
       </section>

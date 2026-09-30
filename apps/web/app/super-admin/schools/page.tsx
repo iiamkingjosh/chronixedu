@@ -11,19 +11,18 @@ import {
   reactivateSchool,
   type SchoolListItem,
   type SchoolPlan,
+  describeNextBilling,
 } from '@/lib/superAdminApi';
 import { useToast } from '@/components/Toast';
 
 const PLAN_LABELS: Record<SchoolPlan, string> = {
   trial: 'Trial',
-  basic: 'Basic',
   premium: 'Premium',
   enterprise: 'Enterprise',
 };
 
 const PLAN_BADGE_CLASSES: Record<SchoolPlan, string> = {
   trial: 'bg-[#FF761B]/10 text-[#FF761B] border-[#FF761B]/30',
-  basic: 'bg-gray-100 text-gray-600 border-gray-200',
   premium: 'bg-blue-50 text-blue-700 border-blue-200',
   enterprise: 'bg-purple-50 text-purple-700 border-purple-200',
 };
@@ -35,11 +34,6 @@ function formatNaira(value: number | null): string {
   return `₦${Math.round(value).toLocaleString('en-NG')}`;
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
-}
 
 function PlanBadge({ plan }: { plan: SchoolPlan | null }) {
   if (!plan) {
@@ -276,7 +270,6 @@ export default function SuperAdminSchoolsPage() {
         >
           <option value="">All Plans</option>
           <option value="trial">Trial</option>
-          <option value="basic">Basic</option>
           <option value="premium">Premium</option>
           <option value="enterprise">Enterprise</option>
         </select>
@@ -295,7 +288,7 @@ export default function SuperAdminSchoolsPage() {
               <th className="py-3 px-4">Status</th>
               <th className="py-3 px-4">Payout</th>
               <th className="py-3 px-4" title="Enrolled in the current session (billed) / everyone on the roll">Students <span className="font-normal normal-case text-gray-400">billed / roll</span></th>
-              <th className="py-3 px-4">MRR</th>
+              <th className="py-3 px-4" title="What the subscription is billed each cycle — not its monthly recurring revenue">Amount</th>
               <th className="py-3 px-4">Next Billing</th>
               <th className="py-3 px-4">Actions</th>
             </tr>
@@ -323,7 +316,7 @@ export default function SuperAdminSchoolsPage() {
                 <td className="py-3 px-4"><PayoutBadge status={school.payout_status} /></td>
                 <td className="py-3 px-4 text-gray-700">{school.billable_students} <span className="text-gray-400">/ {school.student_count}</span></td>
                 <td className="py-3 px-4 text-gray-700">{formatNaira(school.amount_naira)}</td>
-                <td className="py-3 px-4 text-gray-700">{formatDate(school.next_billing_date)}</td>
+                <td className="py-3 px-4 text-gray-700">{describeNextBilling(school.next_billing_date, school.next_billing_basis)}</td>
                 <td className="py-3 px-4">
                   <div className="flex items-center gap-3">
                     <Link href={`/super-admin/schools/${school.id}`} className="text-slate-600 hover:text-slate-900 font-medium">View</Link>

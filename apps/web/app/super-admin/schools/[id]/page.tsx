@@ -16,7 +16,7 @@ import {
   type SchoolDetail,
   type SchoolPlan,
   type SubscriptionStatus,
-  type AuditLogEntry, getBillingPreview, type BillingPreview } from '@/lib/superAdminApi';
+  type AuditLogEntry, getBillingPreview, type BillingPreview, describeNextBilling } from '@/lib/superAdminApi';
 import { useToast } from '@/components/Toast';
 
 type Tab = 'overview' | 'subscription' | 'users' | 'activity';
@@ -41,7 +41,6 @@ const ROLE_LABELS: Record<string, string> = {
 
 const PLAN_LABELS: Record<SchoolPlan, string> = {
   trial: 'Trial',
-  basic: 'Basic',
   premium: 'Premium',
   enterprise: 'Enterprise',
 };
@@ -51,6 +50,8 @@ const SUB_STATUS_BADGE: Record<SubscriptionStatus, string> = {
   suspended: 'bg-red-50 text-red-700 border-red-200',
   cancelled: 'bg-gray-100 text-gray-500 border-gray-200',
   trial: 'bg-[#FF761B]/10 text-[#FF761B] border-[#FF761B]/30',
+  grace: 'bg-amber-50 text-amber-700 border-amber-200',
+  read_only: 'bg-red-50 text-red-700 border-red-200',
 };
 
 const ACTION_BADGE: Record<string, string> = {
@@ -103,6 +104,8 @@ function SubStatusBadge({ status }: { status: SubscriptionStatus }) {
     suspended: 'Suspended',
     cancelled: 'Cancelled',
     trial: 'Trial',
+    grace: 'Grace period',
+    read_only: 'Read-only',
   };
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${SUB_STATUS_BADGE[status]}`}>
@@ -155,8 +158,8 @@ const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm f
 // ── Create Subscription Modal ───────────────────────────────────────────────────
 
 const createSubSchema = z.object({
-  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
-  billing_cycle: z.enum(['monthly', 'annual']),
+  plan: z.enum(['trial', 'premium', 'enterprise']),
+  billing_cycle: z.enum(['termly', 'monthly', 'annual']),
   trial_ends_at: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.plan === 'trial' && !data.trial_ends_at) {
@@ -193,7 +196,7 @@ function defaultTrialEndsAt(): string {
 function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: string; onClose: () => void; onDone: () => void }) {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<CreateSubFormInput, unknown, CreateSubFormOutput>({
     resolver: zodResolver(createSubSchema),
-    defaultValues: { plan: 'basic', billing_cycle: 'monthly', trial_ends_at: defaultTrialEndsAt() },
+    defaultValues: { plan: 'premium', billing_cycle: 'termly', trial_ends_at: defaultTrialEndsAt() },
   });
   const [apiError, setApiError] = useState('');
   const plan = watch('plan');
@@ -232,13 +235,13 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
         <Field label="Plan" error={errors.plan?.message}>
           <select {...register('plan')} className={inputClass}>
             <option value="trial">Trial</option>
-            <option value="basic">Basic</option>
             <option value="premium">Premium</option>
             <option value="enterprise">Enterprise</option>
           </select>
         </Field>
         <Field label="Billing Cycle" error={errors.billing_cycle?.message}>
           <select {...register('billing_cycle')} className={inputClass}>
+            <option value="termly">Termly (per term — ₦800/student)</option>
             <option value="monthly">Monthly</option>
             <option value="annual">Annual</option>
           </select>
@@ -297,7 +300,7 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
 // ── Change Plan Modal ────────────────────────────────────────────────────────
 
 const changePlanSchema = z.object({
-  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
+  plan: z.enum(['trial', 'premium', 'enterprise']),
 });
 
 type ChangePlanForm = z.infer<typeof changePlanSchema>;
@@ -330,7 +333,6 @@ function ChangePlanModal({ subscriptionId, currentPlan, onClose, onDone }: {
         <Field label="Plan" error={errors.plan?.message}>
           <select {...register('plan')} className={inputClass}>
             <option value="trial">Trial</option>
-            <option value="basic">Basic</option>
             <option value="premium">Premium</option>
             <option value="enterprise">Enterprise</option>
           </select>
@@ -670,7 +672,7 @@ export default function SuperAdminSchoolDetailPage() {
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-500">Next Billing</dt>
-                  <dd className="text-gray-900">{formatDate(subscription.next_billing_date)}</dd>
+                  <dd className="text-gray-900">{describeNextBilling(subscription.next_billing_date, subscription.next_billing_basis)}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-gray-500">Trial Ends</dt>

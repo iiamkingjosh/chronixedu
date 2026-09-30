@@ -10,6 +10,7 @@ import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { insertSchoolSettings, updateIdentityConfig, updateAcademicConfig, schoolHasPrincipal } from '../db/queries/schools';
 import { getPlatformRevenue } from '../db/queries/platformRevenue';
+import { planEnum } from '../services/planFeatures';
 import { cache, schoolCacheKey } from '../services/cacheService';
 import { NIGERIAN_DEFAULTS } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
@@ -70,7 +71,7 @@ const listSchoolsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
   search: z.string().optional(),
   status: z.enum(['active', 'inactive']).optional(),
-  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']).optional(),
+  plan: planEnum.optional(),
   // Demo and fixture tenants are hidden by default: this list gets shown on a screen
   // during sales calls, and "Bulk Import Commit Test School" sitting in it is its own
   // kind of problem. Opt in explicitly to administer them.
@@ -104,11 +105,30 @@ const derivedAmountRefused = z.undefined({
 
 const createSubscriptionSchema = z.object({
   school_id: z.string().uuid(),
-  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
-  billing_cycle: z.enum(['monthly', 'annual']),
+  plan: planEnum,
+  // Termly is the default: ₦800 per student per term (decided 30 Sep 2026, migration 046).
+  billing_cycle: z.enum(['monthly', 'termly', 'annual']).default('termly'),
   amount_naira: derivedAmountRefused,
   trial_ends_at: z.string().optional(),
 });
+
+/**
+ * When a subscription is next billed, and on what basis — the two must travel together,
+ * because a blank date means different things (doctrine 8):
+ *   next_term      termly: the school's next term start (next_term_start, migration 046)
+ *   not_yet_known  termly, and no future term is set yet — the normal case after onboarding
+ *   not_billed     trial
+ *   stored / not_set  monthly or annual: the stored column, as before
+ * Derived on read, never stored: term dates are editable and sessions roll over.
+ */
+function nextBillingSql(ps: string): string {
+  return `CASE WHEN ${ps}.billing_cycle = 'termly' THEN next_term_start(${ps}.school_id) ELSE ${ps}.next_billing_date END`;
+}
+function nextBillingBasisSql(ps: string): string {
+  return `CASE WHEN ${ps}.plan = 'trial' THEN 'not_billed'
+               WHEN ${ps}.billing_cycle = 'termly' THEN CASE WHEN next_term_start(${ps}.school_id) IS NULL THEN 'not_yet_known' ELSE 'next_term' END
+               WHEN ${ps}.next_billing_date IS NULL THEN 'not_set' ELSE 'stored' END`;
+}
 
 /**
  * The trigger that derives amount_naira refuses two states with their own SQLSTATEs.
@@ -138,9 +158,9 @@ function defaultTrialEndsAt(): string {
 
 const updateSubscriptionSchema = z
   .object({
-    plan: z.enum(['trial', 'basic', 'premium', 'enterprise']).optional(),
-    subscription_status: z.enum(['active', 'suspended', 'cancelled', 'trial']).optional(),
-    billing_cycle: z.enum(['monthly', 'annual']).optional(),
+    plan: planEnum.optional(),
+    subscription_status: z.enum(['active', 'suspended', 'cancelled', 'trial', 'grace', 'read_only']).optional(),
+    billing_cycle: z.enum(['monthly', 'termly', 'annual']).optional(),
     amount_naira: derivedAmountRefused,
     next_billing_date: z.string().optional(),
     trial_ends_at: z.string().optional(),
@@ -274,7 +294,7 @@ const ONBOARDING_TOTAL_STEPS = 6;
 // ── Announcement schemas ─────────────────────────────────────────────────────
 
 const announcementTypeEnum = z.enum(['info', 'warning', 'critical', 'maintenance']);
-const announcementPlanEnum = z.enum(['trial', 'basic', 'premium', 'enterprise']);
+const announcementPlanEnum = planEnum;
 
 function validateAnnouncementDates(data: { scheduled_at?: string; expires_at?: string }, ctx: z.RefinementCtx): void {
   if (data.scheduled_at !== undefined) {
@@ -619,7 +639,8 @@ router.get(
            platform_subscriptions.plan,
            platform_subscriptions.subscription_status,
            platform_subscriptions.amount_naira,
-           platform_subscriptions.next_billing_date,
+           ${nextBillingSql('platform_subscriptions')} AS next_billing_date,
+           ${nextBillingBasisSql('platform_subscriptions')} AS next_billing_basis,
            (SELECT COUNT(*) FROM students WHERE students.school_id = schools.id) AS student_count,
            billable_student_count(schools.id) AS billable_students,
            (SELECT MAX(created_at) FROM audit_logs WHERE audit_logs.school_id = schools.id) AS last_activity,
@@ -658,7 +679,11 @@ router.get(
       }
 
       const settingsResult = await pool.query(`SELECT * FROM school_settings WHERE school_id = $1`, [req.params.schoolId]);
-      const subscriptionResult = await pool.query(`SELECT * FROM platform_subscriptions WHERE school_id = $1`, [req.params.schoolId]);
+      const subscriptionResult = await pool.query(
+        `SELECT ps.*, ${nextBillingSql('ps')} AS next_billing_date, ${nextBillingBasisSql('ps')} AS next_billing_basis
+           FROM platform_subscriptions ps WHERE ps.school_id = $1`,
+        [req.params.schoolId]
+      );
       const userCountsResult = await pool.query(
         `SELECT role, COUNT(*) FROM users WHERE school_id = $1 GROUP BY role`,
         [req.params.schoolId]
@@ -941,10 +966,11 @@ router.get(
            ps.subscription_status,
            ps.amount_naira,
            ps.billing_cycle,
-           ps.next_billing_date,
+           ${nextBillingSql('ps')} AS next_billing_date,
+           ${nextBillingBasisSql('ps')} AS next_billing_basis,
            ps.trial_ends_at,
            ps.created_at,
-           EXTRACT(DAY FROM (ps.next_billing_date - NOW()))::integer AS days_until_billing
+           (${nextBillingSql('ps')} - (NOW() AT TIME ZONE 'Africa/Lagos')::date) AS days_until_billing
          FROM platform_subscriptions ps
          JOIN schools s ON s.id = ps.school_id
          ${whereClause}
@@ -953,27 +979,27 @@ router.get(
         params
       );
 
-      const summaryResult = await pool.query<{
-        total_mrr_naira: string;
-        total_annual_naira: string;
-        active_count: string;
-        trial_count: string;
-        suspended_count: string;
-      }>(
-        `SELECT
-           COALESCE(SUM(amount_naira) FILTER (WHERE subscription_status = 'active' AND billing_cycle = 'monthly'), 0) AS total_mrr_naira,
-           COALESCE(SUM(amount_naira) FILTER (WHERE subscription_status = 'active' AND billing_cycle = 'annual'), 0) AS total_annual_naira,
-           COUNT(*) FILTER (WHERE subscription_status = 'active') AS active_count,
-           COUNT(*) FILTER (WHERE subscription_status = 'trial') AS trial_count,
-           COUNT(*) FILTER (WHERE subscription_status = 'suspended') AS suspended_count
-         FROM platform_subscriptions`
-      );
+      // MRR from the one source (getPlatformRevenue). This summary had its own SUM, which
+      // counted monthly subscriptions only — it would have shown termly revenue as nothing.
+      const [revenue, summaryResult] = await Promise.all([
+        getPlatformRevenue(),
+        pool.query<{ active_count: string; trial_count: string; grace_count: string; read_only_count: string; suspended_count: string }>(
+          `SELECT
+             COUNT(*) FILTER (WHERE subscription_status = 'active') AS active_count,
+             COUNT(*) FILTER (WHERE subscription_status = 'trial') AS trial_count,
+             COUNT(*) FILTER (WHERE subscription_status = 'grace') AS grace_count,
+             COUNT(*) FILTER (WHERE subscription_status = 'read_only') AS read_only_count,
+             COUNT(*) FILTER (WHERE subscription_status = 'suspended') AS suspended_count
+           FROM platform_subscriptions`
+        ),
+      ]);
       const summaryRow = summaryResult.rows[0];
       const summary = {
-        total_mrr_naira: Number(summaryRow.total_mrr_naira),
-        total_annual_naira: Number(summaryRow.total_annual_naira),
+        total_mrr_naira: revenue.total_mrr_kobo / 100,
         active_count: parseInt(summaryRow.active_count, 10),
         trial_count: parseInt(summaryRow.trial_count, 10),
+        grace_count: parseInt(summaryRow.grace_count, 10),
+        read_only_count: parseInt(summaryRow.read_only_count, 10),
         suspended_count: parseInt(summaryRow.suspended_count, 10),
       };
 
@@ -1152,13 +1178,15 @@ router.patch(
       const effective = { ...parsed.data };
       const resultingPlan = effective.plan ?? existing.plan;
       const resultingStatus = effective.subscription_status ?? existing.subscription_status;
-      if (resultingPlan !== 'trial' && resultingStatus === 'trial') {
+      // trial, grace and read_only are the trial gate's states (migration 046); a paid plan
+      // is in none of them.
+      if (resultingPlan !== 'trial' && ['trial', 'grace', 'read_only'].includes(resultingStatus)) {
         if (effective.subscription_status !== undefined) {
           // Asked for outright: refuse, rather than write a state the trial-expiry job reads
           // as an expired trial.
           return res.status(400).json({
             success: false,
-            error: { code: 'INCONSISTENT_STATUS', message: `A ${resultingPlan} plan cannot have trial status; use 'active'.` },
+            error: { code: 'INCONSISTENT_STATUS', message: `A ${resultingPlan} plan cannot have '${resultingStatus}' status; use 'active'.` },
           });
         }
         // Leaving 'trial' for a paid plan: the status follows the plan. Chronix High School's
@@ -1196,8 +1224,9 @@ router.patch(
 
       if (parsed.data.plan !== undefined) {
         await pool.query(`UPDATE schools SET subscription_tier = $1 WHERE id = $2`, [parsed.data.plan, existing.school_id]);
-        cache.del(schoolCacheKey(existing.school_id, 'data'));
       }
+      // Always: the cached school row carries the subscription status the gate reads.
+      cache.del(schoolCacheKey(existing.school_id, 'data'));
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
@@ -1226,34 +1255,44 @@ router.post(
       }
       const { days } = parsed.data;
 
-      const existingResult = await pool.query<{ id: string; school_id: string; subscription_status: string }>(
-        `SELECT id, school_id, subscription_status FROM platform_subscriptions WHERE id = $1`,
+      const existingResult = await pool.query<{ id: string; school_id: string; plan: string; subscription_status: string }>(
+        `SELECT id, school_id, plan, subscription_status FROM platform_subscriptions WHERE id = $1`,
         [req.params.id]
       );
       const existing = existingResult.rows[0];
       if (!existing) {
         return res.status(404).json({ success: false, error: { code: 'SUBSCRIPTION_NOT_FOUND', message: 'Subscription not found' } });
       }
-      if (existing.subscription_status !== 'trial') {
+      // A trial in grace or read-only can be extended too — it is a way back, and the status
+      // is recomputed from the new end date with the job's own rule (Africa/Lagos, the end
+      // date inclusive, then 14 days of grace).
+      if (existing.plan !== 'trial' || !['trial', 'grace', 'read_only'].includes(existing.subscription_status)) {
         return res.status(400).json({ success: false, error: { code: 'NOT_A_TRIAL', message: 'Can only extend trial subscriptions' } });
       }
 
-      const result = await pool.query<{ trial_ends_at: string }>(
+      const result = await pool.query<{ trial_ends_at: string; subscription_status: string }>(
         `UPDATE platform_subscriptions
-         SET trial_ends_at = trial_ends_at + (INTERVAL '1 day' * $2::integer), updated_at = NOW()
-         WHERE id = $1
-         RETURNING trial_ends_at`,
+            SET trial_ends_at = trial_ends_at + (INTERVAL '1 day' * $2::integer),
+                subscription_status = CASE
+                  WHEN ((trial_ends_at + (INTERVAL '1 day' * $2::integer)) AT TIME ZONE 'Africa/Lagos')::date >= (NOW() AT TIME ZONE 'Africa/Lagos')::date THEN 'trial'
+                  WHEN ((trial_ends_at + (INTERVAL '1 day' * $2::integer)) AT TIME ZONE 'Africa/Lagos')::date + 14 >= (NOW() AT TIME ZONE 'Africa/Lagos')::date THEN 'grace'
+                  ELSE 'read_only' END,
+                updated_at = NOW()
+          WHERE id = $1
+          RETURNING trial_ends_at, subscription_status`,
         [req.params.id, days]
       );
       const newTrialEndsAt = result.rows[0].trial_ends_at;
+      const newStatus = result.rows[0].subscription_status;
+      cache.del(schoolCacheKey(existing.school_id, 'data'));
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'TRIAL_EXTENDED', existing.school_id, JSON.stringify({ days_added: days, new_trial_ends_at: newTrialEndsAt }), clientIp(req)]
+        [req.user!.user_id, 'TRIAL_EXTENDED', existing.school_id, JSON.stringify({ days_added: days, new_trial_ends_at: newTrialEndsAt, status_before: existing.subscription_status, status_after: newStatus }), clientIp(req)]
       );
 
-      return res.json({ success: true, data: { subscription_id: req.params.id, days_added: days, new_trial_ends_at: newTrialEndsAt } });
+      return res.json({ success: true, data: { subscription_id: req.params.id, days_added: days, new_trial_ends_at: newTrialEndsAt, subscription_status: newStatus } });
     } catch (err) {
       return next(err);
     }
@@ -1298,12 +1337,22 @@ router.post(
       // against a row the trial-expiry job had suspended. The SCHOOL's is_active is not
       // touched: a policy suspension is a different decision with its own route. The
       // response says which happened.
-      const reactivated = subscription.subscription_status === 'suspended';
+      // Grace and read-only (the trial gate, migration 046) restore the same way. A payment
+      // against a TRIAL-plan subscription also moves the plan to premium: "active" on a trial
+      // plan would be free and never expire. [MOSES] decision recorded in docs/AUDIT-2026-09.md.
+      const reactivated = ['suspended', 'grace', 'read_only'].includes(subscription.subscription_status);
+      const upgradedFromTrial = subscription.plan === 'trial';
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        if (reactivated) {
-          await client.query(`UPDATE platform_subscriptions SET subscription_status = 'active', updated_at = NOW() WHERE id = $1`, [subscription.id]);
+        if (reactivated || upgradedFromTrial) {
+          await client.query(
+            `UPDATE platform_subscriptions SET subscription_status = 'active', plan = CASE WHEN plan = 'trial' THEN 'premium' ELSE plan END, updated_at = NOW() WHERE id = $1`,
+            [subscription.id]
+          );
+        }
+        if (upgradedFromTrial) {
+          await client.query(`UPDATE schools SET subscription_tier = 'premium' WHERE id = $1`, [subscription.school_id]);
         }
         await client.query(
           `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
@@ -1315,6 +1364,7 @@ router.post(
             JSON.stringify({
               amount, reference, payment_date, notes: notes ?? null, plan: subscription.plan, recorded_by: req.user!.email,
               status_before: subscription.subscription_status, subscription_reactivated: reactivated,
+              plan_before: subscription.plan, upgraded_from_trial: upgradedFromTrial,
             }),
             clientIp(req),
           ]
@@ -1328,14 +1378,17 @@ router.post(
       } finally {
         client.release();
       }
+      cache.del(schoolCacheKey(subscription.school_id, 'data'));
 
       return res.json({
         success: true,
         data: {
           subscription_id: req.params.id, school_id: subscription.school_id, amount_recorded: amount, reference, payment_date,
           subscription_status_before: subscription.subscription_status,
-          subscription_status: reactivated ? 'active' : subscription.subscription_status,
+          subscription_status: reactivated || upgradedFromTrial ? 'active' : subscription.subscription_status,
           subscription_reactivated: reactivated,
+          plan: upgradedFromTrial ? 'premium' : subscription.plan,
+          upgraded_from_trial: upgradedFromTrial,
         },
       });
     } catch (err) {
@@ -1875,16 +1928,9 @@ router.get(
              JOIN schools s ON s.id = st.school_id
             WHERE s.is_active = true AND s.is_demo = false`
         ),
-        pool.query<{ total: string }>(
-          `SELECT COALESCE(SUM(
-             CASE WHEN ps.billing_cycle = 'monthly' THEN ps.amount_naira
-                  WHEN ps.billing_cycle = 'annual' THEN ps.amount_naira / 12
-                  ELSE 0 END
-           ), 0) AS total
-           FROM platform_subscriptions ps
-           JOIN schools s ON s.id = ps.school_id
-           WHERE ps.subscription_status = 'active' AND s.is_active = true AND s.is_demo = false`
-        ),
+        // The one MRR source. This was a third copy of the arithmetic, and it counted a
+        // termly subscription as nothing.
+        getPlatformRevenue(),
         pool.query<{ count: string }>(
           `SELECT COUNT(*) FROM platform_subscriptions ps
              JOIN schools s ON s.id = ps.school_id
@@ -1903,7 +1949,7 @@ router.get(
           total_schools: parseInt(totalSchools.rows[0].count, 10),
           active_schools: parseInt(activeSchools.rows[0].count, 10),
           total_students: parseInt(totalStudents.rows[0].count, 10),
-          total_mrr_naira: Number(mrr.rows[0].total),
+          total_mrr_naira: mrr.total_mrr_kobo / 100,
           trial_count: parseInt(trialCount.rows[0].count, 10),
           new_schools_this_month: parseInt(newSchoolsThisMonth.rows[0].count, 10),
           last_snapshot_date: lastSnapshot.rows[0]?.snapshot_date ?? null,

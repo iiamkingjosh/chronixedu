@@ -40,7 +40,7 @@ function makeToken(role: string, schoolId?: string) {
 function injectTestSchool(req: express.Request, res: express.Response, next: express.NextFunction): void {
   const tier = req.header('x-test-subscription-tier');
   if (tier) {
-    res.locals.school = { subscription_tier: tier };
+    res.locals.school = { subscription_tier: tier, subscription_status: req.header('x-test-subscription-status') ?? 'active' };
   }
   next();
 }
@@ -160,11 +160,12 @@ describe('GET /api/schools/:schoolId/analytics/overview', () => {
     expect(res.status).toBe(403);
   });
 
-  it('returns 403 FEATURE_NOT_IN_PLAN for a basic-tier school', async () => {
+  it('returns 403 FEATURE_NOT_IN_PLAN for a read-only school (the trial gate, migration 046)', async () => {
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/analytics/overview?term_id=${TERM_ID}`)
       .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`)
-      .set('x-test-subscription-tier', 'basic');
+      .set('x-test-subscription-tier', 'trial')
+      .set('x-test-subscription-status', 'read_only');
 
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FEATURE_NOT_IN_PLAN');

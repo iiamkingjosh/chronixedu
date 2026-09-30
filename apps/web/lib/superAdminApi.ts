@@ -7,9 +7,28 @@ interface ApiResponse<T> {
 
 // ── Shared enums ──────────────────────────────────────────────────────────────
 
-export type SchoolPlan = 'trial' | 'basic' | 'premium' | 'enterprise';
-export type SubscriptionStatus = 'active' | 'suspended' | 'cancelled' | 'trial';
-export type BillingCycle = 'monthly' | 'annual';
+// Basic was removed on 30 Sep 2026: trial, premium, enterprise (API: services/planFeatures.ts).
+export type SchoolPlan = 'trial' | 'premium' | 'enterprise';
+// grace and read_only are the trial gate's states (migration 046).
+export type SubscriptionStatus = 'active' | 'suspended' | 'cancelled' | 'trial' | 'grace' | 'read_only';
+export type BillingCycle = 'monthly' | 'termly' | 'annual';
+
+/**
+ * What a next-billing date is based on. A blank date means different things, and they must
+ * not look alike: a termly school whose next term is not set yet is not the same as a trial
+ * that is not billed at all.
+ */
+export type NextBillingBasis = 'next_term' | 'not_yet_known' | 'not_billed' | 'stored' | 'not_set';
+
+/** One line for a next-billing cell, saying which of those it is. */
+export function describeNextBilling(date: string | null, basis: NextBillingBasis | null | undefined): string {
+  if (basis === 'not_billed') return 'Not billed (trial)';
+  if (basis === 'not_yet_known') return 'Set next term dates to see this';
+  if (!date) return '—';
+  const d = new Date(date);
+  const label = Number.isNaN(d.getTime()) ? date : d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
+  return basis === 'next_term' ? `${label} (next term)` : label;
+}
 export type AnnouncementType = 'info' | 'warning' | 'critical' | 'maintenance';
 export type AnnouncementStatusFilter = 'scheduled' | 'published' | 'expired' | 'all';
 
@@ -25,6 +44,7 @@ export interface SchoolListItem {
   subscription_status: SubscriptionStatus | null;
   amount_naira: number | null;
   next_billing_date: string | null;
+  next_billing_basis: NextBillingBasis | null;
   /** Everyone on the school's roll (a students row), enrolled or not. */
   student_count: number;
   /** Those enrolled in the current academic session — what subscriptions are billed on. */
@@ -153,6 +173,7 @@ export interface PlatformSubscription {
   amount_naira: number | null;
   billing_cycle: BillingCycle;
   next_billing_date: string | null;
+  next_billing_basis?: NextBillingBasis;
   trial_ends_at: string | null;
   created_at: string;
   updated_at: string;
@@ -167,17 +188,20 @@ export interface SubscriptionListItem {
   subscription_status: SubscriptionStatus;
   amount_naira: number;
   billing_cycle: BillingCycle;
-  next_billing_date: string;
+  next_billing_date: string | null;
+  next_billing_basis: NextBillingBasis;
   trial_ends_at: string | null;
   created_at: string;
-  days_until_billing: number;
+  days_until_billing: number | null;
 }
 
 export interface SubscriptionsSummary {
+  /** From the one MRR source (getPlatformRevenue): termly ÷ 4, annual ÷ 12. */
   total_mrr_naira: number;
-  total_annual_naira: number;
   active_count: number;
   trial_count: number;
+  grace_count: number;
+  read_only_count: number;
   suspended_count: number;
 }
 

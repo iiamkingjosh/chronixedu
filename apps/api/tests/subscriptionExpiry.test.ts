@@ -34,17 +34,17 @@ describe('Subscription Trial Expiry', () => {
     await pool.end();
   }, 20000);
 
-  it('runTrialExpiryCheck suspends expired trial subscription to "suspended"', async () => {
+  it('runTrialExpiryCheck moves an expired trial into grace (migration 046) — not "suspended"', async () => {
     await runTrialExpiryCheck();
 
     const result = await pool.query<{ subscription_status: string }>(
       `SELECT subscription_status FROM platform_subscriptions WHERE id = $1`,
       [trialSubscriptionId]
     );
-    expect(result.rows[0].subscription_status).toBe('suspended');
+    expect(result.rows[0].subscription_status).toBe('grace');
   }, 20000);
 
-  it('runTrialExpiryCheck sets school is_active = false', async () => {
+  it('runTrialExpiryCheck leaves school is_active as it was (created false here)', async () => {
     const result = await pool.query<{ is_active: boolean }>(
       `SELECT is_active FROM schools WHERE id = $1`,
       [trialSchoolId]
@@ -52,9 +52,9 @@ describe('Subscription Trial Expiry', () => {
     expect(result.rows[0].is_active).toBe(false);
   });
 
-  it('runTrialExpiryCheck creates a TRIAL_EXPIRED_AUTO_SUSPEND audit log entry', async () => {
+  it('runTrialExpiryCheck creates a TRIAL_ENTERED_GRACE audit log entry', async () => {
     const result = await pool.query(
-      `SELECT id FROM platform_audit_logs WHERE target_school_id = $1 AND action_type = 'TRIAL_EXPIRED_AUTO_SUSPEND'`,
+      `SELECT id FROM platform_audit_logs WHERE target_school_id = $1 AND action_type = 'TRIAL_ENTERED_GRACE'`,
       [trialSchoolId]
     );
     expect(result.rows.length).toBeGreaterThanOrEqual(1);

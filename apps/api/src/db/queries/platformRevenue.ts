@@ -1,4 +1,5 @@
 import pool from '../client';
+import { PAID_PLANS } from '../../services/planFeatures';
 
 /**
  * Platform MRR, as one aggregate, in integer kobo.
@@ -24,6 +25,10 @@ import pool from '../client';
  *
  *   - Naira → kobo is `amount_naira * 100` on a `numeric(12,2)` column, so it is exact
  *     by construction; there is no float that could carry a 0.999999 into it.
+ *   - Each subscription's amount is converted to a MONTH: annual ÷ 12, termly ÷ 4 (three
+ *     terms a year, so a term is a quarter of a year's twelve months: amount × 3 ÷ 12),
+ *     monthly ÷ 1. Before migration 046 everything that was not annual divided by 1, so a
+ *     termly subscription would have been counted at four times its monthly value.
  *   - An annual plan divides by 12 **per subscription**, then rounds to whole kobo
  *     (`ROUND`, half-up away from zero), and the plan total is the exact sum of those
  *     rounded figures. Rounding per subscription rather than per plan is the billing
@@ -52,7 +57,8 @@ export interface PlatformRevenue {
   unit: 'kobo';
 }
 
-const PLANS = ['basic', 'premium', 'enterprise'] as const;
+// The paid plans, from the one plan list (services/planFeatures.ts). Trial is never revenue.
+const PLANS = PAID_PLANS;
 
 /**
  * `pg` returns bigint as a string to avoid silently losing precision, and `Number()`
@@ -71,11 +77,11 @@ function toSafeInteger(raw: string, label: string): number {
 export async function getPlatformRevenue(): Promise<PlatformRevenue> {
   const result = await pool.query<{ plan: string; mrr_kobo: string; count: string }>(
     // The monthly contribution of one subscription, in kobo, computed entirely in
-    // numeric: annual plans divide by 12 and round to whole kobo; monthly plans divide
-    // by 1, which ROUND leaves untouched because amount_naira * 100 is already integral.
+    // numeric: annual ÷ 12, termly ÷ 4, monthly ÷ 1, each rounded to whole kobo. An
+    // unknown cycle is not guessed at: ÷ NULL makes it contribute nothing.
     `SELECT ps.plan,
             COALESCE(SUM(ROUND(ps.amount_naira * 100
-                               / CASE WHEN ps.billing_cycle = 'annual' THEN 12 ELSE 1 END)), 0)::bigint
+                               / CASE ps.billing_cycle WHEN 'annual' THEN 12 WHEN 'termly' THEN 4 WHEN 'monthly' THEN 1 END)), 0)::bigint
               AS mrr_kobo,
             COUNT(*) AS count
        FROM platform_subscriptions ps
@@ -87,7 +93,7 @@ export async function getPlatformRevenue(): Promise<PlatformRevenue> {
   );
 
   const byPlan = new Map<string, { mrr_kobo: number; count: number }>(
-    PLANS.map(plan => [plan, { mrr_kobo: 0, count: 0 }])
+    PLANS.map(plan => [plan as string, { mrr_kobo: 0, count: 0 }])
   );
 
   for (const row of result.rows) {

@@ -262,10 +262,10 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly' });
+        .send({ school_id: subSchoolId, plan: 'premium', billing_cycle: 'monthly' });
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.plan).toBe('basic');
+      expect(res.body.data.plan).toBe('premium');
       subscriptionId = res.body.data.id;
     });
 
@@ -273,7 +273,7 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly' });
+        .send({ school_id: subSchoolId, plan: 'premium', billing_cycle: 'monthly' });
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('SUBSCRIPTION_EXISTS');
     });
@@ -337,7 +337,7 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly', amount_naira: 12345 });
+        .send({ school_id: subSchoolId, plan: 'premium', billing_cycle: 'monthly', amount_naira: 12345 });
       expect(res.status).toBe(400);
       expect(res.body.error.message.fieldErrors.amount_naira).toBeTruthy();
     });
@@ -444,7 +444,7 @@ describe('superAdmin — platform school management', () => {
 
       const subResult = await pool.query<{ id: string }>(
         `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, subscription_status)
-         VALUES ($1, 'basic', 'monthly', 'active')
+         VALUES ($1, 'premium', 'monthly', 'active')
          RETURNING id`,
         [cacheTestSchoolId]
       );
@@ -817,7 +817,7 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post('/api/super-admin/announcements')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ body: 'This is a test announcement body.', type: 'info', target_plans: ['basic'] });
+        .send({ body: 'This is a test announcement body.', type: 'info', target_plans: ['premium'] });
       expect(res.status).toBe(400);
     });
 
@@ -829,7 +829,7 @@ describe('superAdmin — platform school management', () => {
           title: 'Scheduled Maintenance',
           body: 'The platform will be undergoing scheduled maintenance this weekend.',
           type: 'maintenance',
-          target_plans: ['basic', 'premium'],
+          target_plans: ['trial', 'premium'],
         });
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);

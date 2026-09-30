@@ -49,7 +49,7 @@ const amountOf = async (schoolId: string): Promise<string | undefined> =>
 const create = (body: object) => request(app).post('/api/super-admin/subscriptions').set('Authorization', sa()).send(body);
 const patch = (subId: string, body: object) => request(app).patch(`/api/super-admin/subscriptions/${subId}`).set('Authorization', sa()).send(body);
 const preview = (schoolId: string) => request(app).get(`/api/super-admin/schools/${schoolId}/billing-preview`).set('Authorization', sa());
-const paid = (schoolId: string) => ({ school_id: schoolId, plan: 'basic', billing_cycle: 'monthly' });
+const paid = (schoolId: string) => ({ school_id: schoolId, plan: 'premium', billing_cycle: 'monthly' });
 
 /** A student on School A's roll; enrolled in a class for a session only when asked. */
 async function addStudent(n: number, enrol?: { classId: string; sessionId: string }) {
@@ -191,7 +191,7 @@ describe('the subscription write', () => {
 
   it('a plan change to a paid plan with no rate configured answers 409, not 500', async () => {
     const created = await create({ school_id: I.schoolA, plan: 'trial', billing_cycle: 'monthly' });
-    const res = await patch(created.body.data.id, { plan: 'basic' });
+    const res = await patch(created.body.data.id, { plan: 'premium' });
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe('BILLING_RATE_NOT_CONFIGURED');
   });

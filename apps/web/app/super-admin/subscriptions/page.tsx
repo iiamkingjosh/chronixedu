@@ -15,20 +15,19 @@ import {
   type MRRResponse,
   type SchoolPlan,
   type SubscriptionStatus,
+  describeNextBilling,
 } from '@/lib/superAdminApi';
 
 const LIMIT = 25;
 
 const PLAN_LABELS: Record<SchoolPlan, string> = {
   trial: 'Trial',
-  basic: 'Basic',
   premium: 'Premium',
   enterprise: 'Enterprise',
 };
 
 const PLAN_BADGE_CLASSES: Record<SchoolPlan, string> = {
   trial: 'bg-[#FF761B]/10 text-[#FF761B] border-[#FF761B]/30',
-  basic: 'bg-gray-100 text-gray-600 border-gray-200',
   premium: 'bg-blue-50 text-blue-700 border-blue-200',
   enterprise: 'bg-purple-50 text-purple-700 border-purple-200',
 };
@@ -38,6 +37,8 @@ const SUB_STATUS_LABELS: Record<SubscriptionStatus, string> = {
   suspended: 'Suspended',
   cancelled: 'Cancelled',
   trial: 'Trial',
+  grace: 'Grace period',
+  read_only: 'Read-only',
 };
 
 const SUB_STATUS_BADGE: Record<SubscriptionStatus, string> = {
@@ -45,17 +46,14 @@ const SUB_STATUS_BADGE: Record<SubscriptionStatus, string> = {
   suspended: 'bg-red-50 text-red-700 border-red-200',
   cancelled: 'bg-gray-100 text-gray-500 border-gray-200',
   trial: 'bg-[#FF761B]/10 text-[#FF761B] border-[#FF761B]/30',
+  grace: 'bg-amber-50 text-amber-700 border-amber-200',
+  read_only: 'bg-red-50 text-red-700 border-red-200',
 };
 
 function formatNaira(value: number): string {
   return `₦${Math.round(value).toLocaleString('en-NG')}`;
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  return d.toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' });
-}
 
 function PlanBadge({ plan }: { plan: SchoolPlan }) {
   return (
@@ -174,7 +172,7 @@ export default function SuperAdminSubscriptionsPage() {
                 <td className="py-3 px-4"><SubStatusBadge status={sub.subscription_status} /></td>
                 <td className="py-3 px-4 text-gray-700">{formatNaira(sub.amount_naira)}</td>
                 <td className="py-3 px-4 text-gray-700 capitalize">{sub.billing_cycle}</td>
-                <td className="py-3 px-4 text-gray-700">{formatDate(sub.next_billing_date)}</td>
+                <td className="py-3 px-4 text-gray-700">{describeNextBilling(sub.next_billing_date, sub.next_billing_basis)}</td>
                 <td className="py-3 px-4">
                   <Link href={`/super-admin/schools/${sub.school_id}?tab=subscription`} className="text-slate-600 hover:text-slate-900 font-medium">
                     Manage

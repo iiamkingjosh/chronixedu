@@ -11,6 +11,9 @@ export interface SchoolRow {
 }
 
 export interface SchoolWithSettings extends SchoolRow {
+  /** platform_subscriptions.subscription_status, or null with no subscription. Carried on
+   *  the cached school row so the feature gate and the read-only guard need no query. */
+  subscription_status?: string | null;
   identity_config: Record<string, unknown>;
   academic_config: Record<string, unknown>;
   notification_config: Record<string, unknown>;
@@ -81,9 +84,11 @@ export async function insertSchoolSettings(
 export async function findSchoolById(schoolId: string): Promise<SchoolWithSettings | null> {
   const result = await pool.query<SchoolWithSettings>(
     `SELECT s.id, s.name, s.slug, s.is_active, s.subscription_tier, s.created_at, s.updated_at,
+            ps.subscription_status,
             ss.identity_config, ss.academic_config, ss.notification_config, ss.report_config
      FROM schools s
      LEFT JOIN school_settings ss ON ss.school_id = s.id
+     LEFT JOIN platform_subscriptions ps ON ps.school_id = s.id
      WHERE s.id = $1`,
     [schoolId]
   );
@@ -329,4 +334,26 @@ export async function getSchoolNameAndEmail(schoolId: string): Promise<{ name: s
     [schoolId]
   );
   return result.rows[0] ?? null;
+}
+
+export interface SubscriptionGate {
+  plan: string;
+  subscription_status: string;
+  /** The trial's last day and grace's last day, in Africa/Lagos (YYYY-MM-DD). */
+  trial_end_date: string | null;
+  grace_last_day: string | null;
+  today: string;
+}
+
+/** The trial gate's inputs for one school (migration 046), or null with no subscription. */
+export async function findSubscriptionGate(schoolId: string): Promise<SubscriptionGate | null> {
+  const { rows } = await pool.query<SubscriptionGate>(
+    `SELECT plan, subscription_status,
+            ((trial_ends_at AT TIME ZONE 'Africa/Lagos')::date)::text AS trial_end_date,
+            ((trial_ends_at AT TIME ZONE 'Africa/Lagos')::date + 14)::text AS grace_last_day,
+            ((NOW() AT TIME ZONE 'Africa/Lagos')::date)::text AS today
+       FROM platform_subscriptions WHERE school_id = $1`,
+    [schoolId]
+  );
+  return rows[0] ?? null;
 }

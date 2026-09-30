@@ -162,23 +162,23 @@ describe('Phase 4 Integration', () => {
       await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [trialSchoolId]);
     });
 
-    it('3b-3e. runTrialExpiryCheck suspends the expired trial subscription and school, and logs TRIAL_EXPIRED_AUTO_SUSPEND', async () => {
+    it('3b-3e. runTrialExpiryCheck moves the expired trial into grace, leaves the school alone, and logs TRIAL_ENTERED_GRACE', async () => {
       await runTrialExpiryCheck();
 
       const subResult = await pool.query<{ subscription_status: string }>(
         `SELECT subscription_status FROM platform_subscriptions WHERE id = $1`,
         [trialSubscriptionId]
       );
-      expect(subResult.rows[0].subscription_status).toBe('suspended');
+      expect(subResult.rows[0].subscription_status).toBe('grace');
 
       const schoolResult = await pool.query<{ is_active: boolean }>(
         `SELECT is_active FROM schools WHERE id = $1`,
         [trialSchoolId]
       );
-      expect(schoolResult.rows[0].is_active).toBe(false);
+      expect(schoolResult.rows[0].is_active).toBe(false); // created inactive; the job no longer changes it
 
       const auditResult = await pool.query(
-        `SELECT id FROM platform_audit_logs WHERE target_school_id = $1 AND action_type = 'TRIAL_EXPIRED_AUTO_SUSPEND'`,
+        `SELECT id FROM platform_audit_logs WHERE target_school_id = $1 AND action_type = 'TRIAL_ENTERED_GRACE'`,
         [trialSchoolId]
       );
       expect(auditResult.rows.length).toBeGreaterThanOrEqual(1);
@@ -342,7 +342,7 @@ describe('Phase 4 Integration', () => {
           title: 'Phase4 Integration Announcement',
           body: 'This announcement is part of the Phase 4 integration test suite.',
           type: 'info',
-          target_plans: ['trial', 'basic', 'premium', 'enterprise'],
+          target_plans: ['trial', 'premium', 'enterprise'],
         });
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);

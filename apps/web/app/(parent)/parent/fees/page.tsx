@@ -50,7 +50,7 @@ function isValidAmount(value: string): boolean {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ParentFeesPage() {
-  const { schoolId, subscriptionTier } = useAuth();
+  const { schoolId } = useAuth();
   const { selectedChild, loading: childrenLoading, error: childrenError, children: linkedChildren } = useParentContext();
 
   const [loading, setLoading] = useState(true);
@@ -260,9 +260,7 @@ export default function ParentFeesPage() {
               <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-3">{payError}</div>
             )}
 
-            {subscriptionTier === 'basic' ? (
-              <p className="text-sm text-gray-500 text-center py-2.5">Online payment isn&apos;t available for this school yet — please contact the school office.</p>
-            ) : Number(invoice.balance) > 0 ? (
+            {Number(invoice.balance) > 0 ? (
               <div className="space-y-3">
                 <div className="flex gap-2">
                   <button

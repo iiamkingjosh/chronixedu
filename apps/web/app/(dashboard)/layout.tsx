@@ -11,6 +11,7 @@ import { isAdminRole, canAccessPayoutSettings } from '@/lib/auth';
 import { getNavGroupsForRole, visibleNavGroups, type NavItem } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
+import SubscriptionNotice from '@/components/SubscriptionNotice';
 import { endSupportSession } from '@/lib/superAdminApi';
 
 const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
@@ -31,7 +32,7 @@ const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: Na
 });
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading, logout, subscriptionTier, supportCode, isImpersonating, exitImpersonation } = useAuth();
+  const { user, loading, logout, supportCode, isImpersonating, exitImpersonation } = useAuth();
   const [exiting, setExiting] = useState(false);
 
   async function handleExitImpersonation() {
@@ -76,8 +77,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   const showSettings = isAdminRole(user.role);
-  const showPayoutSettings = canAccessPayoutSettings(user.role) && subscriptionTier !== 'basic';
-  const visibleGroups = visibleNavGroups(navGroups, subscriptionTier === 'basic' ? ['/principal/analytics'] : []);
+  // Every plan includes payouts and analytics since Basic was removed (30 Sep 2026); the
+  // API still refuses them for a read-only school, and the notice below says why.
+  const showPayoutSettings = canAccessPayoutSettings(user.role);
+  const visibleGroups = visibleNavGroups(navGroups, []);
 
   function handleLogout() {
     logout();
@@ -231,6 +234,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </button>
           </div>
         )}
+        {user.school_id && <SubscriptionNotice schoolId={user.school_id} isPrincipal={user.role === 'principal'} />}
         <main key={pathname} className="flex-1 min-w-0 overflow-y-auto page-transition">{children}</main>
       </div>
     </div>

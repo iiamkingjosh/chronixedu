@@ -1,8 +1,28 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 19 — 2026-09-30  
-**Scope:** Redis as a dependency of every request; the login limiter's ceiling  
-**Round 19 total findings:** 1 (0 Critical · 0 High · 1 Medium) + 1 recorded change
+**Latest audit:** Round 20 — 2026-09-30  
+**Scope:** The plan gate after Basic's removal; the trial gate replaces suspension  
+**Round 20 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+
+---
+
+## Round 20 — 2026-09-30
+
+**Scope:** The plan and pricing decisions of 30 Sep 2026 (plans trial / premium / enterprise; ₦800 per student per term), and what they exposed in the gates that depend on the plan.
+
+### M-01 — The feature gate could not refuse anything but one string ✅ Fixed
+
+**Files:** `apps/api/src/services/planFeatures.ts`, `middleware/requireFeature.ts`, `middleware/requireWritableSubscription.ts` (new), `db/queries/schools.ts`, `routes/superAdmin.ts`; tests `planFeatures.test.ts`, `trialGate.db.test.ts`
+
+`planIncludesFeature` was one rule: `false` if the tier was the string `'basic'`, `true` for everything else, including `null`, `trial`, and any value nobody had decided about. Removing Basic — the pricing decision — would have made `requireFeature('analytics')` and the five `requireFeature('online_payments')` call sites decoration, and it had already been failing open **in silence** for trial schools, which is why nobody knew trial had full access.
+
+**Fix.** One plan list (`PLANS`), one zod enum built from it (`planEnum`, now every plan enum in `superAdmin.ts` — the four literal copies are gone and a test fails if one comes back), and a `Record<Plan, PlanFeature[]>` map: a plan added without a feature decision is a **type error**, so the build fails rather than the plan inheriting everything. Trial, premium and enterprise all get every feature — decided, not defaulted. A null or unknown tier still passes (a misconfigured school should not lose what it pays for) but is **logged at error** with the value. A `read_only` subscription has no features whatever its plan.
+
+**The trial gate replaces suspension.** The trial-expiry job used to set `schools.is_active = false`, which answered 403 on every `/api/schools/:id/*` route after staff had signed in successfully: teachers lost attendance, principals results, parents report cards, and nobody could export their own students' records. Now: trial through the end date, 14 days of grace with full access and an in-app countdown, then **read-only** — every GET works, every write under `/api/schools/:id` is refused with 423 `SCHOOL_READ_ONLY`, and the extras are off. It is keyed on the **subscription** status, never on `is_active`, which stays an administrator's deliberate decision with its own route. Super admins bypass. The status rides on the cached school row, so neither guard adds a query per request; every route and the job clear that cache when they change it.
+
+**The payment carve-out is empty, and says so.** Read-only must not block the routes that let a school pay — but no route under `/api/schools` lets a school pay its Chronix subscription yet. `READ_ONLY_WRITE_ALLOWLIST` exists, is pinned empty by a test, and the payment system adds its routes to it one at a time, each tested while read-only. Today's way back is a super-admin payment record, extending the trial, or a PATCH — all outside the guard.
+
+**Tests.** `trialGate.db.test.ts`, 19 tests: 18 fail with the old code restored (old behaviour files from git, migration 046 moved aside, the new guard reduced to a pass-through); the 19th was found passing on the old code for the wrong reason (it omitted a field the old code required), rewritten, and now fails on the old code for the right one. `planFeatures.test.ts` cannot load against the old module. Read-only's GET-works and POST-refused are asserted together (doctrine 16), and `is_active` is asserted *true* after each transition that used to set it false.
 
 ---
 

@@ -153,8 +153,10 @@ describe('Fee payment initiate — payout gate', () => {
     );
   });
 
-  it('returns 403 FEATURE_NOT_IN_PLAN when the school is on basic, even with an active payout config', async () => {
-    await pool.query(`UPDATE schools SET subscription_tier = 'basic' WHERE id = $1`, [schoolId]);
+  it('returns 403 FEATURE_NOT_IN_PLAN when the school is read-only, even with an active payout config', async () => {
+    // The trial gate's read-only state takes the plan's extras away (migration 046).
+    await pool.query(`INSERT INTO platform_subscriptions (school_id, plan, subscription_status) VALUES ($1, 'trial', 'read_only')
+                      ON CONFLICT (school_id) DO UPDATE SET subscription_status = 'read_only'`, [schoolId]);
     // requireActiveSchool caches the school row for 5 minutes; the earlier
     // requests in this suite already primed that cache, so bust it or the
     // stale (pre-update) row would make requireFeature fail open.
@@ -168,7 +170,7 @@ describe('Fee payment initiate — payout gate', () => {
     expect(res.status).toBe(403);
     expect(res.body.error.code).toBe('FEATURE_NOT_IN_PLAN');
 
-    await pool.query(`UPDATE schools SET subscription_tier = 'premium' WHERE id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [schoolId]);
     cache.del(schoolCacheKey(schoolId, 'data'));
   });
 });

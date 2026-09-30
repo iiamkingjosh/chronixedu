@@ -13,6 +13,7 @@ import {
   stopFeeReminderCron,
 } from '../services/feeReminderService';
 import { schoolAllowsFeature } from '../services/planFeatures';
+import { findSubscriptionGate } from '../db/queries/schools';
 
 jest.mock('node-cron');
 jest.mock('../db/queries/analytics');
@@ -23,6 +24,7 @@ jest.mock('../db/queries/notificationLogs');
 jest.mock('../services/emailService');
 jest.mock('../services/termiiService');
 jest.mock('../services/planFeatures');
+jest.mock('../db/queries/schools');
 
 const mockCron = cron as jest.Mocked<typeof cron>;
 const mockAnalytics = analyticsQueries as jest.Mocked<typeof analyticsQueries>;
@@ -112,7 +114,19 @@ describe('sendFeeRemindersForSchool', () => {
     expect(mockInsertLog).not.toHaveBeenCalled();
   });
 
-  it('skips SMS but still sends in-app and email when the school is on basic', async () => {
+  it('sends nothing, and never reads balances, for a read-only school (migration 046)', async () => {
+    (findSubscriptionGate as jest.Mock).mockResolvedValueOnce({ plan: 'trial', subscription_status: 'read_only', trial_end_date: null, grace_last_day: null, today: '2026-10-01' });
+    mockFees.getOutstandingBalances.mockResolvedValueOnce([OUTSTANDING_ROW as never]);
+
+    expect(await sendFeeRemindersForSchool(SCHOOL_ID, TERM_ID)).toBe(0);
+
+    expect(mockFees.getOutstandingBalances).not.toHaveBeenCalled();
+    expect(mockCreateNotification).not.toHaveBeenCalled();
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    mockFees.getOutstandingBalances.mockReset();
+  });
+
+  it('skips SMS but still sends in-app and email when the school has no SMS feature', async () => {
     mockFees.getOutstandingBalances.mockResolvedValueOnce([OUTSTANDING_ROW as never]);
     mockParents.getParentsForStudent.mockResolvedValueOnce([
       { parent_id: PARENT_ID, email: 'parent@test.com', phone: '+2348011111111' },

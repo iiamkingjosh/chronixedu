@@ -5,6 +5,7 @@ import pool from '../db/client';
 import { detectSupportSession } from '../middleware/detectSupportSession';
 import { verifyToken, requirePasswordChanged } from '../middleware/auth';
 import { requireActiveSchool } from '../middleware/requireActiveSchool';
+import { requireWritableSubscription } from '../middleware/requireWritableSubscription';
 import { errorHandler } from '../middleware/errorHandler';
 import scoresRoutes from '../routes/scores';
 import resultsRoutes from '../routes/results';
@@ -71,7 +72,7 @@ export const tokens = {
 export function buildApp(): express.Express {
   const app = express();
   app.use(express.json());
-  app.use('/api/schools', detectSupportSession, verifyToken, requirePasswordChanged, requireActiveSchool);
+  app.use('/api/schools', detectSupportSession, verifyToken, requirePasswordChanged, requireActiveSchool, requireWritableSubscription);
   for (const r of [scoresRoutes, resultsRoutes, studentsRoutes, feesRoutes, dashboardRoutes, teacherDashboardRoutes, parentRoutes, studentRoutes, usersRoutes, sessionsRoutes, rosterRoutes, noticesRoutes, schoolsRoutes]) {
     app.use('/api/schools', r);
   }

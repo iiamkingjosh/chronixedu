@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { useAuth } from '@/app/providers';
 import { SETTINGS_NAV_GROUPS, visibleNavGroups } from '@/lib/navigation';
 
 /**
@@ -10,8 +9,7 @@ import { SETTINGS_NAV_GROUPS, visibleNavGroups } from '@/lib/navigation';
  * on the logo uploader.
  */
 export default function SettingsIndexPage() {
-  const { subscriptionTier } = useAuth();
-  const groups = visibleNavGroups(SETTINGS_NAV_GROUPS, subscriptionTier === 'basic' ? ['/settings/payout'] : []);
+  const groups = visibleNavGroups(SETTINGS_NAV_GROUPS, []);
 
   return (
     <div className="max-w-2xl mx-auto p-8">

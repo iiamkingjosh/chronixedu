@@ -9,6 +9,7 @@ import { sendTermiiSms } from './termiiService';
 import { logger } from '../config/logger';
 import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
 import { schoolAllowsFeature } from './planFeatures';
+import { findSubscriptionGate } from '../db/queries/schools';
 
 const CRON_NAME = 'weekly-fee-reminders';
 
@@ -28,6 +29,12 @@ function buildReminderMessage(row: OutstandingBalanceRow): { title: string; body
 
 /** Sends fee reminders (in-app + email + SMS) for every outstanding invoice in a school/term. Returns the number of parents notified. */
 export async function sendFeeRemindersForSchool(schoolId: string, termId: string): Promise<number> {
+  // Decided in migration 046: a read-only school sends no fee reminders. They would ask
+  // parents to pay while online payment is off and the school cannot record a payment.
+  if ((await findSubscriptionGate(schoolId))?.subscription_status === 'read_only') {
+    logger.info('fee_reminders_skipped_read_only', { school_id: schoolId, term_id: termId });
+    return 0;
+  }
   const balances = await getOutstandingBalances(schoolId, termId);
   const allowsSms = await schoolAllowsFeature(schoolId, 'sms');
   let remindersSent = 0;

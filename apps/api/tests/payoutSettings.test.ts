@@ -214,8 +214,10 @@ describe('Payout settings', () => {
     expect(getRes.status).toBe(200);
   });
 
-  it('returns 403 FEATURE_NOT_IN_PLAN for a basic-tier school on all four payout routes', async () => {
-    await pool.query(`UPDATE schools SET subscription_tier = 'basic' WHERE id = $1`, [schoolId]);
+  it('returns 403 FEATURE_NOT_IN_PLAN for a read-only school on all four payout routes', async () => {
+    // The trial gate's read-only state takes the plan's extras away (migration 046).
+    await pool.query(`INSERT INTO platform_subscriptions (school_id, plan, subscription_status) VALUES ($1, 'trial', 'read_only')
+                      ON CONFLICT (school_id) DO UPDATE SET subscription_status = 'read_only'`, [schoolId]);
     // requireActiveSchool caches the school row for 5 minutes; earlier requests
     // in this suite already primed that cache, so bust it or the stale
     // (pre-update) row would make requireFeature fail open.
@@ -239,7 +241,7 @@ describe('Payout settings', () => {
     expect(putRes.body.error.code).toBe('FEATURE_NOT_IN_PLAN');
 
     // Restore for any tests that run after this one in the same file.
-    await pool.query(`UPDATE schools SET subscription_tier = 'premium' WHERE id = $1`, [schoolId]);
+    await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [schoolId]);
     cache.del(schoolCacheKey(schoolId, 'data'));
   });
 

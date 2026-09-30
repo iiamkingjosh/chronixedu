@@ -36,6 +36,7 @@ import { generateReportCardPreview } from '../services/reportCardService';
 import { listBanks, resolveBankAccount, createPaystackSubaccount, PaystackServiceError } from '../services/paystackService';
 import { sendTermiiSms } from '../services/termiiService';
 import { logger } from '../config/logger';
+import { findSubscriptionGate } from '../db/queries/schools';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -249,6 +250,44 @@ router.post(
 );
 
 // ── GET /api/schools/:schoolId ─────────────────────────────────────────────────
+
+// ── GET /:schoolId/subscription-status ──────────────────────────────────────
+// The trial gate's state, for the in-app notice (migration 046). Every member of the
+// school may read it — unlike this file's requireSchoolAccess, which admits principals
+// only — so the guard is written here, explicitly (CLAUDE.md doctrine 1). A GET, so it
+// still answers while the school is read-only; that is when it matters most.
+router.get(
+  '/:schoolId/subscription-status',
+  (req: Request, res: Response, next: NextFunction) => {
+    const u = req.user;
+    if (u && (u.role === 'super_admin' || u.school_id === req.params.schoolId)) { next(); return; }
+    res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+  },
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const r = await findSubscriptionGate(req.params.schoolId);
+      if (!r) return res.json({ success: true, data: { state: 'none' } });
+      const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
+      const state = ['trial', 'grace', 'read_only'].includes(r.subscription_status) ? r.subscription_status : 'active';
+      return res.json({
+        success: true,
+        data: {
+          state,
+          plan: r.plan,
+          trial_end_date: r.trial_end_date,
+          grace_last_day: r.grace_last_day,
+          // Days of full access left, counting today: through the trial's last day, or
+          // through grace's last day. null once read-only.
+          days_left: state === 'trial' && r.trial_end_date ? daysBetween(r.today, r.trial_end_date) + 1
+            : state === 'grace' && r.grace_last_day ? daysBetween(r.today, r.grace_last_day) + 1
+            : null,
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 
 router.get(
   '/:schoolId',

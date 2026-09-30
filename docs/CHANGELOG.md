@@ -1,5 +1,17 @@
 # Chronix Edu — Changelog
 
+## One plan, termly billing, and a gentler end to the free trial (2026-09-30)
+
+### For schools
+- When a free trial ends, nothing is locked straight away. There are 14 more days with everything working, and a notice at the top of every page says how many are left.
+- After that the school becomes read-only rather than suspended: everyone can still sign in, see and export every record — results, attendance, report cards — but new changes are paused until the subscription is renewed. Before, the whole school was shut out the morning the trial ended.
+- The pricing page now shows one plan, Premium, at ₦800 per student per term with every feature included. Enterprise is an enquiry for boarding schools and multi-campus groups. The Basic plan has been removed.
+
+### For Chronix administrators
+- Subscriptions can be billed per term, and new ones are termly by default. The next billing date for a termly school is the start of its next term; when that term has not been set up yet, the screens say so instead of showing a blank.
+- Monthly recurring revenue now counts a termly subscription as a quarter of its term amount, everywhere it is shown. The schools list's "MRR" column is now "Amount", because it shows what each school is billed, not its monthly share.
+- Recording a payment against a trial that has lapsed restores the school and moves it to Premium. Extending a trial also works after it has lapsed.
+
 ## A school that upgrades from a trial stays active (2026-09-30)
 
 ### For Chronix administrators

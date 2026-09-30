@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/app/providers';
 import { SETTINGS_NAV_GROUPS, visibleNavGroups } from '@/lib/navigation';
 
 /**
@@ -12,8 +11,7 @@ import { SETTINGS_NAV_GROUPS, visibleNavGroups } from '@/lib/navigation';
  */
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { subscriptionTier } = useAuth();
-  const groups = visibleNavGroups(SETTINGS_NAV_GROUPS, subscriptionTier === 'basic' ? ['/settings/payout'] : []);
+  const groups = visibleNavGroups(SETTINGS_NAV_GROUPS, []);
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
   const linkClass = (href: string) =>
     `block rounded-md px-3 py-1.5 text-sm ${isActive(href) ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`;

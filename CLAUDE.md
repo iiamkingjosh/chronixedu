@@ -326,6 +326,29 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   found in trial status (`TRIAL_STATUS_CLEARED_PAID_PLAN`, logged at error). The trial end date is
   inclusive in Africa/Lagos. A manual payment against a suspended subscription reactivates the
   subscription, not the school. All from Chronix High School's 8 Sep suspension — `trialExpiry.db.test.ts`.
+- **Plans are trial, premium, enterprise; ₦800 per student per TERM** (decided 30 Sep 2026). One
+  list, `PLANS` in `services/planFeatures.ts`; every zod plan enum is `planEnum`; `PLAN_FEATURES` is a
+  `Record<Plan, …>` so a plan without a feature decision fails the build. All three get every feature.
+  A null/unknown tier passes and logs at error. `billing_cycle` accepts `termly` and defaults to it
+  (migration 046). **MRR divides termly by 4** (three terms ÷ twelve months) in `getPlatformRevenue`,
+  which is now the only MRR arithmetic — the subscriptions summary and the analytics overview each
+  had their own copy, and both counted termly revenue as nothing.
+- **A termly subscription's next billing date is derived on read**: `next_term_start(school)`, the
+  school's next term start after today (Lagos). Never stored — term dates are editable. The API
+  returns it with `next_billing_basis` (`next_term | not_yet_known | not_billed | stored | not_set`),
+  because "no future term set yet" is the normal case after onboarding and must not look like a blank.
+- **The trial gate** (`runTrialExpiryCheck`, 09:00 Lagos): trial through `trial_ends_at` (inclusive),
+  then 14 days of `grace` (full access, in-app countdown), then `read_only` — GETs work, writes under
+  `/api/schools/:id` get 423 `SCHOOL_READ_ONLY` (`middleware/requireWritableSubscription.ts`), extras off.
+  **Never touches `schools.is_active`** — that is an administrator's decision with its own route. The
+  status rides on the cached school row (`findSchoolById`); anything that changes it clears
+  `schoolCacheKey(id, 'data')`. `READ_ONLY_WRITE_ALLOWLIST` is where routes that let a school pay go —
+  empty until the payment system exists, pinned by a test. Recovery: a recorded payment (which also
+  moves a trial to premium), extending the trial (status recomputed from the new date), or a PATCH.
+  Read-only schools send no fee reminders; queued notifications still deliver in-app and by email,
+  without SMS.
+- `GET /:schoolId/subscription-status` feeds the staff banner (`components/SubscriptionNotice.tsx`);
+  any member of the school may read it, and it answers while read-only.
 - Not built yet, deliberately: checkout and webhooks. They wait on a rate being set and a real
   school's amount looking right.
 
