@@ -499,6 +499,7 @@ A change is done when all of these pass locally:
 
 ```bash
 npm run lint
+node scripts/audit-gate.js               # CI's security gate; needs the network (npm audit)
 npx tsc -p apps/api/tsconfig.json --noEmit
 npx tsc -p apps/web/tsconfig.json --noEmit
 npm run test:unit                       # mocked, no DB
@@ -533,6 +534,14 @@ paging (15.4 GB RAM, 36 GB committed): Postgres idle, TCP connects fast under lo
 the client's own 10s timer firing through event-loop stalls. Check free memory before
 chasing a flake. The ERP project's Supabase stack runs in the same Docker VM; stop it when
 you are not using it.
+
+**The security gate carries a dated exception list** (`scripts/audit-allowlist.json`, enforced by
+`scripts/audit-gate.js` as CI's third step). It exists because a bare `npm audit --audit-level=critical`
+sat red on every commit for five weeks after two critical advisories landed on `next`, stopped the
+workflow before lint and every test, and so stopped reporting anything. An entry is honoured only
+while it is still reported as critical, unexpired, and its stated precondition holds; adding a
+`remotePatterns`, `domains` or `loader` to `apps/web/next.config.js` therefore fails CI until the AVIF
+exception is re-decided. Do not extend an `expires` date by habit — upgrade, or re-justify it.
 
 Workflow/data-integrity changes need a DB test in `apps/api/src/__db_tests__/`
 that **fails on the old code**. Never point any test at production: both test

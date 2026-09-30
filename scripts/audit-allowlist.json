@@ -1,0 +1,16 @@
+[
+  {
+    "id": "GHSA-p293-qw3h-jr36",
+    "package": "next",
+    "reason": "Unauthenticated RCE on Windows-hosted servers only (advisory published 2026-08-25, CVSS 9.0). The web service runs in Railway's Linux containers. Revisit before any move to a Windows host.",
+    "precondition": null,
+    "expires": "2026-12-31"
+  },
+  {
+    "id": "GHSA-2xp9-vwfh-vxw4",
+    "package": "next",
+    "reason": "RCE when an AVIF file is optimized (advisory published 2026-08-25, CVSS 9.5). The image optimizer has no source an attacker controls: next.config.js sets no images.remotePatterns/domains/loader and the only next/image use is one local PNG logo. An inference from our configuration, not a statement in the advisory — so the precondition is checked on every run. Real fix: upgrade next to 15.5.24.",
+    "precondition": "next-images-local-only",
+    "expires": "2026-12-31"
+  }
+]

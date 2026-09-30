@@ -24,9 +24,17 @@ jobs:
         run: npm ci
 
       - name: Security audit
-        # Fail only on CRITICAL. Remaining HIGH issues (next 14→16, @typescript-eslint 6→8)
+        # Fail only on CRITICAL. Remaining HIGH issues (next 14→15, @typescript-eslint 6→8)
         # require major version upgrades tracked in the ops roadmap.
-        run: npm audit --audit-level=critical
+        #
+        # Not a bare `npm audit --audit-level=critical`: that had no way to name an
+        # accepted advisory, so two criticals on next@14.2.35 (published 25 Aug 2026) kept
+        # this step red on every commit, ahead of lint and every test job, for five weeks.
+        # scripts/audit-gate.js fails on any critical advisory NOT in
+        # scripts/audit-allowlist.json, and on an allowlisted one that is stale, past its
+        # date, or whose stated precondition no longer holds. It also fails if npm audit
+        # produced no report.
+        run: node scripts/audit-gate.js
 
       - name: Lint (web + api)
         run: npm run lint
