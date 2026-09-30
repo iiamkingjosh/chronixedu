@@ -29,33 +29,47 @@ describe('requestLogger', () => {
 });
 
 describe('describeClientIp — the shape of the client address, never the address', () => {
-  function seen(xff: string | undefined, trust: number | boolean = 1) {
+  function seen(xff: string | undefined, realIp?: string, trust: number | boolean = 1) {
     const app = express();
     app.set('trust proxy', trust);
     let shape: ReturnType<typeof describeClientIp> | undefined;
     app.get('/x', (req, res) => { shape = describeClientIp(req); res.end(); });
-    const r = request(app).get('/x');
-    return (xff ? r.set('X-Forwarded-For', xff) : r).then(() => shape!);
+    let r = request(app).get('/x');
+    if (xff) r = r.set('X-Forwarded-For', xff);
+    if (realIp) r = r.set('X-Real-IP', realIp);
+    return r.then(() => shape!);
   }
 
   it('a public client behind one proxy: taken from the last hop, not internal', async () => {
-    expect(await seen('129.18.153.138')).toEqual({ xff_hops: 1, xff_distinct: 1, ip_family: 'v4', ip_internal: false, ip_from: 'last', edge: null });
+    expect(await seen('129.18.153.138')).toEqual({ xff_hops: 1, xff_distinct: 1, ip_family: 'v4', ip_internal: false, ip_from: 'last', edge: null, real_ip: 'none' });
   });
 
   it('an extra platform hop appended after the client shows up as an internal last hop', async () => {
-    expect(await seen('129.18.153.138, 100.64.0.7')).toEqual({ xff_hops: 2, xff_distinct: 2, ip_family: 'v4', ip_internal: true, ip_from: 'last', edge: null });
+    expect(await seen('129.18.153.138, 100.64.0.7')).toEqual({ xff_hops: 2, xff_distinct: 2, ip_family: 'v4', ip_internal: true, ip_from: 'last', edge: null, real_ip: 'none' });
   });
 
   it('no forwarded header: the socket peer, which in tests is loopback', async () => {
-    expect(await seen(undefined)).toEqual({ xff_hops: 0, xff_distinct: 0, ip_family: 'v4', ip_internal: true, ip_from: 'socket', edge: null });
+    expect(await seen(undefined)).toEqual({ xff_hops: 0, xff_distinct: 0, ip_family: 'v4', ip_internal: true, ip_from: 'socket', edge: null, real_ip: 'none' });
   });
 
   it('the client repeated by a proxy is one distinct address in two hops', async () => {
     expect(await seen('129.18.153.138, ::ffff:129.18.153.138')).toMatchObject({ xff_hops: 2, xff_distinct: 1, ip_from: 'last' });
   });
 
+  it('X-Real-IP naming the first hop while req.ip is the last: the two headers disagree about the client', async () => {
+    expect(await seen('129.18.153.138, 198.51.100.4', '129.18.153.138')).toMatchObject({ xff_distinct: 2, ip_from: 'last', real_ip: 'eq_first' });
+  });
+
+  it('X-Real-IP agreeing with req.ip', async () => {
+    expect(await seen('129.18.153.138', '::ffff:129.18.153.138')).toMatchObject({ real_ip: 'eq_ip' });
+  });
+
+  it('X-Real-IP matching neither — what a forged header looks like if the edge passes it through', async () => {
+    expect(await seen('129.18.153.138', '203.0.113.9')).toMatchObject({ real_ip: 'other' });
+  });
+
   it('never includes an address in its output', async () => {
-    const shape = await seen('129.18.153.138');
+    const shape = await seen('129.18.153.138, 198.51.100.4', '203.0.113.9');
     expect(JSON.stringify(shape)).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
   });
 });

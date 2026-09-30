@@ -26,6 +26,15 @@ function unmap(ip: string): string {
  * through one Railway edge, landing on two different limiter keys about one time in five;
  * these fields say what the second key is without recording anyone's address.
  */
+function realIpRelation(req: Request, xff: string[], ip: string): 'none' | 'eq_ip' | 'eq_first' | 'other' {
+  const raw = req.headers['x-real-ip'];
+  const real = unmap(String(Array.isArray(raw) ? raw[0] : raw ?? '').trim());
+  if (!real) return 'none';
+  if (real === ip) return 'eq_ip';
+  if (xff.length && real === xff[0]) return 'eq_first';
+  return 'other';
+}
+
 export function describeClientIp(req: Request) {
   const xff = String(req.headers['x-forwarded-for'] ?? '')
     .split(',').map(s => s.trim()).filter(Boolean);
@@ -44,6 +53,11 @@ export function describeClientIp(req: Request) {
     // 'socket' means no forwarded header reached us and it is the peer's own address.
     ip_from: index === -1 ? 'socket' : index === xff.length - 1 ? 'last' : `hop_${index}`,
     edge: String(req.headers['x-railway-edge'] ?? '') || null,
+    // Railway documents X-Real-IP as "the client's remote IP" and does not document
+    // X-Forwarded-For. Express's trust proxy reads only the latter. Where X-Real-IP sits
+    // relative to req.ip and the first forwarded hop says which header names the client
+    // -- and, probed with a forged X-Real-IP, whether the edge overwrites it.
+    real_ip: realIpRelation(req, xff.map(unmap), ip),
   };
 }
 
