@@ -464,9 +464,15 @@ npm run lint
 npx tsc -p apps/api/tsconfig.json --noEmit
 npx tsc -p apps/web/tsconfig.json --noEmit
 npm run test:unit                       # mocked, no DB
-npm run test:db                         # needs TEST_DATABASE_URL=postgres://…/chronixedu_test (local)
-                                        # start it with durability OFF — see below
-npm run test:integration:local          # same local DB; runs after test:db
+# The two DB-backed runners take their targets from the SHELL. The integration setup loads
+# apps/api/.env but never overrides a variable already set — and .env's DATABASE_URL is
+# production, which its guard refuses; .env's TEST_DATABASE_URL points at port 54322 (the
+# ERP stack's Postgres), not the container below. Mirror ci.yml, then run in this order —
+# test:db rebuilds the schema that test:integration:local seeds into:
+export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
+export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
+npm run test:db                         # 22 suites, 219 passed + 2 skipped, ~90s with durability off (below)
+npm run test:integration:local -- --forceExit   # 21 suites, 186 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)
 ```
 
