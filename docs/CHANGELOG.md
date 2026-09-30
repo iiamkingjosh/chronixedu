@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Billing screens say why a school's figure is low (2026-09-30)
+
+### For Chronix administrators
+- The schools list now shows two numbers side by side: students **billed** (enrolled in the current session) and students **on the roll**. They differ when students have been registered or imported but not yet placed in a class.
+- The Create Subscription form explains a low or zero amount in words: no current academic session; students on the roll but none enrolled yet; or some students not yet enrolled and therefore not billed. Before, each of those looked like the same bare number.
+
 ## Platform billing counts the students a school is teaching now (2026-09-30)
 
 ### For Chronix administrators

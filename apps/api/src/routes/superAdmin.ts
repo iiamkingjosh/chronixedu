@@ -621,6 +621,7 @@ router.get(
            platform_subscriptions.amount_naira,
            platform_subscriptions.next_billing_date,
            (SELECT COUNT(*) FROM students WHERE students.school_id = schools.id) AS student_count,
+           billable_student_count(schools.id) AS billable_students,
            (SELECT MAX(created_at) FROM audit_logs WHERE audit_logs.school_id = schools.id) AS last_activity,
            schools.created_at
          FROM schools
@@ -1004,6 +1005,20 @@ router.get(
   }
 );
 
+/**
+ * Why a school's billable count can be smaller than its roll — three different reasons that
+ * all read as a bare number, and a ₦0 that means "nobody is enrolled yet" must not look like a
+ * ₦0 that means "there is no current session". `null` when there is nothing to explain,
+ * including a school with nobody on its roll at all (an honest zero).
+ */
+type EnrolmentNote = 'no_current_session' | 'none_enrolled' | 'some_not_enrolled';
+function enrolmentNote(onRoll: number, billable: number, hasCurrentSession: boolean): EnrolmentNote | null {
+  if (!hasCurrentSession) return 'no_current_session';
+  if (onRoll === 0) return null;
+  if (billable === 0) return 'none_enrolled';
+  return billable < onRoll ? 'some_not_enrolled' : null;
+}
+
 // ── GET /schools/:id/billing-preview ─────────────────────────────────────────
 // What a subscription for this school is billed, from the same definition the database
 // trigger uses (billable_student_count, migration 045): students enrolled in the current
@@ -1020,14 +1035,15 @@ router.get(
         return res.status(404).json({ success: false, error: { code: 'SCHOOL_NOT_FOUND', message: 'School not found' } });
       }
       const { rows } = await pool.query<{
-        billable_students: number; current_session_id: string | null; price_per_student_kobo: string | null; amount_naira: string | null;
+        billable_students: number; students_on_roll: number; current_session_id: string | null; price_per_student_kobo: string | null; amount_naira: string | null;
       }>(
         `WITH f AS (
            SELECT billable_student_count($1) AS billable_students,
+                  (SELECT COUNT(*)::int FROM students WHERE school_id = $1) AS students_on_roll,
                   (SELECT id FROM academic_sessions WHERE school_id = $1 AND is_current = TRUE) AS current_session_id,
                   (SELECT price_per_student_kobo FROM platform_pricing_config LIMIT 1) AS price_per_student_kobo
          )
-         SELECT billable_students, current_session_id, price_per_student_kobo,
+         SELECT billable_students, students_on_roll, current_session_id, price_per_student_kobo,
                 CASE WHEN price_per_student_kobo IS NOT NULL AND current_session_id IS NOT NULL
                      THEN ROUND((billable_students::numeric * price_per_student_kobo) / 100.0, 2)::text
                 END AS amount_naira
@@ -1039,6 +1055,8 @@ router.get(
         success: true,
         data: {
           billable_students: r.billable_students,
+          students_on_roll: r.students_on_roll,
+          enrolment_note: enrolmentNote(r.students_on_roll, r.billable_students, r.current_session_id !== null),
           current_session_id: r.current_session_id,
           rate_configured: r.price_per_student_kobo !== null,
           price_per_student_kobo: r.price_per_student_kobo === null ? null : Number(r.price_per_student_kobo),

@@ -294,7 +294,7 @@ export default function SuperAdminSchoolsPage() {
               <th className="py-3 px-4">Plan</th>
               <th className="py-3 px-4">Status</th>
               <th className="py-3 px-4">Payout</th>
-              <th className="py-3 px-4">Students</th>
+              <th className="py-3 px-4" title="Enrolled in the current session (billed) / everyone on the roll">Students <span className="font-normal normal-case text-gray-400">billed / roll</span></th>
               <th className="py-3 px-4">MRR</th>
               <th className="py-3 px-4">Next Billing</th>
               <th className="py-3 px-4">Actions</th>
@@ -321,7 +321,7 @@ export default function SuperAdminSchoolsPage() {
                 <td className="py-3 px-4"><PlanBadge plan={school.plan} /></td>
                 <td className="py-3 px-4"><StatusBadge isActive={school.is_active} /></td>
                 <td className="py-3 px-4"><PayoutBadge status={school.payout_status} /></td>
-                <td className="py-3 px-4 text-gray-700">{school.student_count}</td>
+                <td className="py-3 px-4 text-gray-700">{school.billable_students} <span className="text-gray-400">/ {school.student_count}</span></td>
                 <td className="py-3 px-4 text-gray-700">{formatNaira(school.amount_naira)}</td>
                 <td className="py-3 px-4 text-gray-700">{formatDate(school.next_billing_date)}</td>
                 <td className="py-3 px-4">

@@ -25,7 +25,10 @@ export interface SchoolListItem {
   subscription_status: SubscriptionStatus | null;
   amount_naira: number | null;
   next_billing_date: string | null;
+  /** Everyone on the school's roll (a students row), enrolled or not. */
   student_count: number;
+  /** Those enrolled in the current academic session — what subscriptions are billed on. */
+  billable_students: number;
   last_activity: string | null;
   created_at: string;
 }
@@ -226,6 +229,10 @@ export interface UpdateSubscriptionInput {
 export interface BillingPreview {
   /** Students with an enrolment in the school's current academic session, each once. */
   billable_students: number;
+  /** Everyone on the roll, enrolled or not. */
+  students_on_roll: number;
+  /** Why billable is below the roll, when it is. null when there is nothing to explain. */
+  enrolment_note: 'no_current_session' | 'none_enrolled' | 'some_not_enrolled' | null;
   current_session_id: string | null;
   rate_configured: boolean;
   price_per_student_kobo: number | null;

@@ -221,7 +221,10 @@ describe('the billing preview', () => {
     await setRate();
     let res = await preview(I.schoolA);
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual({ billable_students: 3, current_session_id: I.sessionA, rate_configured: true, price_per_student_kobo: RATE_KOBO, amount_naira: '2400.00' });
+    expect(res.body.data).toEqual({
+      billable_students: 3, students_on_roll: 3, enrolment_note: null,
+      current_session_id: I.sessionA, rate_configured: true, price_per_student_kobo: RATE_KOBO, amount_naira: '2400.00',
+    });
     await clearRate();
     res = await preview(I.schoolA);
     expect(res.body.data).toMatchObject({ billable_students: 3, rate_configured: false, price_per_student_kobo: null, amount_naira: null });
@@ -229,5 +232,57 @@ describe('the billing preview', () => {
     await pool.query(`UPDATE academic_sessions SET is_current = FALSE WHERE id = $1`, [I.sessionA]);
     res = await preview(I.schoolA);
     expect(res.body.data).toMatchObject({ billable_students: 0, current_session_id: null, rate_configured: true, amount_naira: null });
+  });
+});
+
+describe('a bare number cannot say why it is low: the preview names the reason', () => {
+  const note = async (schoolId: string) => (await preview(schoolId)).body.data;
+
+  it('nothing to explain when everyone on the roll is enrolled — established first, so the notes below mean something', async () => {
+    const d = await note(I.schoolA);
+    expect(d).toMatchObject({ students_on_roll: 3, billable_students: 3, enrolment_note: null });
+  });
+
+  it('some_not_enrolled: a student on the roll with no enrolment this session is named, and not billed', async () => {
+    await setRate();
+    await addStudent(45); // on the roll, never enrolled
+    const d = await note(I.schoolA);
+    expect(d).toMatchObject({ students_on_roll: 4, billable_students: 3, enrolment_note: 'some_not_enrolled', amount_naira: '2400.00' });
+  });
+
+  it('none_enrolled: a roll of students with a current session but no enrolment is ₦0 for THAT reason', async () => {
+    await setRate();
+    const d = await note(I.schoolB); // one student on the roll, sessionB is current, nobody enrolled
+    expect(d).toMatchObject({ students_on_roll: 1, billable_students: 0, enrolment_note: 'none_enrolled', amount_naira: '0.00' });
+  });
+
+  it('no_current_session: ₦0 for a different reason, reported as a different note', async () => {
+    await pool.query(`UPDATE academic_sessions SET is_current = FALSE WHERE id = $1`, [I.sessionB]);
+    const d = await note(I.schoolB);
+    expect(d).toMatchObject({ students_on_roll: 1, billable_students: 0, enrolment_note: 'no_current_session', amount_naira: null });
+  });
+
+  it('an empty roll with a session is an honest zero, not a problem', async () => {
+    await pool.query(`DELETE FROM students WHERE id = $1`, [I.sOtherSchool]);
+    const d = await note(I.schoolB);
+    expect(d).toMatchObject({ students_on_roll: 0, billable_students: 0, enrolment_note: null });
+  });
+});
+
+describe('the schools list shows the roll and the billable count side by side', () => {
+  const row = async (schoolId: string) => {
+    const res = await request(app).get('/api/super-admin/schools?include_demo=true').set('Authorization', sa());
+    expect(res.status).toBe(200);
+    return (res.body.data.schools as Array<{ id: string; student_count: string; billable_students: number }>).find((x) => x.id === schoolId)!;
+  };
+
+  it('agree when everyone is enrolled; diverge when someone is on the roll and not enrolled', async () => {
+    const before = await row(I.schoolA);
+    expect(Number(before.student_count)).toBe(3);
+    expect(before.billable_students).toBe(3);
+    await addStudent(46); // on the roll only
+    const after = await row(I.schoolA);
+    expect(Number(after.student_count)).toBe(4);
+    expect(after.billable_students).toBe(3);
   });
 });

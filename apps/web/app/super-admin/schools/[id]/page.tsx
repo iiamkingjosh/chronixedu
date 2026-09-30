@@ -169,6 +169,21 @@ type CreateSubFormOutput = z.output<typeof createSubSchema>;
 
 const DEFAULT_TRIAL_LENGTH_DAYS = 30;
 
+/** What a ₦0 (or a low figure) means, in words. A bare number cannot say which of three
+ *  very different things happened. */
+function enrolmentMessage(p: BillingPreview): string | null {
+  switch (p.enrolment_note) {
+    case 'no_current_session':
+      return `This school has no current academic session, so it cannot be priced yet${p.students_on_roll > 0 ? ` (${p.students_on_roll} on its roll)` : ''}.`;
+    case 'none_enrolled':
+      return `${p.students_on_roll} student${p.students_on_roll === 1 ? ' is' : 's are'} on the roll but none is enrolled in the current session, so the amount is ₦0. It updates by itself as students are enrolled in classes.`;
+    case 'some_not_enrolled':
+      return `${p.students_on_roll - p.billable_students} of the ${p.students_on_roll} students on the roll are not enrolled in the current session and are not billed.`;
+    default:
+      return null;
+  }
+}
+
 function defaultTrialEndsAt(): string {
   const d = new Date();
   d.setDate(d.getDate() + DEFAULT_TRIAL_LENGTH_DAYS);
@@ -239,7 +254,7 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
             <dl className="space-y-1">
               <div className="flex justify-between gap-4">
                 <dt className="text-gray-500">Billable students</dt>
-                <dd className="text-gray-900">{preview.billable_students} <span className="text-gray-500">enrolled in the current session</span></dd>
+                <dd className="text-gray-900">{preview.billable_students} <span className="text-gray-500">of {preview.students_on_roll} on the roll, enrolled in the current session</span></dd>
               </div>
               <div className="flex justify-between gap-4">
                 <dt className="text-gray-500">Rate</dt>
@@ -252,8 +267,8 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
               {!preview.rate_configured && (
                 <p className="pt-1 text-amber-700">No per-student rate is configured. Set platform_pricing_config before creating a paid subscription.</p>
               )}
-              {preview.rate_configured && preview.current_session_id === null && (
-                <p className="pt-1 text-amber-700">This school has no current academic session, so it cannot be priced yet.</p>
+              {enrolmentMessage(preview) && (
+                <p className="pt-1 text-amber-700">{enrolmentMessage(preview)}</p>
               )}
             </dl>
           )}
