@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Limits apply to each visitor, not to everyone at once (2026-09-30)
+
+### Sign-in protection now counts each person separately
+- The app was identifying visitors by the address of the hosting provider's relay, not their own. So the limits on wrong passwords and on requests per minute were being shared by everyone using the app at the same time, and one person's mistakes could count against another. Each visitor is now counted on their own.
+- The address recorded against administrator actions in the audit trail is now the administrator's own. Entries before 30 September 2026 hold the relay's address instead.
+
 ## Correct passwords are never refused for "too many requests" (2026-09-30)
 
 ### Signing in several times in a row works

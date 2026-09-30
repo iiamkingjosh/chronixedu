@@ -10,6 +10,7 @@ import { verifyToken, requireRole } from '../middleware/auth';
 import { findUserByEmail, updatePasswordHash, getPasswordHashById, changeOwnPassword } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
 import { redis } from '../middleware/rateLimit';
+import { clientIp } from '../middleware/clientIp';
 
 const router = express.Router();
 
@@ -147,7 +148,7 @@ router.post('/login', async (req, res, next) => {
 
   try {
     const emailKey = `login_attempts:${email.toLowerCase()}`;
-    const ip = req.ip ?? 'unknown';
+    const ip = clientIp(req) ?? 'unknown';
     const ipKey = `login_attempts_ip:${ip}`;
 
     // Atomic Redis-based lockout — immune to concurrent-request race conditions.

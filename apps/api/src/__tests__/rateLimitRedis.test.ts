@@ -168,3 +168,42 @@ describe('what the failures-only count still cannot tell apart', () => {
     for (let i = 0; i < 6; i++) expect((await login(app)).status).toBe(200);
   });
 });
+
+describe('the limiter key is the client, whichever proxy the request came through', () => {
+  // On Railway every request's X-Forwarded-For is two Railway addresses; the client is
+  // in X-Real-IP. Keyed on req.ip (the last hop), one client landed on different counters
+  // as its requests took different proxies, and every client through one proxy shared a
+  // counter. Measured 30 Sep 2026 — SECURITY.md Round 18.
+  function proxiedApp() {
+    const redis = fakeRedis();
+    const app = express();
+    app.set('trust proxy', 1); // what index.ts sets: req.ip = last forwarded hop
+    mountRateLimiters(app, createRateLimiters(redis.send));
+    app.get('/api/x', (_req, res) => res.json({ success: true }));
+    return { app, redis };
+  }
+  const via = (app: express.Express, proxy: string, client: string) =>
+    request(app).get('/api/x').set('X-Forwarded-For', `198.51.100.1, ${proxy}`).set('X-Real-IP', client);
+
+  it('one client through two proxies is one counter', async () => {
+    const { app, redis } = proxiedApp();
+    await via(app, '198.51.100.7', '203.0.113.1');
+    await via(app, '198.51.100.8', '203.0.113.1');
+    expect(redis.keys.size).toBe(1);
+    expect([...redis.keys.values()][0].hits).toBe(2);
+  });
+
+  it('two clients through one proxy are two counters', async () => {
+    const { app, redis } = proxiedApp();
+    await via(app, '198.51.100.7', '203.0.113.1');
+    await via(app, '198.51.100.7', '203.0.113.2');
+    expect(redis.keys.size).toBe(2);
+  });
+
+  it('a hundred requests from other clients through the same proxy leave this client untouched', async () => {
+    const { app } = proxiedApp();
+    for (let i = 0; i < 100; i++) expect((await via(app, '198.51.100.7', `203.0.113.${1 + (i % 50)}`)).status).toBe(200);
+    // the 101st through that proxy — refused on the old keying, admitted now
+    expect((await via(app, '198.51.100.7', '203.0.113.99')).status).toBe(200);
+  });
+});

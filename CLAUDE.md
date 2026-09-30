@@ -171,6 +171,12 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   way: C-4a gives it its own column-scoped role (`docs/c4a/grants.sql`), so anything added to
   it widens that role. Its TLS resolves through `resolveSsl(url, 'login')` like the pool;
   every connection the API opens must, and each logs its own `pg_tls_verified` line.
+- **The client's address is `clientIp(req)` — `X-Real-IP` — never `req.ip`.** On Railway,
+  `X-Forwarded-For` holds two Railway addresses and no client, and the edge overwrites both
+  headers, so `trust proxy` at any depth yields a Railway proxy; measured 30 Sep 2026
+  (SECURITY.md Round 18). Rate-limit keys, lockout keys and the audit `ip_address` column all
+  go through `clientIp`. A new `req.ip` reader is a regression; `audit_logs.ip_address` rows
+  before 30 Sep 2026 hold proxy addresses.
 - Login: Supabase `signInWithPassword` verifies the password; the API then signs
   its **own** HS256 JWT (`JWT_SECRET`, 1h) with `user_id, school_id, role, email,
   title, must_change_password, subscription_tier`. Supabase-issued tokens are

@@ -37,11 +37,12 @@ sequence → all admitted.
    or student — resets their address's failure count between guesses. The per-email
    lockout is the guessing control; the per-IP one is not.
 
-**§3.1, measured 30 Sep:** from one client (IPv4 forced; no IPv6 on the machine),
-one address in Railway's logs, one edge (`jnb1`), about one request in five landed on a
-different limiter key. Not dual-stack: `ipKeyGenerator` unmaps `::ffff:` addresses.
-A forged `X-Forwarded-For` did not open a new key, so the limit is not client-spoofable.
-`http_request` logs `client_ip` (shape only, no address) to identify the second key.
+**§3.1, answered 30 Sep (SECURITY.md Round 18):** `req.ip` was never the client.
+`X-Forwarded-For` carries two Railway addresses and no client; the client is `X-Real-IP`,
+which the edge overwrites, so it cannot be forged through the edge. The one-in-five
+"second key" was the same client via a different proxy; the same proxy served every
+school. Fixed by `clientIp(req)`; `trust proxy` depth was never the lever. The raise of
+`max` from 5 to 20 now has both prerequisites — test 5 exists, and the key is per client.
 
 **Known limit of the shipped change:** the failures-only count is decremented when a
 response is *sent*. Six correct logins from one address in flight at once (login takes

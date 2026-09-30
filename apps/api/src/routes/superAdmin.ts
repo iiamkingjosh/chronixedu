@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
@@ -402,7 +403,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, target_user_id, metadata, ip_address, support_session_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [req.user!.user_id, 'IMPERSONATION_START', school_id, target.id, JSON.stringify({ reason, target_role: target.role }), req.ip, sessionId]
+        [req.user!.user_id, 'IMPERSONATION_START', school_id, target.id, JSON.stringify({ reason, target_role: target.role }), clientIp(req), sessionId]
       );
 
       return res.json({ success: true, data: { session_id: sessionId, scoped_token: scopedToken } });
@@ -695,7 +696,7 @@ router.patch(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'SCHOOL_SUSPENDED', req.params.schoolId, JSON.stringify({ reason, suspended_by: req.user!.email }), req.ip]
+        [req.user!.user_id, 'SCHOOL_SUSPENDED', req.params.schoolId, JSON.stringify({ reason, suspended_by: req.user!.email }), clientIp(req)]
       );
 
       return res.json({ success: true, data: { school_id: req.params.schoolId, is_active: false, reason } });
@@ -752,7 +753,7 @@ router.patch(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'SCHOOL_REACTIVATED', req.params.schoolId, JSON.stringify({ reason, reactivated_by: req.user!.email }), req.ip]
+        [req.user!.user_id, 'SCHOOL_REACTIVATED', req.params.schoolId, JSON.stringify({ reason, reactivated_by: req.user!.email }), clientIp(req)]
       );
 
       return res.json({ success: true, data: { school_id: req.params.schoolId, is_active: true, reason } });
@@ -856,7 +857,7 @@ router.delete(
         await client.query(
           `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
            VALUES ($1, $2, $3, $4, $5)`,
-          [req.user!.user_id, 'SCHOOL_DATA_WIPED', req.params.schoolId, JSON.stringify({ wiped_by: req.user!.email, school_slug: school.slug }), req.ip]
+          [req.user!.user_id, 'SCHOOL_DATA_WIPED', req.params.schoolId, JSON.stringify({ wiped_by: req.user!.email, school_slug: school.slug }), clientIp(req)]
         );
 
         await client.query('COMMIT');
@@ -1025,7 +1026,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'SUBSCRIPTION_CREATED', school_id, JSON.stringify({ plan, billing_cycle, amount_naira }), req.ip]
+        [req.user!.user_id, 'SUBSCRIPTION_CREATED', school_id, JSON.stringify({ plan, billing_cycle, amount_naira }), clientIp(req)]
       );
 
       return res.status(201).json({ success: true, data: subscription });
@@ -1080,7 +1081,7 @@ router.patch(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'SUBSCRIPTION_UPDATED', existing.school_id, JSON.stringify({ changes: req.body, previous_plan: existing.plan }), req.ip]
+        [req.user!.user_id, 'SUBSCRIPTION_UPDATED', existing.school_id, JSON.stringify({ changes: req.body, previous_plan: existing.plan }), clientIp(req)]
       );
 
       return res.json({ success: true, data: updated });
@@ -1128,7 +1129,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'TRIAL_EXTENDED', existing.school_id, JSON.stringify({ days_added: days, new_trial_ends_at: newTrialEndsAt }), req.ip]
+        [req.user!.user_id, 'TRIAL_EXTENDED', existing.school_id, JSON.stringify({ days_added: days, new_trial_ends_at: newTrialEndsAt }), clientIp(req)]
       );
 
       return res.json({ success: true, data: { subscription_id: req.params.id, days_added: days, new_trial_ends_at: newTrialEndsAt } });
@@ -1172,7 +1173,7 @@ router.post(
           'MANUAL_PAYMENT_RECORDED',
           subscription.school_id,
           JSON.stringify({ amount, reference, payment_date, notes: notes ?? null, plan: subscription.plan, recorded_by: req.user!.email }),
-          req.ip,
+          clientIp(req),
         ]
       );
 
@@ -1320,7 +1321,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'ONBOARDING_STARTED', school.id, JSON.stringify({ school_name, school_email }), req.ip]
+        [req.user!.user_id, 'ONBOARDING_STARTED', school.id, JSON.stringify({ school_name, school_email }), clientIp(req)]
       );
 
       return res.status(201).json({ success: true, data: { session_id: session.id, school_id: school.id, school_slug: school.slug } });
@@ -1618,7 +1619,7 @@ router.post(
 
       await pool.query(
         `UPDATE schools SET is_active = TRUE, legal_terms_accepted_at = NOW(), legal_terms_accepted_ip = $2 WHERE id = $1`,
-        [session.school_id, req.ip]
+        [session.school_id, clientIp(req)]
       );
       await pool.query(
         `UPDATE onboarding_sessions SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
@@ -1671,7 +1672,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'SCHOOL_ONBOARDED', session.school_id, JSON.stringify({ completed_steps: Object.keys(stepsCompleted), principal_email: principalEmail }), req.ip]
+        [req.user!.user_id, 'SCHOOL_ONBOARDED', session.school_id, JSON.stringify({ completed_steps: Object.keys(stepsCompleted), principal_email: principalEmail }), clientIp(req)]
       );
 
       return res.json({
@@ -2174,7 +2175,7 @@ router.post(
           req.user!.user_id,
           'ANNOUNCEMENT_PUBLISHED',
           JSON.stringify({ announcement_id: req.params.id, target_plans: announcement.target_plans, recipients_count: recipientsCount }),
-          req.ip,
+          clientIp(req),
         ]
       );
 
@@ -2258,7 +2259,7 @@ router.post(
           req.user!.user_id,
           userId,
           JSON.stringify({ email, first_name, last_name }),
-          req.ip ?? null,
+          clientIp(req) ?? null,
         ]
       );
 
@@ -2333,7 +2334,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
          VALUES ($1, 'PLATFORM_ADMIN_WELCOME_RESENT', $2, $3, $4)`,
-        [req.user!.user_id, req.params.id, JSON.stringify({ email }), req.ip ?? null]
+        [req.user!.user_id, req.params.id, JSON.stringify({ email }), clientIp(req) ?? null]
       );
 
       return res.json({ success: true, data: { email } });
@@ -2426,7 +2427,7 @@ router.patch(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
          VALUES ($1, 'PLATFORM_ADMIN_SUSPENDED', $2, $3, $4)`,
-        [req.user!.user_id, req.params.id, JSON.stringify({ reason, suspended_by: req.user!.email, email: admin.email }), req.ip]
+        [req.user!.user_id, req.params.id, JSON.stringify({ reason, suspended_by: req.user!.email, email: admin.email }), clientIp(req)]
       );
 
       return res.json({ success: true, data: { admin_id: req.params.id, is_active: false, reason } });
@@ -2468,7 +2469,7 @@ router.patch(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
          VALUES ($1, 'PLATFORM_ADMIN_REACTIVATED', $2, $3, $4)`,
-        [req.user!.user_id, req.params.id, JSON.stringify({ reason, reactivated_by: req.user!.email, email: admin.email }), req.ip]
+        [req.user!.user_id, req.params.id, JSON.stringify({ reason, reactivated_by: req.user!.email, email: admin.email }), clientIp(req)]
       );
 
       return res.json({ success: true, data: { admin_id: req.params.id, is_active: true, reason } });
@@ -2521,7 +2522,7 @@ router.delete(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
          VALUES ($1, 'PLATFORM_ADMIN_DELETED', $2, $3, $4)`,
-        [req.user!.user_id, req.params.id, JSON.stringify({ deleted_by: req.user!.email, original_email: admin.email }), req.ip]
+        [req.user!.user_id, req.params.id, JSON.stringify({ deleted_by: req.user!.email, original_email: admin.email }), clientIp(req)]
       );
 
       try {

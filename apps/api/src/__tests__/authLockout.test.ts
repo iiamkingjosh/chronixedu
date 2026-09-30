@@ -86,3 +86,14 @@ describe('per-email lockout', () => {
     expect(mockSignIn.mock.calls[4][0]).toEqual({ email: 'target@school.ng', password: 'correct-password' }); // zod lowercases it
   });
 });
+
+describe('the per-address lockout key', () => {
+  it('is the client (X-Real-IP), not the forwarded hop req.ip would give', async () => {
+    mockSignIn.mockResolvedValue({ data: null, error: { message: 'Invalid login credentials' } });
+    await request(app).post('/api/auth/login')
+      .set('X-Forwarded-For', '198.51.100.1, 198.51.100.9').set('X-Real-IP', '203.0.113.5')
+      .send({ email: 'target@school.ng', password: 'wrong' });
+    expect([...store.keys()]).toContain('login_attempts_ip:203.0.113.5');
+    expect([...store.keys()]).not.toContain('login_attempts_ip:198.51.100.9');
+  });
+});

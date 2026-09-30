@@ -1,7 +1,12 @@
-import rateLimit, { Options } from 'express-rate-limit';
+import rateLimit, { Options, ipKeyGenerator } from 'express-rate-limit';
+import { clientIp } from './clientIp';
 import { RedisStore, SendCommandFn } from 'rate-limit-redis';
 import Redis from 'ioredis';
 import { Express, Request, Response } from 'express';
+
+// Every limiter keys on the client, not on req.ip — see clientIp.ts. ipKeyGenerator folds
+// an IPv6 address to its /56 so one client cannot rotate through a whole allocation.
+const keyGenerator = (req: Request) => ipKeyGenerator(clientIp(req) ?? '');
 
 function rateLimitHandler(_req: Request, res: Response, _next: unknown, options: Options) {
   res.status(options.statusCode).json({
@@ -48,6 +53,7 @@ export function createRateLimiters(sendCommand?: SendCommandFn) {
   const general = rateLimit({
     windowMs: 60_000,
     max: 100,
+    keyGenerator,
     store: store('rl:general:'),
     standardHeaders: true,
     legacyHeaders: false,
@@ -61,6 +67,7 @@ export function createRateLimiters(sendCommand?: SendCommandFn) {
   const auth = rateLimit({
     windowMs: 60_000,
     max: 5,
+    keyGenerator,
     store: store('rl:auth:'),
     skip: (req) => isLogin(req),
     standardHeaders: true,
@@ -78,6 +85,7 @@ export function createRateLimiters(sendCommand?: SendCommandFn) {
     windowMs: 60_000,
     max: 5,
     skipSuccessfulRequests: true,
+    keyGenerator,
     store: store('rl:login:'),
     standardHeaders: true,
     legacyHeaders: false,

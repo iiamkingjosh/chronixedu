@@ -6,6 +6,7 @@ import { verifyToken } from '../middleware/auth';
 import { findUserById } from '../db/queries/users';
 import { createNotification } from '../db/queries/notifications';
 import { redis } from '../middleware/rateLimit';
+import { clientIp } from '../middleware/clientIp';
 import {
   getMessageContacts,
   createMessage,
@@ -21,7 +22,7 @@ const router = Router();
 const messageLimiter = rateLimit({
   windowMs: 60_000,
   max: 10,
-  keyGenerator: (req: Request) => (req.user?.user_id ? `msg:${req.user.user_id}` : `msg:${ipKeyGenerator(req.ip ?? '')}`),
+  keyGenerator: (req: Request) => (req.user?.user_id ? `msg:${req.user.user_id}` : `msg:${ipKeyGenerator(clientIp(req) ?? '')}`),
   store: redis
     ? new RedisStore({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

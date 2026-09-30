@@ -3,6 +3,7 @@ import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { z } from 'zod';
 import { verifyToken, requireRole, type SupportSessionContext } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { requireFeature } from '../middleware/requireFeature';
 import { redis } from '../middleware/rateLimit';
 import {
@@ -987,7 +988,7 @@ router.put(
       // against the caller's real password, reachable at the general 100/min
       // rate limit rather than the login route's 5/min.
       const stepUpEmailKey = `payout_step_up_attempts:${callerEmail.toLowerCase()}`;
-      const stepUpIp = req.ip ?? 'unknown';
+      const stepUpIp = clientIp(req) ?? 'unknown';
       const stepUpIpKey = `payout_step_up_attempts_ip:${stepUpIp}`;
       if (redis) {
         const [emailCount, ipCount] = await Promise.all([

@@ -1,8 +1,40 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 17 — 2026-09-30  
-**Scope:** The login rate limit counted correct passwords; Agent File Rule S5 amended  
-**Round 17 total findings:** 1 (0 Critical · 0 High · 1 Medium)
+**Latest audit:** Round 18 — 2026-09-30  
+**Scope:** Which address the app takes as the client's  
+**Round 18 total findings:** 1 (0 Critical · 1 High · 0 Medium)
+
+---
+
+## Round 18 — 2026-09-30
+
+**Scope:** Round 17 left one reading unexplained: a single client, one address in Railway's own logs, one edge, landing on a second rate-limit counter about one request in five. Instrumented over five small deploys, each logging the *shape* of the client address and never the address — hop count, distinct-address count, whether a forged header survived the edge, and finally whether a config-held probe address (the prober's own) appeared in each header.
+
+### H-01 — Every per-address control keyed on a Railway proxy address, not the client ✅ Fixed
+
+**Files:** `apps/api/src/middleware/clientIp.ts` (new), `middleware/rateLimit.ts`, `routes/auth.ts`, `routes/schools.ts`, `routes/superAdmin.ts`, `routes/messages.ts`, `routes/announcements.ts`, `middleware/requestLogger.ts`; tests `clientIp.test.ts`, `rateLimitRedis.test.ts`, `authLockout.test.ts`, `requestLogger.test.ts`
+
+**What was measured** (every probe, every time):
+- `X-Forwarded-For` carries exactly **two** addresses, **distinct**, both public. A client-supplied `X-Forwarded-For` does not add a hop — the edge overwrites the header.
+- `req.ip` (with `trust proxy = 1`, the last hop) is **not** the prober's address. Neither is the first hop.
+- `X-Real-IP` **is** the prober's address, and a forged `X-Real-IP` does not survive the edge either.
+
+So on Railway, `X-Forwarded-For` holds two Railway addresses and no client, and Express's `trust proxy` — which reads only that header — can never yield anything but a Railway proxy, at any depth setting. The client is in `X-Real-IP`, which is what Railway's public-networking spec documents as "the client's remote IP" (it does not document `X-Forwarded-For` at all).
+
+**What that meant, since launch:**
+- Both rate limiters, the login limiter and the per-address login lockout counted **every school through a given proxy as one client**. The 100/min general limit was a platform-wide budget per proxy; `MAX_IP_ATTEMPTS = 20` failed logins in 15 minutes, from anyone, locked out every user routed through that proxy until someone logged in successfully (which clears the key). Not reached only because no real school is live.
+- The one-in-five "second counter" was the same client's requests taking a different proxy.
+- The `ip_address` written to `audit_logs` on every super-admin action (impersonation start, school wipe, suspensions, subscription changes — 17 sites) and to the payout step-up lockout was a Railway address, not the actor's. **Every such row written before this fix records the wrong address; do not read them as actor location.**
+
+**Fix:** `clientIp(req)` returns `X-Real-IP` when it holds a valid address (IPv4-mapped forms unmapped), else `req.ip`. Every former `req.ip` reader uses it. The limiters key on `ipKeyGenerator(clientIp(req))`, so an IPv6 client is folded to its /56 as before. `trust proxy` stays at 1 — it no longer decides anything security-relevant, and turning it off would put a Railway address in `req.ip` on the fallback path.
+
+**Off Railway** (local dev, tests, a direct hit on the container over private networking) nothing overwrites `X-Real-IP`, so there it is exactly as trustworthy as `X-Forwarded-For` was under `trust proxy` — the risk Round 4 M-02 accepted. Not a new exposure: the same requester could already choose `req.ip` there.
+
+**Tests:** 8 new behavioural tests, 6 of which fail with `clientIp` temporarily returning `req.ip` (verified): one client through two proxies is one counter; two clients through one proxy are two; 100 requests from other clients through the same proxy leave a client's allowance untouched; the login lockout key is the client, not the hop; and the helper prefers `X-Real-IP` and unmaps it. The two fallback tests (header absent, header malformed) pass on both by design.
+
+**Round 4 M-02, superseded.** It accepted "trust proxy 1 IP spoofing" as a risk. Measured: through the edge, neither header can be spoofed — the risk accepted was not present — but the header Express read never held the client. The accepted risk was the wrong one.
+
+**Verification after deploy:** the same probe fields, plus the limiter's own `RateLimit-Remaining` header over 30 requests from one client: one counter, decreasing by one each time, no second key.
 
 ---
 
@@ -555,7 +587,7 @@ The real defect underneath was smaller: the teacher class-comments page called t
 | H-03 | In-memory rate limiter resets on restart | ✅ Fixed |
 | H-04 | Paystack webhook falls back to re-serialized body | ✅ Fixed |
 | M-01 | CORS passes all no-Origin requests | ⚠️ Accepted risk |
-| M-02 | trust proxy 1 IP spoofing | ⚠️ Accepted risk |
+| M-02 | trust proxy 1 IP spoofing | ⚠️ Accepted risk → **superseded by Round 18 H-01**: the address Express read was never the client's |
 | M-03 | Impersonation actions logged under victim's ID | ✅ Fixed |
 | M-04 | JWTs stored in localStorage | ⚠️ Accepted risk |
 | L-01 | bcrypt cost factor 10 | ✅ Fixed |

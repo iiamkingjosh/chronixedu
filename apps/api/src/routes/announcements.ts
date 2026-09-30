@@ -6,6 +6,7 @@ import { RedisStore } from 'rate-limit-redis';
 import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { redis } from '../middleware/rateLimit';
+import { clientIp } from '../middleware/clientIp';
 import { createNotificationsBulk } from '../db/queries/notifications';
 import { sendEmail } from '../services/emailService';
 import { createAnnouncement, listAnnouncementsForRole, getTargetUsers } from '../db/queries/announcements';
@@ -18,7 +19,7 @@ const BATCH_SIZE = 50;
 const announcementLimiter = rateLimit({
   windowMs: 60 * 60_000,
   max: 5,
-  keyGenerator: (req: Request) => (req.user?.user_id ? `ann:${req.user.user_id}` : `ann:${ipKeyGenerator(req.ip ?? '')}`),
+  keyGenerator: (req: Request) => (req.user?.user_id ? `ann:${req.user.user_id}` : `ann:${ipKeyGenerator(clientIp(req) ?? '')}`),
   store: redis
     ? new RedisStore({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
