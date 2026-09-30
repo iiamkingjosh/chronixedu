@@ -206,11 +206,12 @@ export interface ListSubscriptionsParams {
   page?: number;
 }
 
+// amount_naira is derived by the API (rate × students enrolled in the current session)
+// and is refused if sent — see getBillingPreview for what a subscription will cost.
 export interface CreateSubscriptionInput {
   school_id: string;
   plan: SchoolPlan;
   billing_cycle: BillingCycle;
-  amount_naira: number;
   trial_ends_at?: string;
 }
 
@@ -218,9 +219,23 @@ export interface UpdateSubscriptionInput {
   plan?: SchoolPlan;
   subscription_status?: SubscriptionStatus;
   billing_cycle?: BillingCycle;
-  amount_naira?: number;
   next_billing_date?: string;
   trial_ends_at?: string;
+}
+
+export interface BillingPreview {
+  /** Students with an enrolment in the school's current academic session, each once. */
+  billable_students: number;
+  current_session_id: string | null;
+  rate_configured: boolean;
+  price_per_student_kobo: number | null;
+  /** Naira with two decimals, as the API stores it; null when it cannot be priced. */
+  amount_naira: string | null;
+}
+
+export async function getBillingPreview(schoolId: string): Promise<BillingPreview> {
+  const res = await apiFetch<ApiResponse<BillingPreview>>(`/api/super-admin/schools/${schoolId}/billing-preview`);
+  return res.data;
 }
 
 export interface RecordPaymentInput {

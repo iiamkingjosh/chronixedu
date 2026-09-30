@@ -41,12 +41,27 @@ const get = (key?: string) => {
   return key === undefined ? r : r.set('X-API-Key', key);
 };
 
-/** An active subscription for School A, which the seed leaves without one. */
-async function subscribe(schoolId: string, plan: string, cycle: string, naira: string) {
+/**
+ * Since migrations 044/045 amount_naira is DERIVED — the per-student rate × the students
+ * enrolled in the school's current session — and the database recomputes it on every
+ * write. A subscription's amount is therefore chosen through the rate and the enrolment,
+ * never typed. The seed enrols THREE of School A's students in its current session and
+ * none of School B's, so School A at rate R bills 3R kobo a cycle.
+ */
+const A_ENROLLED = 3;
+async function setRate(kobo: number) {
   await pool.query(
-    `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, amount_naira, subscription_status)
-     VALUES ($1, $2, $3, $4, 'active')`,
-    [schoolId, plan, cycle, naira]
+    `INSERT INTO platform_pricing_config (price_per_student_kobo) VALUES ($1)
+     ON CONFLICT (id) DO UPDATE SET price_per_student_kobo = EXCLUDED.price_per_student_kobo`,
+    [kobo]
+  );
+}
+/** An active subscription for a school; the seed leaves every school without one. */
+async function subscribe(schoolId: string, plan: string, cycle: string) {
+  await pool.query(
+    `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, subscription_status)
+     VALUES ($1, $2, $3, 'active')`,
+    [schoolId, plan, cycle]
   );
 }
 
@@ -97,7 +112,8 @@ describe('the API key boundary', () => {
 
 describe('what the ERP receives', () => {
   it('returns the same figure as getPlatformRevenue, not its own arithmetic', async () => {
-    await subscribe(I.schoolA, 'premium', 'monthly', '50000.00');
+    await setRate(1_000_000);
+    await subscribe(I.schoolA, 'premium', 'monthly');
     const expected = await getPlatformRevenue();
 
     const res = await get(KEY);
@@ -108,24 +124,30 @@ describe('what the ERP receives', () => {
     expect(res.body.data.unit).toBe('kobo');
   });
 
-  it('reports kobo, not naira — ₦50,000 is 5,000,000', async () => {
-    await subscribe(I.schoolA, 'premium', 'monthly', '50000.00');
-    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(5_000_000);
+  it('reports kobo, not naira — three students at ₦10,000 is ₦30,000, which is 3,000,000', async () => {
+    await setRate(1_000_000);
+    await subscribe(I.schoolA, 'premium', 'monthly');
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(A_ENROLLED * 1_000_000);
   });
 
   it('divides an annual subscription into a monthly figure', async () => {
-    await subscribe(I.schoolA, 'enterprise', 'annual', '1200000.00');
-    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(10_000_000);
+    await setRate(4_000_000); // three students × ₦40,000 = ₦120,000 a year
+    await subscribe(I.schoolA, 'enterprise', 'annual');
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe((A_ENROLLED * 4_000_000) / 12);
   });
 
   it('excludes a demo school — a fixture tenant is not revenue', async () => {
+    await setRate(1_000_000);
+    await subscribe(I.schoolA, 'premium', 'monthly');
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(A_ENROLLED * 1_000_000); // counted first
     await pool.query(`UPDATE schools SET is_demo = true WHERE id = $1`, [I.schoolA]);
-    await subscribe(I.schoolA, 'premium', 'monthly', '50000.00');
     expect((await get(KEY)).body.data.total_mrr_kobo).toBe(0);
   });
 
   it('excludes a suspended school — not billing this month', async () => {
-    await subscribe(I.schoolA, 'premium', 'monthly', '50000.00');
+    await setRate(1_000_000);
+    await subscribe(I.schoolA, 'premium', 'monthly');
+    expect((await get(KEY)).body.data.total_mrr_kobo).toBe(A_ENROLLED * 1_000_000); // counted first
     await pool.query(`UPDATE schools SET is_active = false WHERE id = $1`, [I.schoolA]);
     expect((await get(KEY)).body.data.total_mrr_kobo).toBe(0);
   });
@@ -143,7 +165,8 @@ describe('what the ERP receives', () => {
   });
 
   it('exposes no school names or identifiers — aggregate only', async () => {
-    await subscribe(I.schoolA, 'premium', 'monthly', '50000.00');
+    await setRate(1_000_000);
+    await subscribe(I.schoolA, 'premium', 'monthly');
     const body = JSON.stringify((await get(KEY)).body);
     expect(body).not.toContain('School A');
     expect(body).not.toContain(I.schoolA);
@@ -163,30 +186,34 @@ describe('what the ERP receives', () => {
  */
 describe('the money contract', () => {
   it('a naira amount with kobo in it arrives as whole kobo', async () => {
-    await subscribe(I.schoolA, 'basic', 'monthly', '1999.99');
+    await setRate(66_633); // three students × ₦666.33 = ₦1,998.99
+    await subscribe(I.schoolA, 'basic', 'monthly');
     const res = await get(KEY);
-    expect(res.body.data.total_mrr_kobo).toBe(199_999);
+    expect(res.body.data.total_mrr_kobo).toBe(199_899);
     // An integer, not a float that happens to print cleanly — the consumer never has to
     // ask which of the two it received.
     expect(Number.isInteger(res.body.data.total_mrr_kobo)).toBe(true);
   });
 
   it('an annual amount that does not divide by 12 rounds to whole kobo', async () => {
-    // ₦100.00/yr = 10,000 kobo / 12 = 833.33… → 833. The old code produced
-    // 8.333333333333334 naira and left the consumer to guess what to do with it.
-    await subscribe(I.schoolA, 'basic', 'annual', '100.00');
+    // Three students × ₦33.33 = ₦99.99/yr = 9,999 kobo / 12 = 833.25 → 833. The old code
+    // produced a repeating float here and left the consumer to guess what to do with it.
+    await setRate(3_333);
+    await subscribe(I.schoolA, 'basic', 'annual');
     expect((await get(KEY)).body.data.total_mrr_kobo).toBe(833);
   });
 
   it('the parts add up to the total exactly, with awkward amounts in three plans', async () => {
     // `platform_subscriptions` is unique on school_id — one subscription per school — so
-    // three plans needs three schools. schoolC is created here rather than seeded
-    // because no other test needs it.
+    // three plans needs three schools, each with students enrolled in a CURRENT session:
+    // School A has three from the seed; School B gets its one student enrolled; School C is
+    // built here with two, because no other test needs it. Born dormant, then activated —
+    // migration 039 rejects a school created active or activated without an active principal.
     const schoolC = 'c0000000-0000-4000-8000-000000000001';
     const principalC = 'c0000000-0000-4000-8000-000000000002';
-    // Born dormant, then activated — migration 039 rejects a school created active, and
-    // rejects activating one with no active principal. Both guards are doing their job
-    // here; this is the shape every fixture uses.
+    const sessionC = 'c0000000-0000-4000-8000-000000000003';
+    const classC = 'c0000000-0000-4000-8000-000000000004';
+    const classB = 'c0000000-0000-4000-8000-000000000005';
     await pool.query(`INSERT INTO schools (id, name, slug) VALUES ($1, 'School C', 'school-c')`, [schoolC]);
     await pool.query(
       `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
@@ -194,24 +221,37 @@ describe('the money contract', () => {
       [principalC, schoolC, `${principalC}@test`]
     );
     await pool.query(`UPDATE schools SET is_active = true WHERE id = $1`, [schoolC]);
-    await subscribe(I.schoolA, 'basic', 'monthly', '333.33');
-    await subscribe(I.schoolB, 'premium', 'annual', '1000.00');
-    await subscribe(schoolC, 'enterprise', 'monthly', '0.01');
+    await pool.query(`INSERT INTO academic_sessions (id, school_id, name, start_date, end_date, is_current) VALUES ($1, $2, '2026/2027', '2026-09-01', '2027-07-31', true)`, [sessionC, schoolC]);
+    await pool.query(`INSERT INTO classes (id, school_id, name, level) VALUES ($1, $2, 'JSS 1', 'Junior'), ($3, $4, 'JSS 1', 'Junior')`, [classC, schoolC, classB, I.schoolB]);
+    for (const n of [51, 52]) {
+      const uid = `c0000000-0000-4000-8000-0000000000${n}`;
+      const sid = `c0000000-0000-4000-8000-0000000001${n}`;
+      await pool.query(
+        `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
+         VALUES ($1, $2, $3, 'x', 'student', $4, 'Test', true, 'subject', false)`,
+        [uid, schoolC, `${uid}@test`, `StudentC${n}`]
+      );
+      await pool.query(`INSERT INTO students (id, school_id, user_id, admission_no) VALUES ($1, $2, $3, $4)`, [sid, schoolC, uid, `ADM-C${n}`]);
+      await pool.query(`INSERT INTO student_classes (student_id, class_id, session_id) VALUES ($1, $2, $3)`, [sid, classC, sessionC]);
+    }
+    await pool.query(`INSERT INTO student_classes (student_id, class_id, session_id) VALUES ($1, $2, $3)`, [I.sOtherSchool, classB, I.sessionB]);
+
+    await setRate(33_333); // ₦333.33 a student
+    await subscribe(I.schoolA, 'basic', 'monthly');      // 3 × 33,333 = 99,999
+    await subscribe(I.schoolB, 'premium', 'annual');     // 1 × 33,333 / 12 = 2,777.75 → 2,778
+    await subscribe(schoolC, 'enterprise', 'monthly');   // 2 × 33,333 = 66,666
 
     const { data } = (await get(KEY)).body;
     const summed = data.by_plan.reduce((acc: number, p: { mrr_kobo: number }) => acc + p.mrr_kobo, 0);
     // Not "close to" — equal. A consumer reconciling per-plan against the total must not
     // have to allow a tolerance.
     expect(summed).toBe(data.total_mrr_kobo);
-    expect(data.total_mrr_kobo).toBe(33_333 + 8_333 + 1);
-
-    await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [schoolC]);
-    await pool.query(`DELETE FROM users WHERE id = $1`, [principalC]);
-    await pool.query(`DELETE FROM schools WHERE id = $1`, [schoolC]);
+    expect(data.total_mrr_kobo).toBe(99_999 + 2_778 + 66_666);
   });
 
   it('every figure in the payload is an integer', async () => {
-    await subscribe(I.schoolA, 'premium', 'annual', '99999.99');
+    await setRate(3_333_333); // three students × ₦33,333.33 a year → 833,333.25 a month → 833,333
+    await subscribe(I.schoolA, 'premium', 'annual');
     const { data } = (await get(KEY)).body;
     const figures = [data.total_mrr_kobo, ...data.by_plan.map((p: { mrr_kobo: number }) => p.mrr_kobo)];
     expect(figures.every(Number.isInteger)).toBe(true);

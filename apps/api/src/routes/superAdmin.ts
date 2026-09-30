@@ -94,18 +94,37 @@ const listSubscriptionsQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional().default(1),
 });
 
-const createSubscriptionSchema = z
-  .object({
-    school_id: z.string().uuid(),
-    plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
-    billing_cycle: z.enum(['monthly', 'annual']),
-    amount_naira: z.number().nonnegative(),
-    trial_ends_at: z.string().optional(),
-  })
-  .refine(data => data.plan === 'trial' || data.amount_naira > 0, {
-    message: 'Amount must be greater than 0 for a paid plan',
-    path: ['amount_naira'],
-  });
+// amount_naira is DERIVED — the per-student rate × the students enrolled in the school's
+// current session, recomputed by the database on every write (migrations 044/045). It is
+// refused here rather than silently ignored: a caller that sent one would otherwise
+// believe it had been set.
+const derivedAmountRefused = z.undefined({
+  error: "amount_naira is derived from the per-student rate and the school's current enrolment; it cannot be set",
+}).optional(); // optional: the key may be absent; anything but undefined is refused
+
+const createSubscriptionSchema = z.object({
+  school_id: z.string().uuid(),
+  plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
+  billing_cycle: z.enum(['monthly', 'annual']),
+  amount_naira: derivedAmountRefused,
+  trial_ends_at: z.string().optional(),
+});
+
+/**
+ * The trigger that derives amount_naira refuses two states with their own SQLSTATEs.
+ * Both are the caller's to fix, so they answer 409 with the envelope's error shape rather
+ * than the generic 500 a database exception would otherwise become.
+ */
+function billingRefusal(err: unknown): { code: string; message: string } | null {
+  const code = (err as { code?: string })?.code;
+  if (code === 'BL001') {
+    return { code: 'BILLING_RATE_NOT_CONFIGURED', message: 'No per-student rate is configured. Set platform_pricing_config before creating or changing a paid subscription.' };
+  }
+  if (code === 'BL002') {
+    return { code: 'NO_CURRENT_SESSION', message: 'This school has no current academic session, so a paid subscription cannot be priced. Set its current session first.' };
+  }
+  return null;
+}
 
 // If a trial subscription is created with no trial_ends_at, it runs for this
 // many days — keeps a caller-omitted date from meaning "never expires".
@@ -122,7 +141,7 @@ const updateSubscriptionSchema = z
     plan: z.enum(['trial', 'basic', 'premium', 'enterprise']).optional(),
     subscription_status: z.enum(['active', 'suspended', 'cancelled', 'trial']).optional(),
     billing_cycle: z.enum(['monthly', 'annual']).optional(),
-    amount_naira: z.number().positive().optional(),
+    amount_naira: derivedAmountRefused,
     next_billing_date: z.string().optional(),
     trial_ends_at: z.string().optional(),
   })
@@ -985,8 +1004,56 @@ router.get(
   }
 );
 
+// ── GET /schools/:id/billing-preview ─────────────────────────────────────────
+// What a subscription for this school is billed, from the same definition the database
+// trigger uses (billable_student_count, migration 045): students enrolled in the current
+// session × the configured per-student rate. The super-admin UI shows this read-only
+// where it used to collect a number the trigger then discarded.
+
+router.get(
+  '/schools/:id/billing-preview',
+  ...guard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const school = await pool.query(`SELECT id FROM schools WHERE id = $1`, [req.params.id]);
+      if (!school.rows[0]) {
+        return res.status(404).json({ success: false, error: { code: 'SCHOOL_NOT_FOUND', message: 'School not found' } });
+      }
+      const { rows } = await pool.query<{
+        billable_students: number; current_session_id: string | null; price_per_student_kobo: string | null; amount_naira: string | null;
+      }>(
+        `WITH f AS (
+           SELECT billable_student_count($1) AS billable_students,
+                  (SELECT id FROM academic_sessions WHERE school_id = $1 AND is_current = TRUE) AS current_session_id,
+                  (SELECT price_per_student_kobo FROM platform_pricing_config LIMIT 1) AS price_per_student_kobo
+         )
+         SELECT billable_students, current_session_id, price_per_student_kobo,
+                CASE WHEN price_per_student_kobo IS NOT NULL AND current_session_id IS NOT NULL
+                     THEN ROUND((billable_students::numeric * price_per_student_kobo) / 100.0, 2)::text
+                END AS amount_naira
+           FROM f`,
+        [req.params.id]
+      );
+      const r = rows[0];
+      return res.json({
+        success: true,
+        data: {
+          billable_students: r.billable_students,
+          current_session_id: r.current_session_id,
+          rate_configured: r.price_per_student_kobo !== null,
+          price_per_student_kobo: r.price_per_student_kobo === null ? null : Number(r.price_per_student_kobo),
+          amount_naira: r.amount_naira,
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 // ── POST /subscriptions ─────────────────────────────────────────────────────
-// Creates a subscription for a school that doesn't yet have one.
+// Creates a subscription for a school that doesn't yet have one. amount_naira is derived
+// by the database (rate × current enrolment) — see billingRefusal for the two refusals.
 
 router.post(
   '/subscriptions',
@@ -997,7 +1064,7 @@ router.post(
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
-      const { school_id, plan, billing_cycle, amount_naira } = parsed.data;
+      const { school_id, plan, billing_cycle } = parsed.data;
       const trial_ends_at = plan === 'trial' ? (parsed.data.trial_ends_at ?? defaultTrialEndsAt()) : parsed.data.trial_ends_at;
 
       const schoolResult = await pool.query(`SELECT id FROM schools WHERE id = $1`, [school_id]);
@@ -1012,13 +1079,20 @@ router.post(
 
       const subscriptionStatus = plan === 'trial' ? 'trial' : 'active';
 
-      const result = await pool.query(
-        `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, amount_naira, trial_ends_at, subscription_status)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING *`,
-        [school_id, plan, billing_cycle, amount_naira, trial_ends_at ?? null, subscriptionStatus]
-      );
-      const subscription = result.rows[0];
+      let subscription;
+      try {
+        const result = await pool.query(
+          `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, trial_ends_at, subscription_status)
+           VALUES ($1, $2, $3, $4, $5)
+           RETURNING *`,
+          [school_id, plan, billing_cycle, trial_ends_at ?? null, subscriptionStatus]
+        );
+        subscription = result.rows[0];
+      } catch (err) {
+        const refused = billingRefusal(err);
+        if (refused) return res.status(409).json({ success: false, error: refused });
+        throw err;
+      }
 
       await pool.query(`UPDATE schools SET subscription_tier = $1 WHERE id = $2`, [plan, school_id]);
       cache.del(schoolCacheKey(school_id, 'data'));
@@ -1026,7 +1100,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'SUBSCRIPTION_CREATED', school_id, JSON.stringify({ plan, billing_cycle, amount_naira }), clientIp(req)]
+        [req.user!.user_id, 'SUBSCRIPTION_CREATED', school_id, JSON.stringify({ plan, billing_cycle, amount_naira: subscription.amount_naira }), clientIp(req)]
       );
 
       return res.status(201).json({ success: true, data: subscription });
@@ -1055,7 +1129,8 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'SUBSCRIPTION_NOT_FOUND', message: 'Subscription not found' } });
       }
 
-      const SUBSCRIPTION_FIELDS = ['plan', 'subscription_status', 'billing_cycle', 'amount_naira', 'next_billing_date', 'trial_ends_at'] as const;
+      // amount_naira is not here: it is derived by the database on this very UPDATE.
+      const SUBSCRIPTION_FIELDS = ['plan', 'subscription_status', 'billing_cycle', 'next_billing_date', 'trial_ends_at'] as const;
       const params: unknown[] = [];
       const fields: string[] = [];
       for (const field of SUBSCRIPTION_FIELDS) {
@@ -1067,11 +1142,18 @@ router.patch(
       fields.push(`updated_at = NOW()`);
       params.push(req.params.id);
 
-      const result = await pool.query(
-        `UPDATE platform_subscriptions SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
-        params
-      );
-      const updated = result.rows[0];
+      let updated;
+      try {
+        const result = await pool.query(
+          `UPDATE platform_subscriptions SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
+          params
+        );
+        updated = result.rows[0];
+      } catch (err) {
+        const refused = billingRefusal(err);
+        if (refused) return res.status(409).json({ success: false, error: refused });
+        throw err;
+      }
 
       if (parsed.data.plan !== undefined) {
         await pool.query(`UPDATE schools SET subscription_tier = $1 WHERE id = $2`, [parsed.data.plan, existing.school_id]);

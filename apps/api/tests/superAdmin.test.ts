@@ -196,6 +196,17 @@ describe('superAdmin — platform school management', () => {
   // ── Subscription Management ──────────────────────────────────────────────
 
   describe('Subscription Management', () => {
+    // Since migrations 044/045 amount_naira is DERIVED (per-student rate × students enrolled
+    // in the school's CURRENT academic session) and refused from a caller; a paid plan for a
+    // school with no current session is refused with 409 NO_CURRENT_SESSION. So every school
+    // this block creates gets a current session, and the block sets a rate.
+    async function giveCurrentSession(schoolId: string) {
+      await pool.query(
+        `INSERT INTO academic_sessions (school_id, name, start_date, end_date, is_current) VALUES ($1, '2026/2027', '2026-09-01', '2027-07-31', true)`,
+        [schoolId]
+      );
+    }
+
     let subSchoolId: string;
     let trialSchoolId: string;
     let subscriptionId: string;
@@ -207,12 +218,14 @@ describe('superAdmin — platform school management', () => {
         ['Subscription Test School', `test-subscription-${randomUUID()}`]
       );
       subSchoolId = subSchoolResult.rows[0].id;
+      await giveCurrentSession(subSchoolId);
 
       const trialSchoolResult = await pool.query<{ id: string }>(
         `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
         ['Subscription Trial School', `test-subscription-trial-${randomUUID()}`]
       );
       trialSchoolId = trialSchoolResult.rows[0].id;
+      await giveCurrentSession(trialSchoolId);
 
       const trialSubResult = await pool.query<{ id: string }>(
         `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, amount_naira, subscription_status, trial_ends_at)
@@ -221,11 +234,17 @@ describe('superAdmin — platform school management', () => {
         [trialSchoolId]
       );
       trialSubscriptionId = trialSubResult.rows[0].id;
+      await pool.query(
+        `INSERT INTO platform_pricing_config (price_per_student_kobo) VALUES (50000)
+         ON CONFLICT (id) DO UPDATE SET price_per_student_kobo = EXCLUDED.price_per_student_kobo`
+      );
     }, 20000);
 
     afterAll(async () => {
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id IN ($1, $2)`, [subSchoolId, trialSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE school_id IN ($1, $2)`, [subSchoolId, trialSchoolId]);
+      await pool.query(`DELETE FROM platform_pricing_config`);
+      await pool.query(`DELETE FROM academic_sessions WHERE school_id IN ($1, $2)`, [subSchoolId, trialSchoolId]);
       await pool.query(`DELETE FROM schools WHERE id IN ($1, $2) AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [subSchoolId, trialSchoolId]);
     });
 
@@ -235,7 +254,7 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: subSchoolId, billing_cycle: 'monthly', amount_naira: 50000 });
+        .send({ school_id: subSchoolId, billing_cycle: 'monthly' });
       expect(res.status).toBe(400);
     });
 
@@ -243,7 +262,7 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly', amount_naira: 50000 });
+        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly' });
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.plan).toBe('basic');
@@ -254,7 +273,7 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly', amount_naira: 50000 });
+        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly' });
       expect(res.status).toBe(409);
       expect(res.body.error.code).toBe('SUBSCRIPTION_EXISTS');
     });
@@ -265,13 +284,14 @@ describe('superAdmin — platform school management', () => {
         ['Trial Default Test School', `test-trial-default-${randomUUID()}`]
       );
       const newSchoolId = newSchoolResult.rows[0].id;
+      await giveCurrentSession(newSchoolId);
 
       try {
         const before = Date.now();
         const res = await request(app)
           .post('/api/super-admin/subscriptions')
           .set('Authorization', `Bearer ${superAdminToken}`)
-          .send({ school_id: newSchoolId, plan: 'trial', billing_cycle: 'monthly', amount_naira: 50000 });
+          .send({ school_id: newSchoolId, plan: 'trial', billing_cycle: 'monthly' });
 
         expect(res.status).toBe(201);
         expect(res.body.success).toBe(true);
@@ -283,22 +303,24 @@ describe('superAdmin — platform school management', () => {
       } finally {
         await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [newSchoolId]);
         await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [newSchoolId]);
+        await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [newSchoolId]);
         await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [newSchoolId]);
       }
     });
 
-    it('POST /subscriptions — trial plan with amount_naira 0 → 201 (trials can be free)', async () => {
+    it('POST /subscriptions — trial plan → 201 at ₦0.00 (trials are not billed)', async () => {
       const newSchoolResult = await pool.query<{ id: string }>(
         `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
         ['Free Trial Test School', `test-free-trial-${randomUUID()}`]
       );
       const newSchoolId = newSchoolResult.rows[0].id;
+      await giveCurrentSession(newSchoolId);
 
       try {
         const res = await request(app)
           .post('/api/super-admin/subscriptions')
           .set('Authorization', `Bearer ${superAdminToken}`)
-          .send({ school_id: newSchoolId, plan: 'trial', billing_cycle: 'monthly', amount_naira: 0 });
+          .send({ school_id: newSchoolId, plan: 'trial', billing_cycle: 'monthly' });
 
         expect(res.status).toBe(201);
         expect(res.body.success).toBe(true);
@@ -306,15 +328,16 @@ describe('superAdmin — platform school management', () => {
       } finally {
         await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [newSchoolId]);
         await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [newSchoolId]);
+        await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [newSchoolId]);
         await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [newSchoolId]);
       }
     });
 
-    it('POST /subscriptions — basic (paid) plan with amount_naira 0 → 400', async () => {
+    it('POST /subscriptions — amount_naira is derived, so sending one → 400 naming the field', async () => {
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly', amount_naira: 0 });
+        .send({ school_id: subSchoolId, plan: 'basic', billing_cycle: 'monthly', amount_naira: 12345 });
       expect(res.status).toBe(400);
       expect(res.body.error.message.fieldErrors.amount_naira).toBeTruthy();
     });
@@ -325,11 +348,12 @@ describe('superAdmin — platform school management', () => {
         ['Subscription Sync Test School', `test-sync-post-${randomUUID()}`]
       );
       const syncTestSchoolId = newSchoolResult.rows[0].id;
+      await giveCurrentSession(syncTestSchoolId);
 
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: syncTestSchoolId, plan: 'premium', billing_cycle: 'monthly', amount_naira: 60000 });
+        .send({ school_id: syncTestSchoolId, plan: 'premium', billing_cycle: 'monthly' });
 
       expect(res.status).toBe(201);
 
@@ -341,6 +365,7 @@ describe('superAdmin — platform school management', () => {
 
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [syncTestSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [syncTestSchoolId]);
+      await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [syncTestSchoolId]);
       await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [syncTestSchoolId]);
     });
 
@@ -350,13 +375,14 @@ describe('superAdmin — platform school management', () => {
         ['Cache Invalidation Test School POST', `test-cache-post-${randomUUID()}`]
       );
       const cacheTestSchoolId = newSchoolResult.rows[0].id;
+      await giveCurrentSession(cacheTestSchoolId);
 
       const cacheSpy = jest.spyOn(cache, 'del');
 
       const res = await request(app)
         .post('/api/super-admin/subscriptions')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_id: cacheTestSchoolId, plan: 'premium', billing_cycle: 'monthly', amount_naira: 60000 });
+        .send({ school_id: cacheTestSchoolId, plan: 'premium', billing_cycle: 'monthly' });
 
       expect(res.status).toBe(201);
       expect(cacheSpy).toHaveBeenCalledWith(schoolCacheKey(cacheTestSchoolId, 'data'));
@@ -364,6 +390,7 @@ describe('superAdmin — platform school management', () => {
       cacheSpy.mockRestore();
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [cacheTestSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [cacheTestSchoolId]);
+      await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [cacheTestSchoolId]);
       await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [cacheTestSchoolId]);
     });
 
@@ -413,10 +440,11 @@ describe('superAdmin — platform school management', () => {
         ['Cache Invalidation Test School PATCH', `test-cache-patch-${randomUUID()}`]
       );
       const cacheTestSchoolId = newSchoolResult.rows[0].id;
+      await giveCurrentSession(cacheTestSchoolId);
 
       const subResult = await pool.query<{ id: string }>(
-        `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, amount_naira, subscription_status)
-         VALUES ($1, 'basic', 'monthly', 50000, 'active')
+        `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, subscription_status)
+         VALUES ($1, 'basic', 'monthly', 'active')
          RETURNING id`,
         [cacheTestSchoolId]
       );
@@ -435,6 +463,7 @@ describe('superAdmin — platform school management', () => {
       cacheSpy.mockRestore();
       await pool.query(`DELETE FROM platform_audit_logs WHERE target_school_id = $1`, [cacheTestSchoolId]);
       await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [cacheTestSchoolId]);
+      await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [cacheTestSchoolId]);
       await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [cacheTestSchoolId]);
     });
 

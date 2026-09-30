@@ -16,8 +16,7 @@ import {
   type SchoolDetail,
   type SchoolPlan,
   type SubscriptionStatus,
-  type AuditLogEntry,
-} from '@/lib/superAdminApi';
+  type AuditLogEntry, getBillingPreview, type BillingPreview } from '@/lib/superAdminApi';
 import { useToast } from '@/components/Toast';
 
 type Tab = 'overview' | 'subscription' | 'users' | 'activity';
@@ -158,7 +157,6 @@ const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm f
 const createSubSchema = z.object({
   plan: z.enum(['trial', 'basic', 'premium', 'enterprise']),
   billing_cycle: z.enum(['monthly', 'annual']),
-  amount_naira: z.coerce.number().min(0, 'Amount must be 0 or greater'),
   trial_ends_at: z.string().optional(),
 }).superRefine((data, ctx) => {
   if (data.plan === 'trial' && !data.trial_ends_at) {
@@ -180,10 +178,23 @@ function defaultTrialEndsAt(): string {
 function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: string; onClose: () => void; onDone: () => void }) {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<CreateSubFormInput, unknown, CreateSubFormOutput>({
     resolver: zodResolver(createSubSchema),
-    defaultValues: { plan: 'basic', billing_cycle: 'monthly', amount_naira: 0, trial_ends_at: defaultTrialEndsAt() },
+    defaultValues: { plan: 'basic', billing_cycle: 'monthly', trial_ends_at: defaultTrialEndsAt() },
   });
   const [apiError, setApiError] = useState('');
   const plan = watch('plan');
+
+  // The amount is derived — rate × students enrolled in the current session — and the
+  // database recomputes it on every write. Shown here, never collected.
+  const [preview, setPreview] = useState<BillingPreview | null>(null);
+  const [previewError, setPreviewError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    getBillingPreview(schoolId)
+      .then((p) => { if (!cancelled) setPreview(p); })
+      .catch((err: unknown) => { if (!cancelled) setPreviewError(err instanceof Error ? err.message : 'Could not work out the amount'); });
+    return () => { cancelled = true; };
+  }, [schoolId]);
+  const cannotPrice = plan !== 'trial' && (preview === null || !preview.rate_configured || preview.current_session_id === null);
 
   async function onSubmit(values: CreateSubFormOutput) {
     setApiError('');
@@ -192,7 +203,6 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
         school_id: schoolId,
         plan: values.plan,
         billing_cycle: values.billing_cycle,
-        amount_naira: values.amount_naira,
         ...(values.plan === 'trial' && values.trial_ends_at ? { trial_ends_at: values.trial_ends_at } : {}),
       });
       onDone();
@@ -218,9 +228,36 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
             <option value="annual">Annual</option>
           </select>
         </Field>
-        <Field label="Amount (₦)" error={errors.amount_naira?.message}>
-          <input {...register('amount_naira')} type="number" min={0} step="0.01" className={inputClass} />
-        </Field>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm">
+          {plan === 'trial' ? (
+            <p className="text-gray-700"><span className="font-medium">Amount:</span> ₦0.00 — trial plans are not billed.</p>
+          ) : previewError ? (
+            <p className="text-red-700">{previewError}</p>
+          ) : preview === null ? (
+            <p className="text-gray-500">Working out the amount…</p>
+          ) : (
+            <dl className="space-y-1">
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500">Billable students</dt>
+                <dd className="text-gray-900">{preview.billable_students} <span className="text-gray-500">enrolled in the current session</span></dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500">Rate</dt>
+                <dd className="text-gray-900">{preview.rate_configured && preview.price_per_student_kobo !== null ? `${formatNaira(preview.price_per_student_kobo / 100)} per student` : 'not configured'}</dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt className="text-gray-500">Amount</dt>
+                <dd className="font-medium text-gray-900">{preview.amount_naira !== null ? formatNaira(Number(preview.amount_naira)) : '—'}</dd>
+              </div>
+              {!preview.rate_configured && (
+                <p className="pt-1 text-amber-700">No per-student rate is configured. Set platform_pricing_config before creating a paid subscription.</p>
+              )}
+              {preview.rate_configured && preview.current_session_id === null && (
+                <p className="pt-1 text-amber-700">This school has no current academic session, so it cannot be priced yet.</p>
+              )}
+            </dl>
+          )}
+        </div>
         {plan === 'trial' && (
           <Field label="Trial Ends At" error={errors.trial_ends_at?.message}>
             <input {...register('trial_ends_at')} type="date" className={inputClass} />
@@ -233,7 +270,7 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
         )}
         <div className="flex justify-end gap-3 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900">Cancel</button>
-          <button type="submit" disabled={isSubmitting} className="px-5 py-2 bg-[#003366] text-white text-sm font-medium rounded-lg hover:bg-[#002244] disabled:opacity-50 transition-colors">
+          <button type="submit" disabled={isSubmitting || cannotPrice} className="px-5 py-2 bg-[#003366] text-white text-sm font-medium rounded-lg hover:bg-[#002244] disabled:opacity-50 transition-colors">
             {isSubmitting ? 'Creating…' : 'Create Subscription'}
           </button>
         </div>

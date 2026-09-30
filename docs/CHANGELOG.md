@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Platform billing counts the students a school is teaching now (2026-09-30)
+
+### For Chronix administrators
+- A school's subscription amount is worked out from the students enrolled in its **current** academic session, each counted once — not from everyone who has ever been on its books. A school that has graduated three cohorts is no longer charged for them.
+- The amount is recomputed automatically when students are enrolled or withdrawn and when the session rolls over. It is no longer typed in: the Create Subscription form shows the count, the rate and the amount it will be billed, and says plainly when it cannot be priced (no rate configured, or no current session).
+- No money has been collected and no rate is set yet; this fixes the number before anything is charged against it.
+
 ## A shorter menu for principals (2026-09-30)
 
 ### Settings is one entry, and the daily work is grouped

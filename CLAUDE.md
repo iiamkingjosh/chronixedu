@@ -292,6 +292,37 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - `updateAcademicConfig` is an upsert. It was an UPDATE, which matched nothing for a
   school without a `school_settings` row and still answered "updated".
 
+## Platform billing (what a school is charged)
+
+- `platform_subscriptions.amount_naira` is **derived, never written**: the per-student rate
+  (`platform_pricing_config.price_per_student_kobo`, a singleton, unset in production until
+  Moses sets it) × the school's **billable students**, recomputed by a BEFORE trigger on every
+  write (migrations 044, 045). The API refuses `amount_naira` from a caller (400 naming the
+  field) rather than ignoring it.
+- **A billable student has a `student_classes` row for the school's CURRENT academic
+  session, counted once** (`billable_student_count(school_id)`, migration 045; the same
+  condition `queries/students.ts` lists students by). 044 counted `students` — everyone ever
+  enrolled, a number that only grows — so a school in its fifth year would have paid for five
+  cohorts. No graduation feature is needed: a graduate gets no row in the new session and
+  falls out at rollover. `COUNT(DISTINCT)` because `student_classes` has **no unique
+  constraint on `(student_id, session_id)`** — a mid-session class move leaves two rows.
+  That missing constraint is a recorded, un-fixed latent issue (`docs/AUDIT-2026-09.md`).
+- **Recompute fires on enrolment and rollover**: `student_classes` INSERT/UPDATE/DELETE and
+  `academic_sessions` INSERT/UPDATE OF `is_current`/DELETE. Not on `students` — creating a
+  student is not what makes them billable. It is best-effort for exactly one condition, the
+  no-rate exception (SQLSTATE `BL001`): an enrolment never fails because billing is not
+  configured, and anything else (deadlock, permission) propagates as the fault it is.
+- **No current session** (decided in 045): INSERT of a paid plan is refused (`BL002` → 409
+  `NO_CURRENT_SESSION`); UPDATE keeps the last computed amount and warns. Zero enrolled with
+  a session in place is an honest ₦0.00. `BL001` → 409 `BILLING_RATE_NOT_CONFIGURED`.
+- `GET /super-admin/schools/:id/billing-preview` returns the count, the rate and the amount
+  from the same function the trigger uses; the create-subscription modal shows it read-only.
+- Tests that need a paid subscription set a rate first (`platform_pricing_config` upsert);
+  the fixture's default is production's — none. `partnerRevenue.db.test.ts` and
+  `tests/superAdmin.test.ts` choose amounts through rate × enrolment, never a literal.
+- Not built yet, deliberately: checkout and webhooks. They wait on a rate being set and a real
+  school's amount looking right.
+
 ## Partner integration (Chronix ERP)
 
 - `/api/partner/*` is machine-to-machine: gated by `requireErpApiKey` (shared secret in
