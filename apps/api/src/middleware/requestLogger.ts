@@ -74,6 +74,15 @@ export function describeClientIp(req: Request) {
     // forged header survives the edge decides which header can be trusted as the client.
     xff_first_testnet: xff.length > 0 && isTestnet(unmap(xff[0])),
     real_ip_testnet: isTestnet(realIpHeader(req)),
+    real_ip_family: (() => { const f = isIP(realIpHeader(req)); return f === 4 ? 'v4' : f === 6 ? 'v6' : 'none'; })(),
+    // Set DIAG_PROBE_IP to the prober's own address (a config value, never logged) and
+    // the log says which header carries it — proof that X-Real-IP is the client, not a
+    // hop, before anything is keyed on it. Unset, the fields are absent.
+    ...(process.env.DIAG_PROBE_IP ? {
+      real_ip_eq_probe: realIpHeader(req) === process.env.DIAG_PROBE_IP,
+      ip_eq_probe: ip === process.env.DIAG_PROBE_IP,
+      xff_first_eq_probe: xff.length > 0 && unmap(xff[0]) === process.env.DIAG_PROBE_IP,
+    } : {}),
   };
 }
 
