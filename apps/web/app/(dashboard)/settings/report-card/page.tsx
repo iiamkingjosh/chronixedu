@@ -215,7 +215,7 @@ export default function ReportCardSettingsPage() {
         </div>
       )}
 
-      <h1 className="font-heading text-xl font-semibold text-gray-900 mb-1">Report Card Settings</h1>
+      <h1 className="font-heading text-xl font-semibold text-gray-900 mb-1">Report Card Template</h1>
       <p className="text-sm text-gray-500 mb-8">Configure report card layout and generation settings</p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">

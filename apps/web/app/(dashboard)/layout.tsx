@@ -8,7 +8,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { isAdminRole, canAccessPayoutSettings } from '@/lib/auth';
-import { getMainNavForRole, SETTINGS_NAV, type NavItem } from '@/lib/navigation';
+import { getNavGroupsForRole, visibleNavGroups, type NavItem } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
 import { endSupportSession } from '@/lib/superAdminApi';
@@ -51,7 +51,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
-  const mainNav = useMemo(() => user ? getMainNavForRole(user.role) : [], [user?.role]);
+  const navGroups = useMemo(() => user ? getNavGroupsForRole(user.role) : [], [user?.role]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -77,9 +77,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const showSettings = isAdminRole(user.role);
   const showPayoutSettings = canAccessPayoutSettings(user.role) && subscriptionTier !== 'basic';
-  const navSectionLabel = user.role === 'teacher' ? 'Teaching' : user.role === 'registrar' ? 'Registrar' : user.role === 'bursar' ? 'Bursar' : 'Principal';
-  const visibleMainNav = subscriptionTier === 'basic' ? mainNav.filter((item) => item.href !== '/principal/analytics') : mainNav;
-  const visibleSettingsNav = subscriptionTier === 'basic' ? SETTINGS_NAV.filter((item) => item.href !== '/settings/payout') : SETTINGS_NAV;
+  const visibleGroups = visibleNavGroups(navGroups, subscriptionTier === 'basic' ? ['/principal/analytics'] : []);
 
   function handleLogout() {
     logout();
@@ -89,25 +87,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   function renderNav(onNavigate?: () => void) {
     return (
       <>
-        {visibleMainNav.length > 0 && (
-          <div className="mb-4">
+        {visibleGroups.map((group) => (
+          <div key={group.label} className="mb-4">
             <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
-              {navSectionLabel}
+              {group.label}
             </p>
-            {visibleMainNav.map((item) => (
+            {group.items.map((item) => (
               <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
             ))}
           </div>
-        )}
+        ))}
 
+        {/* One entry, not eleven: settings is set-up work, not daily work. The eleven pages
+            live behind it, grouped, in settings/layout.tsx, with /settings as an index. */}
         {showSettings && (
-          <div>
-            <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
-              Settings
-            </p>
-            {visibleSettingsNav.map((item) => (
-              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
-            ))}
+          <div className="mt-2 pt-3 border-t border-white/10">
+            <NavLink item={{ label: 'Settings', href: '/settings' }} pathname={pathname} onNavigate={onNavigate} />
           </div>
         )}
 

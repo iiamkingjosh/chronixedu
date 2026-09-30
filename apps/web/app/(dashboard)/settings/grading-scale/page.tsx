@@ -177,8 +177,8 @@ export default function GradingScalePage() {
         </div>
       )}
 
-      <h1 className="text-xl font-semibold text-gray-900 mb-1">Grading Scale</h1>
-      <p className="text-sm text-gray-500 mb-8">Define grade bands. Bands must cover 0–100 without gaps or overlaps.</p>
+      <h1 className="text-xl font-semibold text-gray-900 mb-1">School-wide Grading</h1>
+      <p className="text-sm text-gray-500 mb-8">Used by every class unless Grading by Level says otherwise. Bands must cover 0–100 without gaps or overlaps.</p>
 
       {/* Warnings banner + confirmation gate */}
       {warnings.length > 0 && (

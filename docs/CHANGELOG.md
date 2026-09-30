@@ -1,5 +1,13 @@
 # Chronix Edu — Changelog
 
+## A shorter menu for principals (2026-09-30)
+
+### Settings is one entry, and the daily work is grouped
+- A principal's sidebar had 22 links, half of them settings that are changed once a year sitting at the same weight as Results and Attendance. It is now 12: the eleven everyday links in four labelled groups (Overview, Academics, Students, Communication) and a single **Settings** entry.
+- Opening Settings shows a page listing every settings screen with a line on what it is for, grouped into Setup, Grading & Reports and Fees, with the same list beside you on every settings screen. It used to jump straight to School Identity.
+- Two confusing names fixed: the report-card *template* is now "Report Card Template" (it sat next to "Report Cards", the thing you generate), and "Grading Scale" is now "School-wide Grading", next to "Grading by Level", so the relationship is visible.
+- Nothing moves on its own: the menu is in the same order every time you sign in.
+
 ## Sign-in keeps working through a hiccup in its supporting service (2026-09-30)
 
 ### The app no longer goes down if the attempt-counting service does

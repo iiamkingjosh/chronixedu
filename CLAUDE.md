@@ -210,6 +210,14 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Web: all HTTP through `lib/api.ts` (`apiFetch`, `apiUpload`, `apiFetchBlob`). Forms use React Hook Form + zod.
   Offline score/attendance writes go through Dexie (`lib/offlineDb.ts`).
 - Path alias `@/` in web. Keep files where their siblings are.
+- **The sidebar is `lib/navigation.ts`.** The principal's daily work is four labelled groups
+  (11 links); Settings is ONE sidebar entry whose sub-nav lives in `settings/layout.tsx`, with
+  `/settings` an index page. Labels must not collide even singular-vs-plural
+  (`lib/__tests__/navigation.test.ts` — "Report Cards" beside "Report Card" was the wrong-click
+  it exists for). Nothing reorders by usage. "School-wide Grading" and "Grading by Level" stay
+  two pages: merged behind a level selector, the page would show a level's *effective* values
+  and a save would pin them (doctrine 8). Web unit tests run with `npm run test` in `apps/web`
+  (jest, pure TypeScript under `lib/`), and the root `test:unit` runs them after the API's.
 - Record security fixes in `SECURITY.md` (next round, existing format) and
   user-visible changes in `docs/CHANGELOG.md`, in the same PR as the change.
 - New integration tests in `apps/api/tests/` must delete the rows they create in `afterAll`,
