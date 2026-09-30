@@ -1,3 +1,7 @@
+// No `images` block, on purpose. CI's security gate (scripts/audit-gate.js) accepts the
+// critical AVIF advisory on next@14 only while this file gives the image optimizer no source
+// an attacker controls: adding `remotePatterns`, `domains` or a `loader` here fails CI until
+// that exception is re-decided (scripts/audit-allowlist.json). The real fix is next 15.5.24.
 const withPWA = require('@ducanh2912/next-pwa').default({
   dest: 'public',
   register: false, // registered manually in components/PwaRegister.tsx (app router has no _document)

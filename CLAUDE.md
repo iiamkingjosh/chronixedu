@@ -452,6 +452,20 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   `dist/templates`. Scoping the install with `--workspace` is not worth it — npm still
   materialises the whole hoisted tree, so it installs the same 730 packages either way.
   The build also reads the root `tsconfig.base.json`, so it needs the repo root present.
+- **The web service mirrors it since 30 Sep 2026:** root directory `/` (the repo root), build
+  `npm ci && npm run build --workspace=@chronixedu/web`, start
+  `cd apps/web && npm start -- -p ${PORT:-3000} -H 0.0.0.0`, watch `/apps/web/**`,
+  `/package.json`, `/package-lock.json`. It had `rootDirectory: /apps/web` with
+  `npm install --prefer-offline=false && npm run build` — the lockfile was not even visible
+  to the build, so every web deploy resolved dependencies afresh against ranges.
+  `apps/web/tsconfig.json` does not extend `tsconfig.base.json`, so that is not a web build
+  input. Verified from a clean clone (`npm ci`, then the workspace build produced
+  `apps/web/.next`) before the change, and the start command was run locally in that exact
+  form (`/login` and `/settings` 200). The first build under it was made deliberately — the
+  commit carrying this note — and checked for `SUCCESS` *and* the login page loading: a build
+  that succeeds with a broken start command is the one failure that takes the site down
+  rather than leaving the old deploy serving. A Railway *redeploy* cannot test this config:
+  it reuses the old image, whose files sit at `/` rather than under `apps/web`.
 - **The Supabase CA ships in the repo at `apps/api/certs/supabase-ca.crt`**, is copied
   into `dist/certs` by the build, and is the DEFAULT — `PGSSLROOTCERT` only overrides it.
   So a deploy is TLS-verified without setting any variable, and `pg_tls_verified` is
