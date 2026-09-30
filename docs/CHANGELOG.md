@@ -1,5 +1,13 @@
 # Chronix Edu — Changelog
 
+## A school that upgrades from a trial stays active (2026-09-30)
+
+### For Chronix administrators
+- Changing a school's plan from Trial to a paid plan now also ends the trial status, so the nightly trial check can no longer suspend a paying school. One school was suspended this way on 8 September; its subscription has been repaired.
+- The nightly check never suspends a paid plan, and a trial now lasts through its end date: a trial ending on the 8th is usable all of the 8th and expires the next morning.
+- Recording a payment against a suspended subscription reactivates the subscription and the confirmation says so. Reactivating the school itself is still a separate action.
+- A suspended subscription can be reactivated from the school page. Before, it could only be suspended.
+
 ## Billing screens say why a school's figure is low (2026-09-30)
 
 ### For Chronix administrators

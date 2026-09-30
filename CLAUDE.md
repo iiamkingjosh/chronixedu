@@ -320,6 +320,12 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Tests that need a paid subscription set a rate first (`platform_pricing_config` upsert);
   the fixture's default is production's — none. `partnerRevenue.db.test.ts` and
   `tests/superAdmin.test.ts` choose amounts through rate × enrolment, never a literal.
+- **Status follows plan.** `PATCH /subscriptions/:id` derives what a caller leaves unsaid: leaving
+  `trial` for a paid plan sets `subscription_status = 'active'`, and trial status on a paid plan is
+  refused (`INCONSISTENT_STATUS`). `runTrialExpiryCheck()` never suspends a paid plan — it heals one
+  found in trial status (`TRIAL_STATUS_CLEARED_PAID_PLAN`, logged at error). The trial end date is
+  inclusive in Africa/Lagos. A manual payment against a suspended subscription reactivates the
+  subscription, not the school. All from Chronix High School's 8 Sep suspension — `trialExpiry.db.test.ts`.
 - Not built yet, deliberately: checkout and webhooks. They wait on a rate being set and a real
   school's amount looking right.
 

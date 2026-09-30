@@ -515,15 +515,20 @@ export default function SuperAdminSchoolDetailPage() {
     }
   }
 
-  async function handleSuspendBilling() {
+  // Both directions. This used to write only 'suspended', so a subscription suspended by
+  // the trial-expiry job (or by hand) could not be brought back from anywhere in the UI.
+  async function handleBillingStatus(next: 'suspended' | 'active') {
     if (!detail?.subscription) return;
-    if (!window.confirm('Suspend billing for this school? This sets the subscription status to suspended.')) return;
+    const question = next === 'suspended'
+      ? 'Suspend billing for this school? This sets the subscription status to suspended.'
+      : 'Reactivate billing for this school? This sets the subscription status to active.';
+    if (!window.confirm(question)) return;
     try {
-      await updateSubscription(detail.subscription.id, { subscription_status: 'suspended' });
-      show('Billing suspended', 'success');
+      await updateSubscription(detail.subscription.id, { subscription_status: next });
+      show(next === 'suspended' ? 'Billing suspended' : 'Billing reactivated', 'success');
       load();
     } catch (err: unknown) {
-      show(err instanceof Error ? err.message : 'Failed to suspend billing', 'error');
+      show(err instanceof Error ? err.message : `Failed to ${next === 'suspended' ? 'suspend' : 'reactivate'} billing`, 'error');
     }
   }
 
@@ -696,13 +701,23 @@ export default function SuperAdminSchoolDetailPage() {
                 >
                   Record Payment
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSuspendBilling}
-                  className="border border-red-200 rounded-md px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-                >
-                  Suspend Billing
-                </button>
+                {subscription.subscription_status === 'suspended' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleBillingStatus('active')}
+                    className="border border-green-200 rounded-md px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+                  >
+                    Reactivate Billing
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleBillingStatus('suspended')}
+                    className="border border-red-200 rounded-md px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                  >
+                    Suspend Billing
+                  </button>
+                )}
               </div>
             </>
           )}

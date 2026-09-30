@@ -1147,13 +1147,34 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'SUBSCRIPTION_NOT_FOUND', message: 'Subscription not found' } });
       }
 
+      // What the row will hold after this write. A caller may name only the field it means
+      // to change; the consequences it does not name are decided here, for every caller.
+      const effective = { ...parsed.data };
+      const resultingPlan = effective.plan ?? existing.plan;
+      const resultingStatus = effective.subscription_status ?? existing.subscription_status;
+      if (resultingPlan !== 'trial' && resultingStatus === 'trial') {
+        if (effective.subscription_status !== undefined) {
+          // Asked for outright: refuse, rather than write a state the trial-expiry job reads
+          // as an expired trial.
+          return res.status(400).json({
+            success: false,
+            error: { code: 'INCONSISTENT_STATUS', message: `A ${resultingPlan} plan cannot have trial status; use 'active'.` },
+          });
+        }
+        // Leaving 'trial' for a paid plan: the status follows the plan. Chronix High School's
+        // plan was changed to premium with the status left 'trial', and five days later the
+        // trial-expiry job — which selects on status alone — suspended it as an expired
+        // trial. Fixed at the route so the UI is not the only safe caller.
+        effective.subscription_status = 'active';
+      }
+
       // amount_naira is not here: it is derived by the database on this very UPDATE.
       const SUBSCRIPTION_FIELDS = ['plan', 'subscription_status', 'billing_cycle', 'next_billing_date', 'trial_ends_at'] as const;
       const params: unknown[] = [];
       const fields: string[] = [];
       for (const field of SUBSCRIPTION_FIELDS) {
-        if (parsed.data[field] !== undefined) {
-          params.push(parsed.data[field]);
+        if (effective[field] !== undefined) {
+          params.push(effective[field]);
           fields.push(`${field} = $${params.length}`);
         }
       }
@@ -1181,7 +1202,7 @@ router.patch(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'SUBSCRIPTION_UPDATED', existing.school_id, JSON.stringify({ changes: req.body, previous_plan: existing.plan }), clientIp(req)]
+        [req.user!.user_id, 'SUBSCRIPTION_UPDATED', existing.school_id, JSON.stringify({ changes: req.body, effective, previous_plan: existing.plan, previous_status: existing.subscription_status }), clientIp(req)]
       );
 
       return res.json({ success: true, data: updated });
@@ -1253,8 +1274,8 @@ router.post(
       }
       const { amount, reference, payment_date, notes } = parsed.data;
 
-      const result = await pool.query<{ id: string; school_id: string; plan: string }>(
-        `SELECT ps.id, ps.school_id, ps.plan
+      const result = await pool.query<{ id: string; school_id: string; plan: string; subscription_status: string }>(
+        `SELECT ps.id, ps.school_id, ps.plan, ps.subscription_status
          FROM platform_subscriptions ps
          JOIN schools s ON s.id = ps.school_id
          WHERE ps.id = $1`,
@@ -1264,22 +1285,58 @@ router.post(
       if (!subscription) {
         return res.status(404).json({ success: false, error: { code: 'SUBSCRIPTION_NOT_FOUND', message: 'Subscription not found' } });
       }
+      if (subscription.subscription_status === 'cancelled') {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'SUBSCRIPTION_CANCELLED', message: 'This subscription is cancelled; nothing was recorded. Reinstate it before recording a payment.' },
+        });
+      }
 
-      await pool.query(
-        `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          req.user!.user_id,
-          'MANUAL_PAYMENT_RECORDED',
-          subscription.school_id,
-          JSON.stringify({ amount, reference, payment_date, notes: notes ?? null, plan: subscription.plan, recorded_by: req.user!.email }),
-          clientIp(req),
-        ]
-      );
+      // A payment against a suspended subscription reactivates it: money received is the
+      // strongest evidence there is of a live customer, and before this the payment was
+      // recorded and reconciled nothing — Chronix High School, ₦50,000 on 28 Sep 2026,
+      // against a row the trial-expiry job had suspended. The SCHOOL's is_active is not
+      // touched: a policy suspension is a different decision with its own route. The
+      // response says which happened.
+      const reactivated = subscription.subscription_status === 'suspended';
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        if (reactivated) {
+          await client.query(`UPDATE platform_subscriptions SET subscription_status = 'active', updated_at = NOW() WHERE id = $1`, [subscription.id]);
+        }
+        await client.query(
+          `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            req.user!.user_id,
+            'MANUAL_PAYMENT_RECORDED',
+            subscription.school_id,
+            JSON.stringify({
+              amount, reference, payment_date, notes: notes ?? null, plan: subscription.plan, recorded_by: req.user!.email,
+              status_before: subscription.subscription_status, subscription_reactivated: reactivated,
+            }),
+            clientIp(req),
+          ]
+        );
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        const refused = billingRefusal(err);
+        if (refused) return res.status(409).json({ success: false, error: refused });
+        throw err;
+      } finally {
+        client.release();
+      }
 
       return res.json({
         success: true,
-        data: { subscription_id: req.params.id, school_id: subscription.school_id, amount_recorded: amount, reference, payment_date },
+        data: {
+          subscription_id: req.params.id, school_id: subscription.school_id, amount_recorded: amount, reference, payment_date,
+          subscription_status_before: subscription.subscription_status,
+          subscription_status: reactivated ? 'active' : subscription.subscription_status,
+          subscription_reactivated: reactivated,
+        },
       });
     } catch (err) {
       return next(err);
