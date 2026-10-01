@@ -181,13 +181,24 @@ const recordPaymentSchema = z.object({
 
 // ── Onboarding wizard schemas ───────────────────────────────────────────────
 
+// is_demo is REQUIRED, with no default: whether a school is a customer is a stated fact, never an
+// unset field (doctrine 8). A default of FALSE is how a typo'd test school ("guyg ") was counted as
+// a customer in every platform total. Names are trimmed: that same school reached production with
+// a trailing space, which makes two schools look identical in a list.
+const isDemoChoice = z.boolean({
+  error: (issue) => issue.input === undefined
+    ? 'is_demo is required: say whether this school is a customer (false) or a demo/test school (true)'
+    : 'is_demo must be true or false',
+});
+
 const startOnboardingSchema = z.object({
-  school_name: z.string().min(3),
-  school_email: z.string().email(),
+  school_name: z.string().trim().min(3),
+  school_email: z.string().trim().email(),
+  is_demo: isDemoChoice,
 });
 
 const onboardingStep1Schema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1),
   address: z.string().min(1),
   phone: z.string().min(1),
 });
@@ -1490,7 +1501,7 @@ router.post(
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
-      const { school_name, school_email } = parsed.data;
+      const { school_name, school_email, is_demo } = parsed.data;
 
       const existing = await pool.query(`SELECT id FROM schools WHERE email = $1`, [school_email]);
       if (existing.rows[0]) {
@@ -1500,10 +1511,10 @@ router.post(
       const slug = generateOnboardingSlug(school_name);
 
       const schoolResult = await pool.query<{ id: string; slug: string }>(
-        `INSERT INTO schools (name, slug, email, is_active, subscription_tier)
-         VALUES ($1, $2, $3, FALSE, 'trial')
+        `INSERT INTO schools (name, slug, email, is_active, subscription_tier, is_demo)
+         VALUES ($1, $2, $3, FALSE, 'trial', $4)
          RETURNING id, slug`,
-        [school_name, slug, school_email]
+        [school_name, slug, school_email, is_demo]
       );
       const school = schoolResult.rows[0];
 
@@ -1518,7 +1529,7 @@ router.post(
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'ONBOARDING_STARTED', school.id, JSON.stringify({ school_name, school_email }), clientIp(req)]
+        [req.user!.user_id, 'ONBOARDING_STARTED', school.id, JSON.stringify({ school_name, school_email, is_demo }), clientIp(req)]
       );
 
       return res.status(201).json({ success: true, data: { session_id: session.id, school_id: school.id, school_slug: school.slug } });

@@ -65,7 +65,7 @@ describe('Onboarding Wizard', () => {
     const res = await request(app)
       .post('/api/super-admin/onboarding')
       .set('Authorization', `Bearer ${superAdminToken}`)
-      .send({ school_name: 'Onboarding Wizard School', school_email: onboardingSchoolEmail });
+      .send({ school_name: 'Onboarding Wizard School', school_email: onboardingSchoolEmail, is_demo: false });
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.session_id).toBeDefined();

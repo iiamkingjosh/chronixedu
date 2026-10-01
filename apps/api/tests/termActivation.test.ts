@@ -38,7 +38,7 @@ describe('Term activation', () => {
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ('Term Activation Test', $1, false) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ('Term Activation Test', $1, false, false) RETURNING id`,
       [`term-activation-${suffix}`]
     );
     schoolId = schoolResult.rows[0].id;

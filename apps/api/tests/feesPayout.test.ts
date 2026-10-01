@@ -41,7 +41,7 @@ describe('Fee payment initiate — payout gate', () => {
     process.env.PAYSTACK_SECRET_KEY = 'sk_test_123';
 
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
       ['Fees Payout Test School', `test-fees-payout-${randomUUID()}`]
     );
     schoolId = schoolResult.rows[0].id;

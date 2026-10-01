@@ -90,7 +90,7 @@ describe('Phase 4 Integration', () => {
 
     beforeAll(async () => {
       const result = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Phase4 Lifecycle School', lifecycleSlug]
       );
       lifecycleSchoolId = result.rows[0].id;
@@ -142,7 +142,7 @@ describe('Phase 4 Integration', () => {
 
     beforeAll(async () => {
       const schoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Phase4 Trial Expiry School', `test-phase4-trial-${randomUUID()}`]
       );
       trialSchoolId = schoolResult.rows[0].id;
@@ -213,7 +213,7 @@ describe('Phase 4 Integration', () => {
       const res = await request(app)
         .post('/api/super-admin/onboarding')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_name: 'Phase4 Onboarding School', school_email: onboardingSchoolEmail });
+        .send({ school_name: 'Phase4 Onboarding School', school_email: onboardingSchoolEmail, is_demo: false });
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.session_id).toBeDefined();

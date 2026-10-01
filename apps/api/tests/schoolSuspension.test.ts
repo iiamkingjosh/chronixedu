@@ -47,7 +47,7 @@ describe('School Suspension', () => {
     superAdminToken = makeToken(superAdminUserId, 'super_admin', null, saRow.rows[0].email);
 
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
       ['Suspension Test School', `test-suspension-${randomUUID()}`]
     );
     schoolId = schoolResult.rows[0].id;

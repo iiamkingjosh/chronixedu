@@ -364,6 +364,8 @@ export interface OnboardingSession {
 export interface StartOnboardingInput {
   school_name: string;
   school_email: string;
+  /** Required, no default: a school is a customer only because someone said so (doctrine 8). */
+  is_demo: boolean;
 }
 
 export interface StartOnboardingResponse {

@@ -137,7 +137,7 @@ async function checkAfter(c, ddl) {
   }
   // Fixtures, as owner: every UPDATE/DELETE/SELECT probe has a row to hit, because a
   // probe against an empty table proves nothing.
-  await c.query(`INSERT INTO schools (id, name, slug) VALUES ($1, 'C4A Probe School', 'c4a-probe') ON CONFLICT (id) DO NOTHING`, [SCHOOL]);
+  await c.query(`INSERT INTO schools (id, name, slug, is_demo) VALUES ($1, 'C4A Probe School', 'c4a-probe', TRUE) ON CONFLICT (id) DO NOTHING`, [SCHOOL]);
   await c.query(`INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
                  VALUES ($1, $2, 'c4a-probe@test', 'x', 'teacher', 'C4A', 'Probe', true) ON CONFLICT (id) DO NOTHING`, [USER, SCHOOL]);
   // Targeted by id: audit_logs is append-only, so fixtures from earlier runs of this probe

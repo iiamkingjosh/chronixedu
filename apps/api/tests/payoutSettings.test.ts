@@ -87,7 +87,7 @@ describe('Payout settings', () => {
     process.env.ROOT_ADMIN_EMAIL = ROOT_ADMIN_EMAIL;
 
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active, email) VALUES ($1, $2, false, $3) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, email, is_demo) VALUES ($1, $2, false, $3, false) RETURNING id`,
       ['Payout Test School', `test-payout-${randomUUID()}`, schoolEmail]
     );
     schoolId = schoolResult.rows[0].id;
@@ -123,7 +123,7 @@ describe('Payout settings', () => {
     // A completely separate school with its own bursar. Its token carries the
     // right ROLE but the wrong school_id — the exact cross-tenant case.
     const otherSchoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active, email) VALUES ($1, $2, false, $3) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, email, is_demo) VALUES ($1, $2, false, $3, false) RETURNING id`,
       ['Other Payout Test School', `test-payout-other-${randomUUID()}`, 'other-office@test.com']
     );
     otherSchoolId = otherSchoolResult.rows[0].id;

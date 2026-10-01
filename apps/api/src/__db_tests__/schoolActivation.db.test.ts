@@ -53,8 +53,7 @@ afterAll(() => pool.end());
 /** A school mid-onboarding with all six steps ticked, and no principal. */
 async function onboardingSession(): Promise<{ sessionId: string; schoolId: string }> {
   const school = await pool.query<{ id: string }>(
-    `INSERT INTO schools (name, slug, email, is_active, subscription_tier)
-     VALUES ('Wizard School', $1, $2, FALSE, 'trial') RETURNING id`,
+    `INSERT INTO schools (name, slug, email, is_active, subscription_tier, is_demo) VALUES ('Wizard School', $1, $2, FALSE, 'trial', FALSE) RETURNING id`,
     [`wizard-${Date.now()}`, `wizard-${Date.now()}@example.com`]
   );
   const schoolId = school.rows[0].id;
@@ -136,7 +135,7 @@ describe('reactivation requires a principal too', () => {
     // Otherwise the hole simply moves: create a dormant school with POST /api/schools,
     // reactivate it one request later, same live principalless tenant in two calls.
     const created = await request(app)
-      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Dormant School' });
+      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Dormant School', is_demo: false });
     const schoolId = created.body.data.school.id;
 
     const res = await request(app)
@@ -153,7 +152,7 @@ describe('reactivation requires a principal too', () => {
     // The route check gives a clean 400; this is the backstop under it. The invariant
     // was spread across routes, which is what produced the hole in the first place.
     const created = await request(app)
-      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Trigger Backstop School' });
+      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Trigger Backstop School', is_demo: false });
     const schoolId = created.body.data.school.id;
 
     await expect(
@@ -163,7 +162,7 @@ describe('reactivation requires a principal too', () => {
 
   it('allows reactivation once a principal exists', async () => {
     const created = await request(app)
-      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Reactivatable School' });
+      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Reactivatable School', is_demo: false });
     const schoolId = created.body.data.school.id;
     await pool.query(
       `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name)
@@ -184,7 +183,7 @@ describe('reactivation requires a principal too', () => {
     // superAdmin.ts deactivates users, so checking role alone let a school reactivate
     // into the same unadministerable state with a disabled principal on file.
     const created = await request(app)
-      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Disabled Principal School' });
+      .post('/api/schools').set('Authorization', superToken()).send({ name: 'Disabled Principal School', is_demo: false });
     const schoolId = created.body.data.school.id;
     await pool.query(
       `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active)
@@ -204,7 +203,7 @@ describe('reactivation requires a principal too', () => {
     // principal can exist at insert time. A school is born dormant.
     await expect(
       pool.query(
-        `INSERT INTO schools (name, slug, is_active) VALUES ('Born Active', $1, TRUE)`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ('Born Active', $1, TRUE, FALSE)`,
         [`born-active-${Date.now()}`]
       )
     ).rejects.toThrow(/cannot be created already active/);
@@ -212,7 +211,7 @@ describe('reactivation requires a principal too', () => {
 
   it('defaults is_active to FALSE, so an INSERT that omits it is dormant', async () => {
     const { rows } = await pool.query<{ is_active: boolean }>(
-      `INSERT INTO schools (name, slug) VALUES ('Default Dormant', $1) RETURNING is_active`,
+      `INSERT INTO schools (name, slug, is_demo) VALUES ('Default Dormant', $1, FALSE) RETURNING is_active`,
       [`default-dormant-${Date.now()}`]
     );
     expect(rows[0].is_active).toBe(false);
@@ -242,7 +241,7 @@ describe('POST /api/schools creates a dormant school', () => {
     const res = await request(app)
       .post('/api/schools')
       .set('Authorization', superToken())
-      .send({ name: 'Direct Create School' });
+      .send({ name: 'Direct Create School', is_demo: false });
 
     expect(res.status).toBe(201);
     expect(res.body.data.school.is_active).toBe(false);

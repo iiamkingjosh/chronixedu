@@ -46,10 +46,11 @@ export interface PayoutConfig {
  * The school stays reachable to super_admins for onboarding; requireActiveSchool keeps
  * everyone else out until it is activated.
  */
-export async function insertSchool(name: string, slug: string): Promise<SchoolRow> {
+export async function insertSchool(name: string, slug: string, isDemo: boolean): Promise<SchoolRow> {
+  // isDemo has no default on purpose: the caller states whether this is a customer (doctrine 8).
   const result = await pool.query<SchoolRow>(
-    `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, FALSE) RETURNING id, name, slug, is_active, created_at, updated_at`,
-    [name, slug]
+    `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, FALSE, $3) RETURNING id, name, slug, is_active, created_at, updated_at`,
+    [name, slug, isDemo]
   );
   return result.rows[0];
 }

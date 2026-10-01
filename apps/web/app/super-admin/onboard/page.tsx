@@ -148,8 +148,10 @@ function ProgressBar({ currentStep }: { currentStep: number }) {
 // ── Step 1: Info ─────────────────────────────────────────────────────────────
 
 const step1CreateSchema = z.object({
-  school_name: z.string().min(1, 'School name is required'),
-  school_email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
+  school_name: z.string().trim().min(1, 'School name is required'),
+  school_email: z.string().trim().min(1, 'Email is required').email('Enter a valid email address'),
+  // No default and no preselected radio: "customer" must be chosen, not inherited (doctrine 8).
+  kind: z.enum(['customer', 'demo'], { error: 'Choose whether this is a customer or a demo/test school' }),
 });
 type Step1CreateForm = z.infer<typeof step1CreateSchema>;
 
@@ -182,7 +184,11 @@ function Step1Info({ wizard, onNext }: { wizard: WizardState; onNext: (patch: Pa
   async function onCreateSubmit(values: Step1CreateForm) {
     setApiError('');
     try {
-      const res = await startOnboarding(values);
+      const res = await startOnboarding({
+        school_name: values.school_name,
+        school_email: values.school_email,
+        is_demo: values.kind === 'demo',
+      });
       setSessionId(res.session_id);
       setSchoolId(res.school_id);
       setSchoolName(values.school_name);
@@ -219,6 +225,22 @@ function Step1Info({ wizard, onNext }: { wizard: WizardState; onNext: (patch: Pa
         <Field label="School Email" error={createForm.formState.errors.school_email?.message}>
           <input {...createForm.register('school_email')} type="email" className={inputClass} placeholder="admin@greenwood.edu.ng" />
         </Field>
+        <fieldset>
+          <legend className="block text-sm font-medium text-gray-700 mb-1">This school is</legend>
+          <div className="space-y-2">
+            <label className="flex items-start gap-2 text-sm text-gray-700">
+              <input type="radio" value="customer" {...createForm.register('kind')} className="mt-0.5" />
+              <span><span className="font-medium">A customer</span> — a real school. It counts in platform totals and revenue.</span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-gray-700">
+              <input type="radio" value="demo" {...createForm.register('kind')} className="mt-0.5" />
+              <span><span className="font-medium">A demo or test school</span> — for sales demos, training or testing. Left out of totals and revenue.</span>
+            </label>
+          </div>
+          {createForm.formState.errors.kind?.message && (
+            <p className="mt-1 text-xs text-red-600">{createForm.formState.errors.kind.message}</p>
+          )}
+        </fieldset>
         {apiError && <ErrorBox message={apiError} />}
         <div className="flex justify-between pt-2">
           <button type="button" disabled className={backButtonClass}>Back</button>

@@ -169,7 +169,7 @@ export async function seed(): Promise<void> {
     // Migration 039: a school is born dormant and is activated once it has an active
     // principal. The fixture follows the same path production does — inserting an active
     // school here would be testing a system that is not shipped.
-    await q(`INSERT INTO schools (id, name, slug, is_active) VALUES ($1,'School A','school-a',FALSE),($2,'School B','school-b',FALSE)`, [I.schoolA, I.schoolB]);
+    await q(`INSERT INTO schools (id, name, slug, is_active, is_demo) VALUES ($1,'School A','school-a',FALSE,FALSE),($2,'School B','school-b',FALSE,FALSE)`, [I.schoolA, I.schoolB]);
     await q(`INSERT INTO academic_sessions (id, school_id, name, start_date, end_date, is_current)
              VALUES ($1,$2,'2026/2027','2026-09-01','2027-07-31',true),($3,$4,'2026/2027','2026-09-01','2027-07-31',true)`,
       [I.sessionA, I.schoolA, I.sessionB, I.schoolB]);

@@ -44,8 +44,14 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 *
 
 // ── Zod schemas ────────────────────────────────────────────────────────────────
 
+// is_demo is required with no default — see startOnboardingSchema in routes/superAdmin.ts.
 const createSchoolSchema = z.object({
-  name: z.string().min(1).max(255),
+  name: z.string().trim().min(1).max(255),
+  is_demo: z.boolean({
+    error: (issue) => issue.input === undefined
+      ? 'is_demo is required: say whether this school is a customer (false) or a demo/test school (true)'
+      : 'is_demo must be true or false',
+  }),
   motto: z.string().max(500).optional(),
   primary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
   secondary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
@@ -227,10 +233,10 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
 
-      const { name, motto, primary_colour, secondary_colour } = parsed.data;
+      const { name, is_demo, motto, primary_colour, secondary_colour } = parsed.data;
       const slug = slugify(name);
 
-      const school = await insertSchool(name, slug);
+      const school = await insertSchool(name, slug, is_demo);
 
       const identityConfig: Record<string, unknown> = {
         name,

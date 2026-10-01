@@ -214,7 +214,7 @@ describe('the money contract', () => {
     const sessionC = 'c0000000-0000-4000-8000-000000000003';
     const classC = 'c0000000-0000-4000-8000-000000000004';
     const classB = 'c0000000-0000-4000-8000-000000000005';
-    await pool.query(`INSERT INTO schools (id, name, slug) VALUES ($1, 'School C', 'school-c')`, [schoolC]);
+    await pool.query(`INSERT INTO schools (id, name, slug, is_demo) VALUES ($1, 'School C', 'school-c', FALSE)`, [schoolC]);
     await pool.query(
       `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
        VALUES ($1, $2, $3, 'x', 'principal', 'PrinC', 'Test', true, 'subject', false)`,

@@ -41,7 +41,7 @@ describe('Support Session Impersonation', () => {
     platformAdminId = saResult.rows[0].id;
 
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
       ['Impersonation Test School', `test-impersonation-${randomUUID()}`]
     );
     targetSchoolId = schoolResult.rows[0].id;

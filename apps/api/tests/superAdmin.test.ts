@@ -61,7 +61,7 @@ describe('superAdmin — platform school management', () => {
     rootAdminToken = makeToken(superAdminUserId, 'super_admin', null, process.env.ROOT_ADMIN_EMAIL!);
 
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
       ['Super Admin Test School', testSchoolSlug]
     );
     testSchoolId = schoolResult.rows[0].id;
@@ -214,14 +214,14 @@ describe('superAdmin — platform school management', () => {
 
     beforeAll(async () => {
       const subSchoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Subscription Test School', `test-subscription-${randomUUID()}`]
       );
       subSchoolId = subSchoolResult.rows[0].id;
       await giveCurrentSession(subSchoolId);
 
       const trialSchoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Subscription Trial School', `test-subscription-trial-${randomUUID()}`]
       );
       trialSchoolId = trialSchoolResult.rows[0].id;
@@ -280,7 +280,7 @@ describe('superAdmin — platform school management', () => {
 
     it('POST /subscriptions — trial plan with no trial_ends_at → 201, defaults to 30 days out', async () => {
       const newSchoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Trial Default Test School', `test-trial-default-${randomUUID()}`]
       );
       const newSchoolId = newSchoolResult.rows[0].id;
@@ -310,7 +310,7 @@ describe('superAdmin — platform school management', () => {
 
     it('POST /subscriptions — trial plan → 201 at ₦0.00 (trials are not billed)', async () => {
       const newSchoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Free Trial Test School', `test-free-trial-${randomUUID()}`]
       );
       const newSchoolId = newSchoolResult.rows[0].id;
@@ -344,7 +344,7 @@ describe('superAdmin — platform school management', () => {
 
     it('POST /subscriptions syncs schools.subscription_tier to the new plan', async () => {
       const newSchoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Subscription Sync Test School', `test-sync-post-${randomUUID()}`]
       );
       const syncTestSchoolId = newSchoolResult.rows[0].id;
@@ -371,7 +371,7 @@ describe('superAdmin — platform school management', () => {
 
     it('POST /subscriptions invalidates school cache when subscription tier changes', async () => {
       const newSchoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Cache Invalidation Test School POST', `test-cache-post-${randomUUID()}`]
       );
       const cacheTestSchoolId = newSchoolResult.rows[0].id;
@@ -436,7 +436,7 @@ describe('superAdmin — platform school management', () => {
 
     it('PATCH /subscriptions/:id invalidates school cache when subscription plan changes', async () => {
       const newSchoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['Cache Invalidation Test School PATCH', `test-cache-patch-${randomUUID()}`]
       );
       const cacheTestSchoolId = newSchoolResult.rows[0].id;
@@ -562,7 +562,7 @@ describe('superAdmin — platform school management', () => {
       const res = await request(app)
         .post('/api/super-admin/onboarding')
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ school_name: 'Onboarding Test School', school_email: onboardingSchoolEmail });
+        .send({ school_name: 'Onboarding Test School', school_email: onboardingSchoolEmail, is_demo: false });
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.session_id).toBeDefined();
@@ -1093,7 +1093,7 @@ describe('superAdmin — platform school management', () => {
 
     beforeAll(async () => {
       const schoolResult = await pool.query<{ id: string }>(
-        `INSERT INTO schools (name, slug, is_active) VALUES ($1, $2, false) RETURNING id`,
+        `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ($1, $2, false, false) RETURNING id`,
         ['CSV Injection Test School', `test-csv-injection-${randomUUID()}`]
       );
       csvSchoolId = schoolResult.rows[0].id;

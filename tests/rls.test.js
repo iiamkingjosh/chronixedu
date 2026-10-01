@@ -33,9 +33,9 @@ if (!isDatabaseAvailable) {
 
     await client.query('BEGIN');
     await client.query(
-      `INSERT INTO schools (id, name, slug, email, is_active) VALUES
-        ($1, $2, $3, $4, TRUE),
-        ($5, $6, $7, $8, TRUE)`,
+      `INSERT INTO schools (id, name, slug, email, is_active, is_demo) VALUES
+        ($1, $2, $3, $4, TRUE, TRUE),
+        ($5, $6, $7, $8, TRUE, TRUE)`,
       [
         ids.schoolA,
         'School A',

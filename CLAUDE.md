@@ -399,8 +399,10 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Migration 047: `validate_assessment_components_total` skips a config that no longer exists,
   so a config and its components can be deleted together. Before 047 no school could be deleted.
   Emptying or unbalancing a live config is still refused.
-- `seed-child-prime.js` wipes schools but **not their Storage files**. Three such orphans exist
-  in production (`docs/AUDIT-2026-09.md`).
+- `seed-child-prime.js` wipes schools but **not their Storage files**. The three orphans that left
+  in production were removed by Moses on 1 Oct 2026, and a re-check found 0 orphans. The script
+  itself still does not clear Storage. It now creates its demo school with `is_demo = TRUE`; before,
+  the sales demo was born a "customer" too.
 
 ## Partner integration (Chronix ERP)
 
@@ -474,15 +476,26 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   currently enabled — a suspended school is still a customer and still counts in
   `total_schools`. Every platform-level count in `superAdmin.ts` filters `is_demo`, and
   the platform school list hides demo tenants unless `include_demo=true`.
-- **`is_demo` defaults to FALSE, so a new school is a customer from birth.** Nothing
-  re-evaluates it. The 44 fixture schools were classified once, on 26 Sep 2026, by a
+- **`is_demo` is stated at creation, never defaulted** (decided 1 Oct 2026, option (1)). Both
+  creation paths, `POST /api/schools` (`createSchoolSchema` → `insertSchool(name, slug, isDemo)`)
+  and the onboarding wizard's `POST /api/super-admin/onboarding` (`startOnboardingSchema`), require
+  `is_demo` as a boolean, with no default, and the wizard's first step offers "customer" or
+  "demo/test" with neither preselected. It defaulted to FALSE until then, which is how a typo'd
+  test school, `guyg `, was counted as a customer for a day (doctrine 8, applied to the instance
+  that produced it). The schema default is dropped in a second step, migration 049, deployed only
+  after the code that always supplies the value. Every `INSERT INTO schools`, fixtures and scripts
+  included, must name `is_demo`. Both paths also `.trim()` the name (the wizard trims the email
+  too), because `guyg ` arrived with a trailing space.
+  `schoolCreation.db.test.ts` shows an explicit choice succeeding before it shows an omitted one
+  refused. Nothing re-evaluates `is_demo` after creation. The 44 fixture schools were classified
+  once, on 26 Sep 2026, by a
   one-off script whose rule was "no user holds an email outside the known test domains"
   — chosen over name matching so a real school called "Testimony Academy" would survive.
 - **That rule must never be re-run as a periodic job.** `@students.internal` is in its
   test-domain list, so a real school whose only users were students with generated
   emails would be reclassified as a fixture and vanish from platform totals and the
-  super-admin list. A principal with a real address is *not* guaranteed: `createSchool`
-  inserts name and slug only, and the onboarding wizard's `POST /complete` treats
+  super-admin list. A principal with a real address is *not* guaranteed: `insertSchool`
+  creates no users, and the onboarding wizard's `POST /complete` treats
   `principalEmail` as optional. If a tenant ever needs classifying again, do it by
   explicit id list.
 
@@ -611,7 +624,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 28 suites, 296 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 29 suites, 300 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 21 suites, 186 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

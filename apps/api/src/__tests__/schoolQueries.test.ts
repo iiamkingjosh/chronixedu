@@ -27,15 +27,15 @@ const mockQuery = (pool as unknown as { query: jest.Mock }).query;
 beforeEach(() => jest.clearAllMocks());
 
 describe('insertSchool', () => {
-  it('inserts with name and slug, returns row', async () => {
+  it('inserts with name, slug and the stated is_demo, returns row', async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ id: 'abc', name: 'Test School', slug: 'test-school', is_active: true, created_at: '', updated_at: '' }],
     });
-    const school = await insertSchool('Test School', 'test-school');
+    const school = await insertSchool('Test School', 'test-school', false);
     expect(school.slug).toBe('test-school');
     expect(mockQuery).toHaveBeenCalledWith(
       expect.stringContaining('INSERT INTO schools'),
-      ['Test School', 'test-school']
+      ['Test School', 'test-school', false]
     );
   });
 });

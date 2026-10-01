@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Every new school is marked customer or demo (2026-10-01)
+
+### For Chronix administrators
+- Onboarding a school now asks whether it is **a customer** or **a demo or test school**, with neither preselected. Demo schools are left out of platform totals and revenue. Before, every new school counted as a customer unless someone changed it later.
+- School names (and the onboarding email) are trimmed, so a stray space no longer makes two schools look the same in a list.
+
 ## Deleting a school now deletes everything (2026-10-01)
 
 ### For Chronix administrators

@@ -53,7 +53,7 @@ describe('Principal dashboard stats cache invalidation', () => {
 
   beforeAll(async () => {
     const schoolResult = await pool.query<{ id: string }>(
-      `INSERT INTO schools (name, slug, is_active) VALUES ('Dashboard Cache Test', $1, false) RETURNING id`,
+      `INSERT INTO schools (name, slug, is_active, is_demo) VALUES ('Dashboard Cache Test', $1, false, false) RETURNING id`,
       [`dashboard-cache-${suffix}`]
     );
     schoolId = schoolResult.rows[0].id;

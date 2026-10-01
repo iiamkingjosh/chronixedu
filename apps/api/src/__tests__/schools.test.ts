@@ -91,17 +91,49 @@ describe('POST /api/schools', () => {
     const res = await request(app)
       .post('/api/schools')
       .set('Authorization', `Bearer ${makeToken('super_admin')}`)
-      .send({ name: 'Test School' });
+      .send({ name: 'Test School', is_demo: false });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.data.school.slug).toBe('test-school');
-    expect(mockQueries.insertSchool).toHaveBeenCalledWith('Test School', 'test-school');
+    expect(mockQueries.insertSchool).toHaveBeenCalledWith('Test School', 'test-school', false);
     expect(mockQueries.insertSchoolSettings).toHaveBeenCalledWith(
       'school-uuid-001',
       expect.objectContaining({ name: 'Test School' }),
       expect.objectContaining({ promotion_cutoff: 40, grading_scale: expect.any(Array) })
     );
+  });
+
+  it('requires an explicit is_demo: a stated choice succeeds, an omitted one is refused before any insert', async () => {
+    mockQueries.insertSchool.mockResolvedValueOnce({
+      id: 'school-uuid-002', name: 'Demo School', slug: 'demo-school',
+      is_active: false, subscription_tier: null, created_at: '', updated_at: '',
+    });
+    mockQueries.insertSchoolSettings.mockResolvedValueOnce({ id: 'settings-002', school_id: 'school-uuid-002' });
+    const ok = await request(app).post('/api/schools')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`).send({ name: 'Demo School', is_demo: true });
+    expect(ok.status).toBe(201); // the path works when the choice is made
+    expect(mockQueries.insertSchool).toHaveBeenCalledWith('Demo School', 'demo-school', true);
+
+    (mockQueries.insertSchool as jest.Mock).mockClear();
+    for (const body of [{ name: 'No Choice School' }, { name: 'Null Choice', is_demo: null }, { name: 'String Choice', is_demo: 'false' }]) {
+      const res = await request(app).post('/api/schools')
+        .set('Authorization', `Bearer ${makeToken('super_admin')}`).send(body);
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body.error.message)).toMatch(/is_demo/);
+    }
+    expect(mockQueries.insertSchool).not.toHaveBeenCalled();
+  });
+
+  it('trims the name before it becomes the name and the slug', async () => {
+    mockQueries.insertSchool.mockResolvedValueOnce({
+      id: 'school-uuid-003', name: 'Padded School', slug: 'padded-school',
+      is_active: false, subscription_tier: null, created_at: '', updated_at: '',
+    });
+    mockQueries.insertSchoolSettings.mockResolvedValueOnce({ id: 'settings-003', school_id: 'school-uuid-003' });
+    await request(app).post('/api/schools')
+      .set('Authorization', `Bearer ${makeToken('super_admin')}`).send({ name: '  Padded School  ', is_demo: true });
+    expect(mockQueries.insertSchool).toHaveBeenCalledWith('Padded School', 'padded-school', true);
   });
 
   it('returns 400 when name is missing', async () => {
