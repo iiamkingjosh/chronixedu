@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Error monitoring now covers the web app's server (2026-10-02)
+
+### For Chronix administrators
+- Sentry now receives errors and performance data from the web app's server and from its middleware. Before, only the browser side of the web app reported: the server half of Sentry was never started, because the file that starts it did not exist.
+- Browser reporting is unchanged and was already working. Session replays keep text, form inputs and media masked, as before.
+
 ## Clearer errors, an optional motto, and search for platform admins (2026-10-01)
 
 ### For schools

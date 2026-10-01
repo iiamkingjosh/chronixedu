@@ -72,6 +72,13 @@ const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
 
+  // Next 14 runs instrumentation.ts only with this flag. That file is what loads Sentry's server
+  // and edge configs; without it the server half of Sentry never initialised. Next 15 makes
+  // instrumentation stable and removes the flag.
+  experimental: {
+    instrumentationHook: true,
+  },
+
   async headers() {
     // Security headers (CSP, X-Frame-Options, etc.) are set per-request in
     // middleware.ts so a fresh nonce can be generated for each request.

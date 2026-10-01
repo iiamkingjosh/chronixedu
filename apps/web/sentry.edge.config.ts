@@ -1,7 +1,6 @@
 import * as Sentry from '@sentry/nextjs';
 
-// The Node.js server runtime. Loaded by register() in instrumentation.ts; nothing else loads it.
-
+// The edge runtime (middleware). Loaded by register() in instrumentation.ts.
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   environment: process.env.NODE_ENV,
