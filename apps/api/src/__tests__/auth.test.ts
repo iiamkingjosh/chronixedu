@@ -299,3 +299,89 @@ describe('POST /api/auth/seed-test-user', () => {
     });
   });
 });
+
+describe('POST /api/auth/forgot-password — one answer for every address', () => {
+  // The defect (work order 1 Oct 2026, step 1): a known address whose send failed got 500
+  // RESET_EMAIL_FAILED with Supabase's own text, an unknown address got 200, so the endpoint
+  // listed every registered user, and did so exactly while mail was down. A known address also
+  // waited on the Supabase round trip and an unknown one did not.
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const { supabase } = require('../supabaseClient');
+  const { findUserByEmail } = require('../db/queries/users');
+  const { logger } = require('../config/logger');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  const mockReset = supabase.auth.resetPasswordForEmail as jest.Mock;
+  const mockFindUser = findUserByEmail as jest.Mock;
+
+  const KNOWN = 'principal@known.test';
+  const UNKNOWN = 'nobody@unknown.test';
+  const ask = (email: string) => request(app).post('/api/auth/forgot-password').send({ email });
+
+  /** Resolves when the handler logs `event` at `level`: a signal the code emits, not a sleep. */
+  function whenLogged(level: 'info' | 'error', event: string): Promise<unknown[]> {
+    return new Promise(resolve => {
+      jest.spyOn(logger, level).mockImplementation(((...args: unknown[]) => {
+        if (args[0] === event) resolve(args);
+        return logger;
+      }) as never);
+    });
+  }
+
+  beforeEach(() => {
+    mockFindUser.mockImplementation(async (email: string) => (email === KNOWN ? { id: 'user-known', email } : null));
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('a known address really is sent a reset, and an unknown one is not (the control)', async () => {
+    mockReset.mockResolvedValue({ data: {}, error: null });
+    const accepted = whenLogged('info', 'password_reset_email_accepted');
+
+    const known = await ask(KNOWN);
+    expect(await accepted).toEqual(['password_reset_email_accepted', { user_id: 'user-known' }]);
+    const unknown = await ask(UNKNOWN);
+
+    expect(known.status).toBe(200);
+    expect(mockReset).toHaveBeenCalledTimes(1);
+    expect(mockReset).toHaveBeenCalledWith(KNOWN, expect.objectContaining({ redirectTo: expect.any(String) }));
+    expect(unknown.body).toEqual(known.body);
+  });
+
+  it.each([
+    ['returns an error', () => mockReset.mockResolvedValue({ data: null, error: { message: 'Error sending recovery email', status: 500 } })],
+    ['throws', () => mockReset.mockRejectedValue(new Error('fetch failed'))],
+  ])('a known address whose send %s gets exactly what an unknown address gets', async (_how, failSend) => {
+    failSend();
+    const failed = whenLogged('error', 'password_reset_email_failed');
+
+    const known = await ask(KNOWN);
+    const unknown = await ask(UNKNOWN);
+
+    // Both, asserted against each other: checking only the unknown case passed on the old code.
+    expect(known.status).toBe(200);
+    expect(unknown.status).toBe(known.status);
+    expect(unknown.body).toEqual(known.body);
+    expect(JSON.stringify(known.body)).not.toMatch(/recovery|fetch failed|RESET_EMAIL_FAILED/);
+
+    // The known branch did run, and the failure is on the server, by user id and not address.
+    expect(mockReset).toHaveBeenCalledTimes(1);
+    const [, meta] = (await failed) as [string, Record<string, unknown>];
+    expect(meta.user_id).toBe('user-known');
+    expect(JSON.stringify(meta)).not.toContain(KNOWN);
+  });
+
+  it('answers a known address without waiting for Supabase, as fast as an unknown one', async () => {
+    // Supabase does not answer until this test lets it. The old handler awaited it, so this
+    // request never completed; the answer must not depend on the send at all.
+    let finishSend!: () => void;
+    mockReset.mockReturnValue(new Promise(resolve => { finishSend = () => resolve({ data: {}, error: null }); }));
+    const accepted = whenLogged('info', 'password_reset_email_accepted');
+
+    const known = await ask(KNOWN);
+    expect(known.status).toBe(200);
+    expect(mockReset).toHaveBeenCalledTimes(1); // the send was started, and is still pending
+
+    finishSend();
+    await accepted;
+    expect((await ask(UNKNOWN)).body).toEqual(known.body);
+  });
+});

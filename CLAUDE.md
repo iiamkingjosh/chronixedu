@@ -204,6 +204,10 @@ Monorepo, npm workspaces:
   its **own** HS256 JWT (`JWT_SECRET`, 1h) with `user_id, school_id, role, email,
   title, must_change_password, subscription_tier`. Supabase-issued tokens are
   not used anywhere else.
+- **`POST /forgot-password` answers the same 200 and body for every well-formed request, before any
+  email is attempted** (`sendResetEmail` runs after the response; a failure is logged by user id).
+  Never await the send in the handler, or vary the answer on its result: the answer or its timing
+  would again say whether an account exists (SECURITY.md Round 24).
 - Roles (`public.users.role`): `super_admin, principal, teacher, registrar, bursar, parent, student`.
 - Middleware chain on `/api/schools`: `detectSupportSession → verifyToken →
   requirePasswordChanged → requireActiveSchool → router`. Routes additionally

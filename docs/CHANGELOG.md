@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Password reset no longer reveals who has an account (2026-10-01)
+
+### For schools
+- "Forgot password" now gives the same answer for every email address: if an account exists, a reset link is on its way. Before, when the reset email could not be sent, it showed a technical error, and only for addresses that had an account, so anyone could check whether a given person was registered.
+- The answer also arrives at the same speed for every address. The reset email itself is sent just after.
+
 ## Text messages are switched off (2026-10-01)
 
 ### For schools

@@ -1,8 +1,44 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 23 — 2026-10-01  
-**Scope:** Credentials committed to the public repository; removal from git history  
-**Round 23 total findings:** 1 (0 Critical · 1 High) — partially remediated, two owner actions open
+**Latest audit:** Round 24 — 2026-10-01  
+**Scope:** Password-reset request endpoint: account enumeration by status and by timing  
+**Round 24 total findings:** 1 (0 Critical · 0 High · 1 Medium) — remediated
+
+---
+
+## Round 24 — 2026-10-01
+
+### M-01 — `/forgot-password` revealed which accounts exist ✅ Remediated
+
+**File:** `apps/api/src/routes/auth.ts`, `handleForgotPassword` (served at `POST /api/auth/forgot-password` and `/reset-password`).
+
+The handler looked the address up, and only for a known address asked Supabase to send the reset email, awaiting it. So:
+- **Unknown address:** 200 with the generic message.
+- **Known address, send failed:** 500 `RESET_EMAIL_FAILED` carrying Supabase's own error text.
+- **Known address, send threw** (network): 500 through the error handler.
+- **Known address, send succeeded:** 200, but only after the Supabase round trip.
+
+Anyone could therefore test any address for an account: by status whenever mail was failing, and by response time always. Live production request logs show the size of the timing gap: a known address took 1.4–1.8 s.
+
+Rounds 17 and 19 state that forgot-password "answers 200 whether or not the account exists". That was true only while the send succeeded.
+
+**When the status oracle was open:** whenever Supabase Auth could not send. On 1 Oct 2026 that was from at least 08:40 UTC (451 "Maximum credits exceeded" on `POST /recover`) until the switch to SendGrid SMTP (first 200 at 10:17:38). Railway's request logs for the API, which reach back at least to 29 Sep, hold four POSTs to this route. All four came from one address and one browser at 08:40, 08:57, 10:09 (500 each) and 10:17 (200), consistent with the owner's own reset tests. There is no sign anyone probed it. That covers the retained window only.
+
+**Fix:**
+- Every well-formed request gets the same 200 and the same body, and gets it **before** any email is attempted. The known branch then sends in the background (`sendResetEmail`).
+- A returned or thrown failure is logged as `password_reset_email_failed` with the user id and Supabase's message. A success is logged as `password_reset_email_accepted`. The address is never logged.
+- Validation (400) and the redirect allow-list (400 `INVALID_REDIRECT`) answer before the lookup and are the same for every address, so they were never part of the oracle.
+
+**Timing, decided:** both branches now do exactly one indexed lookup and answer. Nothing is padded or made constant-time. The remaining difference is the Supabase call running after the response, which is not observable in the response. A fixed minimum delay was rejected: it leaks again whenever Supabase is slower than the floor.
+
+**Cost, accepted:** a person whose reset email fails is told "If an account exists for that email, a password reset link has been sent", the same as everyone else, and gets nothing. Before, they saw Supabase's raw error. The failure is now in the server log by user id, and whether it should page someone is work order step 2 (deliberate Sentry capture).
+
+**Tests:** four in `src/__tests__/auth.test.ts`:
+- a control: the known address really is sent a reset, and the unknown one is not;
+- a known address whose send **returns** an error, and one whose send **throws**, each asserted to get the same status and body as an unknown address, with the failure logged by user id and not by address;
+- a known address answered while Supabase has not yet replied.
+
+Run against the pre-fix route (`git show HEAD:…/auth.ts`, restored by a `trap`), all four fail: two answer 500, the timing test never gets a response, and the control waits for a log line the old code never writes. The other 12 auth tests pass on both.
 
 ---
 

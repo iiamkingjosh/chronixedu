@@ -11,6 +11,7 @@ import { findUserByEmail, updatePasswordHash, getPasswordHashById, changeOwnPass
 import { logAudit } from '../db/queries/auditLog';
 import { redis, bestEffort } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
+import { logger } from '../config/logger';
 
 const router = express.Router();
 
@@ -371,7 +372,31 @@ function defaultResetRedirect(): string {
   return `${base.replace(/\/$/, '')}/reset-password`;
 }
 
-/** Request a password-reset email (always returns success to avoid email enumeration). */
+/**
+ * Sends the reset email after the response has gone. Never throws: a failure, returned or
+ * thrown, is logged with the user id. The address is not logged.
+ */
+async function sendResetEmail(userId: string, email: string, redirectTo: string): Promise<void> {
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) {
+      logger.error('password_reset_email_failed', { user_id: userId, status: error.status, error: error.message });
+      return;
+    }
+    logger.info('password_reset_email_accepted', { user_id: userId });
+  } catch (err) {
+    logger.error('password_reset_email_failed', { user_id: userId, error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/**
+ * Request a password-reset email. Every well-formed request gets the same 200 and the same
+ * body — unknown address, known address, send succeeded, send failed — and gets it BEFORE any
+ * email is attempted, so neither the answer nor the time it takes says whether an account
+ * exists. It used to answer 500 RESET_EMAIL_FAILED, with Supabase's own error text, for a known
+ * address whose send failed: an enumeration oracle exactly when mail was down, as on 1 Oct 2026.
+ * And only a known address waited on the Supabase round trip, which is a timing oracle too.
+ */
 async function handleForgotPassword(req: Request, res: Response, next: NextFunction) {
   try {
     const parsed = forgotPasswordSchema.safeParse(req.body);
@@ -398,23 +423,17 @@ async function handleForgotPassword(req: Request, res: Response, next: NextFunct
     const redirectTo = redirect_to ?? defaultResetRedirect();
 
     const local = await findUserByEmail(email);
-    if (local) {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-      if (error) {
-        return res.status(500).json({
-          success: false,
-          error: { code: 'RESET_EMAIL_FAILED', message: error.message },
-        });
-      }
-    }
 
-    return res.json({
+    res.json({
       success: true,
       data: {
         message:
           'If an account exists for that email, a password reset link has been sent.',
       },
     });
+
+    // After the answer, so the known and unknown branches take the same time to respond.
+    if (local) void sendResetEmail(local.id, email, redirectTo);
   } catch (err) {
     return next(err);
   }
