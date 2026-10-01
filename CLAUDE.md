@@ -198,8 +198,9 @@ Monorepo, npm workspaces:
   returns `undefined`, and all five limiters carry `passOnStoreError: true`. A bare
   `await redis.x()` on a request path is a regression: it turns a Redis outage back into
   500s and 503s. The exceptions are the support-session token store and blacklist writers
-  in `superAdmin.ts`. While Redis is down both brute-force controls are off and nothing
-  alarms — open item in `docs/AUDIT-2026-09.md`.
+  in `superAdmin.ts`. While Redis is down both brute-force controls are off; since 1 Oct 2026 the first failure
+  raises the `redis_unavailable` Sentry alert (`config/alerts.ts`), once per 15 minutes. Until
+  then nothing alarmed (`docs/AUDIT-2026-09.md`).
 - Login: Supabase `signInWithPassword` verifies the password; the API then signs
   its **own** HS256 JWT (`JWT_SECRET`, 1h) with `user_id, school_id, role, email,
   title, must_change_password, subscription_tier`. Supabase-issued tokens are
@@ -229,8 +230,16 @@ Monorepo, npm workspaces:
 - **Sentry gets technical data only**, because the DPA names it a sub-processor on that basis.
   `Sentry.setUser` takes the user **id** and nothing else (it sent emails until 1 Oct 2026,
   SECURITY.md Round 21). Replay keeps `maskAllText`, `maskAllInputs` and `blockAllMedia`
-  stated explicitly in `sentry.client.config.ts`. Never put a name, email, phone number or
+  stated explicitly in `instrumentation-client.ts` (named `sentry.client.config.ts` until 1 Oct 2026). Never put a name, email, phone number or
   student record in a Sentry tag, context or breadcrumb.
+- **The API alerts through an allow-list, `config/alerts.ts`** (since 1 Oct 2026). A winston format
+  sends the log events listed in `ALERTS` to Sentry, each under one alert name, at level `error`
+  (the level measured to trigger the email rule), once per 15 minutes per process, grouped by name
+  and environment, carrying only the fields named for it. Everything else stays in the logs. Every
+  `logger.error` event must be in `ALERTS` or in `NOT_ALERTED` with a reason: `alerts.test.ts` fails
+  on a new one, on a listed name that no longer exists in the code, and on a computed event name. So
+  add a new error event to one list in the same commit, and rename an event in both places. Never
+  pipe all of winston to Sentry: a flooded Sentry is ignored.
 - Web: all HTTP through `lib/api.ts` (`apiFetch`, `apiUpload`, `apiFetchBlob`). Forms use React Hook Form + zod.
   A failed request throws `ApiError` (`lib/apiError.ts`): a readable `message` and, for zod
   validation failures, `fields` (field → readable message) a form can attach with `setError`.

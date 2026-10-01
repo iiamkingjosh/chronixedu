@@ -233,7 +233,11 @@ const server = app.listen(port, () => {
 });
 
 // Stated once at boot, so SMS being off reads as the decision it is, not a broken integration.
-if (!isSmsEnabled()) logger.warn('sms_disabled', { run: 'startup', reason: smsDisabledReason() });
+if (!isSmsEnabled()) {
+  logger.warn('sms_disabled', { run: 'startup', reason: smsDisabledReason() });
+  // Switched on without a key is a fault, not the decision: it raises the sms_failing alert.
+  if (process.env.SMS_ENABLED?.trim().toLowerCase() === 'true') logger.error('sms_misconfigured', { reason: smsDisabledReason() });
+}
 
 startNotificationWorker();
 startAnalyticsCron();

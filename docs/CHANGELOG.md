@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Chronix is told when something breaks quietly (2026-10-01)
+
+### For Chronix administrators
+- The API now raises a Sentry alert, which emails the team, for a chosen list of problems it used to only write to its logs: Redis down (which switches off the login-guessing protections), email failing, password-reset emails failing, a parent or teacher notification lost, a payout-change alert not sent, a scheduled job failing, an audit record not written, a paid plan stuck in trial, a school without a recognised plan, SMS failing while switched on, the database certificate nearing expiry, and the payment return address missing.
+- Each problem sends at most one alert every 15 minutes, so an outage is one email, not thousands.
+- Alerts carry technical details only: never an email address, name or phone number.
+
 ## Password reset no longer reveals who has an account (2026-10-01)
 
 ### For schools

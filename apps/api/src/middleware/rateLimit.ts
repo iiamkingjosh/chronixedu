@@ -37,7 +37,7 @@ export const redis = redisClient;
 
 if (redisClient) {
   // Emitted on every failed (re)connect, so during an outage this line repeats every
-  // ~2s. That is the signal; nothing reads it yet (docs/AUDIT-2026-09.md, open items).
+  // ~2s. config/alerts.ts turns it into one redis_unavailable Sentry alert per 15 minutes.
   redisClient.on('error', (err) => {
     logger.error('redis_client_error', { error: err.message });
   });

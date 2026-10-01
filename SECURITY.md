@@ -1,8 +1,41 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 24 — 2026-10-01  
-**Scope:** Password-reset request endpoint: account enumeration by status and by timing  
-**Round 24 total findings:** 1 (0 Critical · 0 High · 1 Medium) — remediated
+**Latest audit:** Round 25 — 2026-10-01  
+**Scope:** Alerting: brute-force controls could be off with nothing raising an alarm; what the API sends to Sentry  
+**Round 25 total findings:** 1 (0 Critical · 0 High · 1 Medium) — remediated; one owner check open
+
+---
+
+## Round 25 — 2026-10-01
+
+### M-01 — The brute-force controls could be off with nothing raising an alarm ✅ Remediated (owner check open)
+
+**Files:** `apps/api/src/config/alerts.ts` (new), `config/logger.ts`, `middleware/rateLimit.ts` (comment), `index.ts`.
+
+Round 19 made Redis best-effort. While Redis is down, both brute-force controls are off: the per-address limiter and the per-email lockout. So are the token blacklist and the caches. That was logged at `error`, and nothing read it. More generally, the API sent Sentry only unhandled exceptions, so every condition it logs and carries on from was invisible. That included mail failing, a notification lost, an audit write failing, and the payout-change fraud alert not going out.
+
+**Fix:** `config/alerts.ts` is an allow-list of 12 named alerts covering 38 log events. A winston format sends a listed event to Sentry, and nothing else:
+- level `error`;
+- once per 15 minutes per process, with a count of what was held back;
+- grouped by alert name and environment;
+- carrying **only the fields named for that alert**, with error objects reduced to their message.
+
+The other 15 events are in `NOT_ALERTED`, each with its reason. `alerts.test.ts` is a ratchet over the source. It fails on an error event in neither list, on a listed name that no longer occurs in the code (so a rename cannot silence an alert), and on a computed event name outside `bestEffort`.
+
+**Sentry stays technical-only (DPA).** A whole log line never goes, because log lines carry addresses: `sendgrid_email_failed` logs `to` and `subject`. A test sends that event with an address and a pupil's name in it, asserts the alert was sent, and asserts neither value is anywhere in what Sentry received.
+
+**Proven end to end:**
+- The API ran locally for 25 s with `REDIS_URL` at a dead port, every outside-world key blank, and Sentry environment `development`.
+- It logged 31 Redis failures and produced **one** event: issue `CHRONIXEDU-API-1`, the API project's first. Its context held the event name, `Command timed out`, the rate limiter's detail and the held-back count. The rest is the SDK's standard runtime context (host name, OS, memory).
+- The project's rule "Send a notification for high priority issues" (6094724) emails the issue owners, falling back to active members. It **fired 27 s later**.
+- That measurement is why every alert is `error`: a warning is not guaranteed to be rated high priority, and could make an issue that emails nobody.
+- It is also why grouping includes the environment: the first version grouped by name alone, so a real production outage would have joined this test issue and raised nothing new.
+
+**Mutation checks:**
+- With the format removed from the logger, the four tests that log through the real logger fail. The "unlisted event is not sent" test passes either way, which is why the control sits beside it.
+- With an unclassified `logger.error` event added to a service, the ratchet fails and names it.
+
+**Open, owner check:** confirm the email for `CHRONIXEDU-API-1` arrived. It is a deliberate local test (environment `development`); resolve it once seen.
 
 ---
 
