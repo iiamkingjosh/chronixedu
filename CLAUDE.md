@@ -456,7 +456,7 @@ Monorepo, npm workspaces:
   widen its grants: functions in `public` default to EXECUTE for PUBLIC, which Supabase serves to
   `anon` over `/rest/v1/rpc`.
 - **A school created on production sends real mail**, including the principal's welcome email with a
-  working temporary password. A trial uses an address that reaches a mailbox Chronix reads, never an
+  working set-password link. A trial uses an address that reaches a mailbox Chronix reads, never an
   invented one (`docs/data-deletion-runbook.md`, "Mail during a production trial").
 - **No third party has accepted the Terms or DPA** (1 Oct 2026). Chronix High School is Moses's own
   pilot (`is_demo = true`), not a customer, whatever older commits say. The deletion and backup
@@ -600,6 +600,21 @@ Monorepo, npm workspaces:
   and `/complete` returns `INCOMPLETE_WIZARD` naming the missing ones. They were renumbered
   rather than left with gaps. The one completed session keeps its old keys 1–6 as history,
   which nothing reads, and the one abandoned in-progress session was deleted.
+- **The principal's address is the account's only key** (item H, 1 Oct 2026; SECURITY.md Round 27).
+  A mistyped address ties the account to a stranger's mailbox, and "Forgot password" sends the reset
+  there. So:
+  - step 4 requires `email_confirmation` equal to `email` (case- and space-insensitive);
+  - the Auth account is created with **no password**, and nothing returns one;
+  - `/complete` requires `principal_email_read_back: true`, never defaulted, and checks it after
+    `INCOMPLETE_WIZARD` and `NO_PRINCIPAL` so it never masks them. That is the operator's
+    statement that they read the address back to the principal by phone. It is recorded as
+    `PRINCIPAL_EMAIL_READ_BACK_CONFIRMED` (who, which address, when), and the system cannot check it.
+  - `/complete` then makes a Supabase set-password link (`generateLink`, type `recovery`,
+    redirect `resetPasswordRedirect()` from `config/appUrls.ts`, shared with forgot-password) BEFORE
+    activating anything, and emails it.
+  The read-back is the control. The double entry catches typos. The link means nobody relays a
+  password, and a wrong address shows at once, because the real principal never gets the link.
+  If any of it is ever trimmed, keep the read-back.
 - A session has **at most 3 terms**, and onboarding takes **exactly one**: the term the school
   is starting in, which becomes current. Three pre-filled rows made the wizard's optional-row
   check always true, so Next never enabled. Schools rarely know later term dates at sign-up and Nigerian
@@ -724,7 +739,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 31 suites, 311 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 31 suites, 317 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

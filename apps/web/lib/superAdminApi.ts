@@ -379,7 +379,6 @@ export interface OnboardingStepResponse {
   completed: boolean;
   session: OnboardingSession;
   principal_created?: boolean;
-  temp_password?: string;
 }
 
 export interface CompleteOnboardingResponse {
@@ -387,6 +386,8 @@ export interface CompleteOnboardingResponse {
   school_name: string;
   principal_email: string | null;
   is_active: boolean;
+  /** Whether the set-password email went out; 'not_sent' when the server has no email configured. */
+  welcome_email: 'sent' | 'not_sent';
   message: string;
 }
 
@@ -410,10 +411,14 @@ export async function saveOnboardingStep(
   return res.data;
 }
 
-export async function completeOnboarding(sessionId: string): Promise<CompleteOnboardingResponse> {
+/** Both are the operator's ticks on the Review step; neither is ever defaulted. */
+export async function completeOnboarding(
+  sessionId: string,
+  confirmations: { accepted_legal_terms: true; principal_email_read_back: true }
+): Promise<CompleteOnboardingResponse> {
   const res = await apiFetch<ApiResponse<CompleteOnboardingResponse>>(`/api/super-admin/onboarding/${sessionId}/complete`, {
     method: 'POST',
-    body: JSON.stringify({ accepted_legal_terms: true }),
+    body: JSON.stringify(confirmations),
   });
   return res.data;
 }

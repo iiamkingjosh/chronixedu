@@ -5,6 +5,8 @@ import { randomUUID } from 'crypto';
 import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
+import { resetPasswordRedirect } from '../config/appUrls';
+import { logger } from '../config/logger';
 import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
@@ -276,15 +278,28 @@ const onboardingStep3Schema = z
   .superRefine((data, ctx) => validateTermRanges([data.term], ctx));
 
 // Step 4: the principal account (was step 6 before 1 Oct 2026).
+// The principal's address is typed twice (item H, 1 Oct 2026). A mistyped address ties the
+// principal account to a stranger's mailbox, and "Forgot password" then sends the reset link there.
 const onboardingStep4Schema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
-  email: z.string().email(),
+  email: z.string().trim().email(),
+  email_confirmation: z.string().trim(),
   phone: z.string().optional(),
+}).refine(d => d.email.toLowerCase() === d.email_confirmation.toLowerCase(), {
+  path: ['email_confirmation'],
+  message: 'The two email addresses do not match',
 });
 
+// Both stated, never defaulted (doctrine 8). principal_email_read_back is the operator's statement
+// that they read the address back to the principal by phone and the principal confirmed it. The
+// system cannot check that; it records who said so and when (PRINCIPAL_EMAIL_READ_BACK_CONFIRMED).
+// That prevents nothing and records everything, which is all an audit row is for (doctrine 6).
 const completeOnboardingSchema = z.object({
   accepted_legal_terms: z.literal(true),
+  // Checked after the wizard's structural refusals (missing steps, no principal), so it never
+  // masks the real reason: "read back the principal's address" means nothing with no principal.
+  principal_email_read_back: z.boolean().optional(),
 });
 
 /**
@@ -1408,23 +1423,6 @@ function generateOnboardingSlug(name: string): string {
 }
 
 /** Generates a random 12-character password mixing upper/lowercase letters, digits, and symbols. */
-function generateTempPassword(): string {
-  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const lower = 'abcdefghijkmnpqrstuvwxyz';
-  const digits = '23456789';
-  const symbols = '!@#$%^&*';
-  const all = upper + lower + digits + symbols;
-  const pick = (chars: string) => chars[Math.floor(Math.random() * chars.length)];
-
-  const chars = [pick(upper), pick(lower), pick(digits), pick(symbols)];
-  for (let i = chars.length; i < 12; i++) chars.push(pick(all));
-
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  return chars.join('');
-}
 
 /** Ensures a school_settings row exists for the school: identity, plus calendar templates only. */
 async function ensureSchoolSettings(schoolId: string, schoolName: string): Promise<void> {
@@ -1652,11 +1650,11 @@ router.patch(
             return res.status(409).json({ success: false, error: { code: 'EMAIL_IN_USE', message: 'A user with this email already exists' } });
           }
 
-          const tempPassword = generateTempPassword();
-
+          // No password (item H, 1 Oct 2026). The principal sets their own from the link /complete
+          // emails, so nobody, the operator included, ever sees or passes on a password. It used to
+          // return a temporary one to the operator's screen, to be relayed by hand.
           const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
-            password: tempPassword,
             email_confirm: true,
           });
           if (authError || !authData?.user) {
@@ -1671,9 +1669,8 @@ router.patch(
             [userId, school.id, email, first_name, last_name, phone ?? null]
           );
 
-          // Never persist the raw password — store a flag so the DB row is safe if read.
-          stepData = { first_name, last_name, email, phone: phone ?? null, temp_password: '[cleared after email sent]' };
-          extraResponseData = { principal_created: true, temp_password: tempPassword };
+          stepData = { first_name, last_name, email, phone: phone ?? null };
+          extraResponseData = { principal_created: true };
           break;
         }
 
@@ -1749,6 +1746,50 @@ router.post(
         });
       }
 
+      // Absent or false is refused: the statement is made, never assumed (doctrine 8).
+      if (parsed.data.principal_email_read_back !== true) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'PRINCIPAL_EMAIL_NOT_READ_BACK',
+            message: "Read the principal's email address back to them by phone, and tick that they confirmed it, before completing onboarding.",
+          },
+        });
+      }
+
+      // Resolved above as the activation gate; step 4's blob wins only because it is
+      // what the operator just typed.
+      const step4Data = stepsCompleted['4'] ?? {};
+      const principalEmail = (step4Data.email as string | undefined) ?? principalRow.rows[0].email;
+
+      // The operator's statement that the address was read back and confirmed, recorded before
+      // anything is activated or sent, with who said it, when, and the address they confirmed.
+      await pool.query(
+        `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
+         VALUES ($1, 'PRINCIPAL_EMAIL_READ_BACK_CONFIRMED', $2, $3, $4)`,
+        [req.user!.user_id, session.school_id, JSON.stringify({
+          principal_email: principalEmail,
+          asserted_confirmed: true,
+          note: "The operator's statement that they read this address back to the principal by phone and the principal confirmed it. Not verified by the system.",
+        }), clientIp(req)]
+      );
+
+      // The set-password link, generated before activation: if Supabase cannot make one, nothing
+      // has been switched on and the operator can simply try again.
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: principalEmail,
+        options: { redirectTo: resetPasswordRedirect() },
+      });
+      const setPasswordLink = linkData?.properties?.action_link;
+      if (linkError || !setPasswordLink) {
+        logger.error('onboarding_set_password_link_failed', { school_id: session.school_id, error: linkError?.message ?? 'no link returned' });
+        return res.status(502).json({
+          success: false,
+          error: { code: 'SET_PASSWORD_LINK_FAILED', message: 'Could not create the principal\'s set-password link. Nothing was activated; try again.' },
+        });
+      }
+
       await pool.query(
         `UPDATE schools SET is_active = TRUE, legal_terms_accepted_at = NOW(), legal_terms_accepted_ip = $2 WHERE id = $1`,
         [session.school_id, clientIp(req)]
@@ -1758,31 +1799,21 @@ router.post(
         [req.params.sessionId]
       );
 
-      // Resolved above as the activation gate; step 4's blob wins only because it is
-      // what the operator just typed.
-      const step6Data = stepsCompleted['4'] ?? {};
-      const principalEmail = (step6Data.email as string | undefined) ?? principalRow.rows[0].email;
-
-      if (principalEmail) {
-        const firstName = (step6Data.first_name as string | undefined) ?? '';
-        const storedPassword = (step6Data.temp_password as string | undefined) ?? '';
-        const passwordCleared = storedPassword === '[cleared after email sent]';
+      let welcomeEmail: 'sent' | 'not_sent' = 'not_sent';
+      {
+        const firstName = (step4Data.first_name as string | undefined) ?? '';
         const appUrl = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
         const loginUrl = `${appUrl}/login`;
-        const passwordLine = passwordCleared
-          ? 'Temporary Password: [provided at account creation — please check with your Chronix administrator]'
-          : `Temporary Password: ${storedPassword}`;
         const emailBody =
           `Hi ${firstName},\n\n` +
           `Welcome to Chronix Edu! Your school's account has been successfully set up and is now live and ready to use.\n\n` +
-          `Here are your login details:\n\n` +
-          `Login Portal: ${loginUrl}\n` +
-          `Email: ${principalEmail}\n` +
-          `${passwordLine}\n\n` +
-          `For your security, you will be asked to set a new password the first time you log in.\n\n` +
+          `Set your password using this link:\n\n` +
+          `${setPasswordLink}\n\n` +
+          `The link works once and expires. If it has expired, go to ${loginUrl}, choose "Forgot password" and enter ${principalEmail}; a new link will be sent to this address.\n\n` +
+          `Your login email is ${principalEmail}. Nobody at Chronix knows or will ask for your password.\n\n` +
           `GETTING STARTED\n\n` +
           `Here is a quick path to get your school fully set up:\n\n` +
-          `1. Log in and create your new password\n` +
+          `1. Set your password using the link above, then log in at ${loginUrl}\n` +
           `2. Add your school logo and branding under Settings → School Identity\n` +
           `3. Set up your classes and subjects under Settings → Roster\n` +
           `4. Add your teachers under Settings → Users\n` +
@@ -1796,15 +1827,17 @@ router.post(
 
         if (isEmailConfigured()) {
           await sendEmail(principalEmail, 'Welcome to Chronix Edu — Your School Portal is Now Live', emailBody);
+          welcomeEmail = 'sent';
         } else {
-          console.log(`[onboarding] SendGrid not configured. Welcome email for ${principalEmail}:\n${emailBody}`);
+          // Never print the body: it carries a working set-password link.
+          logger.warn('onboarding_welcome_email_not_sent', { school_id: session.school_id, reason: 'email is not configured on this server' });
         }
       }
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata, ip_address)
          VALUES ($1, $2, $3, $4, $5)`,
-        [req.user!.user_id, 'SCHOOL_ONBOARDED', session.school_id, JSON.stringify({ completed_steps: Object.keys(stepsCompleted), principal_email: principalEmail }), clientIp(req)]
+        [req.user!.user_id, 'SCHOOL_ONBOARDED', session.school_id, JSON.stringify({ completed_steps: Object.keys(stepsCompleted), principal_email: principalEmail, welcome_email: welcomeEmail }), clientIp(req)]
       );
 
       return res.json({
@@ -1814,7 +1847,11 @@ router.post(
           school_name: school.name,
           principal_email: principalEmail,
           is_active: true,
-          message: 'School onboarded successfully. Welcome email sent.',
+          welcome_email: welcomeEmail,
+          // It said "Welcome email sent" even when none was (email not configured).
+          message: welcomeEmail === 'sent'
+            ? 'School onboarded. The principal has been emailed a link to set their password.'
+            : 'School onboarded, but the welcome email was NOT sent: email is not configured on this server. The principal can use "Forgot password" on the login page with their address.',
         },
       });
     } catch (err) {

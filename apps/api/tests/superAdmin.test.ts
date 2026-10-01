@@ -638,15 +638,15 @@ describe('superAdmin — platform school management', () => {
       expect(res.status).toBe(400);
     });
 
-    itLiveAuth('PATCH /onboarding/:sessionId/step/4 — valid principal data → 200, has temp_password in response', async () => {
+    // Since 1 Oct 2026 (item H): typed twice, and no password comes back.
+    itLiveAuth('PATCH /onboarding/:sessionId/step/4 — valid principal data → 200, creates the principal, returns no password', async () => {
       const res = await request(app)
         .patch(`/api/super-admin/onboarding/${sessionId}/step/4`)
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ first_name: 'Jane', last_name: 'Doe', email: principalEmail });
+        .send({ first_name: 'Jane', last_name: 'Doe', email: principalEmail, email_confirmation: principalEmail });
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
-      expect(typeof res.body.data.temp_password).toBe('string');
-      expect(res.body.data.temp_password.length).toBeGreaterThan(0);
+      expect(res.body.data).not.toHaveProperty('temp_password');
 
       const userResult = await pool.query<{ id: string; role: string }>(`SELECT id, role FROM users WHERE email = $1`, [principalEmail]);
       expect(userResult.rows[0]).toBeDefined();
@@ -684,7 +684,7 @@ describe('superAdmin — platform school management', () => {
       const completeRes = await request(app)
         .post(`/api/super-admin/onboarding/${sessionId}/complete`)
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({ accepted_legal_terms: true });
+        .send({ accepted_legal_terms: true, principal_email_read_back: true });
       expect(completeRes.status).toBe(200);
       expect(completeRes.body.success).toBe(true);
       expect(completeRes.body.data.is_active).toBe(true);

@@ -106,22 +106,24 @@ describe('Onboarding Wizard', () => {
 
 
 
-  it('PATCH step/4 (principal account) → 200, has temp_password', async () => {
+  // Since 1 Oct 2026 (item H): the address is typed twice, and there is no password to return; the
+  // principal sets their own from the link /complete emails.
+  it('PATCH step/4 (principal account) → 200, creates the principal, returns no password', async () => {
     const res = await request(app)
       .patch(`/api/super-admin/onboarding/${sessionId}/step/4`)
       .set('Authorization', `Bearer ${superAdminToken}`)
-      .send({ first_name: 'Wizard', last_name: 'Principal', email: principalEmail });
+      .send({ first_name: 'Wizard', last_name: 'Principal', email: principalEmail, email_confirmation: principalEmail });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(typeof res.body.data.temp_password).toBe('string');
-    expect(res.body.data.temp_password.length).toBeGreaterThan(0);
+    expect(res.body.data.principal_created).toBe(true);
+    expect(res.body.data).not.toHaveProperty('temp_password');
   }, 20000);
 
   it('POST /complete → 200, school is_active: true', async () => {
     const res = await request(app)
       .post(`/api/super-admin/onboarding/${sessionId}/complete`)
       .set('Authorization', `Bearer ${superAdminToken}`)
-      .send({ accepted_legal_terms: true });
+      .send({ accepted_legal_terms: true, principal_email_read_back: true });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data.is_active).toBe(true);
@@ -142,7 +144,7 @@ describe('Onboarding Wizard', () => {
     const res = await request(app)
       .post(`/api/super-admin/onboarding/${sessionId}/complete`)
       .set('Authorization', `Bearer ${superAdminToken}`)
-      .send({ accepted_legal_terms: true });
+      .send({ accepted_legal_terms: true, principal_email_read_back: true });
     expect(res.status).toBe(409);
   });
 });

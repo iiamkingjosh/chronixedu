@@ -188,8 +188,10 @@ accident-proofing, and it is the only door that is not deliberate.
 
 Creating a school on production is not a dry run for mail. The onboarding wizard's Complete step
 emails the principal address typed in its Admin step a welcome message **containing a working
-temporary password**. Adding staff and parents does the same, and announcements, fee reminders and
-notifications reach every address they find. All of it goes through the real SendGrid account.
+set-password link** (since 1 Oct 2026; corrected here the same day: before that it carried no
+password, and the operator relayed a temporary one by hand). Adding staff and parents also emails
+them, and announcements, fee reminders and notifications reach every address they find. All of it
+goes through the real SendGrid account.
 
 **Decided 1 Oct 2026: a production trial uses an address that delivers to a mailbox Chronix reads,
 confirmed by sending it one message first.**
@@ -202,8 +204,8 @@ confirmed by sending it one message first.**
 - On the company domain it hard-bounces. On 1 Oct 2026 the `ZZ Test Onboarding 01 Oct` trial's
   invented principal address produced the SendGrid account's only bounce
   (`550 5.1.1 User does not exist`), and it stayed in Suppressions after the school was deleted.
-- On anyone else's domain it may be a real mailbox, and the welcome email would hand a stranger a
-  working login for the trial school.
+- On anyone else's domain it may be a real mailbox, and the welcome email's set-password link
+  would hand a stranger the trial school's principal account.
 
 **Rejected: switching mail off for trials.** A per-school switch that stops outbound mail is one
 wrong setting away from a real principal never receiving their login. A trial with mail off also

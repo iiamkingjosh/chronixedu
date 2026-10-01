@@ -24,6 +24,15 @@ import schoolsRoutes from '../routes/schools';
 import { verifyToken } from '../middleware/auth';
 import { errorHandler } from '../middleware/errorHandler';
 
+// /complete makes the principal's set-password link through Supabase (item H): an external
+// service, stubbed at that boundary only.
+jest.mock('../supabaseClient', () => ({
+  supabase: {},
+  supabaseAdmin: { auth: { admin: {
+    generateLink: jest.fn(async () => ({ data: { properties: { action_link: 'https://auth.example.test/verify?token=t' } }, error: null })),
+  } } },
+}));
+
 const app = express();
 app.use(express.json());
 app.use('/api/super-admin', superAdminRoutes);
@@ -111,7 +120,7 @@ describe('onboarding completion requires a principal', () => {
     const res = await request(app)
       .post(`/api/super-admin/onboarding/${sessionId}/complete`)
       .set('Authorization', superToken())
-      .send({ accepted_legal_terms: true });
+      .send({ accepted_legal_terms: true, principal_email_read_back: true });
 
     expect(res.status).toBe(200);
     expect(await isActive(schoolId)).toBe(true);
@@ -226,7 +235,7 @@ describe('reactivation requires a principal too', () => {
       [schoolId, `head-susp-${Date.now()}@example.com`]
     );
     await request(app).post(`/api/super-admin/onboarding/${sessionId}/complete`)
-      .set('Authorization', superToken()).send({ accepted_legal_terms: true });
+      .set('Authorization', superToken()).send({ accepted_legal_terms: true, principal_email_read_back: true });
     expect(await isActive(schoolId)).toBe(true);
 
     await expect(

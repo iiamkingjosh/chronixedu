@@ -12,6 +12,7 @@ import { logAudit } from '../db/queries/auditLog';
 import { redis, bestEffort } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
 import { logger } from '../config/logger';
+import { resetPasswordRedirect } from '../config/appUrls';
 
 const router = express.Router();
 
@@ -367,10 +368,6 @@ const confirmResetSchema = z
     path: ['confirm_password'],
   });
 
-function defaultResetRedirect(): string {
-  const base = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? 'http://localhost:3000';
-  return `${base.replace(/\/$/, '')}/reset-password`;
-}
 
 /**
  * Sends the reset email after the response has gone. Never throws: a failure, returned or
@@ -420,7 +417,7 @@ async function handleForgotPassword(req: Request, res: Response, next: NextFunct
       }
     }
 
-    const redirectTo = redirect_to ?? defaultResetRedirect();
+    const redirectTo = redirect_to ?? resetPasswordRedirect();
 
     const local = await findUserByEmail(email);
 

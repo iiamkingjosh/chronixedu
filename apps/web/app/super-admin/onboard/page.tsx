@@ -85,7 +85,7 @@ interface WizardState {
   adminLastName: string;
   adminEmail: string;
   adminPhone: string;
-  tempPassword: string | null;
+  principalCreated: boolean;
 }
 
 const initialWizardState: WizardState = {
@@ -104,7 +104,7 @@ const initialWizardState: WizardState = {
   adminLastName: '',
   adminEmail: '',
   adminPhone: '',
-  tempPassword: null,
+  principalCreated: false,
 };
 
 // Five steps since 1 Oct 2026. Grading and assessment are the principal's to set, in Settings.
@@ -401,11 +401,16 @@ function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext
 
 // ── Step 4: Admin ────────────────────────────────────────────────────────────
 
+// The address is typed twice: a typo ties the principal account to a stranger's mailbox.
 const step4Schema = z.object({
   first_name: z.string().min(1, 'Required'),
   last_name: z.string().min(1, 'Required'),
-  email: z.string().min(1, 'Required').email('Enter a valid email address'),
+  email: z.string().trim().min(1, 'Required').email('Enter a valid email address'),
+  email_confirmation: z.string().trim().min(1, 'Type the email address again'),
   phone: z.string().optional(),
+}).refine(d => d.email.toLowerCase() === d.email_confirmation.toLowerCase(), {
+  path: ['email_confirmation'],
+  message: 'The two email addresses do not match',
 });
 type Step4Form = z.infer<typeof step4Schema>;
 
@@ -417,18 +422,19 @@ function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
       first_name: wizard.adminFirstName,
       last_name: wizard.adminLastName,
       email: wizard.adminEmail,
+      email_confirmation: '',
       phone: wizard.adminPhone,
     },
   });
   const [apiError, setApiError] = useState('');
-  const [result, setResult] = useState<{ tempPassword: string; values: Step4Form } | null>(
-    wizard.tempPassword
+  const [result, setResult] = useState<{ values: Step4Form } | null>(
+    wizard.principalCreated
       ? {
-          tempPassword: wizard.tempPassword,
           values: {
             first_name: wizard.adminFirstName,
             last_name: wizard.adminLastName,
             email: wizard.adminEmail,
+            email_confirmation: wizard.adminEmail,
             phone: wizard.adminPhone,
           },
         }
@@ -438,15 +444,16 @@ function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
   async function onSubmit(values: Step4Form) {
     setApiError('');
     try {
-      const res = await saveOnboardingStep(wizard.sessionId, 4, {
+      await saveOnboardingStep(wizard.sessionId, 4, {
         first_name: values.first_name,
         last_name: values.last_name,
         email: values.email,
+        email_confirmation: values.email_confirmation,
         ...(values.phone ? { phone: values.phone } : {}),
       });
-      setResult({ tempPassword: res.temp_password ?? '', values });
+      setResult({ values });
     } catch (err: unknown) {
-      showSaveError(err, setError, setApiError, 'Failed to create principal account', {}, ['first_name', 'last_name', 'email', 'phone']);
+      showSaveError(err, setError, setApiError, 'Failed to create principal account', {}, ['first_name', 'last_name', 'email', 'email_confirmation', 'phone']);
     }
   }
 
@@ -457,7 +464,7 @@ function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
       adminLastName: result.values.last_name,
       adminEmail: result.values.email,
       adminPhone: result.values.phone ?? '',
-      tempPassword: result.tempPassword,
+      principalCreated: true,
     });
   }
 
@@ -465,9 +472,8 @@ function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
     return (
       <div className="space-y-4">
         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 space-y-1">
-          <p className="text-sm font-semibold text-green-800">Principal account created</p>
-          <p className="text-sm text-green-700 font-mono">Temporary password: {result.tempPassword}</p>
-          <p className="text-xs text-green-600">⚠ Copy this now — it will not be shown again.</p>
+          <p className="text-sm font-semibold text-green-800">Principal account created for {result.values.email}</p>
+          <p className="text-sm text-green-700">There is no password to pass on. When you complete onboarding, the principal is emailed a link to set their own. Nobody else, you included, ever sees it.</p>
         </div>
         <div className="flex justify-between pt-2">
           <button type="button" onClick={onBack} className={backButtonClass}>Back</button>
@@ -488,7 +494,10 @@ function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
         </Field>
       </div>
       <Field label="Email" error={errors.email?.message}>
-        <input {...register('email')} type="email" className={inputClass} />
+        <input {...register('email')} type="email" autoComplete="off" className={inputClass} />
+      </Field>
+      <Field label="Type the email again" error={errors.email_confirmation?.message}>
+        <input {...register('email_confirmation')} type="email" autoComplete="off" onPaste={(e) => e.preventDefault()} className={inputClass} />
       </Field>
       <Field label="Phone (optional)" error={errors.phone?.message}>
         <input {...register('phone')} className={inputClass} />
@@ -512,12 +521,14 @@ function Step5Review({ wizard, onBack, onComplete }: {
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [readBack, setReadBack] = useState(false);
 
   async function handleComplete() {
+    if (!acceptedTerms || !readBack) return;
     setSubmitting(true);
     setApiError('');
     try {
-      const res = await completeOnboarding(wizard.sessionId);
+      const res = await completeOnboarding(wizard.sessionId, { accepted_legal_terms: true, principal_email_read_back: true });
       onComplete(res);
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : 'Failed to complete onboarding');
@@ -577,14 +588,33 @@ function Step5Review({ wizard, onBack, onComplete }: {
         </span>
       </label>
 
+      <label className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={readBack}
+          onChange={(e) => setReadBack(e.target.checked)}
+          className="mt-0.5"
+        />
+        <span className="text-sm text-gray-700">
+          I read this address back to the principal by phone, letter by letter, and they confirmed it is theirs:{' '}
+          <strong className="font-mono break-all">{wizard.adminEmail}</strong>
+          <span className="block text-xs text-gray-500 mt-1">
+            Their set-password link goes to this address and nowhere else. This tick is recorded with your name and the time;
+            it is your statement, and the system cannot check it.
+          </span>
+        </span>
+      </label>
+
       {apiError && <ErrorBox message={apiError} />}
-      {!acceptedTerms && (
-        <p className="text-xs text-gray-500">Tick the confirmation above to complete onboarding.</p>
+      {(!acceptedTerms || !readBack) && (
+        <p className="text-xs text-gray-500">
+          To complete onboarding, tick {[!acceptedTerms && 'the agreement confirmation', !readBack && 'that the principal confirmed their email address'].filter(Boolean).join(' and ')}.
+        </p>
       )}
 
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className={backButtonClass}>Back</button>
-        <button type="button" onClick={handleComplete} disabled={submitting || !acceptedTerms} className={nextButtonClass}>
+        <button type="button" onClick={handleComplete} disabled={submitting || !acceptedTerms || !readBack} className={nextButtonClass}>
           {submitting ? 'Completing…' : 'Complete Onboarding'}
         </button>
       </div>

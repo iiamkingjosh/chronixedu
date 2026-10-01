@@ -1,8 +1,46 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 26 — 2026-10-01  
-**Scope:** Local integration test runs could reach production email, SMS and payment providers  
-**Round 26 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated
+**Latest audit:** Round 27 — 2026-10-01  
+**Scope:** Onboarding: a mistyped principal address ties the school's principal account to a stranger's mailbox  
+**Round 27 total findings:** 1 (0 Critical · 0 High · 1 Medium) — remediated
+
+---
+
+## Round 27 — 2026-10-01
+
+### M-01 — A mistyped principal address hands the principal account to whoever owns that mailbox ✅ Remediated
+
+**Files:** `apps/api/src/routes/superAdmin.ts` (onboarding step 4 and `/complete`), `apps/api/src/config/appUrls.ts` (new), `apps/api/src/routes/auth.ts`, `apps/web/app/super-admin/onboard/page.tsx`, `apps/web/lib/superAdminApi.ts`.
+
+**The risk, stated correctly.** The principal's email address is the account's only key: "Forgot password" sends the reset link to it. A typo that lands on someone else's real mailbox therefore lets that person take over the principal account of a real school. They receive the welcome email, then reset the password. Child Prime's re-onboarding runs through this path.
+
+**Correction.** This was first raised (1 Oct, working checklist item H) as "the welcome email carries the temporary password in plain text". It did not. Since Round 5 (`3a0c63d`, 9 Jul 2026) the password was never stored or emailed. Step 4 returned it to the operator's screen, to be passed on by hand, and the email said to ask the administrator. The takeover needed one more step (Forgot password), and the risk was real all the same. The same correction applies to the note that the no-SendGrid `console.log` printed a password: it printed the email body, which held none.
+
+**Fix, three parts, decided by the owner** (option (c)):
+1. **Typed twice.** Step 4 requires `email_confirmation` equal to `email`, ignoring case and surrounding spaces; on a mismatch it refuses with a field error and creates nothing. The second box refuses pasting. This catches typos, not a wrong-but-valid address.
+2. **A link, not a password.** The Auth account is created with no password, and step 4 returns none. `/complete` makes a Supabase recovery link (`generateLink`, redirect shared with forgot-password through `resetPasswordRedirect()`) **before** activating anything, and emails it. If the link cannot be made, it answers 502 and nothing is activated.
+   - What this changes: no one relays a password, and a wrong address is visible at once, because the real principal never receives the link and says so. Before, they logged in quietly under the mistyped address with the password the operator read out.
+   - What it does not change: a misdelivered link is still a takeover.
+3. **Read back by phone, recorded.** `/complete` requires `principal_email_read_back: true` (never defaulted; `PRINCIPAL_EMAIL_NOT_READ_BACK` otherwise), checked after the wizard's own refusals (missing steps, no principal) so it never masks them. The wizard's Review step asks for it with the address in full. Each completion writes `PRINCIPAL_EMAIL_READ_BACK_CONFIRMED` to `platform_audit_logs`: operator, address, time, `asserted_confirmed: true`.
+   - It is the operator's statement, and the system cannot check it. It prevents nothing and records everything, which is all an audit row is for (doctrine 6).
+   - It is still the only part that closes misdelivery. If the three are ever trimmed, keep this one.
+
+**Also:**
+- The no-SendGrid branch `console.log`ged the whole email. It now carries a working link, so it logs `onboarding_welcome_email_not_sent` with the school id only.
+- The response said "Welcome email sent" even when none was; it now returns `welcome_email: 'sent' | 'not_sent'` and says which.
+- `onboarding_set_password_link_failed` is classified in `NOT_ALERTED`, because the operator is on screen when it happens.
+
+**Tests** (`onboardingFiveSteps.db.test.ts`, six new):
+- a mismatched confirmation is refused and creates nothing, while a matching one creates the principal;
+- the account is created without a password and the response carries none;
+- `/complete` without the read-back, or with it false, is refused and activates nothing; with it, one audit row names the operator and address;
+- the email goes to the confirmed address with the link and no "temporary password";
+- with email not configured, the response says not sent and nothing is printed;
+- if the link cannot be made, nothing is activated and the session stays in progress.
+
+Run against the pre-change route, all six fail and the suite's five older tests pass.
+
+**Not changed, recorded:** parent and student accounts made by the registrar still show temporary passwords on screen (`registrar/students`). That is the same pattern for other roles, and it is a separate item.
 
 ---
 

@@ -1,5 +1,17 @@
 # Chronix Edu — Changelog
 
+## A new principal sets their own password (2026-10-01)
+
+### For schools
+- A new school's principal now receives an email with a link to set their own password. Nobody at Chronix sees it or passes it on.
+- If the link has expired by the time it is opened, "Forgot password" on the login page sends a new one to the same address.
+
+### For Chronix administrators
+- Onboarding asks for the principal's email address twice, and the second box does not accept pasting.
+- No temporary password is shown any more: there is nothing to copy or pass on.
+- Completing onboarding needs a second tick: that you read the address back to the principal by phone and they confirmed it. It is recorded with your name and the time.
+- If the server cannot send email, completing now says so plainly. It used to say "Welcome email sent" either way.
+
 ## Chronix is told when something breaks quietly (2026-10-01)
 
 ### For Chronix administrators

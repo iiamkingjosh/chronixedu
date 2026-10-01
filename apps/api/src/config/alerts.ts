@@ -148,6 +148,7 @@ export const NOT_ALERTED: Record<string, string> = {
   roster_bulk_import_results_file_failed: 'As students_bulk_import_results_file_failed.',
   payment_bulk_import_results_file_failed: 'As students_bulk_import_results_file_failed.',
   analytics_snapshot_failed: 'One school\'s analytics snapshot; nothing a school relies on today, and a whole failed run raises cron_failed.',
+  onboarding_set_password_link_failed: 'The operator is on the onboarding screen when it happens, gets a 502 saying so, and nothing was activated; they retry.',
 };
 
 /** A condition is sent at most once per this window per process; the next event says how many were held back. */

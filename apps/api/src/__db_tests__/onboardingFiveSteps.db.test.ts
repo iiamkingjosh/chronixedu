@@ -19,17 +19,25 @@ import { buildApp, seed, tokens, IDS as I, pool } from './helpers';
 import superAdminRoutes from '../routes/superAdmin';
 import { errorHandler } from '../middleware/errorHandler';
 
-// The principal step creates a Supabase Auth account; /complete sends a welcome email.
-// Both are external services — mocked at that boundary only.
+// The principal step creates a Supabase Auth account; /complete makes a set-password link and sends
+// a welcome email. All external services, mocked at that boundary only.
+const SET_PASSWORD_LINK = 'https://auth.example.test/verify?type=recovery&token=one-time-token';
 jest.mock('../supabaseClient', () => ({
   supabase: {},
-  supabaseAdmin: { auth: { admin: { createUser: jest.fn(async () => ({ data: { user: { id: 'd1d1d1d1-0000-4000-8000-000000000001' } }, error: null })) } } },
+  supabaseAdmin: { auth: { admin: {
+    createUser: jest.fn(async () => ({ data: { user: { id: 'd1d1d1d1-0000-4000-8000-000000000001' } }, error: null })),
+    generateLink: jest.fn(async () => ({ data: { properties: { action_link: 'https://auth.example.test/verify?type=recovery&token=one-time-token' } }, error: null })),
+  } } },
 }));
 jest.mock('../services/emailService', () => ({
   ...jest.requireActual('../services/emailService'),
   sendEmail: jest.fn(async () => undefined),
   isEmailConfigured: jest.fn(() => false),
 }));
+/* eslint-disable @typescript-eslint/no-var-requires */
+const { supabaseAdmin } = require('../supabaseClient');
+const emailService = require('../services/emailService');
+/* eslint-enable @typescript-eslint/no-var-requires */
 
 const wizard = express();
 wizard.use(express.json());
@@ -61,8 +69,8 @@ describe('the five-step wizard', () => {
     expect((await step(sid, 1, { name: 'Five Step School', address: '1 Road', phone: '08000000000' })).status).toBe(200);
     expect((await step(sid, 2, { motto: 'Onward' })).status).toBe(200);
     expect((await step(sid, 3, { session_name: '2026/2027', term: { name: 'First Term', start_date: '2026-09-14', end_date: '2026-12-18' } })).status).toBe(200);
-    expect((await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'principal@fivestep.test' })).status).toBe(200);
-    const done = await request(wizard).post(`/api/super-admin/onboarding/${sid}/complete`).set('Authorization', auth()).send({ accepted_legal_terms: true });
+    expect((await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'principal@fivestep.test', email_confirmation: 'principal@fivestep.test' })).status).toBe(200);
+    const done = await request(wizard).post(`/api/super-admin/onboarding/${sid}/complete`).set('Authorization', auth()).send({ accepted_legal_terms: true, principal_email_read_back: true });
     expect(done.status).toBe(200);
 
     expect((await pool.query(`SELECT is_active FROM schools WHERE id = $1`, [schoolId])).rows[0].is_active).toBe(true);
@@ -108,7 +116,7 @@ describe('the five-step wizard', () => {
       .send({ school_name: 'Half Done School', school_email: 'office@halfdone.test', is_demo: true });
     const sid = start.body.data.session_id;
     await step(sid, 1, { name: 'Half Done School', address: '1 Road', phone: '08000000000' });
-    const res = await request(wizard).post(`/api/super-admin/onboarding/${sid}/complete`).set('Authorization', auth()).send({ accepted_legal_terms: true });
+    const res = await request(wizard).post(`/api/super-admin/onboarding/${sid}/complete`).set('Authorization', auth()).send({ accepted_legal_terms: true, principal_email_read_back: true });
     expect(res.status).toBe(400);
     expect(res.body.error).toMatchObject({ code: 'INCOMPLETE_WIZARD', message: 'Steps 2, 3, 4 are not yet complete' });
   });
@@ -155,5 +163,127 @@ describe('no grading scale, no publishing', () => {
     const ok = await publish();
     expect(ok.status).toBe(200);
     expect(ok.body.data.published_students).toBe(2);
+  });
+});
+
+describe("the principal's address: typed twice, read back, and given a link, never a password (item H)", () => {
+  // A mistyped address ties the principal account to a stranger's mailbox, and "Forgot password"
+  // then sends the reset there. Typing it twice catches typos; reading it back to the principal by
+  // phone closes the rest, and the system records who said so; a set-password link means nobody
+  // sees or relays a password, and a wrong address shows at once (the principal gets nothing).
+  const step = (sessionId: string, n: number, body: object) =>
+    request(wizard).patch(`/api/super-admin/onboarding/${sessionId}/step/${n}`).set('Authorization', auth()).send(body);
+  const complete = (sessionId: string, body: object) =>
+    request(wizard).post(`/api/super-admin/onboarding/${sessionId}/complete`).set('Authorization', auth()).send(body);
+
+  async function throughStep3(name: string) {
+    const start = await request(wizard).post('/api/super-admin/onboarding').set('Authorization', auth())
+      .send({ school_name: name, school_email: `office@${name.toLowerCase().replace(/ /g, '')}.test`, is_demo: true });
+    const sid = start.body.data.session_id;
+    await step(sid, 1, { name, address: '1 Road', phone: '08000000000' });
+    await step(sid, 2, { motto: 'Onward' });
+    await step(sid, 3, { session_name: '2026/2027', term: { name: 'First Term', start_date: '2026-09-14', end_date: '2026-12-18' } });
+    return { sid, schoolId: start.body.data.school_id as string };
+  }
+  const principalCount = async (schoolId: string) =>
+    (await pool.query<{ n: number }>(`SELECT count(*)::int n FROM users WHERE school_id = $1 AND role = 'principal'`, [schoolId])).rows[0].n;
+  const readBackRows = async (schoolId: string) =>
+    (await pool.query(`SELECT platform_admin_id, metadata FROM platform_audit_logs WHERE target_school_id = $1 AND action_type = 'PRINCIPAL_EMAIL_READ_BACK_CONFIRMED'`, [schoolId])).rows;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (emailService.isEmailConfigured as jest.Mock).mockReturnValue(false);
+  });
+
+  it('refuses a confirmation that does not match, creating nothing; a matching one creates the principal', async () => {
+    const { sid, schoolId } = await throughStep3('Typo School');
+
+    const typo = await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada.obi@typo.test', email_confirmation: 'ada.obi@typo.tset' });
+    expect(typo.status).toBe(400);
+    expect(typo.body.error.message.fieldErrors.email_confirmation).toEqual(['The two email addresses do not match']);
+    expect(await principalCount(schoolId)).toBe(0);
+    expect(supabaseAdmin.auth.admin.createUser).not.toHaveBeenCalled();
+
+    const ok = await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada.obi@typo.test', email_confirmation: ' Ada.Obi@typo.test ' });
+    expect(ok.status).toBe(200);
+    expect(await principalCount(schoolId)).toBe(1);
+  });
+
+  it('creates the account with no password, and returns none for the operator to pass on', async () => {
+    const { sid } = await throughStep3('Link Only School');
+    const res = await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada@linkonly.test', email_confirmation: 'ada@linkonly.test' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.principal_created).toBe(true);
+    expect(res.body.data).not.toHaveProperty('temp_password');
+    expect(JSON.stringify(res.body)).not.toMatch(/password/i);
+    const [created] = supabaseAdmin.auth.admin.createUser.mock.calls[0];
+    expect(created).toEqual({ email: 'ada@linkonly.test', email_confirm: true });
+  });
+
+  it('will not complete until the operator states the address was read back; then records who, which address and when', async () => {
+    const { sid, schoolId } = await throughStep3('Read Back School');
+    await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada@readback.test', email_confirmation: 'ada@readback.test' });
+
+    for (const body of [{ accepted_legal_terms: true }, { accepted_legal_terms: true, principal_email_read_back: false }]) {
+      const refused = await complete(sid, body);
+      expect(refused.status).toBe(400);
+      expect(refused.body.error.code).toBe('PRINCIPAL_EMAIL_NOT_READ_BACK');
+    }
+    expect((await pool.query(`SELECT is_active FROM schools WHERE id = $1`, [schoolId])).rows[0].is_active).toBe(false);
+    expect(await readBackRows(schoolId)).toEqual([]);
+
+    const done = await complete(sid, { accepted_legal_terms: true, principal_email_read_back: true });
+    expect(done.status).toBe(200);
+    const rows = await readBackRows(schoolId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].platform_admin_id).toBe(SUPER);
+    expect(rows[0].metadata).toMatchObject({ principal_email: 'ada@readback.test', asserted_confirmed: true });
+  });
+
+  it('emails a set-password link, not a password, to the address that was confirmed', async () => {
+    (emailService.isEmailConfigured as jest.Mock).mockReturnValue(true);
+    const { sid } = await throughStep3('Link School');
+    await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada@link.test', email_confirmation: 'ada@link.test' });
+
+    const done = await complete(sid, { accepted_legal_terms: true, principal_email_read_back: true });
+    expect(done.status).toBe(200);
+    expect(done.body.data.welcome_email).toBe('sent');
+
+    expect(supabaseAdmin.auth.admin.generateLink).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'recovery', email: 'ada@link.test', options: { redirectTo: expect.stringMatching(/\/reset-password$/) },
+    }));
+    expect(emailService.sendEmail).toHaveBeenCalledTimes(1);
+    const [to, , body] = (emailService.sendEmail as jest.Mock).mock.calls[0];
+    expect(to).toBe('ada@link.test');
+    expect(body).toContain(SET_PASSWORD_LINK);
+    expect(body).not.toMatch(/temporary password/i);
+  });
+
+  it('says so, and prints nothing, when email is not configured', async () => {
+    const consoleSpy = jest.spyOn(console, 'log').mockImplementation(() => undefined);
+    const { sid } = await throughStep3('Unsent School');
+    await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada@unsent.test', email_confirmation: 'ada@unsent.test' });
+
+    const done = await complete(sid, { accepted_legal_terms: true, principal_email_read_back: true });
+    expect(done.status).toBe(200);
+    expect(done.body.data.welcome_email).toBe('not_sent');
+    expect(done.body.data.message).toMatch(/NOT sent/);
+    expect(emailService.sendEmail).not.toHaveBeenCalled();
+    // The body carries a working link; it used to be console.logged whole.
+    expect(JSON.stringify(consoleSpy.mock.calls)).not.toContain(SET_PASSWORD_LINK);
+    consoleSpy.mockRestore();
+  });
+
+  it('activates nothing when Supabase cannot make the link', async () => {
+    supabaseAdmin.auth.admin.generateLink.mockResolvedValueOnce({ data: null, error: { message: 'auth service unavailable' } });
+    const { sid, schoolId } = await throughStep3('No Link School');
+    await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada@nolink.test', email_confirmation: 'ada@nolink.test' });
+
+    const res = await complete(sid, { accepted_legal_terms: true, principal_email_read_back: true });
+    expect(res.status).toBe(502);
+    expect(res.body.error.code).toBe('SET_PASSWORD_LINK_FAILED');
+    expect((await pool.query(`SELECT is_active FROM schools WHERE id = $1`, [schoolId])).rows[0].is_active).toBe(false);
+    expect((await pool.query(`SELECT status FROM onboarding_sessions WHERE id = $1`, [sid])).rows[0].status).toBe('in_progress');
   });
 });
