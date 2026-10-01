@@ -515,6 +515,24 @@ Monorepo, npm workspaces:
   `ORDER BY created_at DESC LIMIT 20`; what needed a mechanism was removing a notice that
   is *wrong*, and a clock cannot express intent.
 
+## SMS is switched off (1 Oct 2026) — a decision, not a fault
+
+- **Termii is not funded; Moses decided 1 Oct 2026.** `TERMII_API_KEY` is meant to be unset in
+  production. Do not "fix" SMS: no SMS row, no Termii call and an `sms_disabled` log line are the
+  system working as intended.
+- **Unset or blank key = off** (`isSmsEnabled()` in `services/termiiService.ts`), the
+  `ERP_INTEGRATION_API_KEY` rule applied to SMS. The fee-reminder run and the notification worker
+  check once per run and skip SMS entirely: no provider call, no `notification_logs` row per parent,
+  and **one** `sms_disabled` line per run (per batch that delivered something, for the worker; never
+  on an idle poll). Boot logs it once at `warn`. In-app and email delivery are unchanged.
+- `sendTermiiSms` answers `'sent' | 'failed' | 'disabled'`. `'disabled'` is not a failure and writes
+  no row. A rejected send is logged (`termii_sms_failed`, the status, never the number); it used to
+  be logged nowhere.
+- **The code stays.** Termii, or a replacement, is switched back on by setting the key. Before you
+  do, put SMS back in the public claims: `home-page.tsx` and the login page were reworded to "in the
+  app and by email" the day it went off. `smsSwitchedOff.db.test.ts` shows both states, enabled first.
+- The feature-adoption count (`/analytics/feature-adoption`) counts `status = 'sent'` only.
+
 ## Demo vs customer tenants
 
 - `schools.is_demo` marks a tenant that is not a customer (test fixture, sandbox, sales
@@ -676,7 +694,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 30 suites, 306 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 31 suites, 311 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 21 suites, 185 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)
@@ -726,7 +744,7 @@ a deliberate staging run.
 | Supabase Auth JWT with custom claims; RLS enforces isolation | Custom HS256 JWT; RLS is defence in depth only (doctrine 2) |
 | `result_status` draft→submitted→approved→published per student | Two-level workflow (doctrine 5) |
 | Hosting: Vercel (web) | Railway (web and api) |
-| Firebase Cloud Messaging | Not used. In-app notifications (polled every 60s) + SendGrid + Termii |
+| Firebase Cloud Messaging | Not used. In-app notifications (polled every 60s) + SendGrid; Termii SMS switched off 1 Oct 2026 |
 | `packages/shared`, Axios, Zustand | Not present. Types live per app; `fetch` wrapper in `lib/api.ts` |
 | Launch 7 Sep 2025 (PRD) | Launched 7 Sep 2026 |
 | Flat subscription tiers | trial / basic / premium / enterprise, per student per term |

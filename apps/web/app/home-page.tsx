@@ -432,11 +432,11 @@ export default function HomePage() {
             <div className="feat-text reveal-left">
               <span className="eyebrow" style={{ background: 'var(--orange-l)', color: 'var(--orange)' }}>Communication</span>
               <h3>Parents find out the same day, not at the next PTA meeting.</h3>
-              <p>When a student has been absent three times in a week, a parent gets an SMS. When results are published, they get a notification. No one calls the office asking questions that are already answered in the app.</p>
+              <p>When a student has been absent three times in a week, a parent is told in the app and by email. When results are published, they get a notification. No one calls the office asking questions that are already answered in the app.</p>
               <ul className="feat-list">
                 <li><CheckIcon /> Staff and parents message each other directly in the app</li>
                 <li><CheckIcon /> School-wide announcements reach everyone at once</li>
-                <li><CheckIcon /> Attendance alerts go by SMS and email automatically</li>
+                <li><CheckIcon /> Attendance alerts go in the app and by email automatically</li>
                 <li><CheckIcon /> Works on slow connections, syncs when you&apos;re back online</li>
               </ul>
             </div>
@@ -509,7 +509,7 @@ export default function HomePage() {
                 <li><CheckIcon /> Parent &amp; student portals</li>
                 <li><CheckIcon /> Fee invoicing &amp; payment recording</li>
                 <li><CheckIcon /> In-app messaging &amp; announcements</li>
-                <li><CheckIcon /> SMS reminders for attendance &amp; fees</li>
+                <li><CheckIcon /> Email and in-app reminders for attendance &amp; fees</li>
                 <li><CheckIcon /> Online fee collection via Paystack — settles directly to your school&apos;s bank account</li>
                 <li><CheckIcon /> Analytics dashboard</li>
               </ul>

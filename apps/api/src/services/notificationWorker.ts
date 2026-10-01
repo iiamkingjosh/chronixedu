@@ -3,7 +3,7 @@ import { runExclusive } from './cronTracker';
 import { createNotification } from '../db/queries/notifications';
 import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notificationLogs';
 import { sendEmail } from './emailService';
-import { sendTermiiSms } from './termiiService';
+import { sendTermiiSms, isSmsEnabled, SMS_DISABLED_REASON } from './termiiService';
 import { logger } from '../config/logger';
 import { schoolAllowsFeature } from './planFeatures';
 
@@ -50,9 +50,10 @@ function buildNotification(row: QueuedAuditRow): { type: string; title: string; 
   return { type: notificationType, title: 'School notification', body: 'You have a new notification from your school.' };
 }
 
-async function processRow(row: QueuedAuditRow): Promise<void> {
+/** Delivers one queued notification. Returns how many parents would have been texted had SMS been on. */
+async function processRow(row: QueuedAuditRow, smsOn: boolean): Promise<number> {
   const studentId = row.new_value?.student_id;
-  if (!studentId) return;
+  if (!studentId) return 0;
 
   const { rows: parents } = await pool.query<ParentRecipient>(
     `SELECT u.id AS parent_id, u.email, u.phone
@@ -64,6 +65,7 @@ async function processRow(row: QueuedAuditRow): Promise<void> {
 
   const { type, title, body } = buildNotification(row);
   const allowsSms = await schoolAllowsFeature(row.school_id, 'sms');
+  let smsNotSent = 0;
 
   for (const parent of parents) {
     await createNotification({
@@ -76,7 +78,11 @@ async function processRow(row: QueuedAuditRow): Promise<void> {
     await sendEmail(parent.email, title, body);
 
     if (parent.phone && allowsSms) {
-      if (await hasReachedSmsLimit(parent.parent_id)) {
+      // SMS off is a stated state, not a failure: no provider call and no
+      // notification_logs row per parent — the batch logs one line instead.
+      if (!smsOn) {
+        smsNotSent++;
+      } else if (await hasReachedSmsLimit(parent.parent_id)) {
         await insertNotificationLog({
           school_id: row.school_id,
           user_id: parent.parent_id,
@@ -85,17 +91,22 @@ async function processRow(row: QueuedAuditRow): Promise<void> {
           status: 'throttled',
         });
       } else {
-        const sent = await sendTermiiSms(row.school_id, parent.phone, body);
-        await insertNotificationLog({
-          school_id: row.school_id,
-          user_id: parent.parent_id,
-          channel: 'sms',
-          type,
-          status: sent ? 'sent' : 'failed',
-        });
+        const outcome = await sendTermiiSms(row.school_id, parent.phone, body);
+        if (outcome === 'disabled') {
+          smsNotSent++;
+        } else {
+          await insertNotificationLog({
+            school_id: row.school_id,
+            user_id: parent.parent_id,
+            channel: 'sms',
+            type,
+            status: outcome,
+          });
+        }
       }
     }
   }
+  return smsNotSent;
 }
 
 export async function processNotificationQueue(): Promise<void> {
@@ -109,13 +120,19 @@ export async function processNotificationQueue(): Promise<void> {
     [BATCH_SIZE]
   );
 
+  const smsOn = isSmsEnabled();
+  let smsNotSent = 0;
   for (const row of rows) {
     try {
-      await processRow(row);
+      smsNotSent += await processRow(row, smsOn);
       await pool.query(`UPDATE audit_logs SET processed_at = NOW() WHERE id = $1`, [row.id]);
     } catch (err) {
       logger.error('notification_worker_row_failed', { auditLogId: row.id, error: err instanceof Error ? err.message : err });
     }
+  }
+  // One line per batch that delivered something — never per parent, and not every 30s idle poll.
+  if (!smsOn && rows.length > 0) {
+    logger.info('sms_disabled', { run: 'notification_worker', notifications: rows.length, sms_not_sent: smsNotSent, reason: SMS_DISABLED_REASON });
   }
 }
 

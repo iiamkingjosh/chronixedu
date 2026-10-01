@@ -1,6 +1,17 @@
 # Chronix Edu — Changelog
 
-## Error monitoring now covers the web app's server (2026-10-02)
+## Text messages are switched off (2026-10-01)
+
+### For schools
+- The app no longer sends text messages (SMS). Attendance alerts, fee reminders and result notices still reach parents in the app and by email, as before.
+- The website and sign-in page now say "in the app and by email" where they used to promise SMS.
+
+### For Chronix administrators
+- SMS is off on purpose while Termii is not funded. Leaving the Termii key unset is now a stated "off" state. Before, every reminder and alert tried to text each parent and recorded a failure for each one. Now nothing is attempted, and each run logs one line saying SMS is off.
+- When SMS is switched back on, a message Termii rejects is now logged. Before, those rejections were recorded nowhere.
+- The feature-adoption figure for SMS counts only messages actually delivered.
+
+## Error monitoring now covers the web app's server (2026-10-01)
 
 ### For Chronix administrators
 - Sentry now receives errors and performance data from the web app's server and from its middleware. Before, only the browser side of the web app reported: the server half of Sentry was never started, because the file that starts it did not exist.

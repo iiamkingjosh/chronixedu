@@ -5,8 +5,9 @@ import path from 'path';
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 jest.mock('../src/services/termiiService', () => ({
-  isSmsConfigured: jest.fn().mockReturnValue(true),
-  sendTermiiSms: jest.fn().mockResolvedValue(true),
+  ...jest.requireActual('../src/services/termiiService'),
+  isSmsEnabled: jest.fn().mockReturnValue(true), // the SMS-on path; off is smsSwitchedOff.db.test.ts
+  sendTermiiSms: jest.fn().mockResolvedValue('sent'),
 }));
 
 jest.mock('../src/services/emailService', () => ({

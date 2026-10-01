@@ -18,7 +18,12 @@ import { sendEmail } from '../services/emailService';
 const { executeSchoolDeletion } = require('../../scripts/delete-school-data.js');
 
 jest.mock('../services/emailService', () => ({ sendEmail: jest.fn() }));
-jest.mock('../services/termiiService', () => ({ sendTermiiSms: jest.fn().mockResolvedValue(false) }));
+// SMS switched off (as in production since 1 Oct 2026): this test is about the purge, never a text.
+jest.mock('../services/termiiService', () => ({
+  ...jest.requireActual('../services/termiiService'),
+  isSmsEnabled: jest.fn().mockReturnValue(false),
+  sendTermiiSms: jest.fn().mockResolvedValue('disabled'),
+}));
 
 const OPERATOR = 'a1a1a1a1-0000-4000-8000-000000000001';
 

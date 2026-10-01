@@ -1971,7 +1971,8 @@ router.get(
       const totalActive = parseInt(activeResult.rows[0].count, 10);
 
       const featureQueries = [
-        { feature: 'sms', sql: `SELECT COUNT(DISTINCT school_id) AS cnt FROM notification_logs WHERE channel = 'sms'` },
+        // Delivered texts only: a 'failed' or 'throttled' row is not a school using SMS.
+        { feature: 'sms', sql: `SELECT COUNT(DISTINCT school_id) AS cnt FROM notification_logs WHERE channel = 'sms' AND status = 'sent'` },
         { feature: 'paystack', sql: `SELECT COUNT(DISTINCT school_id) AS cnt FROM payments WHERE method = 'paystack'` },
         { feature: 'timetable', sql: `SELECT COUNT(DISTINCT school_id) AS cnt FROM timetable_slots` },
         { feature: 'assignments', sql: `SELECT COUNT(DISTINCT school_id) AS cnt FROM assignments` },

@@ -5,7 +5,7 @@ import { getParentsForStudent } from '../db/queries/parents';
 import { createNotification } from '../db/queries/notifications';
 import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notificationLogs';
 import { sendEmail } from './emailService';
-import { sendTermiiSms } from './termiiService';
+import { sendTermiiSms, isSmsEnabled, SMS_DISABLED_REASON } from './termiiService';
 import { logger } from '../config/logger';
 import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
 import { schoolAllowsFeature } from './planFeatures';
@@ -27,17 +27,22 @@ function buildReminderMessage(row: OutstandingBalanceRow): { title: string; body
   return { title, body };
 }
 
-/** Sends fee reminders (in-app + email + SMS) for every outstanding invoice in a school/term. Returns the number of parents notified. */
-export async function sendFeeRemindersForSchool(schoolId: string, termId: string): Promise<number> {
+interface ReminderTally {
+  notified: number;
+  /** Parents who would have been texted had SMS been on. */
+  smsNotSent: number;
+}
+
+async function remindSchool(schoolId: string, termId: string, smsOn: boolean): Promise<ReminderTally> {
   // Decided in migration 046: a read-only school sends no fee reminders. They would ask
   // parents to pay while online payment is off and the school cannot record a payment.
   if ((await findSubscriptionGate(schoolId))?.subscription_status === 'read_only') {
     logger.info('fee_reminders_skipped_read_only', { school_id: schoolId, term_id: termId });
-    return 0;
+    return { notified: 0, smsNotSent: 0 };
   }
   const balances = await getOutstandingBalances(schoolId, termId);
   const allowsSms = await schoolAllowsFeature(schoolId, 'sms');
-  let remindersSent = 0;
+  const tally: ReminderTally = { notified: 0, smsNotSent: 0 };
 
   for (const row of balances) {
     const { title, body } = buildReminderMessage(row);
@@ -55,30 +60,53 @@ export async function sendFeeRemindersForSchool(schoolId: string, termId: string
       await sendEmail(parent.email, title, body);
 
       if (parent.phone && allowsSms) {
-        if (await hasReachedSmsLimit(parent.parent_id)) {
+        // SMS off is a stated state, not a failure: no provider call and no
+        // notification_logs row per parent — the run logs one line instead.
+        if (!smsOn) {
+          tally.smsNotSent++;
+        } else if (await hasReachedSmsLimit(parent.parent_id)) {
           await insertNotificationLog({ school_id: schoolId, user_id: parent.parent_id, channel: 'sms', type: REMINDER_TYPE, status: 'throttled' });
         } else {
-          const sent = await sendTermiiSms(schoolId, parent.phone, body);
-          await insertNotificationLog({ school_id: schoolId, user_id: parent.parent_id, channel: 'sms', type: REMINDER_TYPE, status: sent ? 'sent' : 'failed' });
+          const outcome = await sendTermiiSms(schoolId, parent.phone, body);
+          if (outcome === 'disabled') tally.smsNotSent++;
+          else await insertNotificationLog({ school_id: schoolId, user_id: parent.parent_id, channel: 'sms', type: REMINDER_TYPE, status: outcome });
         }
       }
 
-      remindersSent++;
+      tally.notified++;
     }
   }
 
-  return remindersSent;
+  return tally;
+}
+
+/** Sends fee reminders (in-app + email, and SMS when it is switched on) for every outstanding invoice in a school/term. Returns the number of parents notified. */
+export async function sendFeeRemindersForSchool(schoolId: string, termId: string): Promise<number> {
+  const smsOn = isSmsEnabled();
+  const { notified, smsNotSent } = await remindSchool(schoolId, termId, smsOn);
+  if (!smsOn) {
+    logger.info('sms_disabled', { run: 'fee_reminders', school_id: schoolId, parents_notified: notified, sms_not_sent: smsNotSent, reason: SMS_DISABLED_REASON });
+  }
+  return notified;
 }
 
 /** Runs fee reminders for every school with a current term, skipping any school that errors. */
 export async function runFeeReminders(): Promise<void> {
+  const smsOn = isSmsEnabled();
   const schools = await listSchoolsWithCurrentTerm();
+  const total: ReminderTally = { notified: 0, smsNotSent: 0 };
   for (const { school_id, term_id } of schools) {
     try {
-      await sendFeeRemindersForSchool(school_id, term_id);
+      const tally = await remindSchool(school_id, term_id, smsOn);
+      total.notified += tally.notified;
+      total.smsNotSent += tally.smsNotSent;
     } catch (err) {
       logger.error('fee_reminders_failed', { schoolId: school_id, error: err instanceof Error ? err.message : err });
     }
+  }
+  // One line for the whole run, however many schools and parents it covered.
+  if (!smsOn) {
+    logger.info('sms_disabled', { run: 'fee_reminders', schools: schools.length, parents_notified: total.notified, sms_not_sent: total.smsNotSent, reason: SMS_DISABLED_REASON });
   }
 }
 

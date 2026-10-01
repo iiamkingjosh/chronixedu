@@ -1,5 +1,6 @@
 import pool from '../db/client';
-import { isSmsConfigured, sendTermiiSms } from '../services/termiiService';
+import { logger } from '../config/logger';
+import { isSmsEnabled, sendTermiiSms } from '../services/termiiService';
 
 jest.mock('../db/client', () => ({
   __esModule: true,
@@ -21,26 +22,33 @@ afterAll(() => {
   process.env = ORIGINAL_ENV;
 });
 
-describe('isSmsConfigured', () => {
-  it('returns false when TERMII_API_KEY is not set', () => {
-    delete process.env.TERMII_API_KEY;
-    expect(isSmsConfigured()).toBe(false);
+describe('isSmsEnabled', () => {
+  it('is on when TERMII_API_KEY holds a value', () => {
+    expect(isSmsEnabled()).toBe(true);
   });
 
-  it('returns true when TERMII_API_KEY is set', () => {
-    expect(isSmsConfigured()).toBe(true);
+  it('is off when TERMII_API_KEY is not set', () => {
+    delete process.env.TERMII_API_KEY;
+    expect(isSmsEnabled()).toBe(false);
+  });
+
+  it('is off when TERMII_API_KEY is blank — an emptied variable is not a key', () => {
+    process.env.TERMII_API_KEY = '   ';
+    expect(isSmsEnabled()).toBe(false);
   });
 });
 
 describe('sendTermiiSms', () => {
-  it('returns false immediately when Termii is not configured', async () => {
-    delete process.env.TERMII_API_KEY;
-
-    const result = await sendTermiiSms(SCHOOL_ID, '+2348011111111', 'hello');
-
-    expect(result).toBe(false);
+  it("answers 'disabled' — not a failure — without a query, a call or an error log when SMS is off", async () => {
+    const errorSpy = jest.spyOn(logger, 'error');
+    for (const key of [undefined, '']) {
+      if (key === undefined) delete process.env.TERMII_API_KEY; else process.env.TERMII_API_KEY = key;
+      expect(await sendTermiiSms(SCHOOL_ID, '+2348011111111', 'hello')).toBe('disabled');
+    }
     expect(mockQuery).not.toHaveBeenCalled();
     expect(global.fetch).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it("uses the school's sms_sender_name from school_settings when set", async () => {
@@ -49,7 +57,7 @@ describe('sendTermiiSms', () => {
 
     const result = await sendTermiiSms(SCHOOL_ID, '+2348011111111', 'hello');
 
-    expect(result).toBe(true);
+    expect(result).toBe('sent');
     expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('FROM school_settings'), [SCHOOL_ID]);
     const [, options] = (global.fetch as jest.Mock).mock.calls[0];
     expect(JSON.parse(options.body)).toMatchObject({ to: '+2348011111111', from: 'MySchool', sms: 'hello' });
@@ -75,21 +83,25 @@ describe('sendTermiiSms', () => {
     expect(JSON.parse(options.body)).toMatchObject({ from: 'ChronixEdu' });
   });
 
-  it('returns false when the Termii API responds with a non-ok status', async () => {
+  it("answers 'failed' and logs the status, not the number, when Termii rejects the message", async () => {
+    const errorSpy = jest.spyOn(logger, 'error');
     mockQuery.mockResolvedValueOnce({ rows: [{ notification_config: {} }] });
-    (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false });
+    (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: false, status: 401 });
 
     const result = await sendTermiiSms(SCHOOL_ID, '+2348011111111', 'hello');
 
-    expect(result).toBe(false);
+    expect(result).toBe('failed');
+    expect(errorSpy).toHaveBeenCalledWith('termii_sms_failed', { schoolId: SCHOOL_ID, status: 401 });
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain('2348011111111');
+    errorSpy.mockRestore();
   });
 
-  it('returns false and does not throw when fetch rejects', async () => {
+  it("answers 'failed' and does not throw when fetch rejects", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [{ notification_config: {} }] });
     (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('network error'));
 
     const result = await sendTermiiSms(SCHOOL_ID, '+2348011111111', 'hello');
 
-    expect(result).toBe(false);
+    expect(result).toBe('failed');
   });
 });

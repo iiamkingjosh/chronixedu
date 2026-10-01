@@ -44,7 +44,7 @@ const features = [
         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
       </svg>
     ),
-    label: 'Real-time SMS & in-app parent alerts',
+    label: 'Real-time email & in-app parent alerts',
   },
 ];
 

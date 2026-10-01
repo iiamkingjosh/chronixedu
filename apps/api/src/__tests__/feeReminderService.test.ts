@@ -5,7 +5,8 @@ import * as parentQueries from '../db/queries/parents';
 import { createNotification } from '../db/queries/notifications';
 import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notificationLogs';
 import { sendEmail } from '../services/emailService';
-import { sendTermiiSms } from '../services/termiiService';
+import { sendTermiiSms, isSmsEnabled } from '../services/termiiService';
+import { logger } from '../config/logger';
 import {
   sendFeeRemindersForSchool,
   runFeeReminders,
@@ -35,6 +36,7 @@ const mockInsertLog = insertNotificationLog as jest.Mock;
 const mockHasReachedLimit = hasReachedSmsLimit as jest.Mock;
 const mockSendEmail = sendEmail as jest.Mock;
 const mockSendTermiiSms = sendTermiiSms as jest.Mock;
+const mockIsSmsEnabled = isSmsEnabled as jest.Mock;
 const mockSchoolAllowsFeature = schoolAllowsFeature as jest.Mock;
 
 const SCHOOL_ID = 'school-1';
@@ -60,9 +62,16 @@ beforeEach(() => {
   mockInsertLog.mockResolvedValue(undefined);
   mockHasReachedLimit.mockResolvedValue(false);
   mockSendEmail.mockResolvedValue(undefined);
-  mockSendTermiiSms.mockResolvedValue(true);
+  mockSendTermiiSms.mockResolvedValue('sent');
+  mockIsSmsEnabled.mockReturnValue(true);
   mockSchoolAllowsFeature.mockResolvedValue(true);
 });
+
+const TWO_PARENTS = [
+  { parent_id: PARENT_ID, email: 'parent@test.com', phone: '+2348011111111' },
+  { parent_id: 'parent-2', email: 'parent2@test.com', phone: '+2348022222222' },
+];
+const smsDisabledLines = (spy: jest.SpyInstance) => spy.mock.calls.filter(([event]) => event === 'sms_disabled');
 
 describe('sendFeeRemindersForSchool', () => {
   it('sends an in-app notification, email and SMS to each linked parent of an outstanding-balance student', async () => {
@@ -98,6 +107,36 @@ describe('sendFeeRemindersForSchool', () => {
     });
 
     expect(count).toBe(1);
+  });
+
+  it('with SMS switched off: in-app and email still go, Termii is not called, no SMS row, one sms_disabled line', async () => {
+    // Control first: the same two parents with SMS on are texted and logged 'sent',
+    // because "nothing was sent" also holds for code that does nothing at all.
+    mockFees.getOutstandingBalances.mockResolvedValueOnce([OUTSTANDING_ROW as never]);
+    mockParents.getParentsForStudent.mockResolvedValueOnce(TWO_PARENTS);
+    expect(await sendFeeRemindersForSchool(SCHOOL_ID, TERM_ID)).toBe(2);
+    expect(mockSendTermiiSms).toHaveBeenCalledTimes(2);
+    expect(mockInsertLog.mock.calls.map(([log]) => log.status)).toEqual(['sent', 'sent']);
+
+    jest.clearAllMocks();
+    mockIsSmsEnabled.mockReturnValue(false);
+    mockSchoolAllowsFeature.mockResolvedValue(true);
+    const infoSpy = jest.spyOn(logger, 'info');
+    const errorSpy = jest.spyOn(logger, 'error');
+    mockFees.getOutstandingBalances.mockResolvedValueOnce([OUTSTANDING_ROW as never]);
+    mockParents.getParentsForStudent.mockResolvedValueOnce(TWO_PARENTS);
+
+    expect(await sendFeeRemindersForSchool(SCHOOL_ID, TERM_ID)).toBe(2);
+
+    expect(mockCreateNotification).toHaveBeenCalledTimes(2);
+    expect(mockSendEmail).toHaveBeenCalledTimes(2);
+    expect(mockSendTermiiSms).not.toHaveBeenCalled();
+    expect(mockHasReachedLimit).not.toHaveBeenCalled();
+    expect(mockInsertLog).not.toHaveBeenCalled();
+    expect(smsDisabledLines(infoSpy)).toEqual([['sms_disabled', expect.objectContaining({ run: 'fee_reminders', school_id: SCHOOL_ID, parents_notified: 2, sms_not_sent: 2 })]]);
+    expect(errorSpy).not.toHaveBeenCalled();
+    infoSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it('skips SMS but still sends in-app and email when the parent has no phone number', async () => {
@@ -184,6 +223,30 @@ describe('runFeeReminders', () => {
 
     expect(mockFees.getOutstandingBalances).toHaveBeenCalledWith('school-1', 'term-1');
     expect(mockFees.getOutstandingBalances).toHaveBeenCalledWith('school-2', 'term-2');
+  });
+
+  it('with SMS switched off, the whole run logs one sms_disabled line, not one per school or parent', async () => {
+    mockIsSmsEnabled.mockReturnValue(false);
+    const infoSpy = jest.spyOn(logger, 'info');
+    const errorSpy = jest.spyOn(logger, 'error');
+    mockAnalytics.listSchoolsWithCurrentTerm.mockResolvedValueOnce([
+      { school_id: 'school-1', term_id: 'term-1' },
+      { school_id: 'school-2', term_id: 'term-2' },
+    ]);
+    mockFees.getOutstandingBalances.mockResolvedValue([OUTSTANDING_ROW as never]);
+    mockParents.getParentsForStudent.mockResolvedValue(TWO_PARENTS);
+
+    await expect(runFeeReminders()).resolves.toBeUndefined();
+
+    expect(mockSendEmail).toHaveBeenCalledTimes(4);
+    expect(mockSendTermiiSms).not.toHaveBeenCalled();
+    expect(mockInsertLog).not.toHaveBeenCalled();
+    expect(smsDisabledLines(infoSpy)).toEqual([['sms_disabled', expect.objectContaining({ run: 'fee_reminders', schools: 2, parents_notified: 4, sms_not_sent: 4 })]]);
+    expect(errorSpy).not.toHaveBeenCalled();
+    mockFees.getOutstandingBalances.mockReset();
+    mockParents.getParentsForStudent.mockReset();
+    infoSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it('continues to the next school if one fails', async () => {
