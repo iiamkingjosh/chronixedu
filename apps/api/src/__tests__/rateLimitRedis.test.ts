@@ -16,7 +16,7 @@
 import request from 'supertest';
 import express from 'express';
 import type { RedisReply } from 'rate-limit-redis';
-import { createRateLimiters, mountRateLimiters } from '../middleware/rateLimit';
+import { createRateLimiters, mountRateLimiters, redisTransport } from '../middleware/rateLimit';
 import { logger } from '../config/logger';
 
 jest.mock('../config/logger', () => ({
@@ -233,5 +233,84 @@ describe('when Redis is unavailable, the limiters fail open', () => {
     // and it recovers on its own once Redis answers again — the 429 is still there
     redis.broken = false;
     expect((await request(app).post('/api/auth/forgot-password')).status).toBe(429);
+  });
+});
+
+/**
+ * A client as ioredis is at boot: still connecting, and (with commandTimeout) failing any command
+ * sent before the connection is ready. `becomeReady` is the connection completing.
+ */
+function connectingClient() {
+  const redis = fakeRedis();
+  const onReady: Array<() => void> = [];
+  const client = {
+    status: 'connecting',
+    once: (_event: 'ready', listener: () => void) => { onReady.push(listener); return client; },
+    call: async (...args: string[]): Promise<RedisReply> => {
+      if (client.status !== 'ready') throw new Error('Command timed out');
+      return redis.send(...args);
+    },
+    becomeReady() { client.status = 'ready'; onReady.splice(0).forEach(fn => fn()); },
+  };
+  return { client, redis };
+}
+
+/** Resolves when the limiters report a store error: a signal the code emits, not a sleep. */
+function storeErrorLogged(): Promise<void> {
+  return new Promise(resolve => {
+    mockLogger.error.mockImplementation(((event: unknown) => {
+      if (event === 'rate_limit_store_unavailable') resolve();
+    }) as never);
+  });
+}
+const storeErrors = () => (mockLogger.error.mock.calls as unknown as Array<[string, Record<string, unknown>]>)
+  .filter(([event]) => event === 'rate_limit_store_unavailable');
+const flush = () => new Promise(resolve => setImmediate(resolve));
+
+describe('at boot, Redis connects after the limiters are built (CHRONIXEDU-API-2)', () => {
+  function appOn(sendCommand: Parameters<typeof createRateLimiters>[0]) {
+    const app = express();
+    mountRateLimiters(app, createRateLimiters(sendCommand));
+    app.post('/api/auth/forgot-password', (_req, res) => res.json({ success: true }));
+    return app;
+  }
+
+  it('without the boot gate, a slow first connect fails the stores at start-up (the control: the race is real)', async () => {
+    const { client } = connectingClient();
+    const logged = storeErrorLogged();
+    appOn((...args: string[]) => client.call(...args) as never); // the transport before 1 Oct
+    await logged;
+    expect(storeErrors()[0][1]).toMatchObject({ error: 'Command timed out' });
+  });
+
+  it('with it, the stores wait for the connection: no start-up error, and the limit bites from the first request', async () => {
+    const { client } = connectingClient();
+    const app = appOn(redisTransport(client));
+    await flush(); // the stores have asked to load their scripts, and are waiting
+    client.becomeReady();
+
+    for (let i = 0; i < 5; i++) expect((await request(app).post('/api/auth/forgot-password')).status).toBe(200);
+    expect((await request(app).post('/api/auth/forgot-password')).status).toBe(429);
+    expect(storeErrors()).toEqual([]);
+  });
+
+  it('after boot nothing waits: a Redis that stops answering fails at once, and requests pass (Round 19)', async () => {
+    const { client } = connectingClient();
+    client.becomeReady();
+    const app = appOn(redisTransport(client));
+    expect((await request(app).post('/api/auth/forgot-password')).status).toBe(200); // working
+
+    client.status = 'reconnecting'; // Redis gone: every command now fails
+    // Default bound is 10s, longer than Jest's 5s timeout: if anything waited here, this would time out.
+    expect((await request(app).post('/api/auth/forgot-password')).status).toBe(200);
+    expect(storeErrors().length).toBeGreaterThan(0);
+  });
+
+  it('a Redis that never connects at boot is still reported, once the bound has passed', async () => {
+    const { client } = connectingClient();
+    const logged = storeErrorLogged();
+    appOn(redisTransport(client, 20)); // never becomes ready
+    await logged;
+    expect(storeErrors()[0][1]).toMatchObject({ error: 'Command timed out' });
   });
 });

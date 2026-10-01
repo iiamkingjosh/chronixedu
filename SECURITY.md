@@ -60,7 +60,19 @@ The other 15 events are in `NOT_ALERTED`, each with its reason. `alerts.test.ts`
 - With the format removed from the logger, the four tests that log through the real logger fail. The "unlisted event is not sent" test passes either way, which is why the control sits beside it.
 - With an unclassified `logger.error` event added to a service, the ratchet fails and names it.
 
-**Open, owner check:** confirm the email for `CHRONIXEDU-API-1` arrived. It is a deliberate local test (environment `development`); resolve it once seen.
+**Owner check, closed 1 Oct 2026:** both alert emails arrived, with event ids matching Sentry's: `a42dde73…` (API-1, development) and `c337e910…` (API-2, below). They go to the Chronix Zoho mailbox, not a personal one. Both issues are resolved.
+
+**Follow-up, the first production event (CHRONIXEDU-API-2, 16:28:09 UTC, release `8303c04`), was a start-up race, not an outage.**
+- 1.77 s after the process started, all three rate limiters' Redis stores failed to load their Lua scripts ("Command timed out"). The stores are built at boot, before the Redis client has connected, and the 500 ms command timeout expired first.
+- No limit was lost: `rate-limit-redis` 5.0.0 reloads its script on the first request (`retryableIncrement`), and there was no `redis_client_error`.
+- It happened on 1 of 32 API boots since 30 Sep. Every fix is a deploy and every deploy a restart, so it would have kept raising "rate limits are OFF" falsely. An alarm that cries wolf in its first week stops being read.
+- **Fix:** the limiters' transport (`redisTransport` in `middleware/rateLimit.ts`) makes a `SCRIPT LOAD` wait for the client's first `ready`, bounded at 10 s. Nothing else waits, and nothing waits after that first `ready`, so a Redis that dies later still fails within 500 ms (Round 19). A Redis that never connects at boot is still reported once the bound passes.
+- **Tests** (`rateLimitRedis.test.ts`, a client that starts "connecting" and fails commands like ioredis's timeout):
+  - the old transport reproduces the start-up error (the control);
+  - the new one logs none, and the limit bites from the first request;
+  - after boot a dead Redis fails at once (a wait would exceed Jest's timeout);
+  - a Redis that never connects is reported.
+- With the gate removed, the second test fails.
 
 ---
 

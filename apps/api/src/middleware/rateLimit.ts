@@ -142,10 +142,44 @@ export function createRateLimiters(sendCommand?: SendCommandFn) {
   return { general, auth, login };
 }
 
-// ioredis.call returns Promise<unknown>; rate-limit-redis expects Promise<RedisReply>.
-// The actual runtime value is always a valid RedisReply — the cast is safe.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const limiters = createRateLimiters(redisClient ? (...args: string[]) => (redisClient as any).call(...args) : undefined);
+/** How long the limiters' script loads wait, at boot only, for Redis's first `ready`. */
+export const BOOT_READY_WAIT_MS = 10_000;
+
+interface RedisLike {
+  status: string;
+  once(event: 'ready', listener: () => void): unknown;
+  call(...args: string[]): Promise<unknown>;
+}
+
+/**
+ * The limiters' Redis transport. Each store loads two Lua scripts the moment it is built, which
+ * is at boot, before the client has connected; with the 500ms command timeout a slow first
+ * connect failed all three stores' loads and raised a false "Redis is unreachable" alert
+ * (CHRONIXEDU-API-2, 1 Oct 2026, 1 boot in 32). The store reloads on its first request, so no
+ * limit was lost, but an alarm that cries wolf on deploys stops being read.
+ *
+ * So a SCRIPT LOAD waits for the client's FIRST `ready`, bounded by `waitMs`, and nothing else
+ * ever waits. Once that first ready (or the bound) has passed, a Redis that stops answering
+ * fails within the 500ms timeout, as Round 19 decided, and a Redis that never connects at boot
+ * is still reported, after the bound.
+ */
+export function redisTransport(client: RedisLike, waitMs: number = BOOT_READY_WAIT_MS): SendCommandFn {
+  const firstReady: Promise<void> = client.status === 'ready'
+    ? Promise.resolve()
+    : new Promise(resolve => {
+      const timer = setTimeout(resolve, waitMs);
+      timer.unref?.();
+      client.once('ready', () => { clearTimeout(timer); resolve(); });
+    });
+  // ioredis.call returns Promise<unknown>; rate-limit-redis expects Promise<RedisReply>.
+  // The actual runtime value is always a valid RedisReply — the cast is safe.
+  return (async (...args: string[]) => {
+    if (args[0]?.toUpperCase() === 'SCRIPT') await firstReady;
+    return client.call(...args);
+  }) as SendCommandFn;
+}
+
+const limiters = createRateLimiters(redisClient ? redisTransport(redisClient) : undefined);
 
 export const generalRateLimiter = limiters.general;
 export const authRateLimiter = limiters.auth;

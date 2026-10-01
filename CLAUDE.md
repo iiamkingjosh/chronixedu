@@ -200,7 +200,9 @@ Monorepo, npm workspaces:
   500s and 503s. The exceptions are the support-session token store and blacklist writers
   in `superAdmin.ts`. While Redis is down both brute-force controls are off; since 1 Oct 2026 the first failure
   raises the `redis_unavailable` Sentry alert (`config/alerts.ts`), once per 15 minutes. Until
-  then nothing alarmed (`docs/AUDIT-2026-09.md`).
+  then nothing alarmed (`docs/AUDIT-2026-09.md`). The one exception to fail-fast is boot: the
+  limiters' script loads wait for Redis's first `ready` (`redisTransport`, bounded 10 s), because
+  building them before the connection raised a false alert (CHRONIXEDU-API-2). Nothing waits after.
 - Login: Supabase `signInWithPassword` verifies the password; the API then signs
   its **own** HS256 JWT (`JWT_SECRET`, 1h) with `user_id, school_id, role, email,
   title, must_change_password, subscription_tier`. Supabase-issued tokens are
