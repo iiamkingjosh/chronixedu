@@ -11,7 +11,9 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 // variable that is set. A test that needs a provider sets a fake key and stubs the call, as
 // feesPayout and payoutSettings do. The marker lets noOutsideWorldKeys.test.ts tell "emptied"
 // from "never there".
-for (const key of ['SENDGRID_API_KEY', 'TERMII_API_KEY', 'PAYSTACK_SECRET_KEY', 'SMS_ENABLED', 'SENTRY_DSN']) {
+// REDIS_URL too (1 Oct 2026): the DB suite already deletes it and CI sets none, so a developer's
+// .env naming a Redis would otherwise be the one local-vs-CI difference left.
+for (const key of ['SENDGRID_API_KEY', 'TERMII_API_KEY', 'PAYSTACK_SECRET_KEY', 'SMS_ENABLED', 'SENTRY_DSN', 'REDIS_URL']) {
   process.env[key] = '';
 }
 process.env.OUTSIDE_WORLD_KEYS_EMPTIED = '1';

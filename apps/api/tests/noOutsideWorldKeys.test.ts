@@ -18,8 +18,8 @@ describe('a local integration run cannot reach a real provider', () => {
     expect(process.env.OUTSIDE_WORLD_KEYS_EMPTIED).toBe('1');
   });
 
-  it('holds no SendGrid, Termii, Paystack or Sentry key, so nothing can email, text or charge', () => {
-    for (const key of ['SENDGRID_API_KEY', 'TERMII_API_KEY', 'PAYSTACK_SECRET_KEY', 'SMS_ENABLED', 'SENTRY_DSN']) {
+  it('holds no SendGrid, Termii, Paystack, Sentry or Redis setting, so nothing can email, text, charge or share state', () => {
+    for (const key of ['SENDGRID_API_KEY', 'TERMII_API_KEY', 'PAYSTACK_SECRET_KEY', 'SMS_ENABLED', 'SENTRY_DSN', 'REDIS_URL']) {
       // Never the value itself: on failure Jest prints it, and it would be a production key.
       const value = process.env[key];
       expect([key, value === '' ? 'empty' : value === undefined ? 'unset' : 'HAS A VALUE']).toEqual([key, 'empty']);

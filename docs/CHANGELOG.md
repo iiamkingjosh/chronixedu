@@ -1,5 +1,10 @@
 # Chronix Edu — Changelog
 
+## Adding people no longer fails at random (2026-10-01)
+
+### For schools
+- Adding a student, parent or staff member, one at a time or in a bulk import, could occasionally fail with an error. A random six-digit support code given to every new account sometimes matched one already in use. New codes are now always unused, and nothing about existing accounts changes.
+
 ## Failures that used to vanish now raise alerts (2026-10-01)
 
 ### For Chronix administrators
