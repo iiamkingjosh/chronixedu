@@ -234,6 +234,16 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   two pages: merged behind a level selector, the page would show a level's *effective* values
   and a save would pin them (doctrine 8). Web unit tests run with `npm run test` in `apps/web`
   (jest, pure TypeScript under `lib/`), and the root `test:unit` runs them after the API's.
+- **The Ctrl+K palette (`components/CommandPalette.tsx`) has no page list of its own.**
+  `lib/commandPalette.ts` builds it from `getNavGroupsForRole`, which rests on
+  `getMainNavForRole`, plus `SETTINGS_NAV_GROUPS`, gated exactly as the sidebar gates Settings:
+  all of it for `isAdminRole`, only Payout Setup for `canAccessPayoutSettings`. Add a page to
+  `navigation.ts` and both the sidebar and the palette get it; never add one to the palette
+  alone, or it will offer a page the role's guard refuses. `commandPalette.test.ts` asserts, per
+  role, that the palette's set EQUALS the expected set, not merely that it is non-empty. It
+  searches pages only; record search needs its own API, tenant scoping and per-record checks.
+  It renders only in the signed-in dashboard layout, never pre-auth. It matches label and
+  description, so "pass mark" finds the grading pages.
 - Record security fixes in `SECURITY.md` (next round, existing format) and
   user-visible changes in `docs/CHANGELOG.md`, in the same PR as the change.
 - New integration tests in `apps/api/tests/` must delete the rows they create in `afterAll`,

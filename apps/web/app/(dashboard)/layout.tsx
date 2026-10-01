@@ -10,6 +10,7 @@ import { useAuth } from '@/app/providers';
 import { isAdminRole, canAccessPayoutSettings } from '@/lib/auth';
 import { getNavGroupsForRole, visibleNavGroups, type NavItem } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
+import CommandPalette from '@/components/CommandPalette';
 import SyncIndicator from '@/components/SyncIndicator';
 import SubscriptionNotice from '@/components/SubscriptionNotice';
 import { endSupportSession } from '@/lib/superAdminApi';
@@ -215,6 +216,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <p className="text-sm text-gray-500 capitalize truncate">{user.role.replace('_', ' ')}</p>
           </div>
           <div className="flex items-center gap-1 shrink-0">
+            <CommandPalette role={user.role} />
             <SyncIndicator variant="dark" />
             <NotificationBell variant="dark" />
           </div>

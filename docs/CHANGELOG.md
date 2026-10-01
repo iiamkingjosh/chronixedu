@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Search for any page with Ctrl K (2026-10-01)
+
+### For schools
+- A **Search** button at the top right of every staff page finds any page you can open. Type part of its name or what it is for: "export" finds Data Export, and "pass mark" finds the grading settings. Each result shows where it lives.
+- Open it with **Ctrl K** (**⌘K** on a Mac), or tap the button on a phone. Arrow keys move, Enter opens the page, and Esc closes.
+- It only ever lists pages your role can open. It searches pages, not students or staff.
+
 ## Onboarding is five steps, and each school sets its own grading (2026-10-01)
 
 ### For Chronix administrators
