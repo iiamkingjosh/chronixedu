@@ -1,5 +1,16 @@
 # Chronix Edu — Changelog
 
+## Failures that used to vanish now raise alerts (2026-10-01)
+
+### For Chronix administrators
+- New alerts:
+  - a new parent's or staff member's welcome email failing to go out;
+  - an announcement or message notification failing;
+  - a deleted platform admin's sign-in account failing to be removed.
+- The end-of-session student promotion now reports when its audit record could not be written.
+- A support session's revoked-token check now reports when Redis cannot answer it. Behaviour is unchanged: the session is still let through, and the ended-session check still applies.
+- When email is not configured, platform announcements no longer print each recipient's address and the message to the server log.
+
 ## A new principal sets their own password (2026-10-01)
 
 ### For schools

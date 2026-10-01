@@ -1384,7 +1384,7 @@ router.post(
         );
         await client.query('COMMIT');
       } catch (err) {
-        await client.query('ROLLBACK').catch(() => undefined);
+        await client.query('ROLLBACK').catch(() => undefined); // silent-ok: the original error is answered or rethrown next
         const refused = billingRefusal(err);
         if (refused) return res.status(409).json({ success: false, error: refused });
         throw err;
@@ -2326,7 +2326,7 @@ router.post(
         if (isEmailConfigured()) {
           await sendEmail(recipient.email, subject, safeBody);
         } else {
-          console.log(`[announcements] SendGrid not configured. Announcement email for ${recipient.email}:\n${subject}\n${announcement.body}`);
+          logger.warn('platform_announcement_email_not_sent', { announcement_id: announcement.id, reason: 'email is not configured on this server' });
         }
       }
       const recipientsCount = recipientsResult.rows.length;
@@ -2688,10 +2688,13 @@ router.delete(
         [req.user!.user_id, req.params.id, JSON.stringify({ deleted_by: req.user!.email, original_email: admin.email }), clientIp(req)]
       );
 
+      // Best-effort: the local lockout below still applies if this fails, but the deleted admin's
+      // Supabase identity, password and all, would remain. Logged and alerted, not swallowed.
       try {
-        await supabaseAdmin.auth.admin.deleteUser(req.params.id);
-      } catch {
-        // Best-effort — local lockout below still applies even if Auth deletion fails.
+        const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(req.params.id);
+        if (authDeleteError) throw authDeleteError;
+      } catch (err) {
+        logger.error('platform_admin_auth_delete_failed', { admin_id: req.params.id, error: err instanceof Error ? err.message : String(err) });
       }
 
       await pool.query(

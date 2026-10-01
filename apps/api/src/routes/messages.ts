@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
+import { logger } from '../config/logger';
 import { verifyToken } from '../middleware/auth';
 import { findUserById } from '../db/queries/users';
 import { createNotification } from '../db/queries/notifications';
@@ -136,9 +137,8 @@ router.post(
         title: notificationTitle,
         body: notificationBody,
         payload: { thread_id: message.thread_id, message_id: message.id },
-      }).catch(() => {
-        // Non-critical — do not surface notification errors to the caller
-      });
+      // The message is saved and answered; a lost notification is logged and alerted, not swallowed.
+      }).catch(err => logger.error('message_notification_failed', { school_id: schoolId, thread_id: message.thread_id, error: err instanceof Error ? err.message : String(err) }));
 
       return res.status(201).json({ success: true, data: message });
     } catch (err) {

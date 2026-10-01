@@ -1,8 +1,36 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 27 — 2026-10-01  
-**Scope:** Onboarding: a mistyped principal address ties the school's principal account to a stranger's mailbox  
-**Round 27 total findings:** 1 (0 Critical · 0 High · 1 Medium) — remediated
+**Latest audit:** Round 28 — 2026-10-01  
+**Scope:** Errors caught and dropped without a trace: an audit write, a revoked-token check, a deleted admin's identity  
+**Round 28 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated
+
+---
+
+## Round 28 — 2026-10-01
+
+### L-01 — Failures caught and dropped, so no log line or alert could ever show them ✅ Remediated
+
+**Found** answering a reviewer's question about step 2's alert list. That list, and its ratchet, see only failures that are *logged*. A scan for handlers that ignore the error (`.catch(() => {})`, `=> undefined`, `=> null`) and empty `catch {}` blocks found these, each now logging a named event:
+
+| Where | What was dropped | Now |
+|---|---|---|
+| `routes/students.ts`, bulk promotion | its audit write (`logAudit(...).catch(() => {})`), awaited and then thrown away, against doctrine 10 | `audit_write_failed` (alerted) |
+| `middleware/detectSupportSession.ts` | the support-token blacklist read: a bare `redis.get` in a silent catch, so with Redis down a revoked support token was accepted and nothing said the check was skipped | through `bestEffort('token_blacklist_unavailable')`: still fails open, now logged and alerted |
+| `routes/superAdmin.ts`, platform-admin deletion | a failed Supabase Auth delete: the local lockout still blocks login, but the deleted admin's identity, password and all, stayed behind | `platform_admin_auth_delete_failed`, new alert `auth_account_left_behind` |
+| `routes/announcements.ts`, `routes/messages.ts` | the whole announcement fan-out, and a message's in-app notification ("non-critical") | `announcement_fanout_failed`, `message_notification_failed` (`notification_lost`) |
+| `routes/students.ts` (3), `routes/users.ts` (1) | the blocks that look up the school and send welcome emails: a failure meant no login details, silently | `welcome_email_failed`, new alert `welcome_email_not_sent` |
+
+**Dead but misleading:** six `sendEmail(...).catch(() => {})`. `sendEmail` never rejects (it logs `sendgrid_email_failed` itself), so they now log a named event instead of reading as "failure ignored".
+
+**Also:** with email not configured, platform announcements `console.log`ged each recipient's address and the message. They now log `platform_announcement_email_not_sent` with the announcement id only.
+
+**Ratchet:** `alerts.test.ts` fails on any such handler in `src` unless it carries `// silent-ok: <reason>`. Three do: two ROLLBACKs whose original error is rethrown or answered, and the alert sender's own catch. Comments are stripped before matching, on CRLF files too. That was the first draft's bug: two comment lines matched because a trailing `\r` defeated the strip. A control runs the scanner on a known sample, in both line endings.
+
+**Tests:**
+- `detectSupportSession.test.ts` (new): a revoked token is refused while Redis answers (the control); with Redis down the session passes **and** `token_blacklist_unavailable` is logged; healthy, nothing is logged. On the pre-change middleware, the second fails.
+- Mutation: an unmarked `.catch(() => {})` added to a service fails the ratchet, naming the file and line.
+
+**Not changed:** the welcome emails these blocks send still carry a temporary password (working checklist item H2).
 
 ---
 

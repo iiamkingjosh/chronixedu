@@ -187,9 +187,9 @@ router.post(
               p.email,
               `Welcome to Chronix Edu — Your Parent Portal Access`,
               welcomeEmailBody({ role: 'parent', name, email: p.email, tempPassword: p.temp_password, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
-            ).catch(() => {});
+            ).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) }));
           }
-        }).catch(() => {});
+        }).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) }));
       }
 
       Sentry.getCurrentScope().addEventProcessor(event => {
@@ -459,13 +459,13 @@ router.post(
                 p.email,
                 'Welcome to Chronix Edu — Your Parent Portal Access',
                 welcomeEmailBody({ role: 'parent', name: `${p.first_name} ${p.last_name}`, email: p.email, tempPassword: parentTempPasswords.get(p.email)!, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
-              ).catch(() => {}))
+              ).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) })))
             );
             if (i + BULK_IMPORT_EMAIL_BATCH_SIZE < allNewParents.length) {
               await new Promise(resolve => setTimeout(resolve, 1000));
             }
           }
-        }).catch(() => {});
+        }).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) }));
       }
 
       // Never let a results-file failure turn an already-successful commit into
@@ -890,7 +890,7 @@ router.post(
         entity:     'student_classes',
         oldValue:   { from_session_id },
         newValue:   { to_session_id, decisions, results },
-      }).catch(() => {});
+      }).catch(err => logger.error('audit_write_failed', { action: 'BULK_PROMOTION', error: err instanceof Error ? err.message : String(err) }));
 
       return res.status(201).json({ success: true, data: { results } });
     } catch (err) {
@@ -993,8 +993,8 @@ router.post(
             email,
             `Welcome to Chronix Edu — Your Parent Portal Access`,
             welcomeEmailBody({ role: 'parent', name: `${first_name} ${last_name}`, email, tempPassword: pw, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
-          ).catch(() => {});
-        }).catch(() => {});
+          ).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) }));
+        }).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) }));
       }
 
       Sentry.getCurrentScope().addEventProcessor(event => {

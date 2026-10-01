@@ -179,7 +179,7 @@ async function mergeSettingsColumn(
     const prior = rows[0]?.cfg ?? {};
     return Object.fromEntries(Object.keys(patch).map(k => [k, prior[k] ?? null]));
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => undefined);
+    await client.query('ROLLBACK').catch(() => undefined); // silent-ok: the original error is rethrown next
     throw err;
   } finally {
     client.release();

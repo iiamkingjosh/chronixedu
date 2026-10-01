@@ -295,6 +295,11 @@ Monorepo, npm workspaces:
   fixture the test needs (preferred — `__db_tests__` has a deterministic `seed()`), or skip
   with `it.skip` / a probe whose stated reason reaches the output, as
   `studentsBulkImport` does. Never a `console.warn` and an early return.
+- **Never swallow an error.** `.catch(() => {})`, `=> undefined`, `=> null` and an empty `catch {}`
+  fail `alerts.test.ts` unless the handler carries `// silent-ok: <reason>` (two ROLLBACKs that
+  rethrow, the alert sender's own catch). Log a named event instead and classify it in
+  `config/alerts.ts`. Seven silent paths were found on 1 Oct 2026, one an audit write (SECURITY.md
+  Round 28). The ratchet sees only what is LOGGED, so a dropped error is the one failure it cannot.
 - **Never write a queue row or an audit row fire-and-forget, and never swallow its failure.**
   `audit_logs` doubles as the notification queue (`*_NOTIFICATION_QUEUED`), so a write that
   outlives its request, or ends in `.catch(() => {})`, can lose a parent notification while

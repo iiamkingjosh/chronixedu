@@ -434,7 +434,7 @@ router.post(
         existing.email,
         'Password Reset Request',
         `A password reset has been requested for your Chronix Edu account.\n\nClick the link below to reset your password:\n\n${actionLink}\n\nThis link expires shortly. If you did not request this, you can safely ignore this email.`
-      ).catch(() => {});
+      ).catch(err => logger.error('password_reset_link_email_failed', { user_id: existing.id, error: err instanceof Error ? err.message : String(err) }));
 
       await logAudit({
         supportSession: req.supportSession,
@@ -745,13 +745,13 @@ router.post(
                 s.email,
                 'Welcome to Chronix Edu — Your Staff Account is Ready',
                 welcomeEmailBody({ role: s.role, name: `${s.first_name} ${s.last_name}`, email: s.email, tempPassword: staffTempPasswords.get(s.email)!, schoolName, appUrl, introVerb: 'added' })
-              ).catch(() => {}))
+              ).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) })))
             );
             if (i + STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE < createdStaff.length) {
               await new Promise(resolve => setTimeout(resolve, 1000));
             }
           }
-        }).catch(() => {});
+        }).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) }));
       }
 
       // Never let a post-write side effect turn an already-successful commit

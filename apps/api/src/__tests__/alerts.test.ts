@@ -137,6 +137,53 @@ describe('the list is complete and current (ratchet)', () => {
     expect(listed.filter(e => !code.includes(`'${e}'`))).toEqual([]);
   });
 
+  /**
+   * Item G (1 Oct 2026): a failure the code catches and drops, without a log line, is invisible to
+   * every list above. Seven were found that way, one of them an audit write. A handler that ignores
+   * the error (`.catch(() => {})`, `=> undefined`, `=> null`) or an empty `catch {}` must carry
+   * `// silent-ok: <reason>` on its lines. Comments are stripped first, so prose about the pattern
+   * is not a hit.
+   */
+  function silentCatches(source: string): Array<{ line: number; marked: boolean }> {
+    // CRLF too: most of src is CRLF, and a trailing \r stopped the comment strip from matching.
+    const lines = source.split(/\r?\n/);
+    const stripped = lines.map(l => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n');
+    const found: Array<{ line: number; marked: boolean }> = [];
+    for (const re of [/\.catch\(\s*\(\s*\w*\s*\)\s*=>\s*(\{\s*\}|undefined|null)\s*\)/g, /catch\s*(\([^)]*\))?\s*\{\s*\}/g]) {
+      for (const m of stripped.matchAll(re)) {
+        const start = stripped.slice(0, m.index).split('\n').length;
+        const end = start + m[0].split('\n').length - 1;
+        found.push({ line: start, marked: /silent-ok: \S/.test(lines.slice(start - 1, end).join('\n')) });
+      }
+    }
+    return found;
+  }
+
+  it('the silent-catch scanner finds what it must (the control)', () => {
+    const sample = [
+      'p.catch(() => {});',
+      'q.catch(() => undefined); // silent-ok: rethrown below',
+      'try { a(); } catch {',
+      '  // nothing',
+      '}',
+      '// p.catch(() => {}) in a comment is prose, not code',
+    ].join('\n');
+    const expected = [
+      { line: 1, marked: false },
+      { line: 2, marked: true },
+      { line: 3, marked: false },
+    ];
+    expect(silentCatches(sample)).toEqual(expected);
+    expect(silentCatches(sample.replace(/\n/g, '\r\n'))).toEqual(expected); // most of src is CRLF
+  });
+
+  it('no error is caught and dropped without a stated reason (item G)', () => {
+    const unmarked = files.flatMap(f => silentCatches(fs.readFileSync(f, 'utf8'))
+      .filter(c => !c.marked)
+      .map(c => `${path.relative(SRC, f)}:${c.line}`));
+    expect(unmarked).toEqual([]);
+  });
+
   it('logger.error is never called with a computed event name, except inside bestEffort', () => {
     const dynamic = files
       .filter(f => !f.endsWith(path.join('config', 'alerts.ts')))

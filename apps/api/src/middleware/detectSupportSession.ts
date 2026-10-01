@@ -2,7 +2,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db/client';
-import { redis } from './rateLimit';
+import { redis, bestEffort } from './rateLimit';
 import type { AuthUser, SupportSessionContext } from './auth';
 
 export interface SupportSessionClaims {
@@ -48,13 +48,13 @@ export async function detectSupportSession(
 
   // Check if this token has been explicitly revoked (e.g. the session was ended early).
   if (redis) {
-    try {
-      const isBlacklisted = await redis.get(`blacklisted_token:${token}`);
-      if (isBlacklisted) {
-        return res.status(401).json({ success: false, error: { code: 'TOKEN_REVOKED', message: 'Token has been revoked' } });
-      }
-    } catch {
-      // Redis unavailable — fail open; the DB ended_at check below still gates access.
+    // Through bestEffort like every request-path Redis read (CLAUDE.md, Auth): a failure is logged
+    // and raises the Redis alert, and answers undefined, so this still fails open. The DB ended_at
+    // check below still gates access. It used to be a bare redis.get in a silent catch.
+    const r = redis;
+    const isBlacklisted = await bestEffort('token_blacklist_unavailable', () => r.get(`blacklisted_token:${token}`));
+    if (isBlacklisted) {
+      return res.status(401).json({ success: false, error: { code: 'TOKEN_REVOKED', message: 'Token has been revoked' } });
     }
   }
 

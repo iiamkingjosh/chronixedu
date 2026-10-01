@@ -111,16 +111,15 @@ router.post(
           for (let i = 0; i < targets.length; i += BATCH_SIZE) {
             const batch = targets.slice(i, i + BATCH_SIZE);
             await Promise.all(
-              batch.map(t => sendEmail(t.email, `Announcement: ${title}`, sanitizeHtml(body, { allowedTags: [], allowedAttributes: {} })).catch(() => {}))
+              batch.map(t => sendEmail(t.email, `Announcement: ${title}`, sanitizeHtml(body, { allowedTags: [], allowedAttributes: {} })).catch(err => logger.error('announcement_email_failed', { school_id: schoolId, error: err instanceof Error ? err.message : String(err) })))
             );
             if (i + BATCH_SIZE < targets.length) {
               await new Promise(resolve => setTimeout(resolve, 1000));
             }
           }
         })
-        .catch(() => {
-          // Non-critical — do not surface notification errors to the caller
-        });
+        // The announcement is saved and answered; a failed fan-out is logged and alerted, not swallowed.
+        .catch(err => logger.error('announcement_fanout_failed', { school_id: schoolId, error: err instanceof Error ? err.message : String(err) }));
 
       return res.status(201).json({ success: true, data: announcement });
     } catch (err) {

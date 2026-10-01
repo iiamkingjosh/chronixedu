@@ -60,7 +60,7 @@ export const ALERTS = {
   email_failing: {
     why: 'Sending email through SendGrid is failing: notifications and receipts are queued for retry, or lost if the queue write failed too',
     level: 'error',
-    events: ['sendgrid_email_failed', 'email_queue_insert_failed'],
+    events: ['sendgrid_email_failed', 'email_queue_insert_failed', 'announcement_email_failed', 'password_reset_link_email_failed'],
     fields: ['error'],
   },
   password_reset_email_failing: {
@@ -72,7 +72,10 @@ export const ALERTS = {
   notification_lost: {
     why: 'A parent or teacher notification could not be queued or delivered',
     level: 'error',
-    events: ['parent_notification_queue_failed', 'teacher_notification_queue_failed', 'notification_worker_row_failed', 'notification_worker_error'],
+    events: [
+      'parent_notification_queue_failed', 'teacher_notification_queue_failed', 'notification_worker_row_failed', 'notification_worker_error',
+      'announcement_fanout_failed', 'message_notification_failed',
+    ],
     fields: ['notification_type', 'error'],
   },
   payout_change_alert_failed: {
@@ -117,6 +120,18 @@ export const ALERTS = {
       'staff_bulk_import_summary_audit_log_failed', 'payment_bulk_import_summary_audit_log_failed',
     ],
     fields: ['action', 'error', 'err'],
+  },
+  welcome_email_not_sent: {
+    why: "A new account's welcome email was not sent: the person has no login details unless someone passes them on",
+    level: 'error',
+    events: ['welcome_email_failed'],
+    fields: ['stage', 'error'],
+  },
+  auth_account_left_behind: {
+    why: "A deleted platform admin's Supabase Auth account could not be deleted: the local lockout blocks login, but the identity remains",
+    level: 'error',
+    events: ['platform_admin_auth_delete_failed'],
+    fields: ['admin_id', 'error'],
   },
   payment_callback_url_missing: {
     why: 'API_BASE_URL is not set: Paystack sends payers back to localhost after they pay',
@@ -215,7 +230,7 @@ export const alertFormat = winston.format(info => {
   try {
     alertFromLog(info as Record<string, unknown>);
   } catch {
-    // An alert must never break logging. There is nowhere safer to report this failure.
+    // silent-ok: an alert must never break logging, and there is nowhere safer to report this failure.
   }
   return info;
 });
