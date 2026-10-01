@@ -15,7 +15,7 @@ import {
   markSubjectSubmitted,
   returnSubjectsToDraft,
 } from '../db/queries/results';
-import { computeClassResults } from '../services/resultEngine';
+import { computeClassResults, resolveGradingScale } from '../services/resultEngine';
 import { startReportCardBatch, getJob, signReportCardAsset } from '../services/reportCardService';
 import { getReportCardsForClass, publishReportCards } from '../db/queries/reportCards';
 import pool from '../db/client';
@@ -398,6 +398,21 @@ router.post(
       const { class_id, term_id } = parsed.data;
       const userId   = req.user!.user_id;
       const schoolId = req.params.schoolId;
+
+      // No grading scale, no publishing. A school's scale is its own decision (doctrine 8):
+      // nothing seeds one, and the engine has no fallback, so an unset scale would publish
+      // results with no grades. Refuse, and say exactly what is missing. Checked first so
+      // the reason is never masked by a later refusal.
+      if ((await resolveGradingScale(schoolId, class_id)).length === 0) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'GRADING_SCALE_NOT_SET',
+            message: 'Set your grading scale first: this class has no grading scale, so its results cannot be graded or published. Settings → Grading Scale (or Grading by Level, if this class has a level of its own).',
+            missing: 'grading_scale',
+          },
+        });
+      }
 
       const students = await getStudentsInClassWithStatus(class_id, term_id, schoolId);
       if (students.length === 0) {

@@ -92,56 +92,23 @@ describe('Onboarding Wizard', () => {
     expect(res.body.success).toBe(true);
   });
 
-  it('PATCH step/3 (calendar — 3 terms) → 200', async () => {
+  it('PATCH step/3 (calendar — one current term) → 200', async () => {
     const res = await request(app)
       .patch(`/api/super-admin/onboarding/${sessionId}/step/3`)
       .set('Authorization', `Bearer ${superAdminToken}`)
       .send({
         session_name: '2025/2026',
-        terms: [
-          { name: 'First Term',  start_date: '2025-09-08', end_date: '2025-12-12' },
-          { name: 'Second Term', start_date: '2026-01-05', end_date: '2026-04-03' },
-          { name: 'Third Term',  start_date: '2026-04-27', end_date: '2026-07-24' },
-        ],
+        term: { name: 'First Term', start_date: '2025-09-08', end_date: '2025-12-12' },
       });
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
 
-  it('PATCH step/4 (grading — valid grade bands) → 200', async () => {
+
+
+  it('PATCH step/4 (principal account) → 200, has temp_password', async () => {
     const res = await request(app)
       .patch(`/api/super-admin/onboarding/${sessionId}/step/4`)
-      .set('Authorization', `Bearer ${superAdminToken}`)
-      .send({
-        grades: [
-          { label: 'A', min: 70, max: 100, remark: 'Excellent' },
-          { label: 'B', min: 60, max: 69,  remark: 'Very Good' },
-          { label: 'C', min: 50, max: 59,  remark: 'Good'      },
-          { label: 'D', min: 40, max: 49,  remark: 'Pass'      },
-          { label: 'F', min: 0,  max: 39,  remark: 'Fail'      },
-        ],
-      });
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-  });
-
-  it('PATCH step/5 (assessment — components summing to 100%) → 200', async () => {
-    const res = await request(app)
-      .patch(`/api/super-admin/onboarding/${sessionId}/step/5`)
-      .set('Authorization', `Bearer ${superAdminToken}`)
-      .send({
-        components: [
-          { name: 'CA 1',        max_score: 10, weight_percent: 30 },
-          { name: 'Examination', max_score: 70, weight_percent: 70 },
-        ],
-      });
-    expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
-  });
-
-  it('PATCH step/6 (principal account) → 200, has temp_password', async () => {
-    const res = await request(app)
-      .patch(`/api/super-admin/onboarding/${sessionId}/step/6`)
       .set('Authorization', `Bearer ${superAdminToken}`)
       .send({ first_name: 'Wizard', last_name: 'Principal', email: principalEmail });
     expect(res.status).toBe(200);

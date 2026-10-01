@@ -15,7 +15,7 @@
  *     lookup had been silently 403-ing against the admin-only directory.
  */
 import request from 'supertest';
-import { buildApp, seed, tokens, IDS as I, pool } from './helpers';
+import { buildApp, seed, setGradingScale, tokens, IDS as I, pool } from './helpers';
 
 const app = buildApp();
 const base = `/api/schools/${I.schoolA}`;
@@ -57,7 +57,9 @@ const studentDashboard = () =>
   request(app).get(`${base}/student/dashboard?term_id=${I.termA}`)
     .set('Authorization', tokens.studentS1());
 
-beforeEach(seed);
+// Publishing requires a grading scale (POST /results/publish refuses GRADING_SCALE_NOT_SET
+// otherwise); this suite is about what publishing reveals, so it sets one explicitly.
+beforeEach(async () => { await seed(); await setGradingScale(I.schoolA); });
 afterAll(() => pool.end());
 
 describe('H1: unpublished results are hidden from parents', () => {

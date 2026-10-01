@@ -1,5 +1,15 @@
 # Chronix Edu — Changelog
 
+## Onboarding is five steps, and each school sets its own grading (2026-10-01)
+
+### For Chronix administrators
+- Onboarding a school now has five steps: Info, Branding, Calendar, Admin, Review. The Grading and Assessment steps are gone.
+- The Calendar step asks for one term only, the one the school is starting in. The step that previously would not let you continue is fixed. Later terms are added from Settings → Academic Structure.
+
+### For schools
+- A new school starts with no grading scale, pass mark or assessment structure. The principal sets them in Settings, and nothing is filled in on the school's behalf.
+- Results cannot be published until the class has a grading scale. The message says so and points to Settings → Grading Scale.
+
 ## Every new school is marked customer or demo (2026-10-01)
 
 ### For Chronix administrators

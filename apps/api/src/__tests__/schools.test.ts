@@ -81,7 +81,7 @@ const SCHOOL_ROW = {
 // ── POST /api/schools ──────────────────────────────────────────────────────────
 
 describe('POST /api/schools', () => {
-  it('creates school + seeds defaults, returns 201', async () => {
+  it('creates school, seeds identity and calendar templates only — no grading scale, pass mark or components — returns 201', async () => {
     mockQueries.insertSchool.mockResolvedValueOnce({
       id: 'school-uuid-001', name: 'Test School', slug: 'test-school',
       is_active: true, subscription_tier: null, created_at: '', updated_at: '',
@@ -100,8 +100,14 @@ describe('POST /api/schools', () => {
     expect(mockQueries.insertSchoolSettings).toHaveBeenCalledWith(
       'school-uuid-001',
       expect.objectContaining({ name: 'Test School' }),
-      expect.objectContaining({ promotion_cutoff: 40, grading_scale: expect.any(Array) })
+      expect.objectContaining({ calendar: expect.any(Array) })
     );
+    // Doctrine 8: nothing is chosen on the school's behalf. These were NIGERIAN_DEFAULTS until
+    // 1 Oct 2026 — a 40% pass mark and a scale nobody picked, on every new school.
+    const academic = (mockQueries.insertSchoolSettings as jest.Mock).mock.calls[0][2];
+    expect(academic).not.toHaveProperty('grading_scale');
+    expect(academic).not.toHaveProperty('promotion_cutoff');
+    expect(academic).not.toHaveProperty('assessment_components');
   });
 
   it('requires an explicit is_demo: a stated choice succeeds, an omitted one is refused before any insert', async () => {

@@ -18,6 +18,16 @@ jest.mock('../services/reportCardService', () => ({
   startReportCardBatch: jest.fn(),
   getJob: jest.fn(),
 }));
+// Publishing refuses without a grading scale (GRADING_SCALE_NOT_SET). These tests are about
+// what publishing releases, so the class has a scale — stated here, not assumed.
+const A_SCALE = [{ grade: 'A', min: 0, max: 100, label: 'All', remark: '' }];
+jest.mock('../services/resultEngine', () => ({
+  ...jest.requireActual('../services/resultEngine'),
+  resolveGradingScale: jest.fn(),
+}));
+import * as resultEngine from '../services/resultEngine';
+const mockResolveGradingScale = resultEngine.resolveGradingScale as jest.Mock;
+beforeEach(() => mockResolveGradingScale.mockResolvedValue(A_SCALE));
 
 const mockResults = resultsQueries as jest.Mocked<typeof resultsQueries>;
 const mockReportCards = reportCardsQueries as jest.Mocked<typeof reportCardsQueries>;
@@ -97,6 +107,19 @@ describe('POST /:schoolId/results/publish — wires up report_cards.is_published
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('NOT_ALL_APPROVED');
+    expect(mockResults.batchUpsertStatuses).not.toHaveBeenCalled();
+    expect(mockReportCards.publishReportCards).not.toHaveBeenCalled();
+  });
+
+  it('refuses with GRADING_SCALE_NOT_SET when the class has no grading scale, and publishes nothing', async () => {
+    mockResolveGradingScale.mockResolvedValueOnce([]);
+    const res = await request(app)
+      .post(`/api/schools/${SCHOOL_ID}/results/publish`)
+      .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`)
+      .send({ class_id: CLASS_ID, term_id: TERM_ID });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toMatchObject({ code: 'GRADING_SCALE_NOT_SET', missing: 'grading_scale' });
+    expect(mockResolveGradingScale).toHaveBeenCalledWith(SCHOOL_ID, CLASS_ID);
     expect(mockResults.batchUpsertStatuses).not.toHaveBeenCalled();
     expect(mockReportCards.publishReportCards).not.toHaveBeenCalled();
   });

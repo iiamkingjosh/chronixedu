@@ -192,6 +192,16 @@ async function fetchAcademicConfig(schoolId: string, classId?: string | null): P
   };
 }
 
+/**
+ * The grading scale a class's results are graded with, resolved exactly as the engine
+ * resolves it (level override, else school-wide). [] means the school never set one —
+ * there is no fallback, by design: POST /results/publish refuses on [] rather than
+ * releasing ungraded results.
+ */
+export async function resolveGradingScale(schoolId: string, classId: string): Promise<GradeBand[]> {
+  return (await fetchAcademicConfig(schoolId, classId)).grading_scale;
+}
+
 export async function getStudentClassId(studentId: string, termId: string): Promise<string | null> {
   const result = await pool.query<{ class_id: string }>(
     `SELECT sc.class_id

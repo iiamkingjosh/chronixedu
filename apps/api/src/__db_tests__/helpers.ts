@@ -232,4 +232,23 @@ export async function seed(): Promise<void> {
   }
 }
 
+/**
+ * A school's grading scale, set EXPLICITLY. The seed gives no school a scale on purpose —
+ * nothing seeds one in production either (doctrine 8), and POST /results/publish refuses
+ * with GRADING_SCALE_NOT_SET until one is set. A suite that publishes calls this in its own
+ * setup, through the same upsert the settings page uses.
+ */
+export async function setGradingScale(schoolId: string): Promise<void> {
+  const { updateAcademicConfig } = await import('../db/queries/schools');
+  await updateAcademicConfig(schoolId, {
+    grading_scale: [
+      { grade: 'A', min: 70, max: 100, label: 'Excellent', remark: 'Excellent' },
+      { grade: 'B', min: 60, max: 69, label: 'Very Good', remark: 'Very good' },
+      { grade: 'C', min: 50, max: 59, label: 'Good', remark: 'Good' },
+      { grade: 'D', min: 40, max: 49, label: 'Pass', remark: 'Pass' },
+      { grade: 'F', min: 0, max: 39, label: 'Fail', remark: 'Fail' },
+    ],
+  });
+}
+
 export { pool };

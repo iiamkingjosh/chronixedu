@@ -3,7 +3,7 @@
  * class + subject. Each test here failed against the pre-audit code.
  */
 import request from 'supertest';
-import { buildApp, seed, tokens, IDS as I, pool } from './helpers';
+import { buildApp, seed, setGradingScale, tokens, IDS as I, pool } from './helpers';
 
 const app = buildApp();
 const base = `/api/schools/${I.schoolA}`;
@@ -25,7 +25,9 @@ const classAction = (action: 'approve' | 'publish', body: Record<string, unknown
   request(app).post(`${base}/results/${action}`).set('Authorization', tokens.principalA())
     .send({ class_id: I.jss2a, term_id: I.termA, ...body });
 
-beforeEach(seed);
+// Publishing requires a grading scale (GRADING_SCALE_NOT_SET otherwise); this suite is about
+// the status workflow, so it sets one explicitly.
+beforeEach(async () => { await seed(); await setGradingScale(I.schoolA); });
 afterAll(() => pool.end());
 
 describe('C-1: scores are unique per subject', () => {

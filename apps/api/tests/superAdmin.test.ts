@@ -615,49 +615,32 @@ describe('superAdmin — platform school management', () => {
       expect(res.body.data.completed).toBe(true);
     });
 
-    // ── PATCH /onboarding/:sessionId/step/5 ──────────────────────────────
+    // ── Removed steps ─────────────────────────────────────────────────────
+    // The wizard is five screens since 1 Oct 2026 (Info, Branding, Calendar, Admin, Review);
+    // the grading and assessment steps are gone and their numbers are not reused for them.
 
-    it('PATCH /onboarding/:sessionId/step/5 — weights not summing to 100 → 400 WEIGHT_SUM_ERROR', async () => {
+    it('PATCH /onboarding/:sessionId/step/5 — no longer a saved step → 400 INVALID_STEP', async () => {
       const res = await request(app)
         .patch(`/api/super-admin/onboarding/${sessionId}/step/5`)
         .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({
-          components: [
-            { name: 'CA 1', max_score: 10, weight_percent: 30 },
-            { name: 'Examination', max_score: 70, weight_percent: 60 },
-          ],
-        });
+        .send({ components: [{ name: 'Examination', max_score: 100, weight_percent: 100 }] });
       expect(res.status).toBe(400);
-      expect(res.body.error.code).toBe('WEIGHT_SUM_ERROR');
+      expect(res.body.error.code).toBe('INVALID_STEP');
     });
 
-    it('PATCH /onboarding/:sessionId/step/5 — valid components summing to 100 → 200', async () => {
-      const res = await request(app)
-        .patch(`/api/super-admin/onboarding/${sessionId}/step/5`)
-        .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({
-          components: [
-            { name: 'CA 1', max_score: 10, weight_percent: 30 },
-            { name: 'Examination', max_score: 70, weight_percent: 70 },
-          ],
-        });
-      expect(res.status).toBe(200);
-      expect(res.body.success).toBe(true);
-    });
+    // ── PATCH /onboarding/:sessionId/step/4 (principal) ──────────────────
 
-    // ── PATCH /onboarding/:sessionId/step/6 ──────────────────────────────
-
-    it('PATCH /onboarding/:sessionId/step/6 — missing email → 400', async () => {
+    it('PATCH /onboarding/:sessionId/step/4 — missing email → 400', async () => {
       const res = await request(app)
-        .patch(`/api/super-admin/onboarding/${sessionId}/step/6`)
+        .patch(`/api/super-admin/onboarding/${sessionId}/step/4`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send({ first_name: 'Jane', last_name: 'Doe' });
       expect(res.status).toBe(400);
     });
 
-    itLiveAuth('PATCH /onboarding/:sessionId/step/6 — valid principal data → 200, has temp_password in response', async () => {
+    itLiveAuth('PATCH /onboarding/:sessionId/step/4 — valid principal data → 200, has temp_password in response', async () => {
       const res = await request(app)
-        .patch(`/api/super-admin/onboarding/${sessionId}/step/6`)
+        .patch(`/api/super-admin/onboarding/${sessionId}/step/4`)
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send({ first_name: 'Jane', last_name: 'Doe', email: principalEmail });
       expect(res.status).toBe(200);
@@ -682,7 +665,7 @@ describe('superAdmin — platform school management', () => {
       expect(res.body.error.code).toBe('INCOMPLETE_WIZARD');
     });
 
-    itLiveAuth('POST /onboarding/:sessionId/complete — after completing steps 1-6 → 200, school is_active=true', async () => {
+    itLiveAuth('POST /onboarding/:sessionId/complete — after completing steps 1-4 → 200, school is_active=true', async () => {
       const step2Res = await request(app)
         .patch(`/api/super-admin/onboarding/${sessionId}/step/2`)
         .set('Authorization', `Bearer ${superAdminToken}`)
@@ -694,27 +677,9 @@ describe('superAdmin — platform school management', () => {
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send({
           session_name: '2025/2026',
-          terms: [
-            { name: 'First Term', start_date: '2025-09-08', end_date: '2025-12-12' },
-            { name: 'Second Term', start_date: '2026-01-05', end_date: '2026-04-03' },
-            { name: 'Third Term', start_date: '2026-04-27', end_date: '2026-07-24' },
-          ],
+          term: { name: 'First Term', start_date: '2025-09-08', end_date: '2025-12-12' },
         });
       expect(step3Res.status).toBe(200);
-
-      const step4Res = await request(app)
-        .patch(`/api/super-admin/onboarding/${sessionId}/step/4`)
-        .set('Authorization', `Bearer ${superAdminToken}`)
-        .send({
-          grades: [
-            { label: 'A', min: 70, max: 100, remark: 'Excellent' },
-            { label: 'B', min: 60, max: 69, remark: 'Very Good' },
-            { label: 'C', min: 50, max: 59, remark: 'Good' },
-            { label: 'D', min: 40, max: 49, remark: 'Pass' },
-            { label: 'F', min: 0, max: 39, remark: 'Fail' },
-          ],
-        });
-      expect(step4Res.status).toBe(200);
 
       const completeRes = await request(app)
         .post(`/api/super-admin/onboarding/${sessionId}/complete`)

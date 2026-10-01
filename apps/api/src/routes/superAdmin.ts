@@ -8,12 +8,12 @@ import { clientIp } from '../middleware/clientIp';
 import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
-import { insertSchoolSettings, updateIdentityConfig, updateAcademicConfig, schoolHasPrincipal } from '../db/queries/schools';
+import { insertSchoolSettings, updateIdentityConfig, schoolHasPrincipal } from '../db/queries/schools';
 import { getPlatformRevenue } from '../db/queries/platformRevenue';
 import { planEnum } from '../services/planFeatures';
 import { csvCell } from '../services/csv';
 import { cache, schoolCacheKey } from '../services/cacheService';
-import { NIGERIAN_DEFAULTS } from '../services/schoolService';
+import { newSchoolAcademicConfig } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
 import { getRecentErrorCount } from '../services/platformAnalyticsService';
 import { redis } from '../middleware/rateLimit';
@@ -258,39 +258,23 @@ export function validateTermRanges(
   }
 }
 
+/**
+ * Step 3: ONE term — the term the school is starting in, which becomes its current term.
+ * The wizard used to offer three rows and pre-fill all three names, so its "is this row
+ * touched?" check was always true and Next never enabled. With a single required term there
+ * is no optional-row inference left to get wrong. Later terms are added afterwards via
+ * POST /:schoolId/sessions/:sessionId/terms, which keeps the overlap checks
+ * (validateTermRanges) that a single term cannot need.
+ */
 const onboardingStep3Schema = z
   .object({
-    session_name: z.string().min(1),
-    // Only the term the school is actually starting in is required. A school rarely
-    // knows its second- and third-term dates at sign-up, and Nigerian calendars shift
-    // (holidays, strikes, elections) — so the remaining terms are added later via
-    // POST /:schoolId/sessions/:sessionId/terms, and dates stay editable via PATCH.
-    terms: z.array(onboardingTermSchema).min(1, 'At least the current term is required').max(3, 'A session has at most 3 terms'),
+    session_name: z.string().trim().min(1),
+    term: onboardingTermSchema,
   })
-  .superRefine((data, ctx) => validateTermRanges(data.terms, ctx));
+  .superRefine((data, ctx) => validateTermRanges([data.term], ctx));
 
-const onboardingGradeSchema = z.object({
-  label: z.string().min(1),
-  min: z.number().min(0).max(100),
-  max: z.number().min(0).max(100),
-  remark: z.string(),
-});
-
+// Step 4: the principal account (was step 6 before 1 Oct 2026).
 const onboardingStep4Schema = z.object({
-  grades: z.array(onboardingGradeSchema).min(1),
-});
-
-const onboardingComponentSchema = z.object({
-  name: z.string().min(1),
-  max_score: z.number().positive(),
-  weight_percent: z.number().positive(),
-});
-
-const onboardingStep5Schema = z.object({
-  components: z.array(onboardingComponentSchema).min(1),
-});
-
-const onboardingStep6Schema = z.object({
   first_name: z.string().min(1),
   last_name: z.string().min(1),
   email: z.string().email(),
@@ -301,7 +285,21 @@ const completeOnboardingSchema = z.object({
   accepted_legal_terms: z.literal(true),
 });
 
-const ONBOARDING_TOTAL_STEPS = 6;
+/**
+ * The wizard is five screens since 1 Oct 2026: 1 Info, 2 Branding, 3 Calendar, 4 Admin,
+ * 5 Review. Review is POST /complete, not a saved step, so the SAVED steps — the ones
+ * steps_completed records and /complete requires — are 1..4. The grading and assessment
+ * steps were removed: the principal sets both in Settings, and nothing is seeded in their
+ * place (doctrine 8).
+ *
+ * Renumbered rather than keeping 1,2,3,6 with gaps. The only stored sessions were one
+ * completed (Moses's pilot, keys 1-6 under the old numbering) and one abandoned in-progress
+ * row, deleted on 1 Oct 2026. Nothing reads a completed session's keys — /complete and
+ * resume both refuse anything not in_progress — so the old keys stay as history and
+ * cannot be misread.
+ */
+const ONBOARDING_SAVED_STEPS = [1, 2, 3, 4] as const;
+const ONBOARDING_TOTAL_STEPS = ONBOARDING_SAVED_STEPS.length;
 
 // ── Announcement schemas ─────────────────────────────────────────────────────
 
@@ -1426,7 +1424,7 @@ function generateTempPassword(): string {
   return chars.join('');
 }
 
-/** Ensures a school_settings row exists for the school, inserting Nigerian defaults if missing. */
+/** Ensures a school_settings row exists for the school: identity, plus calendar templates only. */
 async function ensureSchoolSettings(schoolId: string, schoolName: string): Promise<void> {
   const existing = await pool.query(`SELECT id FROM school_settings WHERE school_id = $1`, [schoolId]);
   if (existing.rows[0]) return;
@@ -1439,31 +1437,8 @@ async function ensureSchoolSettings(schoolId: string, schoolName: string): Promi
     primary_colour: null,
     secondary_colour: null,
   };
-  await insertSchoolSettings(schoolId, identityConfig, NIGERIAN_DEFAULTS as unknown as Record<string, unknown>);
-}
-
-/** Returns null if the grading scale is valid, otherwise a specific error message. */
-function validateOnboardingGrades(grades: { label: string; min: number; max: number; remark: string }[]): string | null {
-  for (const grade of grades) {
-    if (grade.min >= grade.max) {
-      return `Grade ${grade.label}: min (${grade.min}) must be less than max (${grade.max})`;
-    }
-  }
-
-  const sorted = [...grades].sort((a, b) => a.min - b.min);
-
-  if (sorted[0].min !== 0) {
-    return `Grading scale must start at 0. Lowest min is ${sorted[0].min}`;
-  }
-  if (sorted[sorted.length - 1].max !== 100) {
-    return `Grading scale must end at 100. Highest max is ${sorted[sorted.length - 1].max}`;
-  }
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].min !== sorted[i - 1].max + 1) {
-      return `Gap in grading scale between ${sorted[i - 1].label} (max ${sorted[i - 1].max}) and ${sorted[i].label} (min ${sorted[i].min})`;
-    }
-  }
-  return null;
+  // No grading scale, pass mark or assessment components — the school sets its own (doctrine 8).
+  await insertSchoolSettings(schoolId, identityConfig, newSchoolAcademicConfig());
 }
 
 // ── GET /onboarding ──────────────────────────────────────────────────────────
@@ -1579,7 +1554,7 @@ router.get(
 );
 
 // ── PATCH /onboarding/:sessionId/step/:stepNumber ────────────────────────────
-// Saves progress for one step (1-7) of the onboarding wizard.
+// Saves progress for one saved step (1-4) of the onboarding wizard; step 5 is /complete.
 
 router.patch(
   '/onboarding/:sessionId/step/:stepNumber',
@@ -1588,7 +1563,7 @@ router.patch(
     try {
       const stepNumber = Number(req.params.stepNumber);
       if (!Number.isInteger(stepNumber) || stepNumber < 1 || stepNumber > ONBOARDING_TOTAL_STEPS) {
-        return res.status(400).json({ success: false, error: { code: 'INVALID_STEP', message: 'Step number must be between 1 and 6' } });
+        return res.status(400).json({ success: false, error: { code: 'INVALID_STEP', message: `Step number must be between 1 and ${ONBOARDING_TOTAL_STEPS}` } });
       }
 
       const sessionResult = await pool.query(`SELECT * FROM onboarding_sessions WHERE id = $1`, [req.params.sessionId]);
@@ -1642,78 +1617,29 @@ router.patch(
           if (!parsed.success) {
             return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
           }
-          const { session_name, terms } = parsed.data;
+          const { session_name, term } = parsed.data;
 
-          // Span the session across the real earliest start and latest end rather than
-          // the first/last array entries — terms may be submitted in any order, and a
-          // school can now onboard with fewer than three.
-          const sortedTerms = [...terms].sort(
-            (a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime()
-          );
-          const sessionStart = sortedTerms[0].start_date;
-          const sessionEnd = sortedTerms[sortedTerms.length - 1].end_date;
-
+          // One term: the session spans it for now and grows as later terms are added.
           const sessionRowResult = await pool.query<{ id: string }>(
             `INSERT INTO academic_sessions (school_id, name, start_date, end_date, is_current)
              VALUES ($1, $2, $3, $4, TRUE)
              RETURNING id`,
-            [school.id, session_name, sessionStart, sessionEnd]
+            [school.id, session_name, term.start_date, term.end_date]
           );
           const academicSessionId = sessionRowResult.rows[0].id;
 
-          // The chronologically first term becomes the current one.
-          for (const term of sortedTerms) {
-            await pool.query(
-              `INSERT INTO terms (session_id, school_id, name, start_date, end_date, is_current)
-               VALUES ($1, $2, $3, $4, $5, $6)`,
-              [academicSessionId, school.id, term.name, term.start_date, term.end_date, term === sortedTerms[0]]
-            );
-          }
+          await pool.query(
+            `INSERT INTO terms (session_id, school_id, name, start_date, end_date, is_current)
+             VALUES ($1, $2, $3, $4, $5, TRUE)`,
+            [academicSessionId, school.id, term.name, term.start_date, term.end_date]
+          );
 
-          stepData = { session_name, terms };
+          stepData = { session_name, term };
           break;
         }
 
         case 4: {
           const parsed = onboardingStep4Schema.safeParse(req.body);
-          if (!parsed.success) {
-            return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
-          }
-          const { grades } = parsed.data;
-
-          const gradeError = validateOnboardingGrades(grades);
-          if (gradeError) {
-            return res.status(400).json({ success: false, error: { code: 'INVALID_GRADING_SCALE', message: gradeError } });
-          }
-
-          await ensureSchoolSettings(school.id, school.name);
-          await updateAcademicConfig(school.id, { grading_scale: grades });
-
-          stepData = { grades };
-          break;
-        }
-
-        case 5: {
-          const parsed = onboardingStep5Schema.safeParse(req.body);
-          if (!parsed.success) {
-            return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
-          }
-          const { components } = parsed.data;
-
-          const totalWeight = components.reduce((sum, c) => sum + c.weight_percent, 0);
-          if (totalWeight !== 100) {
-            return res.status(400).json({ success: false, error: { code: 'WEIGHT_SUM_ERROR', message: `Component weights must sum to 100. Current sum: ${totalWeight}` } });
-          }
-
-          await ensureSchoolSettings(school.id, school.name);
-          await updateAcademicConfig(school.id, { assessment_components: components });
-
-          stepData = { components };
-          break;
-        }
-
-        case 6: {
-          const parsed = onboardingStep6Schema.safeParse(req.body);
           if (!parsed.success) {
             return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
           }
@@ -1749,10 +1675,6 @@ router.patch(
           break;
         }
 
-        case 7: {
-          stepData = {};
-          break;
-        }
       }
 
       const newStepEntry = {
@@ -1798,7 +1720,7 @@ router.post(
       }
 
       const stepsCompleted: Record<string, Record<string, unknown>> = session.steps_completed ?? {};
-      const missing = [1, 2, 3, 4, 5, 6].filter(step => !(String(step) in stepsCompleted));
+      const missing = ONBOARDING_SAVED_STEPS.filter(step => !(String(step) in stepsCompleted));
       if (missing.length > 0) {
         return res.status(400).json({ success: false, error: { code: 'INCOMPLETE_WIZARD', message: `Steps ${missing.join(', ')} are not yet complete` } });
       }
@@ -1808,8 +1730,8 @@ router.post(
 
       // A school with no principal is a school nobody can administer. This lookup
       // already existed below, but only to find an address for the welcome email —
-      // the school went live first and the absence of a principal was silent. Step 6
-      // is completable without creating one, so the wizard could finish and hand over
+      // the school went live first and the absence of a principal was silent. Step 4
+      // (the principal step; step 6 before 1 Oct 2026) is completable without creating one, so the wizard could finish and hand over
       // a tenant with no way in. Gate on it BEFORE activating anything.
       const principalRow = await pool.query<{ email: string }>(
         `SELECT email FROM users WHERE school_id = $1 AND role = 'principal' LIMIT 1`,
@@ -1820,7 +1742,7 @@ router.post(
           success: false,
           error: {
             code: 'NO_PRINCIPAL',
-            message: 'This school has no principal account. Create one in step 6 before completing onboarding — without it nobody can administer the school.',
+            message: 'This school has no principal account. Create one in step 4 (Admin) before completing onboarding — without it nobody can administer the school.',
           },
         });
       }
@@ -1834,9 +1756,9 @@ router.post(
         [req.params.sessionId]
       );
 
-      // Resolved above as the activation gate; step 6's blob wins only because it is
+      // Resolved above as the activation gate; step 4's blob wins only because it is
       // what the operator just typed.
-      const step6Data = stepsCompleted['6'] ?? {};
+      const step6Data = stepsCompleted['4'] ?? {};
       const principalEmail = (step6Data.email as string | undefined) ?? principalRow.rows[0].email;
 
       if (principalEmail) {

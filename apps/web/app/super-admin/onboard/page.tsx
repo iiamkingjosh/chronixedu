@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -44,19 +44,6 @@ interface TermInput {
   end_date: string;
 }
 
-interface GradeInput {
-  label: string;
-  min: number;
-  max: number;
-  remark: string;
-}
-
-interface ComponentInput {
-  name: string;
-  max_score: number;
-  weight_percent: number;
-}
-
 interface WizardState {
   sessionId: string;
   schoolId: string;
@@ -68,9 +55,7 @@ interface WizardState {
   primaryColour: string;
   admissionPrefix: string;
   sessionName: string;
-  terms: TermInput[];
-  grades: GradeInput[];
-  components: ComponentInput[];
+  term: TermInput;
   adminFirstName: string;
   adminLastName: string;
   adminEmail: string;
@@ -89,24 +74,7 @@ const initialWizardState: WizardState = {
   primaryColour: '#003366',
   admissionPrefix: '',
   sessionName: '',
-  terms: [
-    { name: 'First Term', start_date: '', end_date: '' },
-    { name: 'Second Term', start_date: '', end_date: '' },
-    { name: 'Third Term', start_date: '', end_date: '' },
-  ],
-  grades: [
-    { label: 'A', min: 70, max: 100, remark: 'Excellent' },
-    { label: 'B', min: 60, max: 69, remark: 'Very Good' },
-    { label: 'C', min: 50, max: 59, remark: 'Good' },
-    { label: 'D', min: 40, max: 49, remark: 'Pass' },
-    { label: 'F', min: 0, max: 39, remark: 'Fail' },
-  ],
-  components: [
-    { name: 'CA1', max_score: 10, weight_percent: 10 },
-    { name: 'CA2', max_score: 10, weight_percent: 10 },
-    { name: 'Mid-Term', max_score: 10, weight_percent: 10 },
-    { name: 'Exam', max_score: 70, weight_percent: 70 },
-  ],
+  term: { name: '', start_date: '', end_date: '' },
   adminFirstName: '',
   adminLastName: '',
   adminEmail: '',
@@ -114,7 +82,8 @@ const initialWizardState: WizardState = {
   tempPassword: null,
 };
 
-const STEP_LABELS = ['Info', 'Branding', 'Calendar', 'Grading', 'Assessment', 'Admin', 'Review'];
+// Five steps since 1 Oct 2026. Grading and assessment are the principal's to set, in Settings.
+const STEP_LABELS = ['Info', 'Branding', 'Calendar', 'Admin', 'Review'];
 
 function ProgressBar({ currentStep }: { currentStep: number }) {
   return (
@@ -346,68 +315,31 @@ const termSchema = z.object({
   path: ['end_date'],
 });
 
-/** A term row that may be left entirely blank — but if any field is filled, all are
- *  required. Only the first term is mandatory at onboarding; the rest are usually
- *  unknown at sign-up and can be added later from Settings → Academic Structure. */
-const wizardTermRowSchema = z.object({
-  name: z.string(),
-  start_date: z.string(),
-  end_date: z.string(),
+/**
+ * One term: the one the school is starting in, which becomes its current term. Three rows with
+ * pre-filled names made the old "touched" check always true, so Next never enabled; a single
+ * required term leaves no optional-row inference to get wrong. Later terms are added from
+ * Settings → Academic Structure, where overlaps are checked.
+ */
+const step3Schema = z.object({
+  session_name: z.string().trim().min(1, 'Required'),
+  term: termSchema,
 });
-
-const step3Schema = z
-  .object({
-    session_name: z.string().min(1, 'Required'),
-    terms: z.array(wizardTermRowSchema).length(3),
-  })
-  .superRefine((data, ctx) => {
-    data.terms.forEach((term, i) => {
-      const touched = [term.name, term.start_date, term.end_date].some(v => v.trim() !== '');
-      const required = i === 0 || touched;
-      if (!required) return;
-
-      (['name', 'start_date', 'end_date'] as const).forEach(field => {
-        if (term[field].trim() === '') {
-          ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Required', path: ['terms', i, field] });
-        }
-      });
-      if (term.start_date && term.end_date && new Date(term.end_date) <= new Date(term.start_date)) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'End date must be after start date', path: ['terms', i, 'end_date'] });
-      }
-    });
-
-    // Terms must not overlap — the API resolves a date to a term without tie-breaking.
-    const filled = data.terms
-      .map((t, i) => ({ ...t, i }))
-      .filter(t => t.start_date && t.end_date && new Date(t.end_date) > new Date(t.start_date))
-      .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-    for (let n = 1; n < filled.length; n++) {
-      if (new Date(filled[n].start_date) <= new Date(filled[n - 1].end_date)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Overlaps "${filled[n - 1].name || 'the previous term'}"`,
-          path: ['terms', filled[n].i, 'start_date'],
-        });
-      }
-    }
-  });
 type Step3Form = z.infer<typeof step3Schema>;
 
 function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
   const { register, handleSubmit, formState: { errors, isValid, isSubmitting } } = useForm<Step3Form>({
     resolver: zodResolver(step3Schema),
     mode: 'onChange',
-    defaultValues: { session_name: wizard.sessionName, terms: wizard.terms },
+    defaultValues: { session_name: wizard.sessionName, term: wizard.term },
   });
   const [apiError, setApiError] = useState('');
 
   async function onSubmit(values: Step3Form) {
     setApiError('');
-    // Blank rows mean "not known yet" — drop them rather than sending empty dates.
-    const terms = values.terms.filter(t => t.name.trim() && t.start_date && t.end_date);
     try {
-      await saveOnboardingStep(wizard.sessionId, 3, { session_name: values.session_name, terms });
-      onNext({ sessionName: values.session_name, terms });
+      await saveOnboardingStep(wizard.sessionId, 3, { session_name: values.session_name, term: values.term });
+      onNext({ sessionName: values.session_name, term: values.term });
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : 'Failed to save academic calendar');
     }
@@ -419,27 +351,19 @@ function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext
         <input {...register('session_name')} className={inputClass} placeholder="2025/2026" />
       </Field>
       <p className="text-xs text-gray-500">
-        Only the term the school is starting in is required. Later terms can be added
-        any time from Settings → Academic Structure, and dates stay editable if the
-        calendar shifts.
+        Enter the term the school is starting in — it becomes the current term. Later terms
+        are added from Settings → Academic Structure, and dates stay editable if the calendar shifts.
       </p>
-      <div className="space-y-3">
-        {wizard.terms.map((_, i) => (
-          <div key={i} className="grid grid-cols-1 sm:grid-cols-3 gap-3 border border-gray-200 rounded-lg p-3">
-            {i > 0 && (
-              <p className="sm:col-span-3 -mb-1 text-xs font-medium text-gray-400">Optional — leave blank if not yet decided</p>
-            )}
-            <Field label="Term Name" error={errors.terms?.[i]?.name?.message}>
-              <input {...register(`terms.${i}.name`)} className={inputClass} />
-            </Field>
-            <Field label="Start Date" error={errors.terms?.[i]?.start_date?.message}>
-              <input {...register(`terms.${i}.start_date`)} type="date" className={inputClass} />
-            </Field>
-            <Field label="End Date" error={errors.terms?.[i]?.end_date?.message}>
-              <input {...register(`terms.${i}.end_date`)} type="date" className={inputClass} />
-            </Field>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border border-gray-200 rounded-lg p-3">
+        <Field label="Term Name" error={errors.term?.name?.message}>
+          <input {...register('term.name')} className={inputClass} placeholder="e.g. First Term" />
+        </Field>
+        <Field label="Start Date" error={errors.term?.start_date?.message}>
+          <input {...register('term.start_date')} type="date" className={inputClass} />
+        </Field>
+        <Field label="End Date" error={errors.term?.end_date?.message}>
+          <input {...register('term.end_date')} type="date" className={inputClass} />
+        </Field>
       </div>
       {apiError && <ErrorBox message={apiError} />}
       <div className="flex justify-between pt-2">
@@ -450,197 +374,19 @@ function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext
   );
 }
 
-// ── Step 4: Grading ──────────────────────────────────────────────────────────
-
-const gradeRowSchema = z.object({
-  label: z.string().min(1, 'Required'),
-  min: z.coerce.number().min(0, 'Min 0').max(100, 'Max 100'),
-  max: z.coerce.number().min(0, 'Min 0').max(100, 'Max 100'),
-  remark: z.string().min(1, 'Required'),
-});
+// ── Step 4: Admin ────────────────────────────────────────────────────────────
 
 const step4Schema = z.object({
-  grades: z.array(gradeRowSchema).min(1),
-});
-type Step4FormInput = z.input<typeof step4Schema>;
-type Step4FormOutput = z.output<typeof step4Schema>;
-
-function validateGradeCoverage(grades: GradeInput[]): string | null {
-  const sorted = [...grades].sort((a, b) => a.min - b.min);
-  if (sorted.length === 0) return 'Add at least one grade band';
-  if (sorted[0].min !== 0) return 'Grade bands must start at 0';
-  if (sorted[sorted.length - 1].max !== 100) return 'Grade bands must end at 100';
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].min !== sorted[i - 1].max + 1) {
-      return 'Grade bands must be contiguous, with no gaps or overlaps';
-    }
-  }
-  return null;
-}
-
-function Step4Grading({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
-  const { register, handleSubmit, control, formState: { errors, isSubmitting } } = useForm<Step4FormInput, unknown, Step4FormOutput>({
-    resolver: zodResolver(step4Schema),
-    defaultValues: { grades: wizard.grades },
-  });
-  const { fields, append, remove } = useFieldArray({ control, name: 'grades' });
-  const [apiError, setApiError] = useState('');
-
-  async function onSubmit(values: Step4FormOutput) {
-    setApiError('');
-    const coverageError = validateGradeCoverage(values.grades);
-    if (coverageError) {
-      setApiError(coverageError);
-      return;
-    }
-    try {
-      await saveOnboardingStep(wizard.sessionId, 4, values);
-      onNext({ grades: values.grades });
-    } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'Failed to save grading scale');
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid grid-cols-[1fr_1fr_1fr_2fr_auto] gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
-        <span>Label</span><span>Min</span><span>Max</span><span>Remark</span><span />
-      </div>
-      <div className="space-y-2">
-        {fields.map((field, i) => (
-          <div key={field.id} className="grid grid-cols-[1fr_1fr_1fr_2fr_auto] gap-2 items-start">
-            <div>
-              <input {...register(`grades.${i}.label`)} className={inputClass} />
-              {errors.grades?.[i]?.label && <p className="mt-1 text-xs text-red-600">{errors.grades[i]?.label?.message}</p>}
-            </div>
-            <div>
-              <input {...register(`grades.${i}.min`)} type="number" min={0} max={100} className={inputClass} />
-              {errors.grades?.[i]?.min && <p className="mt-1 text-xs text-red-600">{errors.grades[i]?.min?.message}</p>}
-            </div>
-            <div>
-              <input {...register(`grades.${i}.max`)} type="number" min={0} max={100} className={inputClass} />
-              {errors.grades?.[i]?.max && <p className="mt-1 text-xs text-red-600">{errors.grades[i]?.max?.message}</p>}
-            </div>
-            <div>
-              <input {...register(`grades.${i}.remark`)} className={inputClass} />
-              {errors.grades?.[i]?.remark && <p className="mt-1 text-xs text-red-600">{errors.grades[i]?.remark?.message}</p>}
-            </div>
-            <button type="button" onClick={() => remove(i)} className="text-gray-400 hover:text-red-600 px-2 py-2" aria-label="Remove grade">✕</button>
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={() => append({ label: '', min: 0, max: 0, remark: '' })}
-        className="text-sm font-medium text-[#003366] hover:underline"
-      >
-        + Add Grade
-      </button>
-      {apiError && <ErrorBox message={apiError} />}
-      <div className="flex justify-between pt-2">
-        <button type="button" onClick={onBack} className={backButtonClass}>Back</button>
-        <button type="submit" disabled={isSubmitting} className={nextButtonClass}>{isSubmitting ? 'Saving…' : 'Next'}</button>
-      </div>
-    </form>
-  );
-}
-
-// ── Step 5: Assessment ───────────────────────────────────────────────────────
-
-const componentRowSchema = z.object({
-  name: z.string().min(1, 'Required'),
-  max_score: z.coerce.number().min(0, 'Min 0'),
-  weight_percent: z.coerce.number().min(0, 'Min 0').max(100, 'Max 100'),
-});
-
-const step5Schema = z.object({
-  components: z.array(componentRowSchema).min(1),
-});
-type Step5FormInput = z.input<typeof step5Schema>;
-type Step5FormOutput = z.output<typeof step5Schema>;
-
-function Step5Assessment({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
-  const { register, handleSubmit, control, watch, formState: { errors, isSubmitting } } = useForm<Step5FormInput, unknown, Step5FormOutput>({
-    resolver: zodResolver(step5Schema),
-    defaultValues: { components: wizard.components },
-  });
-  const { fields, append, remove } = useFieldArray({ control, name: 'components' });
-  const [apiError, setApiError] = useState('');
-  const components = watch('components');
-  const total = components.reduce((sum, c) => sum + (Number(c.weight_percent) || 0), 0);
-
-  async function onSubmit(values: Step5FormOutput) {
-    setApiError('');
-    try {
-      await saveOnboardingStep(wizard.sessionId, 5, values);
-      onNext({ components: values.components });
-    } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'Failed to save assessment structure');
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">
-        <span>Name</span><span>Max Score</span><span>Weight %</span><span />
-      </div>
-      <div className="space-y-2">
-        {fields.map((field, i) => (
-          <div key={field.id} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-start">
-            <div>
-              <input {...register(`components.${i}.name`)} className={inputClass} />
-              {errors.components?.[i]?.name && <p className="mt-1 text-xs text-red-600">{errors.components[i]?.name?.message}</p>}
-            </div>
-            <div>
-              <input {...register(`components.${i}.max_score`)} type="number" min={0} className={inputClass} />
-              {errors.components?.[i]?.max_score && <p className="mt-1 text-xs text-red-600">{errors.components[i]?.max_score?.message}</p>}
-            </div>
-            <div>
-              <input {...register(`components.${i}.weight_percent`)} type="number" min={0} max={100} className={inputClass} />
-              {errors.components?.[i]?.weight_percent && <p className="mt-1 text-xs text-red-600">{errors.components[i]?.weight_percent?.message}</p>}
-            </div>
-            <button
-              type="button"
-              onClick={() => remove(i)}
-              disabled={fields.length <= 1}
-              className="text-gray-400 hover:text-red-600 px-2 py-2 disabled:opacity-30 disabled:hover:text-gray-400"
-              aria-label="Remove component"
-            >
-              ✕
-            </button>
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={() => append({ name: '', max_score: 0, weight_percent: 0 })}
-        className="text-sm font-medium text-[#003366] hover:underline"
-      >
-        + Add Component
-      </button>
-      <p className={`text-sm font-medium ${total === 100 ? 'text-green-600' : 'text-red-600'}`}>Total: {total}%</p>
-      {apiError && <ErrorBox message={apiError} />}
-      <div className="flex justify-between pt-2">
-        <button type="button" onClick={onBack} className={backButtonClass}>Back</button>
-        <button type="submit" disabled={isSubmitting || total !== 100} className={nextButtonClass}>{isSubmitting ? 'Saving…' : 'Next'}</button>
-      </div>
-    </form>
-  );
-}
-
-// ── Step 6: Admin ────────────────────────────────────────────────────────────
-
-const step6Schema = z.object({
   first_name: z.string().min(1, 'Required'),
   last_name: z.string().min(1, 'Required'),
   email: z.string().min(1, 'Required').email('Enter a valid email address'),
   phone: z.string().optional(),
 });
-type Step6Form = z.infer<typeof step6Schema>;
+type Step4Form = z.infer<typeof step4Schema>;
 
-function Step6Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
-  const { register, handleSubmit, formState: { errors, isValid, isSubmitting } } = useForm<Step6Form>({
-    resolver: zodResolver(step6Schema),
+function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
+  const { register, handleSubmit, formState: { errors, isValid, isSubmitting } } = useForm<Step4Form>({
+    resolver: zodResolver(step4Schema),
     mode: 'onChange',
     defaultValues: {
       first_name: wizard.adminFirstName,
@@ -650,7 +396,7 @@ function Step6Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
     },
   });
   const [apiError, setApiError] = useState('');
-  const [result, setResult] = useState<{ tempPassword: string; values: Step6Form } | null>(
+  const [result, setResult] = useState<{ tempPassword: string; values: Step4Form } | null>(
     wizard.tempPassword
       ? {
           tempPassword: wizard.tempPassword,
@@ -664,10 +410,10 @@ function Step6Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
       : null
   );
 
-  async function onSubmit(values: Step6Form) {
+  async function onSubmit(values: Step4Form) {
     setApiError('');
     try {
-      const res = await saveOnboardingStep(wizard.sessionId, 6, {
+      const res = await saveOnboardingStep(wizard.sessionId, 4, {
         first_name: values.first_name,
         last_name: values.last_name,
         email: values.email,
@@ -731,9 +477,9 @@ function Step6Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
   );
 }
 
-// ── Step 7: Review ───────────────────────────────────────────────────────────
+// ── Step 5: Review ───────────────────────────────────────────────────────────
 
-function Step7Review({ wizard, onBack, onComplete }: {
+function Step5Review({ wizard, onBack, onComplete }: {
   wizard: WizardState;
   onBack: () => void;
   onComplete: (result: CompleteOnboardingResponse) => void;
@@ -778,22 +524,12 @@ function Step7Review({ wizard, onBack, onComplete }: {
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Academic Session</h3>
         <p className="text-sm text-gray-900 mb-1">{wizard.sessionName}</p>
         <ul className="text-sm text-gray-600 space-y-0.5">
-          {wizard.terms
-            .filter(t => t.name.trim() && t.start_date && t.end_date)
-            .map((t, i) => <li key={i}>{t.name}: {t.start_date} – {t.end_date}</li>)}
+          <li>{wizard.term.name}: {wizard.term.start_date} – {wizard.term.end_date} (current term)</li>
         </ul>
       </div>
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-2">Grading Scale</h3>
-        <ul className="text-sm text-gray-600 space-y-0.5">
-          {wizard.grades.map((g, i) => <li key={i}>{g.label}: {g.min}–{g.max} ({g.remark})</li>)}
-        </ul>
-      </div>
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900 mb-2">Assessment Structure</h3>
-        <ul className="text-sm text-gray-600 space-y-0.5">
-          {wizard.components.map((c, i) => <li key={i}>{c.name}: {c.max_score} pts ({c.weight_percent}%)</li>)}
-        </ul>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        <p className="font-medium">Grading and assessment are set by the principal</p>
+        <p className="mt-1">This school starts with no grading scale, pass mark or assessment structure — none is filled in on its behalf. The principal sets them in Settings. Results cannot be published until the grading scale is set.</p>
       </div>
       <div>
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Principal Account</h3>
@@ -875,10 +611,8 @@ export default function OnboardWizardPage() {
             {step === 1 && <Step1Info wizard={wizard} onNext={goNext} />}
             {step === 2 && <Step2Branding wizard={wizard} onNext={goNext} onBack={goBack} />}
             {step === 3 && <Step3Calendar wizard={wizard} onNext={goNext} onBack={goBack} />}
-            {step === 4 && <Step4Grading wizard={wizard} onNext={goNext} onBack={goBack} />}
-            {step === 5 && <Step5Assessment wizard={wizard} onNext={goNext} onBack={goBack} />}
-            {step === 6 && <Step6Admin wizard={wizard} onNext={goNext} onBack={goBack} />}
-            {step === 7 && <Step7Review wizard={wizard} onBack={goBack} onComplete={setCompleteResult} />}
+            {step === 4 && <Step4Admin wizard={wizard} onNext={goNext} onBack={goBack} />}
+            {step === 5 && <Step5Review wizard={wizard} onBack={goBack} onComplete={setCompleteResult} />}
           </div>
         </>
       )}

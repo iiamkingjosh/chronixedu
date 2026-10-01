@@ -28,7 +28,7 @@ import {
 import { toKobo, fromKobo } from '../services/money';
 import { findPrincipalsBySchool } from '../db/queries/users';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
-import { NIGERIAN_DEFAULTS, slugify, validateGradeBands } from '../services/schoolService';
+import { newSchoolAcademicConfig, slugify, validateGradeBands } from '../services/schoolService';
 import { cache, schoolCacheKey } from '../services/cacheService';
 import { supabase, supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
@@ -247,7 +247,9 @@ router.post(
         secondary_colour: secondary_colour ?? null,
       };
 
-      const settings = await insertSchoolSettings(school.id, identityConfig, NIGERIAN_DEFAULTS as unknown as Record<string, unknown>);
+      // No grading scale, pass mark or assessment components: the school sets its own
+      // (doctrine 8; services/schoolService.ts newSchoolAcademicConfig).
+      const settings = await insertSchoolSettings(school.id, identityConfig, newSchoolAcademicConfig());
 
       return res.status(201).json({ success: true, data: { school, settings } });
     } catch (err) {

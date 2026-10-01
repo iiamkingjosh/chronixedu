@@ -17,7 +17,7 @@
  */
 import request from 'supertest';
 import { Pool } from 'pg';
-import { buildApp, seed, tokens, IDS as I, pool } from './helpers';
+import { buildApp, seed, setGradingScale, tokens, IDS as I, pool } from './helpers';
 
 const app = buildApp();
 const base = `/api/schools/${I.schoolA}`;
@@ -62,7 +62,9 @@ async function breakQueue(actionType: string) {
       FOR EACH ROW EXECUTE FUNCTION test_break_notification_queue()`);
 }
 
-beforeEach(seed);
+// Publishing requires a grading scale (POST /results/publish refuses GRADING_SCALE_NOT_SET
+// otherwise); this suite is about what publishing reveals, so it sets one explicitly.
+beforeEach(async () => { await seed(); await setGradingScale(I.schoolA); });
 afterEach(async () => {
   await owner.query(`DROP TRIGGER IF EXISTS test_break_notification_queue ON audit_logs`);
   await owner.query(`DROP FUNCTION IF EXISTS test_break_notification_queue()`);

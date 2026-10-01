@@ -87,20 +87,28 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    be a live rule); `promotion_cutoff ?? 40`, where an unset pass mark was
    indistinguishable from a deliberately chosen 40; and `is_default` on the fee minimum,
    which told a school that chose ₦1,000 — the figure we recommend, so the likeliest
-   choice — that it had not chosen one. The check is mechanical: ask whether a field
-   answers *what* or *whether*, and record the second separately when you need it.
+   choice — that it had not chosen one. A fourth, at scale: every new school was born
+   with `NIGERIAN_DEFAULTS` (a five-band scale, a 40% pass mark, four assessment
+   components) written into its settings, so every school "had" choices nobody made. Since
+   1 Oct 2026 nothing is seeded (`newSchoolAcademicConfig`), and publishing refuses until a
+   scale is set. And `is_demo DEFAULT FALSE` made every school a customer until someone said
+   otherwise; it is now stated at creation (migration 049). The check is mechanical: ask
+   whether a field answers *what* or *whether*, and record the second separately when you
+   need it.
 9. **Advisory output is indistinguishable from no output once you have decided to push.**
    The corollary to doctrine 7: verifying what a guard *does* is useless if the guard only
    reports. The lint scripts therefore carry `--max-warnings` pinned to the current count
-   (api 1, web 5), so an existing warning stays tolerated and a NEW one fails at the
+   (api 1, web 4), so an existing warning stays tolerated and a NEW one fails at the
    moment of introduction rather than scrolling past in pre-commit hook output.
    Proof this was needed: a new unused-import warning was introduced and pushed in
    86b0a18 with the hook reporting it the whole time.
    **It freezes the count; it does not shrink it.** Nothing decrements the number, so
-   those six warnings are now permanent-by-default rather than accumulating — strictly
+   the remaining warnings are permanent-by-default rather than accumulating — strictly
    better, and a different claim. Going down takes someone fixing a warning *and*
    lowering the number in the same commit, and nothing here prompts that. Never raise
-   them: a raise is the ratchet being removed, one notch at a time.
+   them: a raise is the ratchet being removed, one notch at a time. First notch down:
+   web 5 → 4 on 1 Oct 2026, when the one-term onboarding step put the unused
+   `termSchema` to use.
 10. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
    settings, payments, support-session actions. `audit_logs` has no DELETE, except migration
@@ -286,6 +294,17 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - `classes.level` is free text (e.g. "Primary", "JSS", "SSS") and is matched
   **exactly**, so keep it consistent: a typo silently falls back to school-wide config
   rather than erroring. It resolves both `assessment_configs` and grading overrides.
+- **A new school has no grading scale, pass mark or assessment structure** until its
+  principal sets them in Settings. Neither creation path seeds them (`newSchoolAcademicConfig`
+  in `services/schoolService.ts`), and onboarding no longer asks. An unset scale is visibly
+  unset: `POST /results/publish` refuses with `409 GRADING_SCALE_NOT_SET`
+  (`missing: 'grading_scale'`), resolved per class through `resolveGradingScale`, the
+  engine's own resolver, and checked before any other refusal so the reason is never masked.
+  Assessment components were already refused visibly (`NO_ASSESSMENT_CONFIG`; scoring reads
+  the `assessment_configs` table, not `academic_config.assessment_components`, which nothing
+  in scoring reads). Never add a fallback scale: that is the `promotion_cutoff ?? 40` bug
+  across every school. DB suites that publish set one explicitly (`setGradingScale` in
+  `__db_tests__/helpers.ts`); the seed gives no school a scale.
 - **Per-level grading:** `school_settings` holds one row per school, so grading_scale
   and promotion_cutoff are school-wide by default. A school running more than one
   section sets `academic_config.level_overrides[<level>]` to override either field for
@@ -501,8 +520,14 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 
 ## Academic calendar
 
-- A session has **at most 3 terms**, but onboarding only requires the one the school
-  is starting in. Schools rarely know later term dates at sign-up and Nigerian
+- **Onboarding is five steps** (1 Info, 2 Branding, 3 Calendar, 4 Admin, 5 Review; decided
+  1 Oct 2026). Review is `POST /complete`, so the saved steps are 1–4 (`ONBOARDING_SAVED_STEPS`),
+  and `/complete` returns `INCOMPLETE_WIZARD` naming the missing ones. They were renumbered
+  rather than left with gaps. The one completed session keeps its old keys 1–6 as history,
+  which nothing reads, and the one abandoned in-progress session was deleted.
+- A session has **at most 3 terms**, and onboarding takes **exactly one**: the term the school
+  is starting in, which becomes current. Three pre-filled rows made the wizard's optional-row
+  check always true, so Next never enabled. Schools rarely know later term dates at sign-up and Nigerian
   calendars shift (holidays, strikes, elections), so the rest are added afterwards
   via `POST /:schoolId/sessions/:sessionId/terms`.
 - **Term dates stay editable** via `PATCH /:schoolId/sessions/:sessionId/terms/:termId`
@@ -624,9 +649,9 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 29 suites, 301 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 30 suites, 305 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
-npm run test:integration:local -- --forceExit   # 21 suites, 186 passed + 7 skipped (Auth-dependent; the setup says why)
+npm run test:integration:local -- --forceExit   # 21 suites, 185 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)
 ```
 

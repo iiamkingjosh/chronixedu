@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test": "jest",
-    "lint": "next lint --max-warnings=5"
+    "lint": "next lint --max-warnings=4"
   },
   "dependencies": {
     "@sentry/nextjs": "^10.58.0",

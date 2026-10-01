@@ -25,6 +25,23 @@ export interface CalendarTerm {
   end_month: number;
 }
 
+/**
+ * What a NEW school's academic_config starts with: the calendar templates and nothing a
+ * school must decide for itself. No grading_scale, no promotion_cutoff, no
+ * assessment_components — doctrine 8. Seeding NIGERIAN_DEFAULTS at creation made every
+ * school "have" a scale and a 40% pass mark that nobody chose, the promotion_cutoff ?? 40
+ * bug across every school at once. An unset scale stays unset and is visibly unset:
+ * POST /results/publish refuses with GRADING_SCALE_NOT_SET until the principal sets one in
+ * Settings. NIGERIAN_DEFAULTS remains as a reference a principal may choose to copy, never
+ * as a value written on anyone's behalf.
+ */
+export function newSchoolAcademicConfig(): Record<string, unknown> {
+  return {
+    academic_calendar: NIGERIAN_DEFAULTS.academic_calendar,
+    calendar: NIGERIAN_DEFAULTS.calendar,
+  };
+}
+
 export interface AcademicConfig {
   grading_scale: GradeBand[];
   promotion_cutoff: number;
