@@ -61,3 +61,6 @@ ChronixEdu_AgentFile_strings.txt
 ChronixEdu_ToDo (1).pdf
 extract_pdf_*.ps1
 extract_pdf_*.py
+
+# The working checklist: local only, never published (it lists open security gaps).
+WORKING-CHECKLIST.md
