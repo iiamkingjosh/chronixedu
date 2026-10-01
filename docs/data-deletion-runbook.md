@@ -44,8 +44,9 @@ deleting transaction.
    DATABASE_URL=<production pooler url> \
    node apps/api/scripts/delete-school-data.js --school <school-uuid> --allow-host <db host>
    ```
-   Check the school name and slug it prints. **Copy the address lists it prints** ("Copy these
-   now") into the ticket: every email address and phone number the run removes. After the run they
+   Check the school name and slug it prints. If this school was a trial on production, read
+   [Mail during a production trial](#mail-during-a-production-trial) first. **Copy the address
+   lists it prints** ("Copy these now") into the ticket: every email address and phone number the run removes. After the run they
    exist nowhere in our database, and two sub-processors keep their own copies (step 5).
 4. **Execute:**
    ```bash
@@ -65,7 +66,8 @@ deleting transaction.
 5. **Sub-processors.** Work through the table below. Two need the addresses from step 3:
    - **SendGrid**: remove each email address from Suppressions (bounces, blocks, spam reports,
      unsubscribes), in the dashboard or `DELETE /v3/suppression/{type}/{email}`. Suppressions never
-     expire on their own.
+     expire on their own. This includes a trial school's own bounce: with the list empty, the next
+     real bounce is visible at once.
    - **Termii**: send the phone numbers with the deletion request (see the Termii row; there is no
      process yet).
 6. **Confirm.** A second dry run must print `Nothing to delete: there is no school <id>, and no row
@@ -181,6 +183,33 @@ accident-proofing, and it is the only door that is not deliberate.
   production since 30 Sep 2026, 23:43 UTC (`migration_runs` id 55).
 - **Live trial on production:** done 1 Oct 2026, below. Every path in this runbook has now run for
   real; nothing is listed as unexercised.
+
+## Mail during a production trial
+
+Creating a school on production is not a dry run for mail. The onboarding wizard's Complete step
+emails the principal address typed in its Admin step a welcome message **containing a working
+temporary password**. Adding staff and parents does the same, and announcements, fee reminders and
+notifications reach every address they find. All of it goes through the real SendGrid account.
+
+**Decided 1 Oct 2026: a production trial uses an address that delivers to a mailbox Chronix reads,
+confirmed by sending it one message first.**
+- Use a Zoho alias on the company domain, created for the purpose and delivering to a mailbox you
+  read. Zoho hosts the domain's mail (its MX records, checked 1 Oct 2026).
+- Do not rely on `+` sub-addresses until one test message to one has arrived. An alias is certain.
+- Mark the school `is_demo = true` at creation, as every non-customer school must be.
+
+**Never invent an address:**
+- On the company domain it hard-bounces. On 1 Oct 2026 the `ZZ Test Onboarding 01 Oct` trial's
+  invented principal address produced the SendGrid account's only bounce
+  (`550 5.1.1 User does not exist`), and it stayed in Suppressions after the school was deleted.
+- On anyone else's domain it may be a real mailbox, and the welcome email would hand a stranger a
+  working login for the trial school.
+
+**Rejected: switching mail off for trials.** A per-school switch that stops outbound mail is one
+wrong setting away from a real principal never receiving their login. A trial with mail off also
+does not test the path a real school takes.
+
+**Afterwards**, delete the trial school with this runbook. Step 5 covers its SendGrid entries.
 
 ## Live trial (production)
 

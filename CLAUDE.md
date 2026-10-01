@@ -453,6 +453,9 @@ Monorepo, npm workspaces:
   Changing the purge function means acting as `chronixedu_audit_purger` (048 shows how). Never
   widen its grants: functions in `public` default to EXECUTE for PUBLIC, which Supabase serves to
   `anon` over `/rest/v1/rpc`.
+- **A school created on production sends real mail**, including the principal's welcome email with a
+  working temporary password. A trial uses an address that reaches a mailbox Chronix reads, never an
+  invented one (`docs/data-deletion-runbook.md`, "Mail during a production trial").
 - **No third party has accepted the Terms or DPA** (1 Oct 2026). Chronix High School is Moses's own
   pilot (`is_demo = true`), not a customer, whatever older commits say. The deletion and backup
   promises bind nobody yet, and must be proven before the first real school signs.
