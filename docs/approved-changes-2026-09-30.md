@@ -10,7 +10,7 @@ Round 19: two further Redis mechanisms (every authenticated request's `verifyTok
 app still went down; the payout step-up lockout got the same treatment as login; and the
 client gained a 500 ms command timeout, without which "fail open" meant "hang, then pass".
 Order matters only in that (3) is independent — do it first or last, not interleaved.
-Prior rounds: 16 (`3a4d1e7`), 17 (`c07c0b4`), 18 (`13c1157`).
+Prior rounds: 16 (`9e2e404`), 17 (`c671c5f`), 18 (`d46299f`).
 
 ---
 
@@ -80,12 +80,12 @@ change, not by assuming.
 
 ## 2. Login limiter: `max` 5 → 20
 
-Both prerequisites now hold: `authLockout.test.ts` exists, and `13c1157` fixed the key
+Both prerequisites now hold: `authLockout.test.ts` exists, and `d46299f` fixed the key
 so the limiter counts the real client address rather than a Railway proxy.
 
 ### 2.1 Why 20 is the right number now
 
-Post-`13c1157` the key is a school's public address, so one school's staff room is one
+Post-`d46299f` the key is a school's public address, so one school's staff room is one
 key — which is what the limit was always meant to measure and never did. With
 `skipSuccessfulRequests`, the limiter now counts only **wrong** passwords. Twenty wrong
 passwords per minute from one school is generous for Monday-morning typos and still

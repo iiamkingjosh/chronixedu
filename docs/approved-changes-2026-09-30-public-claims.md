@@ -1,6 +1,6 @@
 # Public claims and the retention commitment: approved spec and how it landed
 
-Status: approved by Moses 30 Sep 2026. **All five sections implemented in `58eca29` (deployed
+Status: approved by Moses 30 Sep 2026. **All five sections implemented in `e7a1a25` (deployed
 30 Sep, 23:43 UTC), except the (a)/(b) decision in §1, which is [MOSES] by the spec's own
 instruction.** Records: SECURITY.md Round 21; `docs/AUDIT-2026-09.md` (the claims resolved, the
 open deletion item); `docs/data-deletion-runbook.md`; `docs/CHANGELOG.md`; CLAUDE.md "A school's

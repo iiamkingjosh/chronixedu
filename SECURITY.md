@@ -1,8 +1,62 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 22 — 2026-10-01  
-**Scope:** The audit purge path (option (a)); completing school deletion  
-**Round 22 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) + 1 Info
+**Latest audit:** Round 23 — 2026-10-01  
+**Scope:** Credentials committed to the public repository; removal from git history  
+**Round 23 total findings:** 1 (0 Critical · 1 High) — partially remediated, two owner actions open
+
+---
+
+## Round 23 — 2026-10-01
+
+### H-01 — Passwords in a public repository for three and a half months ⚠️ Partially remediated
+
+**File:** `apps/api/scripts/seed-child-prime.js` (16 Jun – 1 Oct 2026), in the **public** repository `iiamkingjosh/chronixedu`.
+
+The demo seeder hardcoded two password constants: one for the platform super-admin account `info@chronixtechnology.com`, and one shared by every Child Prime staff account. It also deleted every school and every Supabase Auth user with no dry run, no host check and no confirmation.
+
+**Done, 1 Oct 2026:**
+- The file was deleted in its own commit (`1254ac9`).
+- **The file was removed from git history** with `git-filter-repo --invert-paths`, in a fresh mirror clone, and force-pushed (`28600d6` → `a799c9a`). The push used `--force-with-lease` pinned to the expected old commit, so it could not overwrite anything newer.
+- Verification:
+  - The new `main` has the **same file tree** (`a461a7a`) as before, so the code and docs are byte-identical and only history changed.
+  - Both password literals occur in **0** blobs in the rewritten repository. The same scan run against the original found them, so the zero is real.
+  - No commit touches the path.
+  - One commit (`83b7ae2`, a rename inside the seed script) became empty and was dropped: 307 commits, previously 308.
+- **Scope check across all history:** no other secret was ever committed. No `.env` file, and no Paystack, SendGrid, Supabase or JWT keys, private keys, or database URLs with real passwords. The only database URLs are the local test container's `postgres:postgres@localhost`; Termii-shaped hits are `package-lock.json` integrity hashes.
+- GitHub reported the repository public, with 0 forks and no pull-request refs, so nothing else on GitHub pins the old history.
+
+**Open, owner actions:**
+1. **Rotate both passwords.** This is the real fix, and it is not confirmed done. Removal from history does not un-leak a secret: anyone who cloned, forked or browsed the repository before 1 Oct may hold it. The super-admin account is the one that matters. It can see every school, start support sessions and record payments. Enabling MFA on super-admin accounts would bound the next leak.
+2. **Ask GitHub Support to purge cached views.** After the force-push, GitHub still served the old commit `97739d7` and the raw file by direct link (HTTP 200). That is documented GitHub behaviour for orphaned commits until its own clean-up or a Support request ("Remove sensitive data") removes them. Only the account owner can file it. Give them the repository name and the old commit IDs `97739d7` and `28600d6`.
+3. Local copies remain on the development machine: a recovery bundle in the session's temp folder, and two stale agent worktrees under `.claude/worktrees/` checked out at old commits. They are not public. Delete them once the rotation is confirmed.
+
+**Consequence of the rewrite: commit IDs changed.** Every commit since 16 Jun 2026 has a new ID. Docs and code comments were updated (40 references). Three places still show the old IDs, as history:
+- Railway's deployment list;
+- GitHub Actions runs;
+- `migration_runs.commit_sha` rows.
+
+`migrations/049` quotes one old ID in a comment and is deliberately not edited, because it is an applied migration. The IDs those places mention:
+
+| Before the rewrite | After |
+|---|---|
+| `e0eb457` | `aead53b` |
+| `86b0a18` | `3abbabe` |
+| `3a4d1e7` | `9e2e404` |
+| `c07c0b4` | `c671c5f` |
+| `13c1157` | `d46299f` |
+| `d5c7716` | `7e99984` |
+| `fe222d2` | `5b81d9a` |
+| `c39e937` | `752db72` |
+| `00f39f2` | `4c5e5d6` |
+| `cbd8359` | `184ed7b` |
+| `58eca29` | `e7a1a25` |
+| `93b5938` | `f7b834e` |
+| `98b8e5d` | `a764c80` |
+| `033e194` | `fccb98b` |
+| `4c29f4d` | `84fd1b8` |
+| `b15b7c8` | `21b0135` |
+| `b1eb76a` | `1254ac9` |
+| `28600d6` | `a799c9a` |
 
 ---
 

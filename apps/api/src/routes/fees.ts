@@ -580,7 +580,7 @@ router.post(
       // But a payment that CLEARS the balance is always allowed, whatever the floor says.
       // Balance ₦600 against a ₦1,000 minimum must still be settleable. Without this
       // carve-out the guard refuses a parent paying exactly what they owe — which is
-      // precisely the defect fixed in fe222d2, rebuilt in a new guard with different
+      // precisely the defect fixed in 5b81d9a, rebuilt in a new guard with different
       // arithmetic. The exact-balance case is tested before the enforcement case for that
       // reason.
       //

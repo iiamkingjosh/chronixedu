@@ -8,7 +8,7 @@
  * The first describe block is the important one. A minimum that also applies to a payment
  * CLEARING the balance refuses a parent paying exactly what they owe — a balance of ₦600
  * against a ₦1,000 minimum becomes unsettleable online. That is the same defect as
- * fe222d2 (float subtraction in the overpayment guard), rebuilt in a new guard with
+ * 5b81d9a (float subtraction in the overpayment guard), rebuilt in a new guard with
  * different arithmetic: same counter, same parent, same refusal. It is written first
  * because it looks like a corner case and is not.
  */

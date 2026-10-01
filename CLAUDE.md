@@ -12,8 +12,10 @@ fixture (created by an integration test, never cleaned up — see `L-test-data`
 in `docs/AUDIT-2026-09.md`) or demo/sandbox data, all marked `is_demo`, plus Moses's own
 pilot (Chronix High School). There is no seed script: the old demo seeder, which wiped
 every school and every Supabase Auth user with no guard and committed staff passwords to
-this public repo, was deleted on 1 Oct 2026 (the passwords stay in git history and were
-rotated). Schools are removed one at a time, with a dry run and host checks, by
+this public repo, was deleted on 1 Oct 2026 and removed from git history the same day (the
+rewrite changed every commit ID since June 2026; SECURITY.md Round 23 has the old→new map and
+what GitHub may still serve). Removing it does not un-leak the passwords: rotation is the fix,
+and is tracked as open until confirmed. Schools are removed one at a time, with a dry run and host checks, by
 `apps/api/scripts/delete-school-data.js`. Treat this repo's "production" database as
 pre-launch: no real student, parent, or payment data exists in it as of 18 Sep 2026.
 Monorepo, npm workspaces:
@@ -103,7 +105,7 @@ Monorepo, npm workspaces:
    (api 1, web 4), so an existing warning stays tolerated and a NEW one fails at the
    moment of introduction rather than scrolling past in pre-commit hook output.
    Proof this was needed: a new unused-import warning was introduced and pushed in
-   86b0a18 with the hook reporting it the whole time.
+   3abbabe with the hook reporting it the whole time.
    **It freezes the count; it does not shrink it.** Nothing decrements the number, so
    the remaining warnings are permanent-by-default rather than accumulating — strictly
    better, and a different claim. Going down takes someone fixing a warning *and*
@@ -650,12 +652,12 @@ Monorepo, npm workspaces:
   service-scoped container build. The runner requires the directory to actually contain
   `.sql` files — an empty `apps/api/src/migrations/` exists in some working copies, and
   matching it made the runner report success after reading zero files.
-- **Clear the Pre-Deploy Command before rolling back past `e0eb457`.** A rollback runs
-  an OLD image, and images built before `e0eb457` have no `dist/migrations` — their
+- **Clear the Pre-Deploy Command before rolling back past `aead53b`.** A rollback runs
+  an OLD image, and images built before `aead53b` have no `dist/migrations` — their
   bundled `migrate.js` still uses the unverified repo-root path. With the gate on, such
   a rollback either fails pre-deploy and is blocked, or behaves unknown. Rollback is
   what you reach for when something is already on fire. This stops mattering once every
-  rollback candidate is post-`e0eb457`.
+  rollback candidate is post-`aead53b`.
 
 ## Definition of done
 

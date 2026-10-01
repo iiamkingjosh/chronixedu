@@ -83,7 +83,7 @@ deleting transaction.
 | **Supabase backups** | Production is on the **free plan** (one organization, `CHRONIX TECHNOLOGY LIMITED`, holding Chronix Edu and Chronix ERP; measured 1 Oct 2026). Supabase backs up Pro/Team/Enterprise daily (7/14/30 days); for free projects it "currently" takes up to 7 daily backups, reachable only after upgrading, and "might no longer" do so. | Not deletable; they expire. At most 7 days, well inside 90. | ✅ by expiry. Terms §19's "routine backups" becomes true on the **Pro upgrade, decided and budgeted, before the first real school signs** (open item in `docs/AUDIT-2026-09.md`). |
 | **Supabase logs** (API/Postgres log explorer) | Request metadata; no bodies. | Expire by plan (free: 1 day). | ✅ by expiry |
 | **Railway logs** | API logs. Personal data appears only on email-send failure (`sendgrid_email_failed`, `email_queue_retry_failed` log the recipient address). | No per-record deletion. Retention by plan: Free 3 d, Trial/Hobby 7 d, Pro 30 d, Enterprise up to 90 d. | ✅ by expiry on any plan. **[MOSES]** confirm the plan (the API does not expose it). |
-| **Sentry** | Error events and session replays. User **id** only since `58eca29` (30 Sep 2026, 23:43 UTC); before that, user emails. Replays mask all text and inputs and block media. | Events expire: **90 days on the business plan**. | ✅ by expiry. The last email-bearing events age out by about **29 Dec 2026**. Check in January (open item). |
+| **Sentry** | Error events and session replays. User **id** only since `e7a1a25` (30 Sep 2026, 23:43 UTC); before that, user emails. Replays mask all text and inputs and block media. | Events expire: **90 days on the business plan**. | ✅ by expiry. The last email-bearing events age out by about **29 Dec 2026**. Check in January (open item). |
 | **SendGrid** | Email Activity (recipient, subject, status) and suppression lists (bounces, blocks, spam reports, unsubscribes), which **do not expire**. | Activity expires (3 days by default, 30 with the extended-history add-on). Suppressions: per address, from the list the script prints (procedure step 5). | Suppressions ✅ by the procedure. **[MOSES]** verify the Activity retention in the dashboard. |
 | **Termii** | SMS history: parent phone numbers and message text (attendance alerts). | **Unknown. No deletion API we use.** The script prints the numbers to put in a request. | 🔴 **A real hole in a 90-day promise, not a formality.** **[MOSES]** ask Termii how long message logs are kept and how to request deletion. |
 | **Paystack** | Transactions for school-fee payments: payer email, amount, reference. | Merchants cannot delete transactions; Paystack keeps them under its own regulatory obligations. | Legal-retention exception, by Paystack's obligation not ours. **[MOSES]** confirm with the adviser. |
@@ -155,7 +155,7 @@ accident-proofing, and it is the only door that is not deliberate.
 - `purgeDuringNotification.db.test.ts`: the school is purged from inside a real
   `processNotificationQueue()` run, between the worker reading its batch and stamping the row. The
   worker completes without throwing, and School B's row (queued after A's) is still processed.
-- **Shown failing on the old code by reverting it** (old script from `58eca29`, 048 moved aside):
+- **Shown failing on the old code by reverting it** (old script from `e7a1a25`, 048 moved aside):
   11 of 18 fail, plus the worker test, each for the right reason ("schema chronixedu_purge does not
   exist", rows left behind, `resolveOperator` missing). The guard tests pass on the old code, as
   they must, because they protect what 048 must not change. So they were shown to bite with a
@@ -185,7 +185,7 @@ accident-proofing, and it is the only door that is not deliberate.
 ## Live trial (production)
 
 **1 Oct 2026, production** (Supabase `pgnpmqaowrnmsytpehwc`), after migration 048 was applied by
-the pre-deploy step (`migration_runs` id 56, commit `93b5938`, 1 applied of 50).
+the pre-deploy step (`migration_runs` id 56, commit `f7b834e`, 1 applied of 50).
 
 **048 in production, checked before use:**
 - the function is owned by `chronixedu_audit_purger`, is SECURITY DEFINER, and its ACL is the purger and `postgres` only;

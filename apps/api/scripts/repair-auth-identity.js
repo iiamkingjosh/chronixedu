@@ -14,7 +14,7 @@
  * this file hardcoded the same constant the Round 11 M-01 fix had just removed, in a
  * publicly readable repo. Note also that a repaired account's stored password_hash
  * must never be reused to mint the auth password: accounts bulk-imported before
- * c39e937 hash a password that was public for months, so doing that would convert a
+ * 752db72 hash a password that was public for months, so doing that would convert a
  * bug that BLOCKS login into working public credentials.
  *
  * Scope: deliberately single-account. A 2026-09-26 sweep found exactly one broken

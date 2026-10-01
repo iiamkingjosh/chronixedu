@@ -45,7 +45,7 @@ export default async function globalSetup(): Promise<void> {
   // loginable identities on whatever Supabase project SUPABASE_URL names — and via
   // apps/api/.env that is production. A sweep on 2026-09-26 found 783 auth
   // identities with no matching users row, every one of them left behind by a test
-  // run, and the ones predating c39e937 carry a password that was public in this
+  // run, and the ones predating 752db72 carry a password that was public in this
   // repo. CI already points at a local stub (127.0.0.1:54321); this stops a local
   // run from silently topping the pile up.
   if (process.env.SUPABASE_URL) {

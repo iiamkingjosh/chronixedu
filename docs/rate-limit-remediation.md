@@ -2,7 +2,7 @@
 
 Status: **partly implemented** — see "Where this stands" below (updated 2026-09-30)
 Supersedes: Agent File **Rule S5** (see §0 — the rule must be amended, not worked around)
-Depends on: `3a4d1e7` (separate Redis prefixes) — already deployed, keep it
+Depends on: `9e2e404` (separate Redis prefixes) — already deployed, keep it
 
 ## Where this stands
 
@@ -77,7 +77,7 @@ Round 17.
 
 ## 1. Evidence
 
-Railway HTTP logs for the API service, in the minute after `3a4d1e7` went live
+Railway HTTP logs for the API service, in the minute after `9e2e404` went live
 (deploy SUCCESS 15:57:31 UTC, 2026-09-28):
 
 ```
@@ -91,7 +91,7 @@ Railway HTTP logs for the API service, in the minute after `3a4d1e7` went live
 
 Five correct passwords in 35 seconds; the sixth refused in 3 ms, before the password
 was checked. The dashboard GETs interleaved between them are now on the general
-counter — `3a4d1e7` did what it claimed — but the limiter still counts successes,
+counter — `9e2e404` did what it claimed — but the limiter still counts successes,
 so the wall is still there. Substitute six teachers on one staff-room router at
 07:50 and the outcome is identical.
 
@@ -214,7 +214,7 @@ call, not a code cleanup — make it explicitly and record it in `SECURITY.md`.
 
 ## 4. Tests
 
-Extend `rateLimitRedis.test.ts` (the fake-Redis harness from `3a4d1e7`, which drives
+Extend `rateLimitRedis.test.ts` (the fake-Redis harness from `9e2e404`, which drives
 the only path production runs). Every test below must be shown **failing on current
 `main`** before the fix lands — doctrine 16: a test that passes either way proves
 nothing.
@@ -222,7 +222,7 @@ nothing.
 1. **Successes do not consume the auth allowance.** 30 requests returning 200 through
    the auth limiter; the 31st still passes. Fails on current code at the 6th.
 2. **Failures do consume it.** 20 requests returning 401; the 21st gets 429.
-3. **The two limiters remain independent.** Regression guard for `3a4d1e7` — 100
+3. **The two limiters remain independent.** Regression guard for `9e2e404` — 100
    general requests must not affect the auth counter and vice versa. (Exists; keep.)
 4. **Scope.** `POST /api/auth/change-password` is not subject to the auth limiter:
    30 calls, none refused by it. Fails on current code.

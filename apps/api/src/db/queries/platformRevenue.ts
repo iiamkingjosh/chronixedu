@@ -6,7 +6,7 @@ import { PAID_PLANS } from '../../services/planFeatures';
  *
  * There were two MRR figures in this product: `/super-admin/subscriptions/mrr` summed
  * every active subscription, while `/super-admin/analytics/overview` excluded demo and
- * suspended schools after d5c7716. They agree today only because no demo school has a
+ * suspended schools after 7e99984. They agree today only because no demo school has a
  * subscription — a latent disagreement, not an absent one. `/api/partner/revenue` would
  * have made it three. This is the single source all of them read.
  *
