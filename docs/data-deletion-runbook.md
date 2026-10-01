@@ -179,13 +179,60 @@ accident-proofing, and it is the only door that is not deliberate.
   - Earlier refusal checks (malformed id, `--confirm`, Supabase choice, credentials, hosts, sentinel key) were rerun under the current flag names the same day and still hold.
 - Migration 047 (the component-weight trigger skips a config deleted in the same transaction) is in
   production since 30 Sep 2026, 23:43 UTC (`migration_runs` id 55).
-- **Live trial on production:** pending migration 048's deploy. See [§C below](#live-trial-production).
+- **Live trial on production:** done 1 Oct 2026, below. Every path in this runbook has now run for
+  real; nothing is listed as unexercised.
 
 ## Live trial (production)
 
-Pending. Runs after 048 is live: a throwaway school with one user, one uploaded logo and one audit
-row, deleted with `--with-supabase` and verified independently of the script's own output; then
-the stray `guyg ` school the same way.
+**1 Oct 2026, production** (Supabase `pgnpmqaowrnmsytpehwc`), after migration 048 was applied by
+the pre-deploy step (`migration_runs` id 56, commit `93b5938`, 1 applied of 50).
+
+**048 in production, checked before use:**
+- the function is owned by `chronixedu_audit_purger`, is SECURITY DEFINER, and its ACL is the purger and `postgres` only;
+- the role is NOLOGIN, NOINHERIT, BYPASSRLS, not a superuser;
+- its only membership is Supabase's automatic ADMIN grant to `postgres` (no SET, no INHERIT);
+- `anon`, `authenticated` and `service_role` cannot execute it; `anon` has no USAGE on the schema;
+- the purger's migration-time CREATE is gone.
+
+`DELETE FROM audit_logs WHERE false` was refused with the new HINT, because the trigger is
+statement-level and fires even when nothing matches.
+
+**The trial school** (`deletion-trial-20261001`, `is_demo = true` so it never counted as a customer):
+- Set up with one Auth user, one logo in `school-assets`, one `audit_logs` row and one
+  `platform_audit_logs` row. All of it was confirmed present by direct query before the run.
+- **Dry run:** named the school; listed `audit_logs` 1, `platform_audit_logs` 1, `users` 1, `schools` 1;
+  1 Auth account; 1 Storage file; 1 email address to clear from SendGrid.
+- **Execute, first attempt: a real network failure.** The Auth delete failed with "other side
+  closed" (0 bytes read back). The script stopped with "the database was NOT touched", and an
+  independent query confirmed every row, the Auth user and the file still present, and no purge
+  record. So the failure path has now run in production, not only locally.
+- **Execute, rerun of the identical command:** Auth account and file deleted first, then the
+  transaction committed with its in-transaction zero check. The service key appeared 0 times in
+  either run's output.
+- **Verified independently of the script** (`verify.js` in the session scratchpad, which does not
+  use the script or its table list):
+  - Auth admin API `getUserById` → "User not found (404)"; `auth.users`, `auth.identities` and
+    `auth.sessions` all 0;
+  - Storage API download → "Object not found (404)"; no `storage.objects` row names the school;
+  - **every uuid/text column of every `public` table** (242 columns, 44 tables) scanned for the
+    school id and the user id: 0 rows;
+  - the purge record survives: `SCHOOL_AUDIT_PURGED`, operator `info@chronixtechnology.com`,
+    `target_school_id` NULL, `audit_logs_deleted: 1`.
+- **Confirming dry run:** "Nothing to delete … no row in any table refers to it", exit 0.
+
+**The scanner's control (doctrine 16).** The same scan, run on `guyg ` before its deletion, found
+its 4 rows (`onboarding_sessions`, `platform_audit_logs`, `school_settings`, `schools`), exactly
+what the script's dry run listed. So a 0 from the scan means absent, not unscanned.
+
+**`guyg `** (slug `guyg-24864a`) was then deleted the same way:
+- dry run: 4 rows, 0 Auth accounts, 0 files;
+- one email address and one phone number on the school row were printed for SendGrid/Termii (not
+  reproduced here; this repository is public);
+- execute committed; the independent scan found 0 rows; the purge record survives
+  (`audit_logs_deleted: 0`); the confirming dry run said "Nothing to delete".
+
+**After both:** 45 schools, all `is_demo`; 0 customers; 0 customer subscriptions; 2
+`SCHOOL_AUDIT_PURGED` records. Measured by direct query.
 
 ## Known gaps
 

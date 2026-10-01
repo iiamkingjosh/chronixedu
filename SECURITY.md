@@ -44,6 +44,8 @@ Relaxing an append-only guard is the change most likely to relax more than inten
 - The guard tests pass on the old code by design, so they were shown to bite with a deliberately over-broad 048: all five failed.
 - The notification worker is purged *mid-run*, between reading its batch and stamping a row, and completes. A later school's row is still processed.
 
+**Proven in production, 1 Oct 2026.** After the deploy, production showed every property above by direct query. A no-match `DELETE FROM audit_logs WHERE false` was refused with the new HINT. A throwaway school with one user, one logo and audit rows was deleted with `--with-supabase` and verified independently of the script: Auth API 404, Storage API 404, and 0 rows across every uuid/text column of every `public` table, with the scanner controlled on a school that still existed. A real network failure on the first attempt stopped the run with the database untouched, confirmed by query. The stray `guyg ` school was deleted the same way. Runbook, "Live trial (production)".
+
 **Residual, stated.** The table owner still holds ADMIN on the purger role (Postgres grants a role's creator ADMIN option automatically). It could grant itself membership, and it could `DISABLE TRIGGER`. Both are deliberate acts, and the first leaves a `pg_auth_members` row that the test asserts is absent. Doctrine 6: accident-proofing, not tamper-proofing.
 
 ### L-01 — The DB suite's rebuild left non-`public` schemas behind ✅ Fixed
