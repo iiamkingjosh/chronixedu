@@ -3,6 +3,19 @@ import path from 'path';
 
 dotenv.config({ path: path.join(__dirname, '.env') });
 
+// The same hazard as the two guards below, one layer further out: .env holds production's
+// SendGrid, Termii and Paystack keys, and a run that loads them can email, text or charge for
+// real. Measured 1 Oct 2026: each local run sent one real email through production SendGrid
+// (a platform announcement to a fixture principal), and made no other outbound call. Emptied,
+// not deleted, because most suites call dotenv.config themselves and dotenv never overwrites a
+// variable that is set. A test that needs a provider sets a fake key and stubs the call, as
+// feesPayout and payoutSettings do. The marker lets noOutsideWorldKeys.test.ts tell "emptied"
+// from "never there".
+for (const key of ['SENDGRID_API_KEY', 'TERMII_API_KEY', 'PAYSTACK_SECRET_KEY', 'SMS_ENABLED', 'SENTRY_DSN']) {
+  process.env[key] = '';
+}
+process.env.OUTSIDE_WORLD_KEYS_EMPTIED = '1';
+
 import { Client } from 'pg';
 import { createClient } from '@supabase/supabase-js';
 

@@ -307,6 +307,12 @@ Monorepo, npm workspaces:
   planner inlines as the current role, so the stub failed with `permission denied for schema
   auth` for any role without USAGE on `auth` — and the C-4a probe measured the stub, not the
   system. Copy bodies from `pg_proc`, and grants too.
+- **A local integration run cannot reach a real provider.** `jest.globalSetup.ts` loads `.env` and
+  then empties `SENDGRID_API_KEY`, `TERMII_API_KEY`, `PAYSTACK_SECRET_KEY`, `SMS_ENABLED` and
+  `SENTRY_DSN`. Emptied, not deleted: suites call `dotenv.config` themselves, and dotenv never
+  overwrites a set variable. A test that needs a provider sets a fake key and stubs the call
+  (`feesPayout`, `payoutSettings`); `noOutsideWorldKeys.test.ts` guards it. Until 1 Oct 2026 each
+  local run sent one real email through production SendGrid (SECURITY.md Round 26).
 - That is only safe because both runners refuse a non-local database (`ALLOW_REMOTE_TEST_DB`,
   `ALLOW_REMOTE_TEST_SUPABASE`), so the leftovers land somewhere disposable. **Do not "fix"
   it by letting tests delete audit rows** — a session flag or role that permits it converts
@@ -715,7 +721,7 @@ export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixed
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
 npm run test:db                         # 31 suites, 311 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
-npm run test:integration:local -- --forceExit   # 21 suites, 185 passed + 7 skipped (Auth-dependent; the setup says why)
+npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)
 ```
 

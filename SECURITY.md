@@ -1,8 +1,33 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 25 — 2026-10-01  
-**Scope:** Alerting: brute-force controls could be off with nothing raising an alarm; what the API sends to Sentry  
-**Round 25 total findings:** 1 (0 Critical · 0 High · 1 Medium) — remediated; one owner check open
+**Latest audit:** Round 26 — 2026-10-01  
+**Scope:** Local integration test runs could reach production email, SMS and payment providers  
+**Round 26 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated
+
+---
+
+## Round 26 — 2026-10-01
+
+### L-01 — Local integration runs sent real email through production SendGrid ✅ Remediated
+
+**Files:** `apps/api/jest.globalSetup.ts`, `apps/api/tests/noOutsideWorldKeys.test.ts` (new).
+
+The integration setup loads `apps/api/.env`, which holds production's `SENDGRID_API_KEY`, `TERMII_API_KEY` and `PAYSTACK_SECRET_KEY`. Most suites also call `dotenv.config` themselves. The setup already refused a remote database and a remote Supabase, but nothing stopped a local run from using the real providers. A throwaway test printing only yes/no showed `isEmailConfigured()` was **true** inside a normal local run. CI was never affected: it has no `.env` and sets no provider key.
+
+**Measured, not inferred** (two full runs, with every provider key present but nothing able to leave the machine):
+- **Email:** SendGrid's client was replaced by a recorder. One message per run: the platform-announcement publish test mailing a fixture principal at a bare `@test` address, which cannot be delivered. So each local run spent one email of the production account's allowance and produced one bounce. Before measuring, this was described as mail to `@test.com` principals; that came from a fixture whose test stubs email, and was wrong.
+- **Everything else:** every `fetch` to a non-local host was recorded and answered locally. There were **zero**, with Paystack and Termii keys present and SMS switched on. A control call to `api.paystack.co` from a throwaway test was caught, so the zero is real. Paystack and Termii are stubbed by the suites that reach them.
+
+**Fix:** after loading `.env`, the setup **empties** `SENDGRID_API_KEY`, `TERMII_API_KEY`, `PAYSTACK_SECRET_KEY`, `SMS_ENABLED` and `SENTRY_DSN`, and sets a marker. Emptied rather than deleted, because dotenv never overwrites a variable that is set, so the suites' own `dotenv.config` calls cannot bring the keys back. A test that needs a provider sets a fake key and stubs the call, as `feesPayout` and `payoutSettings` already did.
+
+**Tests:** `noOutsideWorldKeys.test.ts` loads `.env` the way most suites do, then asserts:
+- the marker, which is the control, because a machine without a `.env` passes the rest whatever the setup did;
+- each key empty;
+- email and SMS off.
+
+On failure it reports a key as "HAS A VALUE", never its value. A failing run on a developer machine would otherwise print production keys; the mutation run's output was checked for SendGrid-shaped strings and held none. With the emptying removed, the test fails on a machine whose `.env` holds the keys.
+
+After the fix, a full local run with nothing blanked in the shell: 22 suites, 187 passed, 7 skipped, and the recorder caught **0** emails, down from 1.
 
 ---
 
