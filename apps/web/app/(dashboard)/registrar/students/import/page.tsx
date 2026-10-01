@@ -41,6 +41,10 @@ interface CommitResult {
   created: number;
   failed: number;
   results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string; admission_no?: string }>;
+  /** Whether the new parents' welcome emails (no password in them) went. */
+  welcome_emails: 'sent' | 'partly_sent' | 'not_sent' | 'none';
+  /** The new parents whose welcome email did not go. */
+  welcome_emails_not_sent: string[];
   download_base64: string | null;
 }
 
@@ -78,6 +82,9 @@ export default function StudentBulkImportPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [rows, setRows] = useState<RowValidationResult[]>([]);
+  // The parent addresses this import will create accounts for and mail, from the preview (item H2).
+  const [mailedAddresses, setMailedAddresses] = useState<string[]>([]);
+  const [addressesConfirmed, setAddressesConfirmed] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [commitResult, setCommitResult] = useState<CommitResult | null>(null);
   const [commitError, setCommitError] = useState('');
@@ -90,11 +97,13 @@ export default function StudentBulkImportPage() {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await apiUpload<{ success: boolean; data: { rows: RowValidationResult[] } }>(
+      const res = await apiUpload<{ success: boolean; data: { rows: RowValidationResult[]; mailed_addresses: string[] } }>(
         `/api/schools/${schoolId}/students/bulk-import/preview`,
         formData
       );
       setRows(res.data.rows);
+      setMailedAddresses(res.data.mailed_addresses);
+      setAddressesConfirmed(false);
       setStep('preview');
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Failed to process this file');
@@ -105,13 +114,18 @@ export default function StudentBulkImportPage() {
 
   async function handleCommit() {
     if (!schoolId) return;
+    if (mailedAddresses.length > 0 && !addressesConfirmed) {
+      setCommitError('Check the parent email addresses above and tick the box to confirm them.');
+      return;
+    }
     setCommitting(true);
     setCommitError('');
     try {
       const validRows = rows.filter(r => r.status === 'valid');
       const res = await apiFetch<{ success: boolean; data: CommitResult }>(
         `/api/schools/${schoolId}/students/bulk-import/commit`,
-        { method: 'POST', body: JSON.stringify({ rows: validRows }) }
+        // An import that creates no parent account mails nobody, so there is nothing to confirm.
+        { method: 'POST', body: JSON.stringify({ rows: validRows, mailed_addresses_confirmed: mailedAddresses.length === 0 || addressesConfirmed }) }
       );
       setCommitResult(res.data);
       setStep('done');
@@ -203,6 +217,29 @@ export default function StudentBulkImportPage() {
             </table>
           </div>
 
+          {mailedAddresses.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-900">
+                {mailedAddresses.length} new parent account{mailedAddresses.length === 1 ? '' : 's'} will be created and emailed at:
+              </p>
+              <ul className="text-sm font-mono text-gray-700 max-h-48 overflow-y-auto space-y-0.5">
+                {mailedAddresses.map(a => <li key={a}>{a}</li>)}
+              </ul>
+              <p className="text-xs text-gray-500">
+                Each address gets a welcome email saying the account is ready and how to set a password with Forgot password. Anyone who reads that mailbox can do so, so a mistyped address hands the account to a stranger.
+              </p>
+              <label className="flex items-start gap-2 text-sm text-gray-800">
+                <input
+                  type="checkbox"
+                  checked={addressesConfirmed}
+                  onChange={e => { setAddressesConfirmed(e.target.checked); setCommitError(''); }}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                I have checked these addresses against the parents&apos; own records.
+              </label>
+            </div>
+          )}
+
           {commitError && (
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{commitError}</div>
           )}
@@ -218,7 +255,7 @@ export default function StudentBulkImportPage() {
             </button>
             <button
               type="button"
-              onClick={() => { setStep('upload'); setFile(null); setRows([]); }}
+              onClick={() => { setStep('upload'); setFile(null); setRows([]); setMailedAddresses([]); setAddressesConfirmed(false); }}
               className="px-5 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
             >
               Start over
@@ -233,6 +270,18 @@ export default function StudentBulkImportPage() {
             {commitResult.created} student{commitResult.created === 1 ? '' : 's'} created
             {commitResult.failed > 0 && <span className="text-red-600">, {commitResult.failed} failed</span>}
           </p>
+          {commitResult.welcome_emails === 'sent' && (
+            <p className="text-sm text-green-700">Each new parent has been emailed how to set their own password with Forgot password.</p>
+          )}
+          {(commitResult.welcome_emails === 'not_sent' || commitResult.welcome_emails === 'partly_sent') && (
+            <div className="text-sm text-amber-700">
+              <p className="font-semibold">
+                {commitResult.welcome_emails === 'partly_sent' ? 'Some welcome emails were NOT sent.' : 'The welcome emails were NOT sent.'}{' '}
+                Tell these parents to set their password with Forgot password on the login page:
+              </p>
+              <ul className="font-mono mt-1">{commitResult.welcome_emails_not_sent.map(a => <li key={a}>{a}</li>)}</ul>
+            </div>
+          )}
 
           {commitResult.created > 0 && (
             <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">

@@ -219,7 +219,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     const res = await request(app)
       .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
       .set('Authorization', `Bearer ${registrarToken}`)
-      .send({ rows });
+      .send({ rows, mailed_addresses_confirmed: true });
 
     expect(res.status).toBe(200);
     expect(res.body.data.created).toBe(1);
@@ -259,7 +259,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     const res = await request(app)
       .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
       .set('Authorization', `Bearer ${registrarToken}`)
-      .send({ rows });
+      .send({ rows, mailed_addresses_confirmed: true });
 
     expect(res.status).toBe(200);
     // Asserted as the failed rows WITH their reasons before the bare count. This test
@@ -304,7 +304,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     const res = await request(app)
       .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
       .set('Authorization', `Bearer ${registrarToken}`)
-      .send({ rows });
+      .send({ rows, mailed_addresses_confirmed: true });
 
     expect(res.status).toBe(200);
     expect(res.body.data.created).toBe(1);
@@ -339,7 +339,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
       const res = await request(app)
         .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
         .set('Authorization', `Bearer ${registrarToken}`)
-        .send({ rows });
+        .send({ rows, mailed_addresses_confirmed: true });
 
       expect(res.status).toBe(200);
       expect(res.body.data.created).toBe(1);
@@ -389,7 +389,7 @@ describe('POST /:schoolId/students/bulk-import/commit', () => {
     const res = await request(app)
       .post(`/api/schools/${schoolId}/students/bulk-import/commit`)
       .set('Authorization', `Bearer ${registrarToken}`)
-      .send({ rows });
+      .send({ rows, mailed_addresses_confirmed: true });
 
     expect(res.status).toBe(200);
     expect(res.body.data.created).toBe(ROW_COUNT);

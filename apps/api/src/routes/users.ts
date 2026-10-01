@@ -24,7 +24,7 @@ import { parseStaffBulkImportFile, StaffBulkImportParseError } from '../services
 import { runFullStaffValidation, STAFF_ROLES } from '../services/staffBulkImportValidation';
 import { generateStaffBulkImportResultsFile, type CreatedStaffRecord, type FailedStaffRecord } from '../services/staffBulkImportResults';
 import { logger } from '../config/logger';
-import { getSchoolName, welcomeEmailBody } from '../services/welcomeEmail';
+import { sendWelcomeEmails } from '../services/welcomeEmail';
 import { cache, schoolCacheKey } from '../services/cacheService';
 
 const router = Router();
@@ -585,7 +585,11 @@ router.post(
         invalid: results.filter(r => r.status === 'error').length,
       };
 
-      return res.json({ success: true, data: { rows: results, summary } });
+      // Every valid row is a new account and a welcome email (item H2). The screen shows this list
+      // and the commit refuses until the operator confirms it.
+      const mailedAddresses = results.filter(r => r.status === 'valid').map(r => r.staff.email);
+
+      return res.json({ success: true, data: { rows: results, summary, mailed_addresses: mailedAddresses } });
     } catch (err) {
       return next(err);
     }
@@ -610,9 +614,11 @@ router.post(
 function generateStaffTempPassword(): string {
   return crypto.randomBytes(9).toString('base64url');
 }
-const STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE = 50;
 
 const staffBulkImportCommitSchema = z.object({
+  // The operator has seen the list of addresses that will be created and mailed, and says so
+  // (item H2, 1 Oct 2026; the bulk analogue of reading one address back). Never defaulted.
+  mailed_addresses_confirmed: z.boolean().optional(),
   rows: z.array(z.object({
     row_number: z.number(),
     status: z.enum(['valid', 'error']),
@@ -642,6 +648,13 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
 
+      if (parsed.data.mailed_addresses_confirmed !== true) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'MAILED_ADDRESSES_NOT_CONFIRMED', message: 'Check the list of email addresses that will be created and mailed, and confirm it, before importing.' },
+        });
+      }
+
       const submittedRows = parsed.data.rows.map(r => r.staff);
       const revalidated = await runFullStaffValidation(submittedRows, findUsersRolesByEmails);
 
@@ -655,7 +668,6 @@ router.post(
       // single-process API's event loop for every other school. bcrypt.hash (async)
       // yields between rounds, so per-row hashing costs wall-clock time on this
       // request without stalling everyone else's.
-      const staffTempPasswords = new Map<string, string>();
 
       for (const row of revalidated) {
         if (row.status === 'error') {
@@ -671,7 +683,6 @@ router.post(
 
         const staffTempPassword = generateStaffTempPassword();
         const staffPasswordHash = await bcrypt.hash(staffTempPassword, 12);
-        staffTempPasswords.set(staff.email, staffTempPassword);
 
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: staff.email,
@@ -733,26 +744,15 @@ router.post(
 
       if (createdStaff.length > 0) {
         cache.del(schoolCacheKey(req.params.schoolId, 'dashboard-stats'));
-
-        const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
-        getSchoolName(req.params.schoolId).then(async schoolName => {
-          for (let i = 0; i < createdStaff.length; i += STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE) {
-            const batch = createdStaff.slice(i, i + STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE);
-            await Promise.all(
-              // No recorded password means no email — a welcome message carrying a
-              // blank password is worse than none.
-              batch.filter(s => staffTempPasswords.has(s.email)).map(s => sendEmail(
-                s.email,
-                'Welcome to Chronix Edu — Your Staff Account is Ready',
-                welcomeEmailBody({ role: s.role, name: `${s.first_name} ${s.last_name}`, email: s.email, tempPassword: staffTempPasswords.get(s.email)!, schoolName, appUrl, introVerb: 'added' })
-              ).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) })))
-            );
-            if (i + STAFF_BULK_IMPORT_EMAIL_BATCH_SIZE < createdStaff.length) {
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-          }
-        }).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) }));
       }
+
+      // Welcome emails with no credential in them (item H2); the response says whether they went.
+      const welcomeEmails = await sendWelcomeEmails(
+        req.params.schoolId,
+        createdStaff.map(st => ({ email: st.email, name: `${st.first_name} ${st.last_name}`, role: st.role })),
+        'Welcome to Chronix Edu — Your Staff Account is Ready',
+        { introVerb: 'added' },
+      );
 
       // Never let a post-write side effect turn an already-successful commit
       // into an apparent 500 — every account has already been created by this
@@ -773,7 +773,14 @@ router.post(
           actionType: 'STAFF_BULK_IMPORT',
           entity: 'users',
           entityId: req.params.schoolId,
-          newValue: { created: createdStaff.length, failed: results.filter(r => r.status === 'failed').length },
+          newValue: {
+            created: createdStaff.length,
+            failed: results.filter(r => r.status === 'failed').length,
+            mailed_addresses_confirmed: true,
+            welcome_emails: welcomeEmails.outcome,
+            mailed_addresses: createdStaff.map(st => st.email),
+            welcome_emails_not_sent: welcomeEmails.not_sent,
+          },
         });
       } catch (auditErr) {
         logger.error('staff_bulk_import_summary_audit_log_failed', { schoolId: req.params.schoolId, err: auditErr });
@@ -785,6 +792,8 @@ router.post(
           created: createdStaff.length,
           failed: results.filter(r => r.status === 'failed').length,
           results,
+          welcome_emails: welcomeEmails.outcome,
+          welcome_emails_not_sent: welcomeEmails.not_sent,
           download_base64: resultsFile ? resultsFile.toString('base64') : null,
         },
       });

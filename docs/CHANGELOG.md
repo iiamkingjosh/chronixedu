@@ -1,5 +1,18 @@
 # Chronix Edu — Changelog
 
+## New staff and parents set their own password (2026-10-01)
+
+### For schools
+- The welcome email for a new parent or staff member no longer contains a password. It says the account is ready and how to set a password with "Forgot password" on the login page.
+- Adding a parent, or registering a student with a parent, asks for the parent's email address twice. The second box does not accept pasting.
+- Before a bulk import of students or staff, the screen lists every email address it will create an account for and email. You tick to confirm them before importing.
+- After adding people, the screen says plainly whether the welcome emails went, and names anyone whose email did not.
+- Staff added by bulk import set their own password with "Forgot password", so nobody else ever sees it.
+- Unchanged: the registrar's screen and the import results sheet still show temporary passwords for students and parents.
+
+### For Chronix administrators
+- Completing onboarding now says the welcome email was NOT sent when the email service refused it. It used to say "sent" whenever email was configured.
+
 ## Adding people no longer fails at random (2026-10-01)
 
 ### For schools

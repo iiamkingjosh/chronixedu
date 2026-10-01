@@ -28,12 +28,18 @@ interface StaffRow {
 interface PreviewResponse {
   rows: StaffRow[];
   summary: { total: number; valid: number; invalid: number };
+  /** The addresses the commit will create accounts for and mail (item H2). */
+  mailed_addresses: string[];
 }
 
 interface CommitResponse {
   created: number;
   failed: number;
   results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string }>;
+  /** Whether the welcome emails (no password in them) went. */
+  welcome_emails: 'sent' | 'partly_sent' | 'not_sent' | 'none';
+  /** The new staff whose welcome email did not go. */
+  welcome_emails_not_sent: string[];
   download_base64: string | null;
 }
 
@@ -63,6 +69,7 @@ export default function StaffBulkImportPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [addressesConfirmed, setAddressesConfirmed] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [commitResult, setCommitResult] = useState<CommitResponse | null>(null);
   const [commitError, setCommitError] = useState('');
@@ -80,6 +87,7 @@ export default function StaffBulkImportPage() {
         formData
       );
       setPreview(res.data);
+      setAddressesConfirmed(false);
       setStep('preview');
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Failed to process this file');
@@ -90,12 +98,16 @@ export default function StaffBulkImportPage() {
 
   async function handleCommit() {
     if (!schoolId || !preview) return;
+    if (!addressesConfirmed) {
+      setCommitError('Check the email addresses above and tick the box to confirm them.');
+      return;
+    }
     setCommitting(true);
     setCommitError('');
     try {
       const res = await apiFetch<{ success: boolean; data: CommitResponse }>(
         `/api/schools/${schoolId}/staff-bulk-import/commit`,
-        { method: 'POST', body: JSON.stringify({ rows: preview.rows.filter(r => r.status === 'valid') }) }
+        { method: 'POST', body: JSON.stringify({ rows: preview.rows.filter(r => r.status === 'valid'), mailed_addresses_confirmed: addressesConfirmed }) }
       );
       setCommitResult(res.data);
       setStep('done');
@@ -124,7 +136,7 @@ export default function StaffBulkImportPage() {
             Download the import template (.xlsx)
           </a>
           <p className="text-xs text-gray-500">
-            Every account created here gets its own randomly generated temporary password, sent to them in a welcome email with their login details — they must change it on first login.
+            Each new staff member is emailed that their account is ready and how to set their own password with Forgot password. The email carries no password, so check every address before you import.
           </p>
           <form onSubmit={handleUpload} className="space-y-4">
             <input
@@ -175,6 +187,29 @@ export default function StaffBulkImportPage() {
             </table>
           </div>
 
+          {preview.mailed_addresses.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-semibold text-gray-900">
+                {preview.mailed_addresses.length} staff account{preview.mailed_addresses.length === 1 ? '' : 's'} will be created and emailed at:
+              </p>
+              <ul className="text-sm font-mono text-gray-700 max-h-48 overflow-y-auto space-y-0.5">
+                {preview.mailed_addresses.map(a => <li key={a}>{a}</li>)}
+              </ul>
+              <p className="text-xs text-gray-500">
+                Anyone who reads one of these mailboxes can set that account&apos;s password with Forgot password, so a mistyped address hands the account to a stranger.
+              </p>
+              <label className="flex items-start gap-2 text-sm text-gray-800">
+                <input
+                  type="checkbox"
+                  checked={addressesConfirmed}
+                  onChange={e => { setAddressesConfirmed(e.target.checked); setCommitError(''); }}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                I have checked these addresses against the staff members&apos; own records.
+              </label>
+            </div>
+          )}
+
           {commitError && (
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{commitError}</div>
           )}
@@ -202,6 +237,18 @@ export default function StaffBulkImportPage() {
       {step === 'done' && commitResult && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
           <p className="text-lg font-semibold text-gray-900">{commitResult.created} staff account(s) created</p>
+          {commitResult.welcome_emails === 'sent' && (
+            <p className="text-sm text-green-700">Each new staff member has been emailed how to set their own password with Forgot password.</p>
+          )}
+          {(commitResult.welcome_emails === 'not_sent' || commitResult.welcome_emails === 'partly_sent') && (
+            <div className="text-sm text-amber-700">
+              <p className="font-semibold">
+                {commitResult.welcome_emails === 'partly_sent' ? 'Some welcome emails were NOT sent.' : 'The welcome emails were NOT sent.'}{' '}
+                Tell these staff members to set their password with Forgot password on the login page:
+              </p>
+              <ul className="font-mono mt-1">{commitResult.welcome_emails_not_sent.map(a => <li key={a}>{a}</li>)}</ul>
+            </div>
+          )}
           {commitResult.failed > 0 && (
             <p className="text-sm text-red-600">{commitResult.failed} row(s) failed:</p>
           )}

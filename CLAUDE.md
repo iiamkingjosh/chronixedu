@@ -307,6 +307,19 @@ Monorepo, npm workspaces:
   write can fail without undoing the operation, log the failure and make the response say
   so (`notifications_queued: false`). Found because an un-awaited INSERT deadlocked with
   the next test's seed.
+- **A welcome email carries no credential** (item H2, option (iii), 1 Oct 2026). Staff and parent
+  welcome emails (`services/welcomeEmail.ts`) say the account is ready and how to set a password
+  with Forgot password. The principal's carries a one-time set-password link (Round 27). The mailbox
+  is then the key, so check the address before any account exists:
+  - one parent: the address is typed twice (`email_confirmation`);
+  - a bulk import: the preview returns `mailed_addresses`, and the commit refuses without
+    `mailed_addresses_confirmed: true` (`MAILED_ADDRESSES_NOT_CONFIRMED`).
+
+  **"Sent" means SendGrid accepted it.** `sendEmail` never throws; it returns
+  `'sent' | 'queued' | 'lost' | 'disabled'`. Anything that tells a person an email went reads that
+  value, never the absence of an error. `email_queue` keeps the body of every refused email, so
+  never put a password in an email body: 1,954 old welcome emails still sit there with one
+  (SECURITY.md Round 29, L-02).
 - **A test stub of a platform object must mirror production verbatim in every property a
   test depends on** — not "equivalently". `scripts/sql/test_supabase_stubs.sql`'s `auth.uid()`
   called `auth.jwt()` by schema-qualified name where production's names only
@@ -744,7 +757,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 32 suites, 323 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 33 suites, 336 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

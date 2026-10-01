@@ -70,6 +70,8 @@ interface AddParentResult {
   last_name: string;
   is_new_account: boolean;
   temp_password: string | null;
+  /** Whether the welcome email (no password in it; it explains Forgot password) went. */
+  welcome_email: 'sent' | 'partly_sent' | 'not_sent' | 'none';
 }
 
 // ── Toast & shared bits ───────────────────────────────────────────────────────
@@ -122,13 +124,18 @@ function formatDate(value: string | null): string {
 
 // ── Add parent modal ──────────────────────────────────────────────────────────
 
+// The parent's address is typed twice: a typo ties the account to a stranger's mailbox (item H2).
 const addParentSchema = z.object({
   first_name:         z.string().min(1, 'Required').max(100),
   last_name:          z.string().min(1, 'Required').max(100),
-  email:              z.string().email('Enter a valid email'),
+  email:              z.string().trim().email('Enter a valid email'),
+  email_confirmation: z.string().trim().min(1, 'Type the email address again'),
   phone:              z.string().max(30).optional().or(z.literal('')),
   relationship_type:  z.string().min(1, 'Required').max(50),
   is_primary_contact: z.boolean().optional(),
+}).refine(d => d.email.toLowerCase() === d.email_confirmation.toLowerCase(), {
+  path: ['email_confirmation'],
+  message: 'The two email addresses do not match',
 });
 type AddParentForm = z.infer<typeof addParentSchema>;
 
@@ -143,7 +150,7 @@ function AddParentModal({ schoolId, studentId, onClose, onAdded }: {
 
   const { register, handleSubmit, formState: { errors } } = useForm<AddParentForm>({
     resolver: zodResolver(addParentSchema),
-    defaultValues: { first_name: '', last_name: '', email: '', phone: '', relationship_type: '', is_primary_contact: false },
+    defaultValues: { first_name: '', last_name: '', email: '', email_confirmation: '', phone: '', relationship_type: '', is_primary_contact: false },
   });
 
   async function onSubmit(values: AddParentForm) {
@@ -175,12 +182,15 @@ function AddParentModal({ schoolId, studentId, onClose, onAdded }: {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Email" error={errors.email?.message}>
-            <input {...register('email')} type="email" className={inputClass} />
+            <input {...register('email')} type="email" autoComplete="off" className={inputClass} />
           </Field>
-          <Field label="Phone (optional)" error={errors.phone?.message}>
-            <input {...register('phone')} className={inputClass} />
+          <Field label="Type the email again" error={errors.email_confirmation?.message}>
+            <input {...register('email_confirmation')} type="email" autoComplete="off" onPaste={(e) => e.preventDefault()} className={inputClass} />
           </Field>
         </div>
+        <Field label="Phone (optional)" error={errors.phone?.message}>
+          <input {...register('phone')} className={inputClass} />
+        </Field>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
           <Field label="Relationship" error={errors.relationship_type?.message}>
             <input {...register('relationship_type')} className={inputClass} placeholder="Father, Mother, Guardian…" />
@@ -190,7 +200,7 @@ function AddParentModal({ schoolId, studentId, onClose, onAdded }: {
             Primary contact
           </label>
         </div>
-        <p className="text-xs text-gray-500">If this email has no account yet, a new parent account will be created and temporary credentials returned.</p>
+        <p className="text-xs text-gray-500">If this email has no account yet, a new parent account will be created and temporary credentials returned. The parent is emailed how to set their own password; the email carries no password.</p>
         {apiError && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
             <p className="text-sm text-red-700">{apiError}</p>
@@ -586,6 +596,12 @@ export default function StudentProfilePage() {
                 ? 'Temporary password shown once — print or note it before dismissing.'
                 : 'Linked to their existing account.'}
             </p>
+            {newParentCredentials.welcome_email === 'sent' && (
+              <p className="text-xs text-green-700 mt-1">They have been emailed how to set their own password with Forgot password.</p>
+            )}
+            {newParentCredentials.welcome_email === 'not_sent' && (
+              <p className="text-xs font-semibold text-amber-700 mt-1">The welcome email was NOT sent. Give them the credentials above, or ask them to use Forgot password on the login page.</p>
+            )}
             <button
               type="button"
               onClick={() => setNewParentCredentials(null)}

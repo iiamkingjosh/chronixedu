@@ -4,12 +4,14 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 
 jest.setTimeout(30000);
 
-// Captures the welcome emails so the test can read the password the staff member is
-// actually given — it is emailed and nothing else surfaces it.
+// Captures the welcome emails so the test can check what they carry. Since item H2 (1 Oct 2026)
+// that is no credential at all: the staff member sets a password with Forgot password.
 const sentEmails: Array<{ to: string; body: string }> = [];
 jest.mock('../src/services/emailService', () => ({
+  isEmailConfigured: jest.fn(() => true),
   sendEmail: jest.fn(async (to: string, _subject: string, text: string) => {
     sentEmails.push({ to, body: text });
+    return 'sent';
   }),
 }));
 
@@ -221,7 +223,7 @@ describe('POST /:schoolId/staff-bulk-import/commit', () => {
     const commit = await request(app)
       .post(`/api/schools/${schoolId}/staff-bulk-import/commit`)
       .set('Authorization', `Bearer ${principalToken}`)
-      .send({ rows: data.rows });
+      .send({ rows: data.rows, mailed_addresses_confirmed: true });
 
     expect(commit.status).toBe(200);
     expect(commit.body.data.created).toBe(1);
@@ -236,17 +238,15 @@ describe('POST /:schoolId/staff-bulk-import/commit', () => {
     expect(dbRow.rows[0]).toMatchObject({ role: 'teacher', teacher_mode: 'class' });
     expect(dbRow.rows[0].must_change_password).toBe(true);
 
-    // Each staff account now gets its own random password rather than a constant that
-    // is readable in the repo and shared by every school. The welcome email is the
-    // only channel that carries it, so assert the password it sends actually works.
-    await new Promise(r => setTimeout(r, 500)); // welcome emails are fire-and-forget
+    // Each staff account gets its own random password rather than a constant that is readable in
+    // the repo and shared by every school; it is never shown or sent anywhere (item H2). The welcome
+    // email says how to set one with Forgot password, and is awaited before the response.
+    expect(bcrypt.compareSync('Password2$', dbRow.rows[0].password_hash)).toBe(false);
+    expect(commit.body.data.welcome_emails).toBe('sent');
     const welcome = sentEmails.find(e => e.to === email);
     expect(welcome).toBeDefined();
-    const match = welcome!.body.match(/[Pp]assword:\s*(\S+)/);
-    expect(match).not.toBeNull();
-    const emailedPassword = match![1];
-    expect(emailedPassword).not.toBe('Password2$');
-    expect(bcrypt.compareSync(emailedPassword, dbRow.rows[0].password_hash)).toBe(true);
+    expect(welcome!.body).not.toMatch(/password:[ \t]*\S/i);
+    expect(welcome!.body).toContain('/forgot-password');
   }, 30000);
 
   it('does not stop the batch when one row fails validation at commit time', async () => {
@@ -261,7 +261,7 @@ describe('POST /:schoolId/staff-bulk-import/commit', () => {
     const commit = await request(app)
       .post(`/api/schools/${schoolId}/staff-bulk-import/commit`)
       .set('Authorization', `Bearer ${principalToken}`)
-      .send({ rows: data.rows });
+      .send({ rows: data.rows, mailed_addresses_confirmed: true });
 
     expect(commit.status).toBe(200);
     expect(commit.body.data.created).toBe(1);
@@ -297,7 +297,7 @@ describe('POST /:schoolId/staff-bulk-import/commit', () => {
     const commit = await request(app)
       .post(`/api/schools/${schoolId}/staff-bulk-import/commit`)
       .set('Authorization', `Bearer ${principalToken}`)
-      .send({ rows: [forgedRow] });
+      .send({ rows: [forgedRow], mailed_addresses_confirmed: true });
 
     expect(commit.status).toBe(200);
     expect(commit.body.data.created).toBe(0);

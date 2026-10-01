@@ -1800,6 +1800,7 @@ router.post(
       );
 
       let welcomeEmail: 'sent' | 'not_sent' = 'not_sent';
+      let welcomeEmailReason = 'email is not configured on this server';
       {
         const firstName = (step4Data.first_name as string | undefined) ?? '';
         const appUrl = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
@@ -1826,8 +1827,16 @@ router.post(
           `support@chronixtechnology.com`;
 
         if (isEmailConfigured()) {
-          await sendEmail(principalEmail, 'Welcome to Chronix Edu — Your School Portal is Now Live', emailBody);
-          welcomeEmail = 'sent';
+          // "sent" only when SendGrid took it: sendEmail queues a refused send and returns normally.
+          const outcome = await sendEmail(principalEmail, 'Welcome to Chronix Edu — Your School Portal is Now Live', emailBody);
+          if (outcome === 'sent') {
+            welcomeEmail = 'sent';
+          } else {
+            welcomeEmailReason = outcome === 'queued'
+              ? 'the email service refused it (it is queued and will be retried, but the link in it expires)'
+              : 'the email service refused it and it could not be queued';
+            logger.error('welcome_email_failed', { school_id: session.school_id, stage: 'send', outcome });
+          }
         } else {
           // Never print the body: it carries a working set-password link.
           logger.warn('onboarding_welcome_email_not_sent', { school_id: session.school_id, reason: 'email is not configured on this server' });
@@ -1851,7 +1860,7 @@ router.post(
           // It said "Welcome email sent" even when none was (email not configured).
           message: welcomeEmail === 'sent'
             ? 'School onboarded. The principal has been emailed a link to set their password.'
-            : 'School onboarded, but the welcome email was NOT sent: email is not configured on this server. The principal can use "Forgot password" on the login page with their address.',
+            : `School onboarded, but the welcome email was NOT sent: ${welcomeEmailReason}. The principal can use "Forgot password" on the login page with their address.`,
         },
       });
     } catch (err) {

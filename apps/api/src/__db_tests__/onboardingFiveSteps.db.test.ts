@@ -31,7 +31,7 @@ jest.mock('../supabaseClient', () => ({
 }));
 jest.mock('../services/emailService', () => ({
   ...jest.requireActual('../services/emailService'),
-  sendEmail: jest.fn(async () => undefined),
+  sendEmail: jest.fn(async () => 'sent'),
   isEmailConfigured: jest.fn(() => false),
 }));
 /* eslint-disable @typescript-eslint/no-var-requires */
@@ -258,6 +258,19 @@ describe("the principal's address: typed twice, read back, and given a link, nev
     expect(to).toBe('ada@link.test');
     expect(body).toContain(SET_PASSWORD_LINK);
     expect(body).not.toMatch(/temporary password/i);
+  });
+
+  it('says NOT sent, and why, when SendGrid refuses the email: sendEmail returns normally either way', async () => {
+    (emailService.isEmailConfigured as jest.Mock).mockReturnValue(true);
+    (emailService.sendEmail as jest.Mock).mockResolvedValueOnce('queued');
+    const { sid } = await throughStep3('Refused School');
+    await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada@refused.test', email_confirmation: 'ada@refused.test' });
+
+    const done = await complete(sid, { accepted_legal_terms: true, principal_email_read_back: true });
+    expect(done.status).toBe(200);
+    expect(emailService.sendEmail).toHaveBeenCalledTimes(1);
+    expect(done.body.data.welcome_email).toBe('not_sent');
+    expect(done.body.data.message).toMatch(/NOT sent: the email service refused it/);
   });
 
   it('says so, and prints nothing, when email is not configured', async () => {

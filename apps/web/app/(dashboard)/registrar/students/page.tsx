@@ -52,12 +52,18 @@ interface NewParentRow {
   temp_password: string;
 }
 
+type WelcomeEmailOutcome = 'sent' | 'partly_sent' | 'not_sent' | 'none';
+
 interface RegistrationResult {
   student: { id: string; admission_no: string; email: string };
   admission_no: string;
   temp_password: string;
   enrollment: unknown;
   new_parents: NewParentRow[];
+  /** Whether the new parents' welcome email (no password in it; it explains Forgot password) went. */
+  welcome_email: WelcomeEmailOutcome;
+  /** The new parents whose welcome email did not go. */
+  welcome_email_not_sent: string[];
 }
 
 function escapeHtml(str: string): string {
@@ -175,13 +181,18 @@ function fullName(row: StudentListRow): string {
 
 // ── Registration form ──────────────────────────────────────────────────────────
 
+// The parent's address is typed twice: a typo ties the account to a stranger's mailbox (item H2).
 const parentFormSchema = z.object({
-  email:              z.string().email('Enter a valid email'),
+  email:              z.string().trim().email('Enter a valid email'),
+  email_confirmation: z.string().trim().min(1, 'Type the email address again'),
   first_name:         z.string().min(1, 'Required').max(100),
   last_name:          z.string().min(1, 'Required').max(100),
   phone:              z.string().max(30).optional().or(z.literal('')),
   relationship_type:  z.string().min(1, 'Required').max(50),
   is_primary_contact: z.boolean().optional(),
+}).refine(d => d.email.toLowerCase() === d.email_confirmation.toLowerCase(), {
+  path: ['email_confirmation'],
+  message: 'The two email addresses do not match',
 });
 
 const registrationFormSchema = z.object({
@@ -256,6 +267,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
       class_id: values.class_id || null,
       parents: values.parents.map(p => ({
         email: p.email,
+        email_confirmation: p.email_confirmation,
         first_name: p.first_name,
         last_name: p.last_name,
         ...(p.phone ? { phone: p.phone } : {}),
@@ -361,7 +373,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
               <p className="text-sm text-gray-500">Optionally add parent or guardian accounts. Each will receive a login.</p>
               <button
                 type="button"
-                onClick={() => append({ email: '', first_name: '', last_name: '', phone: '', relationship_type: '', is_primary_contact: fields.length === 0 })}
+                onClick={() => append({ email: '', email_confirmation: '', first_name: '', last_name: '', phone: '', relationship_type: '', is_primary_contact: fields.length === 0 })}
                 className="btn-primary !px-3 !py-1.5 text-xs"
               >
                 Add Parent / Guardian
@@ -388,7 +400,10 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <Field label="Email" error={errors.parents?.[idx]?.email?.message}>
-                        <input {...register(`parents.${idx}.email`)} type="email" className={inputClass} />
+                        <input {...register(`parents.${idx}.email`)} type="email" autoComplete="off" className={inputClass} />
+                      </Field>
+                      <Field label="Type the email again" error={errors.parents?.[idx]?.email_confirmation?.message}>
+                        <input {...register(`parents.${idx}.email_confirmation`)} type="email" autoComplete="off" onPaste={(e) => e.preventDefault()} className={inputClass} />
                       </Field>
                       <Field label="Phone (optional)" error={errors.parents?.[idx]?.phone?.message}>
                         <input {...register(`parents.${idx}.phone`)} className={inputClass} />
@@ -462,7 +477,7 @@ export default function StudentRegistrationPage() {
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [credentials, setCredentials] = useState<{ student_name: string; admission_no: string; email: string; temp_password: string; new_parents: NewParentRow[] } | null>(null);
+  const [credentials, setCredentials] = useState<{ student_name: string; admission_no: string; email: string; temp_password: string; new_parents: NewParentRow[]; welcome_email: WelcomeEmailOutcome; welcome_email_not_sent: string[] } | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 350);
@@ -547,6 +562,8 @@ export default function StudentRegistrationPage() {
       email: result.student.email,
       temp_password: result.temp_password,
       new_parents: result.new_parents,
+      welcome_email: result.welcome_email,
+      welcome_email_not_sent: result.welcome_email_not_sent,
     });
     show('Student registered');
     setPage(1);
@@ -613,6 +630,14 @@ export default function StudentRegistrationPage() {
                   <li key={p.email}>{p.email} / {p.temp_password}</li>
                 ))}
               </ul>
+              {credentials.welcome_email === 'sent' && (
+                <p className="text-xs text-green-700">Each parent/guardian has been emailed how to set their own password with Forgot password.</p>
+              )}
+              {(credentials.welcome_email === 'not_sent' || credentials.welcome_email === 'partly_sent') && (
+                <p className="text-xs font-semibold text-amber-700">
+                  The welcome email was NOT sent to {credentials.welcome_email_not_sent.join(', ')}. Hand them the credentials slip, or ask them to use Forgot password on the login page.
+                </p>
+              )}
             </div>
           )}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-green-200">

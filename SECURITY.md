@@ -1,8 +1,90 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 28 — 2026-10-01  
-**Scope:** Errors caught and dropped without a trace: an audit write, a revoked-token check, a deleted admin's identity  
-**Round 28 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated
+**Latest audit:** Round 29 — 2026-10-01  
+**Scope:** Welcome emails for new staff and parents: a password in the body, "sent" for mail that did not go, and the old ones still queued  
+**Round 29 total findings:** 3 (0 Critical · 0 High · 1 Medium · 2 Low) — two remediated, one open pending the owner
+
+---
+
+## Round 29 — 2026-10-01
+
+### M-01 — Staff and parent welcome emails carried a working password in plain text ✅ Remediated
+
+**Files:** `apps/api/src/services/welcomeEmail.ts`, `apps/api/src/routes/students.ts` (register, bulk-import preview and commit, add parent), `apps/api/src/routes/users.ts` (staff bulk-import preview and commit), and the screens `apps/web/app/(dashboard)/registrar/students/page.tsx`, `[id]/page.tsx`, `import/page.tsx` and `settings/users/import/page.tsx`.
+
+**The risk.** `welcomeEmailBody` wrote `Password: <temporary password>` into every welcome email for a new parent (registering a student, adding a parent, a student bulk import) and for every new staff member in a staff bulk import. A mistyped address handed a working login to whoever owns that mailbox, with no further step. The mail also persisted wherever it went: the mailbox, SendGrid, and `email_queue` (L-02).
+
+**Decided by the owner, option (iii):** the email carries no credential at all, neither a password nor a link. It says the account is ready, names the login address, and gives the Forgot password steps. Nothing in it signs anyone in or expires. A one-hour link would be dead for most bulk recipients, and the link expiry is global in Supabase.
+
+**What (iii) does not do** is protect a mistyped address: whoever reads the mail can use Forgot password as easily as a link. That protection is an address check before anything is created:
+1. **Single parent: typed twice.** Registering a student with parents, and adding a parent, require `email_confirmation` equal to `email`, ignoring case and surrounding spaces. A mismatch is a 400 and creates nothing. The second box refuses pasting. This catches typos, not a wrong-but-valid address.
+2. **Bulk: shown, then confirmed.**
+   - Both previews return `mailed_addresses`, the addresses the commit will create and mail. It covers valid rows only and counts each address once. A parent who already has an account is linked, not mailed.
+   - Both screens list them with a required tick.
+   - Both commits refuse without `mailed_addresses_confirmed: true` (`MAILED_ADDRESSES_NOT_CONFIRMED`; never defaulted, doctrine 8), before creating anything.
+   - The `STUDENTS_BULK_IMPORT` and `STAFF_BULK_IMPORT` audit rows record the confirmation and the addresses mailed.
+   - Like Round 27's read-back, the tick is the operator's statement: it records what they said, and verifies nothing.
+
+**Honest outcome.**
+- The emails ran fire-and-forget after the response. They are now awaited.
+- Each response states `welcome_email` (or `welcome_emails` for bulk): `sent | partly_sent | not_sent | none`, with the addresses that did not go.
+- The screens say "NOT sent to …" and point to Forgot password.
+- Anything not sent raises Round 28's `welcome_email_not_sent` alert, with counts only.
+
+**Unchanged on purpose (scope).**
+- The registrar's screens still show students' and parents' temporary passwords, and the bulk-import results sheet keeps its "Temporary Password" column.
+- A student without an email gets an `@students.internal` address, which delivers nowhere, and there is no student welcome email. For students, the screen and the sheet are the only channel.
+- Staff created by bulk import now have a temporary password nobody has seen. They set their own with Forgot password, which clears `must_change_password`.
+
+### L-01 — "Sent" was reported for email that did not go ✅ Remediated
+
+**Files:** `apps/api/src/services/emailService.ts`, `apps/api/src/routes/superAdmin.ts` (onboarding `/complete`), `apps/api/src/config/alerts.ts`.
+
+**The defect.**
+- `sendEmail` never throws. A SendGrid refusal is logged and written to `email_queue` for retry; a failed queue write is logged and dropped.
+- It returned nothing in every case, so a caller could only count "no error" as sent. Round 27's onboarding message ("The principal has been emailed a link") did, and so did H2's first draft.
+- For the same reason, Round 28's `welcome_email_failed` at the send stage could never fire.
+
+**The fix.**
+- `sendEmail` now returns `'sent' | 'queued' | 'lost' | 'disabled'`, and only `'sent'` means the email went.
+- When SendGrid refuses the onboarding email, `/complete` now says NOT sent, gives the reason, and logs `welcome_email_failed`.
+- The other callers ignore the value and are unchanged.
+
+### L-02 — `email_queue` holds 1,954 old welcome emails with plaintext passwords ⏳ Open [MOSES]
+
+**Measured** read-only in production on 1 Oct 2026, counts only:
+- 1,954 rows have a `Password:` line in the body: 1,851 `failed` and 103 `sent`, dated 19 Jun – 17 Sep 2026. Each is a different address: 1,761 `test.com`, 191 `example.com`, 2 `gmail.com`.
+- 1,948 of those addresses no longer have an account. The 6 that do are all in demo schools:
+  - The Chronix High School principal's queued email predates the current account by a day, and that password has since been changed. It is dead.
+  - The other 5 are fixture parents in one demo school, created 31 Aug, still active, who never changed the password. **Those 5 passwords would still sign in.**
+- No row is `pending`, so the retry cron re-sends none.
+- No customer school, and no real person, has a working credential there.
+
+**Status.** M-01 stops new rows of this kind, but the existing rows stay until someone deletes them. Proposed:
+1. Delete the rows whose body has a password line.
+2. Deactivate the 5 fixture parents, or delete their demo school with `delete-school-data.js`.
+
+Both are production deletes, so they wait for Moses. Separately, `email_queue` keeps every body forever, `sent` rows included. A retention rule is recorded in `docs/AUDIT-2026-09.md`.
+
+**Tests:**
+- `welcomeEmailNoCredential.db.test.ts` (new, 12 tests).
+  - Covers all four routes. In each, the matching or confirmed request succeeds first.
+  - What its email must not contain: the password Auth was given (the mock records it), or any link. What it must contain: a pointer to `/forgot-password`.
+  - Then each bad request is refused and creates no account, makes no Auth call and sends no email: a mismatched address, a missing confirmation, `false`, and the string `"true"`.
+  - The preview's `mailed_addresses` equals what the commit mails and what the audit row records. Siblings count once; an existing parent and an invalid row are excluded.
+  - Linking an existing parent answers `none`. With email unconfigured, the answer is `not_sent`, with a warning.
+  - SendGrid refusing one of two answers `partly_sent`, names that address, and raises the alert with no address in it.
+- `welcomeEmailOutcome.test.ts` (new, unit, 10 tests):
+  - `sendEmail`'s four outcomes;
+  - `sendWelcomeEmails` when all are sent, one is refused, preparation fails, email is unconfigured, and there is nobody to send to;
+  - the body.
+- `onboardingFiveSteps.db.test.ts` (1 new test): SendGrid refusing the principal's email answers NOT sent, with the reason.
+- `tests/staffBulkImport.test.ts` used to read the password out of the email to prove it worked; it now asserts the email has none. Both the local and the CI integration runs exclude this suite (it needs real Supabase Auth), so the DB suite above is the one that runs.
+
+**Run against the pre-change code:**
+- The first 11 DB tests all fail. The twelfth, for a partial refusal, was written after that run.
+- All 10 unit tests fail.
+- The new onboarding test fails, while its 11 neighbours pass.
 
 ---
 

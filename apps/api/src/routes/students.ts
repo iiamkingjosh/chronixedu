@@ -25,13 +25,12 @@ import { findClassById } from '../db/queries/roster';
 import { logAudit } from '../db/queries/auditLog';
 import { generateTranscript } from '../services/transcriptService';
 import { signReportCardAsset } from '../services/reportCardService';
-import { sendEmail } from '../services/emailService';
 import { parseBulkImportFile, BulkImportParseError } from '../services/bulkImportParser';
 import { runFullValidation } from '../services/bulkImportValidation';
 import { generateBulkImportResultsFile, type CreatedStudentRecord, type CreatedParentRecord } from '../services/bulkImportResults';
 import pool from '../db/client';
 import { logger } from '../config/logger';
-import { getSchoolName, welcomeEmailBody } from '../services/welcomeEmail';
+import { sendWelcomeEmails } from '../services/welcomeEmail';
 import { cache, schoolCacheKey } from '../services/cacheService';
 
 async function checkParentStudentLink(parentId: string, studentId: string, schoolId: string): Promise<boolean> {
@@ -52,14 +51,24 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 *
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
+// A parent's address is typed twice where one is typed by hand (item H2, 1 Oct 2026): a typo ties
+// the account to a stranger's mailbox, and the welcome email and "Forgot password" both go there.
+const sameAddress = (d: { email: string; email_confirmation: string }) =>
+  d.email.trim().toLowerCase() === d.email_confirmation.trim().toLowerCase();
+const ADDRESSES_DIFFER = { path: ['email_confirmation'], message: 'The two email addresses do not match' };
+
 const parentSchema = z.object({
-  email:              z.string().email(),
+  email:              z.string().trim().email(),
+  email_confirmation: z.string().trim(),
   first_name:         z.string().min(1).max(100),
   last_name:          z.string().min(1).max(100),
   phone:              z.string().max(30).optional(),
   relationship_type:  z.string().min(1).max(50),
   is_primary_contact: z.boolean().optional().default(false),
-});
+}).refine(sameAddress, ADDRESSES_DIFFER);
+
+const PARENT_WELCOME_SUBJECT = 'Welcome to Chronix Edu — Your Parent Portal Access';
+const PARENT_PORTAL_LINE = 'Your Parent Portal gives you access to attendance, results, fees, and more.';
 
 const registerSchema = z.object({
   first_name:               z.string().min(1).max(100),
@@ -176,21 +185,17 @@ router.post(
         createAuthAccountFor(req.params.schoolId)
       );
 
-      // Send welcome emails to newly created parent accounts (fire-and-forget)
-      if (result.new_parents.length > 0) {
-        const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
-        getSchoolName(req.params.schoolId).then(schoolName => {
-          for (const p of result.new_parents) {
-            const parent = parentsWithHashes.find(ph => ph.email === p.email);
-            const name = parent ? `${parent.first_name} ${parent.last_name}` : p.email;
-            sendEmail(
-              p.email,
-              `Welcome to Chronix Edu — Your Parent Portal Access`,
-              welcomeEmailBody({ role: 'parent', name, email: p.email, tempPassword: p.temp_password, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
-            ).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) }));
-          }
-        }).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) }));
-      }
+      // Welcome emails to newly created parent accounts: no credential in them (item H2), and the
+      // response says whether they went.
+      const welcomeEmails = await sendWelcomeEmails(
+        req.params.schoolId,
+        result.new_parents.map(p => {
+          const parent = parentsWithHashes.find(ph => ph.email === p.email);
+          return { email: p.email, name: parent ? `${parent.first_name} ${parent.last_name}` : p.email, role: 'parent' };
+        }),
+        PARENT_WELCOME_SUBJECT,
+        { extraLine: PARENT_PORTAL_LINE },
+      );
 
       Sentry.getCurrentScope().addEventProcessor(event => {
         if (event.request?.url?.includes('/students') || event.request?.url?.includes('/parents')) {
@@ -211,6 +216,8 @@ router.post(
           temp_password: tempPassword,
           enrollment:   result.enrollment,
           new_parents:  result.new_parents,
+          welcome_email: welcomeEmails.outcome,
+          welcome_email_not_sent: welcomeEmails.not_sent,
         },
       });
     } catch (err: unknown) {
@@ -295,7 +302,20 @@ router.post(
         invalid: results.filter(r => r.status === 'error').length,
       };
 
-      return res.json({ success: true, data: { rows: results, summary } });
+      // The parent addresses the commit would create accounts for and mail (item H2): valid rows
+      // only, once each, and not those already holding an account (those are linked, not mailed).
+      // The screen shows this list and the commit refuses until the operator confirms it.
+      const parentAddresses = new Map<string, string>();
+      for (const r of results) {
+        if (r.status !== 'valid') continue;
+        for (const p of [r.student.parent1, r.student.parent2]) {
+          if (p?.email && !parentAddresses.has(p.email.toLowerCase())) parentAddresses.set(p.email.toLowerCase(), p.email);
+        }
+      }
+      const taken = await findUsersRolesByEmails([...parentAddresses.keys()]);
+      const mailedAddresses = [...parentAddresses].filter(([key]) => !taken.has(key)).map(([, email]) => email);
+
+      return res.json({ success: true, data: { rows: results, summary, mailed_addresses: mailedAddresses } });
     } catch (err) {
       return next(err);
     }
@@ -313,7 +333,6 @@ router.post(
 function generateTempPassword(): string {
   return randomBytes(9).toString('base64url');
 }
-const BULK_IMPORT_EMAIL_BATCH_SIZE = 50;
 
 const bulkImportParentSchema = z.object({
   first_name: z.string().nullable(),
@@ -325,6 +344,9 @@ const bulkImportParentSchema = z.object({
 });
 
 const bulkImportCommitSchema = z.object({
+  // The bulk analogue of reading one address back (item H2, 1 Oct 2026): the operator has seen the
+  // list of addresses that will be created and mailed, and says so. Never defaulted (doctrine 8).
+  mailed_addresses_confirmed: z.boolean().optional(),
   rows: z.array(z.object({
     row_number: z.number(),
     status: z.enum(['valid', 'error']),
@@ -359,13 +381,19 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
 
+      if (parsed.data.mailed_addresses_confirmed !== true) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'MAILED_ADDRESSES_NOT_CONFIRMED', message: 'Check the list of email addresses that will be created and mailed, and confirm it, before importing.' },
+        });
+      }
+
       const submittedRows = parsed.data.rows.map(r => r.student);
       const revalidated = await runFullValidation(submittedRows, findUsersRolesByEmails);
 
       const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string; admission_no?: string }> = [];
       const createdStudents: CreatedStudentRecord[] = [];
       const allNewParents: CreatedParentRecord[] = [];
-      const parentTempPasswords = new Map<string, string>();
 
       for (const row of revalidated) {
         if (row.status === 'error') {
@@ -431,9 +459,6 @@ router.post(
               last_name: source?.last_name ?? '',
               email: p.email,
             });
-            // Held only in memory for the welcome email. Deliberately NOT added to
-            // CreatedParentRecord, which is written into a downloadable results file.
-            parentTempPasswords.set(p.email, p.temp_password);
           }
         } catch (err: unknown) {
           const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
@@ -447,26 +472,12 @@ router.post(
         cache.del(schoolCacheKey(req.params.schoolId, 'dashboard-stats'));
       }
 
-      if (allNewParents.length > 0) {
-        const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
-        getSchoolName(req.params.schoolId).then(async schoolName => {
-          for (let i = 0; i < allNewParents.length; i += BULK_IMPORT_EMAIL_BATCH_SIZE) {
-            const batch = allNewParents.slice(i, i + BULK_IMPORT_EMAIL_BATCH_SIZE);
-            await Promise.all(
-              // A parent with no recorded password gets no email at all — a welcome
-              // message carrying a blank password is worse than none.
-              batch.filter(p => parentTempPasswords.has(p.email)).map(p => sendEmail(
-                p.email,
-                'Welcome to Chronix Edu — Your Parent Portal Access',
-                welcomeEmailBody({ role: 'parent', name: `${p.first_name} ${p.last_name}`, email: p.email, tempPassword: parentTempPasswords.get(p.email)!, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
-              ).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) })))
-            );
-            if (i + BULK_IMPORT_EMAIL_BATCH_SIZE < allNewParents.length) {
-              await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-          }
-        }).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) }));
-      }
+      const welcomeEmails = await sendWelcomeEmails(
+        req.params.schoolId,
+        allNewParents.map(p => ({ email: p.email, name: `${p.first_name} ${p.last_name}`, role: 'parent' })),
+        PARENT_WELCOME_SUBJECT,
+        { extraLine: PARENT_PORTAL_LINE },
+      );
 
       // Never let a results-file failure turn an already-successful commit into
       // an apparent 500 — every payment/record has already been written by this
@@ -486,7 +497,14 @@ router.post(
         actionType: 'STUDENTS_BULK_IMPORT',
         entity: 'students',
         entityId: req.params.schoolId,
-        newValue: { created: createdStudents.length, failed: results.filter(r => r.status === 'failed').length },
+        newValue: {
+          created: createdStudents.length,
+          failed: results.filter(r => r.status === 'failed').length,
+          mailed_addresses_confirmed: true,
+          welcome_emails: welcomeEmails.outcome,
+          mailed_addresses: allNewParents.map(p => p.email),
+          welcome_emails_not_sent: welcomeEmails.not_sent,
+        },
       });
 
       return res.json({
@@ -495,6 +513,8 @@ router.post(
           created: createdStudents.length,
           failed: results.filter(r => r.status === 'failed').length,
           results,
+          welcome_emails: welcomeEmails.outcome,
+          welcome_emails_not_sent: welcomeEmails.not_sent,
           download_base64: resultsFile ? resultsFile.toString('base64') : null,
         },
       });
@@ -902,13 +922,14 @@ router.post(
 // ── POST /:schoolId/students/:studentId/parents ───────────────────────────────
 
 const addParentSchema = z.object({
-  email:              z.string().email(),
+  email:              z.string().trim().email(),
+  email_confirmation: z.string().trim(),
   first_name:         z.string().min(1).max(100),
   last_name:          z.string().min(1).max(100),
   phone:              z.string().max(30).optional(),
   relationship_type:  z.string().min(1).max(50),
   is_primary_contact: z.boolean().optional().default(false),
-});
+}).refine(sameAddress, ADDRESSES_DIFFER);
 
 router.post(
   '/:schoolId/students/:studentId/parents',
@@ -984,18 +1005,14 @@ router.post(
         [parentUserId, studentId, relationship_type, is_primary_contact ?? false]
       );
 
-      // Send welcome email to newly created parent accounts (fire-and-forget)
-      if (isNewAccount && tempPassword !== null) {
-        const pw = tempPassword;
-        const appUrl = process.env.APP_URL ?? 'http://localhost:3000';
-        getSchoolName(schoolId).then(schoolName => {
-          sendEmail(
-            email,
-            `Welcome to Chronix Edu — Your Parent Portal Access`,
-            welcomeEmailBody({ role: 'parent', name: `${first_name} ${last_name}`, email, tempPassword: pw, schoolName, appUrl, extraLine: 'Your Parent Portal gives you access to attendance, results, fees, and more.' })
-          ).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) }));
-        }).catch(err => logger.error('welcome_email_failed', { school_id: req.params.schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) }));
-      }
+      // Welcome email for a newly created parent account: no credential in it (item H2), and the
+      // response says whether it went.
+      const welcomeEmail = (await sendWelcomeEmails(
+        schoolId,
+        isNewAccount ? [{ email, name: `${first_name} ${last_name}`, role: 'parent' }] : [],
+        PARENT_WELCOME_SUBJECT,
+        { extraLine: PARENT_PORTAL_LINE },
+      )).outcome;
 
       Sentry.getCurrentScope().addEventProcessor(event => {
         if (event.request?.url?.includes('/students') || event.request?.url?.includes('/parents')) {
@@ -1013,6 +1030,7 @@ router.post(
           last_name,
           is_new_account: isNewAccount,
           temp_password: tempPassword,
+          welcome_email: welcomeEmail,
         },
       });
     } catch (err) {

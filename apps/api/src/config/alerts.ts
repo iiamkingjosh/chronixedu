@@ -122,10 +122,10 @@ export const ALERTS = {
     fields: ['action', 'error', 'err'],
   },
   welcome_email_not_sent: {
-    why: "A new account's welcome email was not sent: the person has no login details unless someone passes them on",
+    why: "A new account's welcome email was not sent: the person has not been told the account exists or how to set a password",
     level: 'error',
     events: ['welcome_email_failed'],
-    fields: ['stage', 'error'],
+    fields: ['stage', 'error', 'outcome', 'not_sent', 'of', 'outcomes'],
   },
   auth_account_left_behind: {
     why: "A deleted platform admin's Supabase Auth account could not be deleted: the local lockout blocks login, but the identity remains",
