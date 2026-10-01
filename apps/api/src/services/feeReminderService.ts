@@ -5,7 +5,7 @@ import { getParentsForStudent } from '../db/queries/parents';
 import { createNotification } from '../db/queries/notifications';
 import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notificationLogs';
 import { sendEmail } from './emailService';
-import { sendTermiiSms, isSmsEnabled, SMS_DISABLED_REASON } from './termiiService';
+import { sendTermiiSms, isSmsEnabled, smsDisabledReason } from './termiiService';
 import { logger } from '../config/logger';
 import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
 import { schoolAllowsFeature } from './planFeatures';
@@ -85,7 +85,7 @@ export async function sendFeeRemindersForSchool(schoolId: string, termId: string
   const smsOn = isSmsEnabled();
   const { notified, smsNotSent } = await remindSchool(schoolId, termId, smsOn);
   if (!smsOn) {
-    logger.info('sms_disabled', { run: 'fee_reminders', school_id: schoolId, parents_notified: notified, sms_not_sent: smsNotSent, reason: SMS_DISABLED_REASON });
+    logger.info('sms_disabled', { run: 'fee_reminders', school_id: schoolId, parents_notified: notified, sms_not_sent: smsNotSent, reason: smsDisabledReason() });
   }
   return notified;
 }
@@ -106,7 +106,7 @@ export async function runFeeReminders(): Promise<void> {
   }
   // One line for the whole run, however many schools and parents it covered.
   if (!smsOn) {
-    logger.info('sms_disabled', { run: 'fee_reminders', schools: schools.length, parents_notified: total.notified, sms_not_sent: total.smsNotSent, reason: SMS_DISABLED_REASON });
+    logger.info('sms_disabled', { run: 'fee_reminders', schools: schools.length, parents_notified: total.notified, sms_not_sent: total.smsNotSent, reason: smsDisabledReason() });
   }
 }
 

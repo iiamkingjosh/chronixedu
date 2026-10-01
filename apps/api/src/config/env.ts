@@ -22,6 +22,9 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   SENDGRID_API_KEY: z.string().optional(),
   SENDGRID_FROM_EMAIL: z.string().email('SENDGRID_FROM_EMAIL must be a valid email').default('no-reply@chronixedu.com'),
+  // SMS sends only when this is "true" AND TERMII_API_KEY is set. Unset means off, which it is
+  // by decision since 1 Oct 2026 (Termii unfunded, keys kept). See termiiService.isSmsEnabled.
+  SMS_ENABLED: z.string().optional(),
   TERMII_API_KEY: z.string().optional(),
   TERMII_SENDER_ID: z.string().default('ChronixEdu'),
   PAYSTACK_SECRET_KEY: z.string().optional(),

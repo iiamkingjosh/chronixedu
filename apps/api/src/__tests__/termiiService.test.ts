@@ -1,6 +1,6 @@
 import pool from '../db/client';
 import { logger } from '../config/logger';
-import { isSmsEnabled, sendTermiiSms } from '../services/termiiService';
+import { isSmsEnabled, sendTermiiSms, smsDisabledReason } from '../services/termiiService';
 
 jest.mock('../db/client', () => ({
   __esModule: true,
@@ -14,7 +14,7 @@ const ORIGINAL_ENV = { ...process.env };
 
 beforeEach(() => {
   jest.clearAllMocks();
-  process.env = { ...ORIGINAL_ENV, TERMII_API_KEY: 'test-key', TERMII_SENDER_ID: 'ChronixEdu' };
+  process.env = { ...ORIGINAL_ENV, SMS_ENABLED: 'true', TERMII_API_KEY: 'test-key', TERMII_SENDER_ID: 'ChronixEdu' };
   global.fetch = jest.fn();
 });
 
@@ -23,26 +23,47 @@ afterAll(() => {
 });
 
 describe('isSmsEnabled', () => {
-  it('is on when TERMII_API_KEY holds a value', () => {
+  it('is on when SMS_ENABLED is "true" and TERMII_API_KEY holds a value', () => {
+    expect(isSmsEnabled()).toBe(true);
+    process.env.SMS_ENABLED = ' TRUE ';
     expect(isSmsEnabled()).toBe(true);
   });
 
-  it('is off when TERMII_API_KEY is not set', () => {
-    delete process.env.TERMII_API_KEY;
+  it('is OFF with the key present and SMS_ENABLED unset: production since 1 Oct 2026 (keys kept)', () => {
+    delete process.env.SMS_ENABLED;
+    expect(process.env.TERMII_API_KEY).toBe('test-key'); // the key is there; it is not the switch
     expect(isSmsEnabled()).toBe(false);
+    expect(smsDisabledReason()).toMatch(/SMS_ENABLED is not "true"/);
   });
 
-  it('is off when TERMII_API_KEY is blank — an emptied variable is not a key', () => {
-    process.env.TERMII_API_KEY = '   ';
-    expect(isSmsEnabled()).toBe(false);
+  it('is off for any SMS_ENABLED other than "true": a near miss is not a yes', () => {
+    for (const value of ['false', 'yes', '1', 'on', '']) {
+      process.env.SMS_ENABLED = value;
+      expect(isSmsEnabled()).toBe(false);
+    }
+  });
+
+  it('is off when switched on without a key, and says that is why', () => {
+    for (const key of [undefined, '   ']) {
+      if (key === undefined) delete process.env.TERMII_API_KEY; else process.env.TERMII_API_KEY = key;
+      expect(isSmsEnabled()).toBe(false);
+      expect(smsDisabledReason()).toMatch(/TERMII_API_KEY is not set/);
+    }
   });
 });
 
 describe('sendTermiiSms', () => {
   it("answers 'disabled' — not a failure — without a query, a call or an error log when SMS is off", async () => {
     const errorSpy = jest.spyOn(logger, 'error');
-    for (const key of [undefined, '']) {
-      if (key === undefined) delete process.env.TERMII_API_KEY; else process.env.TERMII_API_KEY = key;
+    const offStates: Array<Record<string, string | undefined>> = [
+      { SMS_ENABLED: undefined, TERMII_API_KEY: 'test-key' }, // keys kept, switch off: production
+      { SMS_ENABLED: 'true', TERMII_API_KEY: undefined },
+      { SMS_ENABLED: 'true', TERMII_API_KEY: '' },
+    ];
+    for (const state of offStates) {
+      for (const [name, value] of Object.entries(state)) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
       expect(await sendTermiiSms(SCHOOL_ID, '+2348011111111', 'hello')).toBe('disabled');
     }
     expect(mockQuery).not.toHaveBeenCalled();

@@ -517,20 +517,26 @@ Monorepo, npm workspaces:
 
 ## SMS is switched off (1 Oct 2026) — a decision, not a fault
 
-- **Termii is not funded; Moses decided 1 Oct 2026.** `TERMII_API_KEY` is meant to be unset in
-  production. Do not "fix" SMS: no SMS row, no Termii call and an `sms_disabled` log line are the
-  system working as intended.
-- **Unset or blank key = off** (`isSmsEnabled()` in `services/termiiService.ts`), the
-  `ERP_INTEGRATION_API_KEY` rule applied to SMS. The fee-reminder run and the notification worker
-  check once per run and skip SMS entirely: no provider call, no `notification_logs` row per parent,
-  and **one** `sms_disabled` line per run (per batch that delivered something, for the worker; never
-  on an idle poll). Boot logs it once at `warn`. In-app and email delivery are unchanged.
+- **Termii is not funded; Moses decided 1 Oct 2026.** SMS is off. Do not "fix" it: no SMS row, no
+  Termii call and an `sms_disabled` log line are the system working as intended.
+- **The Termii keys stay in Railway on purpose** (`TERMII_API_KEY`, `TERMII_SENDER_ID`; Moses, 1 Oct
+  2026: SMS may come back). Do not delete them, and do not read their presence as "SMS is on".
+- **The switch is `SMS_ENABLED`**: SMS sends only when it is `true` AND a key is set
+  (`isSmsEnabled()` in `services/termiiService.ts`). Unset means off, which is production's state.
+  It is not the key, because a key existing answers *what* the key is, not *whether* to send
+  (doctrine 8): the first version of this switch keyed off the key's absence, and with the keys kept
+  it would have left SMS on against a lapsed account, failing once per parent. The fee-reminder run
+  and the notification worker check once per run and skip SMS entirely: no provider call, no
+  `notification_logs` row per parent, and **one** `sms_disabled` line per run (per batch that
+  delivered something, for the worker; never on an idle poll), whose `reason` says which half is
+  missing. Boot logs it once at `warn`. In-app and email delivery are unchanged.
 - `sendTermiiSms` answers `'sent' | 'failed' | 'disabled'`. `'disabled'` is not a failure and writes
   no row. A rejected send is logged (`termii_sms_failed`, the status, never the number); it used to
   be logged nowhere.
-- **The code stays.** Termii, or a replacement, is switched back on by setting the key. Before you
+- **The code stays.** Fund Termii (or a replacement), then set `SMS_ENABLED=true`. Before you
   do, put SMS back in the public claims: `home-page.tsx` and the login page were reworded to "in the
-  app and by email" the day it went off. `smsSwitchedOff.db.test.ts` shows both states, enabled first.
+  app and by email" the day it went off. `smsSwitchedOff.db.test.ts` shows both states, enabled first;
+  its "off" runs keep the key and leave the switch unset, as production does.
 - The feature-adoption count (`/analytics/feature-adoption`) counts `status = 'sent'` only.
 
 ## Demo vs customer tenants

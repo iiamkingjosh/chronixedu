@@ -1,13 +1,16 @@
 /**
- * SMS is a switch (decided 1 Oct 2026: Termii is not funded, so TERMII_API_KEY is unset).
+ * SMS is a switch (decided 1 Oct 2026: Termii is not funded; its keys are KEPT, because SMS
+ * may come back).
  *
- * Before this, an unset key made `sendTermiiSms` return false for every recipient, which
- * each caller wrote down as a `failed` SMS row — one per parent, per run, for ever. A
- * lapsed key that was left set did the same through a rejected request that was logged
- * nowhere. Halting a provider turned into a stream of per-message failures read by nobody.
+ * Before this, a key that was present sent every text to Termii, and with the account lapsed
+ * each one failed: a `failed` SMS row per parent, per run, and a rejection logged nowhere. An
+ * unset key did the same through `sendTermiiSms` returning false for every recipient. Halting a
+ * provider turned into a stream of per-message failures read by nobody.
  *
- * Now an unset or blank key means SMS is OFF: the sending runs skip it entirely — no
- * provider call, no notification_logs row — and each run logs ONE `sms_disabled` line.
+ * Now SMS is ON only when SMS_ENABLED is "true" AND a key is set. Whether a key exists is not
+ * whether to send (doctrine 8): production keeps its keys with SMS_ENABLED unset, and that is
+ * the state the "off" tests below run in. Off, the sending runs skip SMS entirely — no provider
+ * call, no notification_logs row — and each run logs ONE `sms_disabled` line.
  *
  * Each path is first run with SMS on, against the same parents, to show texts really are
  * sent and recorded. "No SMS row" is also what code that does nothing produces, so the
@@ -33,7 +36,7 @@ app.use(errorHandler);
 
 const SECOND_PARENT = '30000000-0000-4000-8000-000000000099';
 const ORIGINAL_FETCH = global.fetch;
-const ORIGINAL_KEY = process.env.TERMII_API_KEY;
+const ORIGINAL_SMS_ENV = { SMS_ENABLED: process.env.SMS_ENABLED, TERMII_API_KEY: process.env.TERMII_API_KEY };
 
 let fetchMock: jest.Mock;
 let infoSpy: jest.SpyInstance;
@@ -62,15 +65,22 @@ beforeEach(async () => {
 
 afterEach(() => {
   global.fetch = ORIGINAL_FETCH;
-  if (ORIGINAL_KEY === undefined) delete process.env.TERMII_API_KEY; else process.env.TERMII_API_KEY = ORIGINAL_KEY;
+  setSmsEnv(ORIGINAL_SMS_ENV);
   infoSpy.mockRestore();
   errorSpy.mockRestore();
 });
 
 afterAll(() => pool.end());
 
-const smsOn = () => { process.env.TERMII_API_KEY = 'test-termii-key'; };
-const smsOff = () => { delete process.env.TERMII_API_KEY; };
+function setSmsEnv(env: { SMS_ENABLED?: string; TERMII_API_KEY?: string }) {
+  for (const name of ['SMS_ENABLED', 'TERMII_API_KEY'] as const) {
+    const value = env[name];
+    if (value === undefined) delete process.env[name]; else process.env[name] = value;
+  }
+}
+const smsOn = () => setSmsEnv({ SMS_ENABLED: 'true', TERMII_API_KEY: 'test-termii-key' });
+/** Production since 1 Oct 2026: the key is still there, the switch is not set. */
+const keysKeptSwitchOff = () => setSmsEnv({ SMS_ENABLED: undefined, TERMII_API_KEY: 'test-termii-key' });
 
 const termiiCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).includes('termii')).length;
 const disabledLines = () => infoSpy.mock.calls.filter(([event]) => event === 'sms_disabled');
@@ -126,8 +136,8 @@ describe('the weekly fee-reminder run', () => {
     expect(disabledLines()).toHaveLength(0);
   });
 
-  it('with TERMII_API_KEY unset, completes, still notifies in-app, sends no text, writes no SMS row, and logs one line', async () => {
-    smsOff();
+  it('with the key kept and SMS_ENABLED unset, completes, still notifies in-app, sends no text, writes no SMS row, and logs one line', async () => {
+    keysKeptSwitchOff();
     await owe();
 
     await expect(runFeeReminders()).resolves.toBeUndefined();
@@ -152,8 +162,8 @@ describe('an absence alert', () => {
     expect(await smsRows('low_attendance')).toEqual(['sent', 'sent']);
   });
 
-  it('with TERMII_API_KEY unset, is delivered in-app, sends no text, writes no SMS row, and logs one line', async () => {
-    smsOff();
+  it('with the key kept and SMS_ENABLED unset, is delivered in-app, sends no text, writes no SMS row, and logs one line', async () => {
+    keysKeptSwitchOff();
     const marked = await raiseAbsenceAlert();
 
     await expect(processNotificationQueue()).resolves.toBeUndefined();
@@ -170,14 +180,19 @@ describe('an absence alert', () => {
     expect(await auditRowsMentioningSms()).toBe(0);
   });
 
-  it('a blank key is off too: an emptied variable is not a key', async () => {
-    process.env.TERMII_API_KEY = '  ';
-    await raiseAbsenceAlert();
-
-    await processNotificationQueue();
+  it('switched on without a key (unset or blank) is off too, and the line says why', async () => {
+    for (const key of [undefined, '  ']) {
+      setSmsEnv({ SMS_ENABLED: 'true', TERMII_API_KEY: key });
+      await raiseAbsenceAlert();
+      await processNotificationQueue();
+      await pool.query(`DELETE FROM attendance WHERE school_id = $1`, [I.schoolA]);
+      await pool.query(`DELETE FROM attendance_alerts WHERE school_id = $1`, [I.schoolA]);
+    }
 
     expect(termiiCalls()).toBe(0);
     expect(await smsRows('low_attendance')).toEqual([]);
-    expect(disabledLines()).toHaveLength(1);
+    const lines = disabledLines();
+    expect(lines).toHaveLength(2);
+    for (const [, meta] of lines) expect(meta.reason).toMatch(/TERMII_API_KEY is not set/);
   });
 });

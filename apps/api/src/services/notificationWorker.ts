@@ -3,7 +3,7 @@ import { runExclusive } from './cronTracker';
 import { createNotification } from '../db/queries/notifications';
 import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notificationLogs';
 import { sendEmail } from './emailService';
-import { sendTermiiSms, isSmsEnabled, SMS_DISABLED_REASON } from './termiiService';
+import { sendTermiiSms, isSmsEnabled, smsDisabledReason } from './termiiService';
 import { logger } from '../config/logger';
 import { schoolAllowsFeature } from './planFeatures';
 
@@ -132,7 +132,7 @@ export async function processNotificationQueue(): Promise<void> {
   }
   // One line per batch that delivered something — never per parent, and not every 30s idle poll.
   if (!smsOn && rows.length > 0) {
-    logger.info('sms_disabled', { run: 'notification_worker', notifications: rows.length, sms_not_sent: smsNotSent, reason: SMS_DISABLED_REASON });
+    logger.info('sms_disabled', { run: 'notification_worker', notifications: rows.length, sms_not_sent: smsNotSent, reason: smsDisabledReason() });
   }
 }
 

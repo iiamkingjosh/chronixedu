@@ -45,7 +45,7 @@ import { startFeeReminderCron, stopFeeReminderCron } from './services/feeReminde
 import { startSubscriptionCron, stopSubscriptionCron } from './services/subscriptionService';
 import { startPlatformAnalyticsCron, stopPlatformAnalyticsCron } from './services/platformAnalyticsService';
 import { startEmailQueueCron, stopEmailQueueCron } from './services/emailQueueService';
-import { isSmsEnabled, SMS_DISABLED_REASON } from './services/termiiService';
+import { isSmsEnabled, smsDisabledReason } from './services/termiiService';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { validateEnv } from './config/env';
@@ -232,8 +232,8 @@ const server = app.listen(port, () => {
   logger.info('server_started', { port });
 });
 
-// Stated once at boot, so an unset key reads as the decision it is, not a broken integration.
-if (!isSmsEnabled()) logger.warn('sms_disabled', { run: 'startup', reason: SMS_DISABLED_REASON });
+// Stated once at boot, so SMS being off reads as the decision it is, not a broken integration.
+if (!isSmsEnabled()) logger.warn('sms_disabled', { run: 'startup', reason: smsDisabledReason() });
 
 startNotificationWorker();
 startAnalyticsCron();

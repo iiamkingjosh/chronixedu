@@ -7,7 +7,7 @@
 - The website and sign-in page now say "in the app and by email" where they used to promise SMS.
 
 ### For Chronix administrators
-- SMS is off on purpose while Termii is not funded. Leaving the Termii key unset is now a stated "off" state. Before, every reminder and alert tried to text each parent and recorded a failure for each one. Now nothing is attempted, and each run logs one line saying SMS is off.
+- SMS is off on purpose while Termii is not funded. A new setting, `SMS_ENABLED`, is the switch: texts go only when it is `true` and a Termii key is set. It is unset, so SMS is off, and the Termii keys stay in place for when SMS comes back. Before, every reminder and alert tried to text each parent and recorded a failure for each one. Now nothing is attempted, and each run logs one line saying SMS is off and why.
 - When SMS is switched back on, a message Termii rejects is now logged. Before, those rejections were recorded nowhere.
 - The feature-adoption figure for SMS counts only messages actually delivered.
 
