@@ -43,6 +43,18 @@ const schoolCount = async () => (await pool.query(`SELECT count(*)::int n FROM s
 const bySlug = async (slug: string) =>
   (await pool.query(`SELECT name, is_demo FROM schools WHERE slug = $1`, [slug])).rows[0];
 
+describe('the database itself (migration 049)', () => {
+  it('stores an explicit is_demo, and refuses a row that does not state one', async () => {
+    const ok = await pool.query(`INSERT INTO schools (name, slug, is_demo) VALUES ('Explicit Row', 'explicit-row', TRUE) RETURNING is_demo`);
+    expect(ok.rows[0].is_demo).toBe(true); // the insert path works when the value is given
+    await expect(pool.query(`INSERT INTO schools (name, slug) VALUES ('Implicit Row', 'implicit-row')`))
+      .rejects.toThrow(/null value in column "is_demo"/);
+    const col = (await pool.query(
+      `SELECT column_default, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'schools' AND column_name = 'is_demo'`)).rows[0];
+    expect(col).toEqual({ column_default: null, is_nullable: 'NO' });
+  });
+});
+
 describe('POST /api/schools', () => {
   it('stores the stated choice, either way; then refuses a school with no choice and inserts nothing', async () => {
     const customer = await request(app).post('/api/schools').set('Authorization', auth()).send({ name: 'Stated Customer', is_demo: false });

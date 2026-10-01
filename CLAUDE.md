@@ -624,7 +624,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 29 suites, 300 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 29 suites, 301 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 21 suites, 186 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)
