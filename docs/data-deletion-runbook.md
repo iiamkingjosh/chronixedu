@@ -8,7 +8,8 @@ do not edit):
 > Personal Data from its systems and those of its Sub-processors within ninety (90) days of
 > subscription termination, except where retention is required by applicable law.
 
-This document is the process that keeps that promise. It has been run end to end on a disposable
+This document is the process that keeps that promise. It was asked for in
+`docs/approved-changes-2026-09-30-public-claims.md` §1, which also records how that spec landed. It has been run end to end on a disposable
 school ([Test record](#test-record)). **One part of it cannot be completed yet**: the audit log.
 Read [The decision](#the-decision-moses) before the first real deletion.
 
@@ -95,6 +96,13 @@ anonymising is an UPDATE and 037 blocks it as surely as 036 blocks DELETE:
 | Cost | Small: one function, one test. | Larger: the function plus a per-action scrubber, and a ratchet that fails when a new action type appears. |
 | Weakens the audit rule | Yes: there is now a sanctioned way to delete. Doctrine 6 already says the rule is accident-proofing, not tamper-proofing, and a purge that audits itself fits that. | Yes, and more broadly: UPDATE of content becomes possible. |
 
+The migrations anticipated this. 036's and 037's error hints read: "If a retention or erasure
+policy genuinely requires this, drop trigger … in its own migration so the decision is recorded."
+So (a) is the route the audit rule itself names. Production has **two** triggers, both enabled
+(checked 1 Oct 2026): `audit_logs_no_delete` (DELETE) and `audit_logs_no_content_change` (UPDATE).
+(a) needs the first relaxed. (b) needs the second relaxed, and then deleting the anonymised users
+and school row still runs into the foreign keys.
+
 Also possible: **(c) keep audit rows as-is**, if the adviser says the law requires them. That is
 the DPA's "except where retention is required by applicable law", and it is what the script does
 today by default.
@@ -119,16 +127,21 @@ deletion can silently claim to be complete.
   - with no audit rows, the school row goes too;
   - migration 047 (below);
   - rerun finds nothing.
-- CLI, School A of the seed:
+- CLI, School A of the seed. Rerun in full on 1 Oct 2026 under the **current** flag names. The first
+  pass used `--with-auth`/`--skip-auth`, renamed when Storage was added, so it no longer counted:
   - dry run listed 12 tables (e.g. 3 students, 3 enrolments, 6 users, 1 queued email), 7 Auth accounts and "1 audit_logs row, 1 audited user, the school row" kept;
-  - refusals verified: no `--confirm`, wrong slug, no Supabase choice, both choices, missing credentials, remote host, wrong `--allow-host`;
-  - Auth unreachable: all 7 deletions failed, the script stopped with "the database was NOT touched", and a dry run afterwards showed every row still present;
+  - each refusal exited 1 and said "Nothing was changed" (or "Refusing to touch"): a malformed school id, no `--confirm`, wrong slug, no Supabase choice, both choices, `--with-supabase` without credentials, a remote host, a wrong `--allow-host`;
+  - Supabase unreachable, run with a sentinel service key: all 7 Auth deletions failed, the script stopped with "the database was NOT touched", a dry run afterwards still listed every row, and the sentinel appeared 0 times in the output;
   - `--execute --skip-supabase` committed, printed the 7 Auth ids, and kept the school row (still referenced);
   - a second dry run listed nothing to delete.
+  - The local database has no `storage` schema, so the CLI printed "Storage files: not checked". The Storage listing is covered by the DB test against a stand-in `storage.objects`; the API removal step is not (see below).
 - **Found by the test, fixed:** deleting a config's assessment components failed at COMMIT
   ("must equal 100; got 0"). The weight trigger re-checked configs that the same transaction had
   deleted. Migration 047 skips a config that no longer exists. Emptying or unbalancing a config
   that still exists is still refused (tested both).
+- **In production since 30 Sep 2026, 23:43 UTC:** migration 047 was applied by the pre-deploy step
+  (`migration_runs` id 55, commit `58eca29`, 1 applied of 49), and the live function body was checked
+  to contain the deleted-config skip. The script itself has **not** been run against production.
 - **Not yet exercised:** `--with-supabase` against a live Supabase Auth/Storage. Only its failure
   path ran locally. **[MOSES]** Before the first real deletion, create a throwaway school in
   production, give it one user and one logo, and run the script on it with `--with-supabase`. That

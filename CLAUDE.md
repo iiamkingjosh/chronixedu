@@ -207,6 +207,11 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Validate every body/query with zod before touching the DB. Parameterised SQL only.
 - DB access lives in `apps/api/src/db/queries/*`; routes orchestrate, services hold business logic.
 - API logging via `logger` (winston). No `console.log` in app code.
+- **Sentry gets technical data only**, because the DPA names it a sub-processor on that basis.
+  `Sentry.setUser` takes the user **id** and nothing else (it sent emails until 1 Oct 2026,
+  SECURITY.md Round 21). Replay keeps `maskAllText`, `maskAllInputs` and `blockAllMedia`
+  stated explicitly in `sentry.client.config.ts`. Never put a name, email, phone number or
+  student record in a Sentry tag, context or breadcrumb.
 - Web: all HTTP through `lib/api.ts` (`apiFetch`, `apiUpload`, `apiFetchBlob`). Forms use React Hook Form + zod.
   Offline score/attendance writes go through Dexie (`lib/offlineDb.ts`).
 - Path alias `@/` in web. Keep files where their siblings are.
@@ -370,6 +375,15 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   path goes in `storagePrefixes()`. It keeps `audit_logs`, and the users and school rows those
   reference, until the **[MOSES] (a)/(b) decision** in the runbook is made. Do not "fix" that by
   deleting around the trigger (doctrine 6).
+- **A new table therefore needs two decisions in its commit**: exported or not, and deleted or
+  not. Each has its own ratchet test, and both fail until the table is classified.
+- The homepage's "delete our copy within 90 days" is the same promise as the legal text and was
+  **deliberately not reworded** (spec §1: build the process, not new words).
+- Migration 047: `validate_assessment_components_total` skips a config that no longer exists,
+  so a config and its components can be deleted together. Before 047 no school could be deleted.
+  Emptying or unbalancing a live config is still refused.
+- `seed-child-prime.js` wipes schools but **not their Storage files**. Three such orphans exist
+  in production (`docs/AUDIT-2026-09.md`).
 
 ## Partner integration (Chronix ERP)
 
@@ -572,7 +586,8 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 22 suites, 219 passed + 2 skipped, ~90s with durability off (below)
+npm run test:db                         # 27 suites, 286 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+                                        # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 21 suites, 186 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)
 ```
@@ -595,7 +610,11 @@ crashes of the jest process was traced — after three wrong attributions — to
 paging (15.4 GB RAM, 36 GB committed): Postgres idle, TCP connects fast under load, and
 the client's own 10s timer firing through event-loop stalls. Check free memory before
 chasing a flake. A run that prints NO summary line is not a pass either: treat it as failed and keep the whole log (a scripted `test:db` printed nothing on 30 Sep 2026 and the cause was not recorded — `docs/AUDIT-2026-09.md`). The ERP project's Supabase stack runs in the same Docker VM; stop it when
-you are not using it.
+you are not using it. Under about 2.5 GB free, a single Jest process running all DB suites dies
+partway, whether started by npm or directly (1 Oct 2026). Run each suite in its own process,
+capturing every exit code and `Tests:` line, and do not count a suite with no summary:
+`for f in src/__db_tests__/*.db.test.ts; do npx jest -c jest.db.config.js --runInBand "$f"; done`
+(from `apps/api`).
 
 **The security gate carries a dated exception list** (`scripts/audit-allowlist.json`, enforced by
 `scripts/audit-gate.js` as CI's third step). It exists because a bare `npm audit --audit-level=critical`
