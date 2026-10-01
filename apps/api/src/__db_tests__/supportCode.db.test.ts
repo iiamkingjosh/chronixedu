@@ -81,6 +81,57 @@ describe('support codes', () => {
     }
   });
 
+  /** The generator's next n draws for seed s, in order: one random() per call, as the trigger draws. */
+  async function nextDraws(c: PoolClient, s: number, n: number): Promise<string[]> {
+    await c.query('SELECT setseed($1)', [s]);
+    const draws: string[] = [];
+    for (let i = 0; i < n; i++) {
+      draws.push((await c.query<{ code: string }>('SELECT (floor(random() * 900000 + 100000))::text AS code')).rows[0].code);
+    }
+    return draws;
+  }
+  /** Give each code to a user (explicit codes draw nothing, so the sequence is untouched). */
+  async function hold(c: PoolClient, codes: string[], base: number): Promise<void> {
+    const distinct = [...new Set(codes)];
+    for (let i = 0; i < distinct.length; i++) {
+      await c.query(`${insertSql}, support_code) VALUES ($1, $2, $3, 'x', 'teacher', 'H', 'Older', true, 'subject', false, $4)`,
+        [id(base + i), I.schoolA, `holder-${base + i}@test`, distinct[i]]);
+    }
+  }
+  const newcomer = (c: PoolClient, n: number) => c.query<{ support_code: string }>(
+    `${insertSql}) VALUES ($1, $2, $3, 'x', 'teacher', 'N', 'Ewer', true, 'subject', false) RETURNING support_code`,
+    [id(n), I.schoolA, `newcomer-${n}@test`]);
+
+  it('stops after 100 draws with a named error (SC001) instead of looping on (migration 051)', async () => {
+    const c = await pool.connect();
+    try {
+      const draws = await nextDraws(c, 0.13, 100);
+      await hold(c, draws, 1000); // every one of the trigger's next 100 draws is taken
+      await c.query('SELECT setseed($1)', [0.13]);
+      // Before 051 the loop drew a 101st code and the insert succeeded; it could, in principle, never stop.
+      await expect(newcomer(c, 1999)).rejects.toMatchObject({
+        code: 'SC001',
+        message: expect.stringContaining('no unused six-digit code in 100 random draws'),
+      });
+    } finally {
+      c.release();
+    }
+  });
+
+  it('...and the 100th draw is still allowed (the control: the bound is 100, and the replay lines up)', async () => {
+    const c = await pool.connect();
+    try {
+      const draws = await nextDraws(c, 0.29, 100);
+      expect(draws.slice(0, 99)).not.toContain(draws[99]); // precondition for this seed
+      await hold(c, draws.slice(0, 99), 2000);
+      await c.query('SELECT setseed($1)', [0.29]);
+      const { rows } = await newcomer(c, 2999);
+      expect(rows[0].support_code).toBe(draws[99]);
+    } finally {
+      c.release();
+    }
+  });
+
   it('an explicit code is kept as given, and a duplicate explicit code is still refused', async () => {
     await pool.query(`${insertSql}, support_code) VALUES ($1, $2, 'explicit@test', 'x', 'teacher', 'E', 'X', true, 'subject', false, '654321')`,
       [id(300), I.schoolA]);

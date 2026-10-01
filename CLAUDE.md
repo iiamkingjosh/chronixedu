@@ -744,7 +744,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 32 suites, 321 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 32 suites, 323 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)
@@ -767,7 +767,9 @@ with `duplicate key … "users_support_code_key"` in the shared seed, in a suite
 touched. It looked like doctrine 15 and was not. It was a random six-digit `support_code` colliding,
 and production had the same exposure, growing with every user (migration 050,
 `supportCode.db.test.ts`). A leftover row collides on its id; a random value collides on its own
-constraint.
+constraint. The code space is six digits, 900,000 accounts platform-wide. Assignment stops after
+100 draws with SQLSTATE `SC001` (migration 051) instead of looping, so `SC001` means "widen the
+code", never "raise the bound".
 
 **A flaky local run on Windows is not evidence about the code until the host is ruled out.**
 On 28 Sep 2026 a run of connection timeouts, `ECONNRESET` and two native `0xC0000409`
