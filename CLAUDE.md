@@ -9,12 +9,14 @@ Where the PDFs in `docs/spec/` disagree with this file, this file wins — see
 Multi-tenant school management SaaS for Nigerian private schools. No real paying
 client is live yet — every school currently in the database is either a test
 fixture (created by an integration test, never cleaned up — see `L-test-data`
-in `docs/AUDIT-2026-09.md`) or demo/sandbox data. `apps/api/scripts/seed-child-prime.js`
-seeds a fictional "Child Prime Onyx School" with made-up Nigerian names and
-gmail.com parent emails for demos/sales — it is NOT a real customer record, and
-running it **wipes every school and every Supabase Auth user first**. Treat
-this repo's "production" database as pre-launch: no real student, parent, or
-payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
+in `docs/AUDIT-2026-09.md`) or demo/sandbox data, all marked `is_demo`, plus Moses's own
+pilot (Chronix High School). There is no seed script: the old demo seeder, which wiped
+every school and every Supabase Auth user with no guard and committed staff passwords to
+this public repo, was deleted on 1 Oct 2026 (the passwords stay in git history and were
+rotated). Schools are removed one at a time, with a dry run and host checks, by
+`apps/api/scripts/delete-school-data.js`. Treat this repo's "production" database as
+pre-launch: no real student, parent, or payment data exists in it as of 18 Sep 2026.
+Monorepo, npm workspaces:
 
 | Path | What |
 |---|---|
@@ -428,10 +430,11 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
 - Migration 047: `validate_assessment_components_total` skips a config that no longer exists,
   so a config and its components can be deleted together. Before 047 no school could be deleted.
   Emptying or unbalancing a live config is still refused.
-- `seed-child-prime.js` wipes schools but **not their Storage files**. The three orphans that left
-  in production were removed by Moses on 1 Oct 2026, and a re-check found 0 orphans. The script
-  itself still does not clear Storage. It now creates its demo school with `is_demo = TRUE`; before,
-  the sales demo was born a "customer" too.
+- Schools are deleted only by `delete-school-data.js`, which removes their Storage files (through
+  the Storage API, before the database step) along with every row. The three orphaned files in
+  production came from the old demo seeder, which deleted schools but not their files. Moses
+  removed them on 1 Oct 2026, a re-check found 0 orphans, and the seeder itself was deleted the
+  same day.
 
 ## Partner integration (Chronix ERP)
 
