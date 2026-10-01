@@ -23,6 +23,11 @@ export default async function globalSetup(): Promise<void> {
   const client = new Client({ connectionString: url });
   await client.connect();
   try {
+    // Every schema a migration creates must be dropped here, not only public. Migration 048 put
+    // the audit purge function in chronixedu_purge; while this dropped public alone, a stale purge
+    // function survived each local rebuild and a "revert to the old code" run still had it, so the
+    // run measured leftovers rather than the code under test.
+    await client.query('DROP SCHEMA IF EXISTS chronixedu_purge CASCADE;');
     await client.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;');
     await client.query(fs.readFileSync(path.join(root, 'scripts/sql/test_supabase_stubs.sql'), 'utf8'));
     const dir = path.join(root, 'migrations');

@@ -69,6 +69,8 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    which reaches `audit_logs` through its FKs whatever the table list says), nor
    `ALTER TABLE … DISABLE TRIGGER ALL`, nor `session_replication_role = 'replica'`. It
    stops a cleanup script and a careless migration; it does not stop someone who means it.
+   Since 048 there is one sanctioned DELETE: the school purge path. It is a function, never a flag
+   (see "A school's data").
 7. **A guard must be verified against every operation it forbids, one at a time.**
    Migration 036's header said "nothing deletes from audit_logs, so this breaks no
    existing path" — true, and beside the point, because it banned DELETE *and UPDATE*
@@ -101,7 +103,8 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
    them: a raise is the ratchet being removed, one notch at a time.
 10. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
-   settings, payments, support-session actions. `audit_logs` has no DELETE.
+   settings, payments, support-session actions. `audit_logs` has no DELETE, except migration
+   048's purge path, which deletes one whole school's rows for the deletion runbook and nothing else.
    **An old value is read, never assumed.** `logSettingsChange(…, null, patch)` recorded
    "prior: null" for every grading and fee change (SECURITY.md Round 15); read the prior
    value under the same lock as the write (`mergeSettingsColumn`), and test it positively —
@@ -261,6 +264,10 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   `ALLOW_REMOTE_TEST_SUPABASE`), so the leftovers land somewhere disposable. **Do not "fix"
   it by letting tests delete audit rows** — a session flag or role that permits it converts
   the invariant into a convention, which is what enforcing it was meant to prevent.
+  Migration 048's purge role is not that, and must not become it: it has no login and no members,
+  is reachable only through `chronixedu_purge.purge_school_audit_logs`, deletes one whole school,
+  and records itself. It exists for `docs/data-deletion-runbook.md`; do not call it from test
+  teardown, and never grant anyone membership in `chronixedu_audit_purger`.
 
 ## Primary vs secondary (teaching model)
 
@@ -372,9 +379,19 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   table needs that decision in the same commit. Files in Storage are not in the export yet.
 - **Deletion:** `apps/api/scripts/delete-school-data.js` and `docs/data-deletion-runbook.md`. Same
   ratchet: every table is in `STEPS` or `NOT_DELETED` (`schoolDeletion.db.test.ts`). A new upload
-  path goes in `storagePrefixes()`. It keeps `audit_logs`, and the users and school rows those
-  reference, until the **[MOSES] (a)/(b) decision** in the runbook is made. Do not "fix" that by
-  deleting around the trigger (doctrine 6).
+  path goes in `storagePrefixes()`. A completed run leaves **zero rows** for the school in every
+  table, checked inside the transaction, which rolls back otherwise. `audit_logs` goes only through
+  migration 048's `chronixedu_purge.purge_school_audit_logs(school, operator)`, decided 1 Oct 2026
+  (option (a)). A plain DELETE is still refused, content UPDATE and write-once `processed_at` are
+  untouched, and the function is unreachable by anything but the table owner. Each of those is
+  tested. `platform_audit_logs` has no triggers, only FKs. The one row a run keeps is the record of
+  the purge (`SCHOOL_AUDIT_PURGED`, school id in `metadata`, `target_school_id` NULL so it survives).
+  Changing the purge function means acting as `chronixedu_audit_purger` (048 shows how). Never
+  widen its grants: functions in `public` default to EXECUTE for PUBLIC, which Supabase serves to
+  `anon` over `/rest/v1/rpc`.
+- **No third party has accepted the Terms or DPA** (1 Oct 2026). Chronix High School is Moses's own
+  pilot (`is_demo = true`), not a customer, whatever older commits say. The deletion and backup
+  promises bind nobody yet, and must be proven before the first real school signs.
 - **A new table therefore needs two decisions in its commit**: exported or not, and deleted or
   not. Each has its own ratchet test, and both fail until the table is classified.
 - The homepage's "delete our copy within 90 days" is the same promise as the legal text and was
@@ -496,6 +513,14 @@ payment data exists in it as of 18 Sep 2026. Monorepo, npm workspaces:
   `rlsPolicyDrift.db.test.ts` fails. (`tenantIsolation.db.test.ts` checks only that RLS
   is *enabled*; it stayed green through the whole 17-policy drift that 042 fixed.)
 - If code starts using a column, a migration must create it. CI rebuilds the schema from scratch.
+- **A migration that creates a schema outside `public` must also add it to the drop list in
+  `apps/api/jest.db.globalSetup.ts`.** The local rebuild drops only what it names. While it dropped
+  `public` alone, 048's `chronixedu_purge` survived between runs, and a revert-to-old-code test run
+  measured a stale function instead of the code (SECURITY.md Round 22 L-01).
+- A migration that needs a non-superuser's view of privileges (roles, ownership, grants) must be
+  tried as a non-superuser. Production's `postgres` has CREATEROLE + BYPASSRLS but is not a
+  superuser, and the local test database runs as one, so a superuser run hides permission failures.
+  048's first draft failed that way.
 - **Railway auto-deploys from `main`, so pushing IS deploying.** The old runbook order
   ("migrations first, then deploy the API") cannot be honoured by pushing — the code is
   live the moment you push, schema ready or not. Either apply the migration before
@@ -586,7 +611,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 27 suites, 286 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 28 suites, 296 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 21 suites, 186 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

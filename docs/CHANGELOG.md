@@ -1,5 +1,13 @@
 # Chronix Edu — Changelog
 
+## Deleting a school now deletes everything (2026-10-01)
+
+### For Chronix administrators
+- The school-deletion script now removes a school's audit history, its users and the school itself, so a completed deletion leaves nothing behind. It checks that before it finishes and undoes the whole run if anything remains. The one record kept is a note that the deletion happened, naming the administrator who ran it.
+- Running a deletion now needs `--operator <your email>`; the script refuses anyone who is not an active Chronix super admin.
+- The script prints every email address and phone number it is about to remove, before removing them, so they can be cleared from SendGrid's suppression lists and named in a deletion request to Termii.
+- See `docs/data-deletion-runbook.md` for the procedure.
+
 ## Principals can export their school's data (2026-10-01)
 
 ### For schools

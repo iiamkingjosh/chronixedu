@@ -1,7 +1,10 @@
 # Data deletion runbook: one school, on termination
 
-**What we promised.** DPA §11 and Terms §22 (both accepted by schools; `legal_terms_accepted_at`,
-do not edit):
+**What we promised.** DPA §11 and Terms §22 (do not edit; once a school accepts them they bind, via
+`legal_terms_accepted_at`). As of 1 Oct 2026 **no third party has accepted them**: every school in
+production is a fixture, a demo, or Moses's own pilot. So this is pre-launch hardening, and it must
+be finished and proven **before the first real school signs**, because that signature makes all of
+it binding at once.
 
 > On termination of the Service, the School has thirty (30) days to request a complete export of
 > its data in a portable format (CSV or PDF). Chronix Edu will permanently delete the School's
@@ -9,9 +12,10 @@ do not edit):
 > subscription termination, except where retention is required by applicable law.
 
 This document is the process that keeps that promise. It was asked for in
-`docs/approved-changes-2026-09-30-public-claims.md` §1, which also records how that spec landed. It has been run end to end on a disposable
-school ([Test record](#test-record)). **One part of it cannot be completed yet**: the audit log.
-Read [The decision](#the-decision-moses) before the first real deletion.
+`docs/approved-changes-2026-09-30-public-claims.md` §1; the audit-log decision it left open was made
+on 1 Oct 2026 (option (a), [below](#the-decision-made-1-oct-2026-option-a)) and built as migration
+048. A completed run leaves **zero rows** for the school in every table, checked inside the
+deleting transaction.
 
 ## Timeline
 
@@ -32,126 +36,162 @@ Read [The decision](#the-decision-moses) before the first real deletion.
    ```
    Whether anything else is "retention required by applicable law" is **[MOSES]**, for the adviser.
    School-fee payments made by parents are the *school's* records, which it has exported.
-2. **Dry run** (changes nothing, prints the plan), from a machine with the production env:
+2. **If the school is still active, suspend it** (Super-admin → Suspend) so nothing writes while you
+   delete. A write that lands mid-run is not dangerous: the final in-transaction check sees the new
+   row and rolls the whole run back, and you rerun. Suspending just avoids the rerun.
+3. **Dry run** (changes nothing), from a machine with the production env:
    ```bash
    DATABASE_URL=<production pooler url> \
    node apps/api/scripts/delete-school-data.js --school <school-uuid> --allow-host <db host>
    ```
-   Check the school name and slug it prints. Keep the output.
-3. **Execute:**
+   Check the school name and slug it prints. **Copy the address lists it prints** ("Copy these
+   now") into the ticket: every email address and phone number the run removes. After the run they
+   exist nowhere in our database, and two sub-processors keep their own copies (step 5).
+4. **Execute:**
    ```bash
    DATABASE_URL=… SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
    node apps/api/scripts/delete-school-data.js --school <uuid> --allow-host <db host> \
-     --execute --confirm <school-slug> --with-supabase
+     --execute --confirm <school-slug> --operator <your super-admin email> --with-supabase
    ```
    Guards, each tested: refuses a non-local database unless `--allow-host` equals the URL's host;
-   refuses `--execute` without `--confirm <slug>`; refuses `--execute` without exactly one of
-   `--with-supabase` / `--skip-supabase`; refuses `--with-supabase` without credentials. Every
-   refusal says "Nothing was changed." The service key is never printed (checked with a sentinel).
+   refuses `--execute` without `--confirm <slug>`, without `--operator` (who must be an active
+   super admin outside the school), or without exactly one of `--with-supabase` / `--skip-supabase`;
+   refuses `--with-supabase` without credentials. Every refusal says "Nothing was changed." The
+   service key is never printed (checked with a sentinel).
    Order: Supabase Auth accounts and Storage files first, stopping if any fails; then **one
-   database transaction**, children before parents. Rerunning is safe.
-4. **Sub-processors.** Work through the table below and note each outcome in the ticket.
-5. **Confirm.** A second dry run should list nothing to delete except what the audit rule keeps.
+   database transaction**, children before parents, ending with `audit_logs` (through
+   `chronixedu_purge.purge_school_audit_logs`), `platform_audit_logs`, `users`, `schools`. Before
+   committing it recounts every table and rolls back unless all are zero.
+5. **Sub-processors.** Work through the table below. Two need the addresses from step 3:
+   - **SendGrid**: remove each email address from Suppressions (bounces, blocks, spam reports,
+     unsubscribes), in the dashboard or `DELETE /v3/suppression/{type}/{email}`. Suppressions never
+     expire on their own.
+   - **Termii**: send the phone numbers with the deletion request (see the Termii row; there is no
+     process yet).
+6. **Confirm.** A second dry run must print `Nothing to delete: there is no school <id>, and no row
+   in any table refers to it.` Nothing else counts as done. The one row that remains on purpose is
+   the record of the purge (`platform_audit_logs`, `SCHOOL_AUDIT_PURGED`, school id in `metadata`,
+   no personal data).
 
 ## Every system that holds school data
 
 | System | What it holds for a school | How it is deleted | Status |
 |---|---|---|---|
-| **Supabase Postgres** (`public`) | Every table. The export covers all of them; `schoolExport.db.test.ts` fails if a new table is not classified. | The script, in one transaction. `schoolDeletion.db.test.ts` fails if a new table is in neither `STEPS` nor `NOT_DELETED`. | ✅ except `audit_logs`, `platform_audit_logs`, the users those name, and the school row. See [The decision](#the-decision-moses). |
+| **Supabase Postgres** (`public`) | Every table. The export covers all of them; `schoolExport.db.test.ts` fails if a new table is not classified. | The script, in one transaction, verified zero before commit. `schoolDeletion.db.test.ts` fails if a new table is in neither `STEPS` nor `NOT_DELETED`. | ✅ including the audit tables, users and school row (migration 048). |
 | **Supabase Auth** | One account per user: email, password hash; `identities` and `sessions` cascade. `auth.audit_log_entries` is empty in production (checked 1 Oct 2026), so login history is not kept in the database. | The script, `--with-supabase` (the same `auth.admin.deleteUser` the super-admin screen uses). Every Auth user has a `public.users` row (checked), so the script sees them all. | ✅ |
-| **Supabase Storage** | `school-assets/schools/<id>/…` (logo, signature, stamp, student photos, staff signatures, assignment files) and `report-cards/{<id>, receipts/<id>, transcripts/<id>}/…`. All 15 production files match these four prefixes (checked 1 Oct 2026). | The script, `--with-supabase`, through the Storage API (a row delete would leave the file), then re-listed to prove it is empty. | ✅. **3 orphaned files exist today**: `school-assets` files for schools already wiped by `seed-child-prime.js`, which deletes schools but not their files. Clean up with `--skip-supabase` output or by hand. |
-| **Supabase backups** | Production is on the **free plan**. Supabase backs up Pro/Team/Enterprise daily (7/14/30 days); for free projects it "currently" takes up to 7 daily backups, reachable only after upgrading, and "might no longer" do so. | Not deletable; they expire. At most 7 days, well inside 90. | ✅ by expiry. **[MOSES]**: Terms §19 says "we perform routine backups". On the free plan that is not something we control. Upgrading to Pro ($25/mo) makes it true. |
+| **Supabase Storage** | `school-assets/schools/<id>/…` (logo, signature, stamp, student photos, staff signatures, assignment files) and `report-cards/{<id>, receipts/<id>, transcripts/<id>}/…`. All 15 production files matched these four prefixes (checked 1 Oct 2026). | The script, `--with-supabase`, through the Storage API (a row delete would leave the file), then re-listed to prove it is empty. | ✅. **3 orphaned files exist today**: `school-assets` files for schools already wiped by `seed-child-prime.js`, which deletes schools but not their files. Remove by hand. |
+| **Supabase backups** | Production is on the **free plan** (one organization, `CHRONIX TECHNOLOGY LIMITED`, holding Chronix Edu and Chronix ERP; measured 1 Oct 2026). Supabase backs up Pro/Team/Enterprise daily (7/14/30 days); for free projects it "currently" takes up to 7 daily backups, reachable only after upgrading, and "might no longer" do so. | Not deletable; they expire. At most 7 days, well inside 90. | ✅ by expiry. Terms §19's "routine backups" becomes true on the **Pro upgrade, decided and budgeted, before the first real school signs** (open item in `docs/AUDIT-2026-09.md`). |
 | **Supabase logs** (API/Postgres log explorer) | Request metadata; no bodies. | Expire by plan (free: 1 day). | ✅ by expiry |
 | **Railway logs** | API logs. Personal data appears only on email-send failure (`sendgrid_email_failed`, `email_queue_retry_failed` log the recipient address). | No per-record deletion. Retention by plan: Free 3 d, Trial/Hobby 7 d, Pro 30 d, Enterprise up to 90 d. | ✅ by expiry on any plan. **[MOSES]** confirm the plan (the API does not expose it). |
-| **Sentry** | Error events and session replays. As of this change: user **id** only (the email was being sent until now; see `middleware/auth.ts`), and replays mask all text and inputs and block media, stated explicitly in `sentry.client.config.ts`. Events from before this change carry emails. | Events expire by plan retention (30–90 days depending on plan). | ✅ by expiry. Older events with emails age out within that window of this deploy. **[MOSES]** confirm the Sentry plan's retention. |
-| **SendGrid** | Email Activity (recipient, subject, status) and suppression lists (bounces, blocks, spam reports, unsubscribes), which **do not expire**. | Activity expires (3 days by default, 30 with the extended-history add-on). Suppressions: delete each of the school's addresses via Suppressions in the dashboard or `DELETE /v3/suppression/{bounces,blocks,spam_reports,unsubscribes}/{email}`. | **[MOSES]** verify retention in the dashboard. Suppressions are a manual step: take the addresses from the school's `people` export *before* executing. |
-| **Termii** | SMS history: parent phone numbers and message text (attendance alerts). | Unknown. No deletion API we use. | **[MOSES]** ask Termii how long message logs are kept and how to request deletion. |
+| **Sentry** | Error events and session replays. User **id** only since `58eca29` (30 Sep 2026, 23:43 UTC); before that, user emails. Replays mask all text and inputs and block media. | Events expire: **90 days on the business plan**. | ✅ by expiry. The last email-bearing events age out by about **29 Dec 2026**. Check in January (open item). |
+| **SendGrid** | Email Activity (recipient, subject, status) and suppression lists (bounces, blocks, spam reports, unsubscribes), which **do not expire**. | Activity expires (3 days by default, 30 with the extended-history add-on). Suppressions: per address, from the list the script prints (procedure step 5). | Suppressions ✅ by the procedure. **[MOSES]** verify the Activity retention in the dashboard. |
+| **Termii** | SMS history: parent phone numbers and message text (attendance alerts). | **Unknown. No deletion API we use.** The script prints the numbers to put in a request. | 🔴 **A real hole in a 90-day promise, not a formality.** **[MOSES]** ask Termii how long message logs are kept and how to request deletion. |
 | **Paystack** | Transactions for school-fee payments: payer email, amount, reference. | Merchants cannot delete transactions; Paystack keeps them under its own regulatory obligations. | Legal-retention exception, by Paystack's obligation not ours. **[MOSES]** confirm with the adviser. |
 | **Opay** | Named in the DPA; **no integration exists in the code** (grep). | Nothing to delete. | ✅. [MOSES] the DPA lists a sub-processor we do not use; harmless, but worth tidying at the next legal revision. |
 | **Cloudflare** | Named in the DPA as CDN; configured outside this repo. | Request logs, if any, expire by plan. | **[MOSES]** confirm whether Cloudflare is in front of the domain today. |
 
-## The decision [MOSES]
+## The decision, made 1 Oct 2026: option (a)
 
-`audit_logs` is append-only **for every caller**: migration 036 blocks DELETE, 037 blocks content
-UPDATE (only `processed_at` may be written, once). It has foreign keys to `users` and `schools`. So
-after the script runs, three things remain:
+**Delete, via a named purge path** (Moses). (b) anonymise was rejected; (c) retain was not needed.
 
-- the school's audit rows: about 44 action types, whose JSON can hold names, emails, scores,
-  payment amounts and IP addresses;
-- the `users` rows those audit rows name (email, name);
-- the `schools` row.
+- The adviser's position is that scrubbing identifying fields would satisfy "permanently delete".
+  That made (b) *legal*, not *better*; (a) is strictly stronger and meets the same test.
+- (b) would have scrubbed two arbitrary-shape JSONB columns. Measured in production on 1 Oct 2026,
+  00:45 UTC: **269 audit rows, 20 distinct `action_type` values, 50 distinct payload keys** across
+  `old_value ‖ new_value`. The code can emit **38 distinct `actionType:` literals** (non-test code)
+  plus the `logSettingsChange` wrappers. So a scrubber would have handled every shape while only
+  20 existed to test against, and a missed key is personal data we had told a school we deleted.
+  Two corrections on the figures: an earlier draft of this runbook said "about 44 action types",
+  which mixed the code's literals with queue-row names; and the decision spec cited 1,042 rows,
+  which this measurement did not reproduce. `audit_logs` cannot shrink short of a TRUNCATE, so the
+  269 stands. The 20 types and 50 keys agree with the spec.
+- (a) is verifiable by `count(*) = 0`. That is the whole argument.
 
-`platform_audit_logs` (Chronix's record of its own admins' actions) is kept alongside, for the
-same reason. In the test, 1 audit row kept 1 user and the school row. A real school would keep
-every staff member who ever saved anything.
+**How it is built (migration 048):**
+- A `NOLOGIN` role with no members, `chronixedu_audit_purger`, owns a `SECURITY DEFINER` function
+  `chronixedu_purge.purge_school_audit_logs(school_id, operator_id)`.
+- The DELETE trigger lets a delete through only when `current_user` is that role, which happens
+  only inside the function. There is no session flag anyone could set.
+- The function deletes that school's rows only: rows with its `school_id`, or by its users.
+- Before deleting, it writes the record of the purge.
+- It lives in a schema PostgREST does not expose. EXECUTE belongs to the table owner alone; PUBLIC,
+  `anon`, `authenticated` and `service_role` are revoked.
+- Content UPDATE and write-once `processed_at` (037/038) are untouched, each tested.
 
-The spec offered two routes. **Both need a migration that relaxes the audit trigger**, because
-anonymising is an UPDATE and 037 blocks it as surely as 036 blocks DELETE:
+`platform_audit_logs` turned out to have no triggers at all. Only its foreign keys held a school
+alive, so the script deletes it with a plain DELETE.
 
-| | (a) Delete: a named purge path | (b) Anonymise in place |
-|---|---|---|
-| What changes | A migration lets DELETE through for one school's rows, only via a purge function that records itself in `platform_audit_logs`. Then the users and school rows can go too. | A migration lets UPDATE through, via a scrub function, to rewrite JSON, `ip_address`, and the users/school rows (`email → deleted-<id>@invalid`, names nulled). |
-| Meets "permanently delete" | Yes, literally. | Only if the scrub is complete. It must know every key in all ~44 JSON shapes, now and in future, and a missed key is personal data we claim to have deleted. |
-| What is lost | The evidence trail of that school's activity, e.g. for a dispute raised after deletion. | Little; structure and timing survive. |
-| Cost | Small: one function, one test. | Larger: the function plus a per-action scrubber, and a ratchet that fails when a new action type appears. |
-| Weakens the audit rule | Yes: there is now a sanctioned way to delete. Doctrine 6 already says the rule is accident-proofing, not tamper-proofing, and a purge that audits itself fits that. | Yes, and more broadly: UPDATE of content becomes possible. |
-
-The migrations anticipated this. 036's and 037's error hints read: "If a retention or erasure
-policy genuinely requires this, drop trigger … in its own migration so the decision is recorded."
-So (a) is the route the audit rule itself names. Production has **two** triggers, both enabled
-(checked 1 Oct 2026): `audit_logs_no_delete` (DELETE) and `audit_logs_no_content_change` (UPDATE).
-(a) needs the first relaxed. (b) needs the second relaxed, and then deleting the anonymised users
-and school row still runs into the foreign keys.
-
-Also possible: **(c) keep audit rows as-is**, if the adviser says the law requires them. That is
-the DPA's "except where retention is required by applicable law", and it is what the script does
-today by default.
-
-My read, for what it's worth: (b) costs more and delivers less, because it needs the same
-relaxation plus a scrubber that must never miss a key. If the legal answer is "delete", (a) is the
-honest implementation; if it is "retain", (c) needs no code. **Nothing has been chosen.** This is
-yours to take to whoever advises you on NDPR. The script reports what it kept on every run, so no
-deletion can silently claim to be complete.
+**The record of the purge** is the one row a run leaves on purpose: `platform_audit_logs`,
+`SCHOOL_AUDIT_PURGED`, written before the delete, naming the operator. It holds the school id in
+`metadata` and leaves `target_school_id` NULL. That breaks the loop of "who records the purge of
+the purge log": the record has no foreign key to the school, so the school's deletion neither
+blocks on it nor removes it, and it survives permanently. It holds a UUID and a count, no personal
+data. Doctrine 6 still applies: the owner can still `DISABLE TRIGGER`. This path is
+accident-proofing, and it is the only door that is not deliberate.
 
 ## Test record
 
 **1 Oct 2026, local disposable database** (`chronixedu_test`, Docker, rebuilt from `migrations/`).
 
-- `schoolDeletion.db.test.ts`, 9 tests, all pass:
-  - completeness: every table classified;
-  - Storage listing: all 6 of A's files across both buckets, none of B's, not a look-alike path;
-  - no-Storage database: reports "not checked", not zero;
-  - dry run changes nothing;
-  - execute: every school-A row gone except the audit-protected ones;
-  - not one school-B row touched;
-  - with no audit rows, the school row goes too;
-  - migration 047 (below);
-  - rerun finds nothing.
-- CLI, School A of the seed. Rerun in full on 1 Oct 2026 under the **current** flag names. The first
-  pass used `--with-auth`/`--skip-auth`, renamed when Storage was added, so it no longer counted:
-  - dry run listed 12 tables (e.g. 3 students, 3 enrolments, 6 users, 1 queued email), 7 Auth accounts and "1 audit_logs row, 1 audited user, the school row" kept;
-  - each refusal exited 1 and said "Nothing was changed" (or "Refusing to touch"): a malformed school id, no `--confirm`, wrong slug, no Supabase choice, both choices, `--with-supabase` without credentials, a remote host, a wrong `--allow-host`;
-  - Supabase unreachable, run with a sentinel service key: all 7 Auth deletions failed, the script stopped with "the database was NOT touched", a dry run afterwards still listed every row, and the sentinel appeared 0 times in the output;
-  - `--execute --skip-supabase` committed, printed the 7 Auth ids, and kept the school row (still referenced);
-  - a second dry run listed nothing to delete.
-  - The local database has no `storage` schema, so the CLI printed "Storage files: not checked". The Storage listing is covered by the DB test against a stand-in `storage.objects`; the API removal step is not (see below).
-- **Found by the test, fixed:** deleting a config's assessment components failed at COMMIT
-  ("must equal 100; got 0"). The weight trigger re-checked configs that the same transaction had
-  deleted. Migration 047 skips a config that no longer exists. Emptying or unbalancing a config
-  that still exists is still refused (tested both).
-- **In production since 30 Sep 2026, 23:43 UTC:** migration 047 was applied by the pre-deploy step
-  (`migration_runs` id 55, commit `58eca29`, 1 applied of 49), and the live function body was checked
-  to contain the deleted-config skip. The script itself has **not** been run against production.
-- **Not yet exercised:** `--with-supabase` against a live Supabase Auth/Storage. Only its failure
-  path ran locally. **[MOSES]** Before the first real deletion, create a throwaway school in
-  production, give it one user and one logo, and run the script on it with `--with-supabase`. That
-  is the one step left before this is proven end to end.
+- `schoolDeletion.db.test.ts`, 18 tests, all pass:
+  - completeness: every table classified, the tail is audit → users → school;
+  - migration 048:
+    - the purge removes A's audit rows and leaves B's 2 (checked non-empty first);
+    - a plain DELETE as the owner is still refused;
+    - a content UPDATE is still refused;
+    - `processed_at` is still write-once;
+    - the function is unreachable by `anon`/`authenticated`/`service_role`/PUBLIC, and no role has SET or INHERIT membership in the purger;
+    - the purge refuses a null id, a non-super-admin operator, and a super admin inside the school;
+    - `platform_audit_logs` has no triggers (pinned);
+  - Storage listing: all 6 of A's files across both buckets, none of B's, not a look-alike path; a database without Storage reports "not checked", not zero;
+  - dry run changes nothing and lists every email and phone number;
+  - the real run leaves zero rows in every table, users and school row included;
+  - the record of the purge survives;
+  - not one school-B row is touched;
+  - a refusal mid-transaction rolls everything back;
+  - the operator is resolved by email;
+  - a rerun finds nothing;
+  - migration 047.
+- `purgeDuringNotification.db.test.ts`: the school is purged from inside a real
+  `processNotificationQueue()` run, between the worker reading its batch and stamping the row. The
+  worker completes without throwing, and School B's row (queued after A's) is still processed.
+- **Shown failing on the old code by reverting it** (old script from `58eca29`, 048 moved aside):
+  11 of 18 fail, plus the worker test, each for the right reason ("schema chronixedu_purge does not
+  exist", rows left behind, `resolveOperator` missing). The guard tests pass on the old code, as
+  they must, because they protect what 048 must not change. So they were shown to bite with a
+  mutation instead: a deliberately over-broad 048 (DELETE and content UPDATE opened, EXECUTE to
+  PUBLIC, the owner made a member, a trigger added to `platform_audit_logs`) failed all five.
+- **Found while doing that:** the DB suite's rebuild dropped only `public`, so 048's
+  `chronixedu_purge` schema survived between local runs. The first "old code" run still had a stale
+  purge function and measured leftovers. `jest.db.globalSetup.ts` now drops every schema a
+  migration creates.
+- **Migration 048 under production's role conditions.** Production's `postgres` is not a superuser
+  (CREATEROLE + BYPASSRLS only), and locally it is, so the migration was also run as a
+  non-superuser with those attributes, in a scratch database with 037's real triggers. The first
+  attempt failed with "permission denied for schema chronixedu_purge": the purger needed USAGE to
+  resolve its own function while setting grants. Fixed (granted for the migration, then revoked),
+  and re-run clean, with every property above re-checked there.
+- CLI on the seed's School A:
+  - the dry run listed 15 tables, `audit_logs`, `platform_audit_logs`, `users` and `schools` included, plus 8 email addresses and 2 phone numbers;
+  - refusals: no `--operator`, and an operator who is not a super admin;
+  - `--execute --skip-supabase --operator …` committed with the in-transaction zero check;
+  - the rerun, both dry and `--execute`, printed "Nothing to delete" and exited 0.
+  - Earlier refusal checks (malformed id, `--confirm`, Supabase choice, credentials, hosts, sentinel key) were rerun under the current flag names the same day and still hold.
+- Migration 047 (the component-weight trigger skips a config deleted in the same transaction) is in
+  production since 30 Sep 2026, 23:43 UTC (`migration_runs` id 55).
+- **Live trial on production:** pending migration 048's deploy. See [§C below](#live-trial-production).
+
+## Live trial (production)
+
+Pending. Runs after 048 is live: a throwaway school with one user, one uploaded logo and one audit
+row, deleted with `--with-supabase` and verified independently of the script's own output; then
+the stray `guyg ` school the same way.
 
 ## Known gaps
 
-- **Audit log**: see [The decision](#the-decision-moses).
 - **Files are not in the export.** The CSV export is complete for the database. Report cards can
   be regenerated, but student photos and assignment submissions exist only as files. The DPA's
   "CSV or PDF" is arguably met for records, not for uploads. Adding a file bundle is a feature;
   see `docs/AUDIT-2026-09.md`.
-- **SendGrid suppressions and Termii** are manual or unknown (table above).
+- **Termii** has no deletion route (table above). SendGrid suppressions are manual but covered by
+  the procedure.

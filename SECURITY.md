@@ -1,8 +1,56 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 21 — 2026-10-01  
-**Scope:** Public claims checked against the code; the school's own export; the deletion process  
-**Round 21 total findings:** 2 (0 Critical · 0 High · 2 Medium) + 2 Info
+**Latest audit:** Round 22 — 2026-10-01  
+**Scope:** The audit purge path (option (a)); completing school deletion  
+**Round 22 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) + 1 Info
+
+---
+
+## Round 22 — 2026-10-01
+
+**Scope:** Option (a) of the deletion runbook, decided by Moses 1 Oct 2026: one school's audit rows may be deleted, through a named purge path and nothing else, so a school deletion can end at zero rows.
+
+### I-01 — A door through `audit_logs_no_delete`, built so it is the only one ✅ Built
+
+**Files:** `migrations/048_audit_purge_path.sql` (new), `apps/api/scripts/delete-school-data.js`; tests `schoolDeletion.db.test.ts`, `purgeDuringNotification.db.test.ts` (new)
+
+Relaxing an append-only guard is the change most likely to relax more than intended. 036 once banned UPDATE alongside DELETE with only DELETE checked, and silenced every parent notification. So the header of 048 enumerates every operation on both audit tables, before and after, and each is tested.
+
+**Mechanism.**
+- A `NOLOGIN` role with no members, `chronixedu_audit_purger`, owns a `SECURITY DEFINER` function, `chronixedu_purge.purge_school_audit_logs(school_id, operator_id)`.
+- The DELETE trigger passes only when `current_user` is that role, which happens only inside the function.
+- **No session flag.** Any caller can set a custom GUC, which would turn the invariant into a convention.
+
+**Exposure, three independent walls:**
+- Functions in `public` get EXECUTE for PUBLIC by default, and Supabase exposes `public` over `/rest/v1/rpc` to `anon`. A purge function left with defaults would have been an unauthenticated audit-log wipe.
+- The function lives in a schema PostgREST does not expose.
+- PUBLIC has no USAGE on that schema.
+- EXECUTE is revoked from PUBLIC, `anon`, `authenticated` and `service_role`, and granted only to the table owner.
+
+**Scope.** The function deletes only the given school's rows: its `school_id`, or rows by its users (those users are deleted next and the FK requires it). It refuses a null id, and an operator who is not an active super admin outside the school. It writes its own record to `platform_audit_logs` before deleting. If the count it deleted differs from the count it recorded, it rolls back.
+
+**Unchanged and tested one at a time:**
+- a plain DELETE as the owner;
+- content UPDATE (037);
+- write-once `processed_at`;
+- TRUNCATE (still unblocked, doctrine 6).
+
+`platform_audit_logs` was measured to have **no triggers at all**; only its foreign keys kept a school alive.
+
+**Production's role conditions.** Production's `postgres` is not a superuser (CREATEROLE + BYPASSRLS), and locally it is. 048 was therefore also applied as a simulated non-superuser with those attributes, which found a failure a superuser run hides: the purger needed USAGE on its own schema while its grants were being set. That was fixed and re-verified. Ownership changes and the function's grants are made *as* the new owner, because Postgres rewrites an old owner's ACL entries on `ALTER … OWNER`, which would have silently taken EXECUTE away from the table owner.
+
+**Tests.**
+- The new tests fail on the old code (11 of 18, plus the worker test), each for the right reason.
+- The guard tests pass on the old code by design, so they were shown to bite with a deliberately over-broad 048: all five failed.
+- The notification worker is purged *mid-run*, between reading its batch and stamping a row, and completes. A later school's row is still processed.
+
+**Residual, stated.** The table owner still holds ADMIN on the purger role (Postgres grants a role's creator ADMIN option automatically). It could grant itself membership, and it could `DISABLE TRIGGER`. Both are deliberate acts, and the first leaves a `pg_auth_members` row that the test asserts is absent. Doctrine 6: accident-proofing, not tamper-proofing.
+
+### L-01 — The DB suite's rebuild left non-`public` schemas behind ✅ Fixed
+
+**Files:** `apps/api/jest.db.globalSetup.ts`
+
+The rebuild dropped only `public`. 048's `chronixedu_purge` survived between local runs, so a "revert to the old code" run still had a stale purge function: the privilege test passed with 048 removed. A test harness that keeps state between runs can report a guard as working when it is absent. It now drops every schema a migration creates. CI was unaffected, because it starts empty.
 
 ---
 
