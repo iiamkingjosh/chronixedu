@@ -205,7 +205,9 @@ const onboardingStep1Schema = z.object({
 
 const onboardingStep2Schema = z
   .object({
-    motto: z.string().min(1).optional(),
+    // Optional, as the form's label says: blank ('') or omitted both mean "no motto". It was
+    // min(1), so the form's blank motto was refused and a raw zod error reached the screen.
+    motto: z.string().trim().max(500).optional(),
     primary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
     admission_prefix: z.string().min(1).optional(),
   })

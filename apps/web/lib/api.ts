@@ -1,3 +1,6 @@
+import { ApiError, describeApiError } from './apiError';
+export { ApiError } from './apiError';
+
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
   throw new Error('NEXT_PUBLIC_API_URL is required in production');
 }
@@ -44,10 +47,10 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
-function errorMessage(json: unknown, fallback: string): string {
-  const err = (json as { error?: unknown } | null)?.error;
-  const message = (err as { message?: unknown } | undefined)?.message ?? err ?? fallback;
-  return typeof message === 'string' ? message : JSON.stringify(message);
+/** Every failed request throws an ApiError: a readable message (never raw JSON — see
+ *  lib/apiError.ts) plus, for validation failures, the per-field messages a form can show. */
+function apiError(status: number, json: unknown, fallback: string): ApiError {
+  return new ApiError(status, describeApiError(json, fallback));
 }
 
 export function redirectToLogin() {
@@ -86,7 +89,7 @@ export async function apiFetch<T = unknown>(
   }
   const json = await readJson(res);
   if (!res.ok) {
-    throw new Error(errorMessage(json, `Request failed (${res.status})`));
+    throw apiError(res.status, json, `Request failed (${res.status})`);
   }
   return json as T;
 }
@@ -104,7 +107,7 @@ export async function apiUpload<T = unknown>(
   if (res.status === 401) handleUnauthorized();
   const json = await readJson(res);
   if (!res.ok) {
-    throw new Error(errorMessage(json, `Upload failed (${res.status})`));
+    throw apiError(res.status, json, `Upload failed (${res.status})`);
   }
   return json as T;
 }
@@ -126,9 +129,7 @@ export async function apiFetchBlob(
   if (res.status === 401) handleUnauthorized();
   if (!res.ok) {
     const json = await res.json().catch(() => null);
-    const message =
-      json?.error?.message ?? json?.error ?? `Request failed (${res.status})`;
-    throw new Error(typeof message === 'string' ? message : JSON.stringify(message));
+    throw apiError(res.status, json, `Request failed (${res.status})`);
   }
   return res.blob();
 }

@@ -226,6 +226,12 @@ Monorepo, npm workspaces:
   stated explicitly in `sentry.client.config.ts`. Never put a name, email, phone number or
   student record in a Sentry tag, context or breadcrumb.
 - Web: all HTTP through `lib/api.ts` (`apiFetch`, `apiUpload`, `apiFetchBlob`). Forms use React Hook Form + zod.
+  A failed request throws `ApiError` (`lib/apiError.ts`): a readable `message` and, for zod
+  validation failures, `fields` (field → readable message) a form can attach with `setError`.
+  The API answers validation with `error.flatten()`, and the client used to `JSON.stringify` it,
+  so raw `{"formErrors":…}` reached the screen on every page that showed `err.message` (fixed
+  1 Oct 2026). Never render an API error object; never disable a submit button just because the
+  form is invalid. A click must validate and show the field errors, or the screen looks broken.
   Offline score/attendance writes go through Dexie (`lib/offlineDb.ts`).
 - Path alias `@/` in web. Keep files where their siblings are.
 - **The sidebar is `lib/navigation.ts`.** The principal's daily work is four labelled groups
@@ -238,10 +244,16 @@ Monorepo, npm workspaces:
   (jest, pure TypeScript under `lib/`), and the root `test:unit` runs them after the API's.
 - **The Ctrl+K palette (`components/CommandPalette.tsx`) has no page list of its own.**
   `lib/commandPalette.ts` builds it from `getNavGroupsForRole`, which rests on
-  `getMainNavForRole`, plus `SETTINGS_NAV_GROUPS`, gated exactly as the sidebar gates Settings:
-  all of it for `isAdminRole`, only Payout Setup for `canAccessPayoutSettings`. Add a page to
-  `navigation.ts` and both the sidebar and the palette get it; never add one to the palette
-  alone, or it will offer a page the role's guard refuses. `commandPalette.test.ts` asserts, per
+  `getMainNavForRole`, plus `SETTINGS_NAV_GROUPS` gated by `settingsAccessForRole`, the one rule
+  the school sidebar also reads (`all` | `payout` | `none`). Add a page to `navigation.ts` and
+  both the sidebar and the palette get it; never add one to the palette alone, or it will offer
+  a page the role's guard refuses. **The platform-admin area is the same rule**: its ten pages
+  are `SUPER_ADMIN_NAV_GROUPS` in `navigation.ts` (they used to be a private list inside
+  `app/super-admin/layout.tsx`). That layout renders its sidebar from them and mounts the palette,
+  and `getMainNavForRole('super_admin')` returns them, not `PRINCIPAL_NAV`: a super admin has no
+  school, so school pages and school Settings are not theirs (`settingsAccessForRole` → `none`).
+  A test pins both directions: the platform palette offers exactly the platform pages, and no
+  school role's palette offers one. `commandPalette.test.ts` asserts, per
   role, that the palette's set EQUALS the expected set, not merely that it is non-empty. It
   searches pages only; record search needs its own API, tenant scoping and per-record checks.
   It renders only in the signed-in dashboard layout, never pre-auth. It matches label and
@@ -662,7 +674,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 30 suites, 305 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 30 suites, 306 passed + 2 skipped (1 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 21 suites, 185 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

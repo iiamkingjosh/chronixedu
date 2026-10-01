@@ -8,10 +8,29 @@
  */
 import {
   PRINCIPAL_NAV, PRINCIPAL_NAV_GROUPS, SETTINGS_NAV, SETTINGS_NAV_GROUPS,
-  getNavGroupsForRole, visibleNavGroups,
+  SUPER_ADMIN_NAV, SUPER_ADMIN_NAV_GROUPS,
+  getMainNavForRole, getNavGroupsForRole, settingsAccessForRole, visibleNavGroups,
 } from '../navigation';
 
 const singular = (label: string) => label.toLowerCase().replace(/s$/, '');
+
+describe('the platform-admin sidebar', () => {
+  it('is the ten platform pages in four groups, each with a description, none twice', () => {
+    expect(SUPER_ADMIN_NAV).toHaveLength(10);
+    expect(SUPER_ADMIN_NAV_GROUPS.map((g) => g.items.length)).toEqual([3, 3, 2, 2]);
+    expect(new Set(SUPER_ADMIN_NAV.map((i) => i.href)).size).toBe(10);
+    expect(new Set(SUPER_ADMIN_NAV.map((i) => singular(i.label))).size).toBe(10);
+    for (const i of SUPER_ADMIN_NAV) expect(`${i.label}: ${i.description ?? ''}`.length).toBeGreaterThan(i.label.length + 10);
+  });
+
+  it('is what a super admin gets — the platform pages, not the school-side principal list', () => {
+    expect(getMainNavForRole('super_admin')).toBe(SUPER_ADMIN_NAV);
+    expect(getMainNavForRole('principal')).toBe(PRINCIPAL_NAV);
+    expect(settingsAccessForRole('super_admin')).toBe('none');
+    expect(settingsAccessForRole('principal')).toBe('all');
+    expect(settingsAccessForRole('bursar')).toBe('payout');
+  });
+});
 
 describe('the principal sidebar', () => {
   it('is eleven daily links in four groups of two or three', () => {

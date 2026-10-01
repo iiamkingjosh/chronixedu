@@ -7,8 +7,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
-import { isAdminRole, canAccessPayoutSettings } from '@/lib/auth';
-import { getNavGroupsForRole, visibleNavGroups, type NavItem } from '@/lib/navigation';
+import { getNavGroupsForRole, visibleNavGroups, settingsAccessForRole, type NavItem } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import CommandPalette from '@/components/CommandPalette';
 import SyncIndicator from '@/components/SyncIndicator';
@@ -77,10 +76,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return null;
   }
 
-  const showSettings = isAdminRole(user.role);
-  // Every plan includes payouts and analytics since Basic was removed (30 Sep 2026); the
-  // API still refuses them for a read-only school, and the notice below says why.
-  const showPayoutSettings = canAccessPayoutSettings(user.role);
+  // One rule for Settings, shared with the Ctrl+K palette (lib/navigation.ts). Every plan includes
+  // payouts and analytics since Basic was removed (30 Sep 2026); the API still refuses them for
+  // a read-only school, and the notice below says why.
+  const settingsAccess = settingsAccessForRole(user.role);
+  const showSettings = settingsAccess === 'all';
+  const showPayoutSettings = settingsAccess !== 'none';
   const visibleGroups = visibleNavGroups(navGroups, []);
 
   function handleLogout() {

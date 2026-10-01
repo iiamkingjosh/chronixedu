@@ -78,6 +78,19 @@ describe('the five-step wizard', () => {
     expect(cfg).not.toHaveProperty('assessment_components');
   });
 
+  it('motto is optional, as the form says: blank or omitted both save', async () => {
+    const start = await request(wizard).post('/api/super-admin/onboarding').set('Authorization', auth())
+      .send({ school_name: 'No Motto School', school_email: 'office@nomotto.test', is_demo: true });
+    const sid = start.body.data.session_id;
+    // Exactly what the form sends when the motto box is left empty.
+    const blank = await step(sid, 2, { motto: '', primary_colour: '#003366', admission_prefix: 'NMS' });
+    expect(blank.status).toBe(200);
+    const omitted = await step(sid, 2, { primary_colour: '#003366', admission_prefix: 'NMS' });
+    expect(omitted.status).toBe(200);
+    const identity = (await pool.query(`SELECT identity_config FROM school_settings WHERE school_id = $1`, [start.body.data.school_id])).rows[0].identity_config;
+    expect(identity.admission_prefix).toBe('NMS');
+  });
+
   it('takes one term, not three, and the removed steps are gone', async () => {
     const start = await request(wizard).post('/api/super-admin/onboarding').set('Authorization', auth())
       .send({ school_name: 'Old Shape School', school_email: 'office@oldshape.test', is_demo: true });

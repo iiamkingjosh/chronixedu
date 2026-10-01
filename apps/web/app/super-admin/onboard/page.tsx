@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useForm } from 'react-hook-form';
+import { useForm, type FieldValues, type Path, type UseFormSetError } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -11,11 +11,12 @@ import {
   completeOnboarding,
   type CompleteOnboardingResponse,
 } from '@/lib/superAdminApi';
+import { ApiError } from '@/lib/api';
 
 // ── Shared UI helpers ────────────────────────────────────────────────────────
 
 const inputClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400';
-const nextButtonClass = 'bg-[#003366] text-white rounded-md px-5 py-2 text-sm font-medium hover:bg-[#002244] disabled:opacity-50';
+const nextButtonClass = 'bg-[#003366] text-white rounded-md px-5 py-2 text-sm font-medium hover:bg-[#002244] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#003366]';
 const backButtonClass = 'border border-gray-300 rounded-md px-5 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed';
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
@@ -26,6 +27,30 @@ function Field({ label, error, children }: { label: string; error?: string; chil
       {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );
+}
+
+/**
+ * Shows a failed save the way a person can act on it: the readable summary in the error box,
+ * and each server-side field error beside its input. `fieldMap` renames an API field to the
+ * form field that holds it (the API's is_demo is the form's `kind`).
+ */
+function showSaveError<T extends FieldValues>(
+  err: unknown,
+  setError: UseFormSetError<T>,
+  setApiError: (message: string) => void,
+  fallback: string,
+  fieldMap: Record<string, Path<T>> = {},
+  formFields: readonly Path<T>[] = [],
+) {
+  if (err instanceof ApiError) {
+    for (const [field, message] of Object.entries(err.fields)) {
+      const target = fieldMap[field] ?? (formFields as readonly string[]).find((f) => f === field);
+      if (target) setError(target as Path<T>, { type: 'server', message });
+    }
+    setApiError(err.message);
+    return;
+  }
+  setApiError(err instanceof Error ? err.message : fallback);
 }
 
 function ErrorBox({ message }: { message: string }) {
@@ -164,7 +189,7 @@ function Step1Info({ wizard, onNext }: { wizard: WizardState; onNext: (patch: Pa
       setSchoolEmail(values.school_email);
       setPhase('details');
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'Failed to start onboarding');
+      showSaveError(err, createForm.setError, setApiError, 'Failed to start onboarding', { is_demo: 'kind' }, ['school_name', 'school_email']);
     }
   }
 
@@ -181,7 +206,7 @@ function Step1Info({ wizard, onNext }: { wizard: WizardState; onNext: (patch: Pa
         phone: values.phone,
       });
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'Failed to save school details');
+      showSaveError(err, detailsForm.setError, setApiError, 'Failed to save school details', {}, ['address', 'phone']);
     }
   }
 
@@ -213,7 +238,7 @@ function Step1Info({ wizard, onNext }: { wizard: WizardState; onNext: (patch: Pa
         {apiError && <ErrorBox message={apiError} />}
         <div className="flex justify-between pt-2">
           <button type="button" disabled className={backButtonClass}>Back</button>
-          <button type="submit" disabled={!createForm.formState.isValid || createForm.formState.isSubmitting} className={nextButtonClass}>
+          <button type="submit" disabled={createForm.formState.isSubmitting} className={nextButtonClass}>
             {createForm.formState.isSubmitting ? 'Creating…' : 'Next'}
           </button>
         </div>
@@ -236,7 +261,7 @@ function Step1Info({ wizard, onNext }: { wizard: WizardState; onNext: (patch: Pa
       {apiError && <ErrorBox message={apiError} />}
       <div className="flex justify-between pt-2">
         <button type="button" disabled className={backButtonClass}>Back</button>
-        <button type="submit" disabled={!detailsForm.formState.isValid || detailsForm.formState.isSubmitting} className={nextButtonClass}>
+        <button type="submit" disabled={detailsForm.formState.isSubmitting} className={nextButtonClass}>
           {detailsForm.formState.isSubmitting ? 'Saving…' : 'Next'}
         </button>
       </div>
@@ -254,7 +279,7 @@ const step2Schema = z.object({
 type Step2Form = z.infer<typeof step2Schema>;
 
 function Step2Branding({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
-  const { register, handleSubmit, watch, formState: { errors, isValid, isSubmitting } } = useForm<Step2Form>({
+  const { register, handleSubmit, watch, setError, formState: { errors, isSubmitting } } = useForm<Step2Form>({
     resolver: zodResolver(step2Schema),
     mode: 'onChange',
     defaultValues: { motto: wizard.motto, primary_colour: wizard.primaryColour, admission_prefix: wizard.admissionPrefix },
@@ -272,7 +297,7 @@ function Step2Branding({ wizard, onNext, onBack }: { wizard: WizardState; onNext
       });
       onNext({ motto: values.motto ?? '', primaryColour: values.primary_colour, admissionPrefix: values.admission_prefix });
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'Failed to save branding');
+      showSaveError(err, setError, setApiError, 'Failed to save branding', {}, ['motto', 'primary_colour', 'admission_prefix']);
     }
   }
 
@@ -298,7 +323,7 @@ function Step2Branding({ wizard, onNext, onBack }: { wizard: WizardState; onNext
       {apiError && <ErrorBox message={apiError} />}
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className={backButtonClass}>Back</button>
-        <button type="submit" disabled={!isValid || isSubmitting} className={nextButtonClass}>{isSubmitting ? 'Saving…' : 'Next'}</button>
+        <button type="submit" disabled={isSubmitting} className={nextButtonClass}>{isSubmitting ? 'Saving…' : 'Next'}</button>
       </div>
     </form>
   );
@@ -328,7 +353,7 @@ const step3Schema = z.object({
 type Step3Form = z.infer<typeof step3Schema>;
 
 function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
-  const { register, handleSubmit, formState: { errors, isValid, isSubmitting } } = useForm<Step3Form>({
+  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<Step3Form>({
     resolver: zodResolver(step3Schema),
     mode: 'onChange',
     defaultValues: { session_name: wizard.sessionName, term: wizard.term },
@@ -341,7 +366,7 @@ function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext
       await saveOnboardingStep(wizard.sessionId, 3, { session_name: values.session_name, term: values.term });
       onNext({ sessionName: values.session_name, term: values.term });
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'Failed to save academic calendar');
+      showSaveError(err, setError, setApiError, 'Failed to save academic calendar', {}, ['session_name']);
     }
   }
 
@@ -368,7 +393,7 @@ function Step3Calendar({ wizard, onNext, onBack }: { wizard: WizardState; onNext
       {apiError && <ErrorBox message={apiError} />}
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className={backButtonClass}>Back</button>
-        <button type="submit" disabled={!isValid || isSubmitting} className={nextButtonClass}>{isSubmitting ? 'Saving…' : 'Next'}</button>
+        <button type="submit" disabled={isSubmitting} className={nextButtonClass}>{isSubmitting ? 'Saving…' : 'Next'}</button>
       </div>
     </form>
   );
@@ -385,7 +410,7 @@ const step4Schema = z.object({
 type Step4Form = z.infer<typeof step4Schema>;
 
 function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (patch: Partial<WizardState>) => void; onBack: () => void }) {
-  const { register, handleSubmit, formState: { errors, isValid, isSubmitting } } = useForm<Step4Form>({
+  const { register, handleSubmit, setError, formState: { errors, isSubmitting } } = useForm<Step4Form>({
     resolver: zodResolver(step4Schema),
     mode: 'onChange',
     defaultValues: {
@@ -421,7 +446,7 @@ function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
       });
       setResult({ tempPassword: res.temp_password ?? '', values });
     } catch (err: unknown) {
-      setApiError(err instanceof Error ? err.message : 'Failed to create principal account');
+      showSaveError(err, setError, setApiError, 'Failed to create principal account', {}, ['first_name', 'last_name', 'email', 'phone']);
     }
   }
 
@@ -471,7 +496,7 @@ function Step4Admin({ wizard, onNext, onBack }: { wizard: WizardState; onNext: (
       {apiError && <ErrorBox message={apiError} />}
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className={backButtonClass}>Back</button>
-        <button type="submit" disabled={!isValid || isSubmitting} className={nextButtonClass}>{isSubmitting ? 'Creating…' : 'Next'}</button>
+        <button type="submit" disabled={isSubmitting} className={nextButtonClass}>{isSubmitting ? 'Creating…' : 'Next'}</button>
       </div>
     </form>
   );
@@ -553,6 +578,9 @@ function Step5Review({ wizard, onBack, onComplete }: {
       </label>
 
       {apiError && <ErrorBox message={apiError} />}
+      {!acceptedTerms && (
+        <p className="text-xs text-gray-500">Tick the confirmation above to complete onboarding.</p>
+      )}
 
       <div className="flex justify-between pt-2">
         <button type="button" onClick={onBack} className={backButtonClass}>Back</button>

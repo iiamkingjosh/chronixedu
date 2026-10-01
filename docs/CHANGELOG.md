@@ -1,5 +1,15 @@
 # Chronix Edu — Changelog
 
+## Clearer errors, an optional motto, and search for platform admins (2026-10-01)
+
+### For schools
+- When something you enter is not accepted, the app now says which field and what is wrong ("Motto: Required", "Enter a valid email address"), instead of showing technical text.
+
+### For Chronix administrators
+- In onboarding, the motto is genuinely optional: leaving it blank no longer stops you on the Branding step.
+- Clicking Next with a required field empty now shows what is missing, beside the field. Before, nothing happened. The Review step says why Complete is greyed out until the confirmation is ticked.
+- The platform-admin area has the Ctrl K search too, for the ten platform pages. Its sidebar is grouped: Platform, Schools, Communication, Administration.
+
 ## Search for any page with Ctrl K (2026-10-01)
 
 ### For schools

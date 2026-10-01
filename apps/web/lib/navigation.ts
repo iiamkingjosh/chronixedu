@@ -1,3 +1,5 @@
+import { isAdminRole, canAccessPayoutSettings } from './auth';
+
 export interface NavItem {
   label: string;
   href: string;
@@ -124,6 +126,43 @@ export const PARENT_NAV: NavItem[] = [
   { label: 'Fees', href: '/parent/fees' },
 ];
 
+// The platform-admin area (app/super-admin/layout.tsx). Lived as a private list inside that
+// layout until 1 Oct 2026; moved here so the sidebar and the Ctrl+K palette read one source.
+export const SUPER_ADMIN_NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Platform',
+    items: [
+      { label: 'Dashboard', href: '/super-admin/dashboard', description: 'Platform overview: schools, subscriptions and recent activity.' },
+      { label: 'Analytics', href: '/super-admin/analytics', description: 'Platform-wide figures: schools, students and revenue.' },
+      { label: 'Health', href: '/super-admin/health', description: 'Service status, scheduled jobs and recent errors.' },
+    ],
+  },
+  {
+    label: 'Schools',
+    items: [
+      { label: 'Schools', href: '/super-admin/schools', description: 'Every school: details, users, suspension and data.' },
+      { label: 'Onboarding', href: '/super-admin/onboard', description: 'Set up a new school, step by step.' },
+      { label: 'Subscriptions', href: '/super-admin/subscriptions', description: 'Plans, billing, trial extensions and recorded payments.' },
+    ],
+  },
+  {
+    label: 'Communication',
+    items: [
+      { label: 'Announcements', href: '/super-admin/announcements', description: 'Messages from Chronix to schools on the platform.' },
+      { label: 'Support', href: '/super-admin/support', description: 'Support sessions: view a school as one of its users.' },
+    ],
+  },
+  {
+    label: 'Administration',
+    items: [
+      { label: 'Audit Logs', href: '/super-admin/audit', description: 'Who did what across the platform, and when.' },
+      { label: 'Platform Admins', href: '/super-admin/admins', description: 'Chronix staff accounts with platform access.' },
+    ],
+  },
+];
+
+export const SUPER_ADMIN_NAV: NavItem[] = SUPER_ADMIN_NAV_GROUPS.flatMap((g) => g.items);
+
 export const STUDENT_NAV: NavItem[] = [
   { label: 'Home', href: '/student/dashboard' },
   { label: 'Timetable', href: '/student/timetable' },
@@ -133,17 +172,37 @@ export const STUDENT_NAV: NavItem[] = [
   { label: 'Messages', href: '/student/messages' },
 ];
 
+/**
+ * A super admin's pages are the PLATFORM pages. It returned PRINCIPAL_NAV until 1 Oct 2026, but a
+ * super admin has no school (school_id is null), so school pages called /api/schools/null/…;
+ * a school is reached as one of its users through a support session, whose token carries that
+ * user's role.
+ */
 export function getMainNavForRole(role: string): NavItem[] {
   if (role === 'teacher') return TEACHER_NAV;
   if (role === 'registrar') return REGISTRAR_NAV;
   if (role === 'bursar') return BURSAR_NAV;
-  if (role === 'principal' || role === 'super_admin') return PRINCIPAL_NAV;
+  if (role === 'principal') return PRINCIPAL_NAV;
+  if (role === 'super_admin') return SUPER_ADMIN_NAV;
   return [];
 }
 
-/** The sidebar's groups for a role: the principal's four, or one group labelled by role. */
+/**
+ * Which school Settings pages a role reaches: all of them, only Payout Setup, or none. One rule,
+ * read by the school sidebar AND the palette, so they cannot disagree. A super admin gets none:
+ * no school of their own (see getMainNavForRole).
+ */
+export function settingsAccessForRole(role: string): 'all' | 'payout' | 'none' {
+  if (role === 'super_admin') return 'none';
+  if (isAdminRole(role)) return 'all';
+  if (canAccessPayoutSettings(role)) return 'payout';
+  return 'none';
+}
+
+/** The sidebar's groups for a role: the principal's four, the platform's four, or one group labelled by role. */
 export function getNavGroupsForRole(role: string): NavGroup[] {
-  if (role === 'principal' || role === 'super_admin') return PRINCIPAL_NAV_GROUPS;
+  if (role === 'principal') return PRINCIPAL_NAV_GROUPS;
+  if (role === 'super_admin') return SUPER_ADMIN_NAV_GROUPS;
   const label = role === 'teacher' ? 'Teaching' : role === 'registrar' ? 'Registrar' : role === 'bursar' ? 'Bursar' : null;
   const items = getMainNavForRole(role);
   return label && items.length > 0 ? [{ label, items }] : [];

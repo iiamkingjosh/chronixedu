@@ -8,24 +8,10 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { ToastProvider } from '@/components/Toast';
-
-interface NavItem {
-  label: string;
-  href: string;
-}
-
-const SUPER_ADMIN_NAV: NavItem[] = [
-  { label: 'Dashboard', href: '/super-admin/dashboard' },
-  { label: 'Schools', href: '/super-admin/schools' },
-  { label: 'Subscriptions', href: '/super-admin/subscriptions' },
-  { label: 'Onboarding', href: '/super-admin/onboard' },
-  { label: 'Analytics', href: '/super-admin/analytics' },
-  { label: 'Announcements', href: '/super-admin/announcements' },
-  { label: 'Support', href: '/super-admin/support' },
-  { label: 'Health', href: '/super-admin/health' },
-  { label: 'Audit Logs', href: '/super-admin/audit' },
-  { label: 'Platform Admins', href: '/super-admin/admins' },
-];
+import CommandPalette from '@/components/CommandPalette';
+// The platform pages live in lib/navigation.ts (SUPER_ADMIN_NAV_GROUPS), not here: the sidebar
+// and the Ctrl+K palette read the same list, so neither can offer a page the other lacks.
+import { getNavGroupsForRole, type NavItem } from '@/lib/navigation';
 
 const NavLink = memo(function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate?: () => void }) {
   const active = pathname === item.href || pathname.startsWith(item.href + '/');
@@ -69,13 +55,22 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
     router.replace('/login');
   }
 
+  const navGroups = getNavGroupsForRole(user.role);
+
   function renderNav(onNavigate?: () => void) {
     return (
-      <div className="mb-4">
-        {SUPER_ADMIN_NAV.map((item) => (
-          <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+      <>
+        {navGroups.map((group) => (
+          <div key={group.label} className="mb-4">
+            <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
+              {group.label}
+            </p>
+            {group.items.map((item) => (
+              <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
+            ))}
+          </div>
         ))}
-      </div>
+      </>
     );
   }
 
@@ -167,8 +162,9 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
               </button>
               <p className="text-sm font-semibold text-[#FF761B] uppercase tracking-wide truncate">Platform Admin</p>
             </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <p className="text-sm text-gray-500 truncate">{user.email}</p>
+            <div className="flex items-center gap-3 shrink-0">
+              <CommandPalette role={user.role} />
+              <p className="hidden sm:block text-sm text-gray-500 truncate">{user.email}</p>
             </div>
           </header>
           <main key={pathname} className="flex-1 min-w-0 overflow-y-auto page-transition">{children}</main>
