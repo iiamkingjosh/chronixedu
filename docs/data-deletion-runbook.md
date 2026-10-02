@@ -59,6 +59,9 @@ deleting transaction.
    super admin outside the school), or without exactly one of `--with-supabase` / `--skip-supabase`;
    refuses `--with-supabase` without credentials. Every refusal says "Nothing was changed." The
    service key is never printed (checked with a sentinel).
+   "Supabase Auth accounts" in the plan counts real logins (users with an `auth.users` row), not
+   users rows. Only those are deleted. A brief network error on one is retried twice before it
+   stops the run (since 2 Oct 2026; before that, every users row was "an account").
    Order: Supabase Auth accounts and Storage files first, stopping if any fails; then **one
    database transaction**, children before parents, ending with `audit_logs` (through
    `chronixedu_purge.purge_school_audit_logs`), `platform_audit_logs`, `users`, `schools`. Before
@@ -278,7 +281,7 @@ before a real school depends on it.
 |---|---|---|---|---|
 | `f5094c7f` | 4 | 1 | 1 | deleted |
 | `dc8ede9c` | 64 | 2 | 4 | deleted |
-| `cc6e5fae` | 109 | 2 | 4 | **not run**: the session's safety check refused it. Moses will run it himself, the first run from a human's hands. Its 2 queued emails went in the queue purge. |
+| `cc6e5fae` | 109 | 2 | 4 | deleted by Moses, the first run from a human's hands (the session's safety check had refused it to Claude). The first attempt stopped before the database on a TLS error, while sending 109 Auth deletes for users that had no login; production was checked unchanged, and a re-run completed. Its 2 queued emails had already gone in the queue purge. |
 
 For each deleted school:
 1. **Steps 1–2.** There were no `platform_subscriptions` rows. The schools were not suspended:
@@ -310,11 +313,16 @@ For each deleted school:
 The addresses were kept in the session's scratchpad for step 5. They are not reproduced here,
 because this repository is public.
 
-**Afterwards:** 43 schools, all `is_demo`, and 5 `SCHOOL_AUDIT_PURGED` records.
+**Afterwards:** 42 schools, all `is_demo`, and 6 `SCHOOL_AUDIT_PURGED` records. For `cc6e5fae` the
+independent scan went from 221 rows to 0, its purge record exists, and the confirming dry run said
+"Nothing to delete".
 
 **Learned:**
 - **A name is not an identity.** "Delete the demo school" meant three runs. The script addresses a
   school by id and confirms it by slug for this reason.
+- **A users row is not a login.** The plan reported "109 Auth accounts" for a school with none, and
+  a network error on a delete that had nothing to delete stopped the run. The plan now reads
+  `auth.users`, and the Auth step retries a brief error.
 - **A queued email outlives its user.** The script reaches one only while the user row exists: it
   deletes `email_queue` (step 6) before `users` (step 11). Rows orphaned earlier were unreachable
   until the retention job (SECURITY.md Round 29, L-02).

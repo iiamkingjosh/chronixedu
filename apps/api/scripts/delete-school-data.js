@@ -16,6 +16,13 @@
  *                        SUPABASE_SERVICE_ROLE_KEY; the key is never printed)
  *   --skip-supabase      leave them, and print what was left — the only time the Auth ids are
  *                        printed, since the users rows that list them are about to go
+ *
+ * "Auth accounts" means users that really have a Supabase Auth login (an auth.users row with the
+ * same id), read from the database before anything changes. It used to mean every users row, so a
+ * school of 109 fixture users with no logins was reported as "109 Auth accounts", and 109 deletes
+ * were sent for accounts that did not exist; one network blip on one of them stopped the whole
+ * run (2 Oct 2026). Where the database has no auth schema to read, every user id is tried, and the
+ * plan says so.
  *   --execute needs exactly one of the two, so leaving them behind is a choice, not an omission.
  *
  * A completed run leaves ZERO rows for the school in every table — checked inside the same
@@ -169,15 +176,60 @@ async function listContacts(client, schoolId) {
   return { emails, phones };
 }
 
+/**
+ * The school's users that have a Supabase Auth login, or null where this database has no auth
+ * schema to read (then every user id is a candidate). A users row is not a login: production held
+ * 239 users rows and 7 logins on 2 Oct 2026.
+ */
+async function listAuthAccounts(client, schoolId) {
+  const has = (await client.query(`SELECT to_regclass('auth.users') IS NOT NULL AS ok`)).rows[0].ok;
+  if (!has) return null;
+  return (await client.query(
+    `SELECT u.id FROM users u JOIN auth.users a ON a.id = u.id WHERE u.school_id = $1 ORDER BY u.id`, [schoolId])).rows.map(r => r.id);
+}
+
 /** What would be deleted, changing nothing. `school` is null once the school row is gone. */
 async function planSchoolDeletion(client, schoolId) {
   const school = (await client.query(`SELECT id, slug, name FROM schools WHERE id = $1`, [schoolId])).rows[0] || null;
   const steps = await countAll(client, schoolId);
   const total = steps.reduce((a, s) => a + s.rows, 0);
-  const authUserIds = (await client.query(`SELECT id FROM users WHERE school_id = $1 ORDER BY id`, [schoolId])).rows.map(r => r.id);
+  const userIds = (await client.query(`SELECT id FROM users WHERE school_id = $1 ORDER BY id`, [schoolId])).rows.map(r => r.id);
+  const authAccounts = await listAuthAccounts(client, schoolId);
+  // The ids the Auth step acts on: real logins where they can be read, otherwise every user.
+  const authUserIds = authAccounts ?? userIds;
   const storageObjects = await listStorageObjects(client, schoolId);
   const contacts = await listContacts(client, schoolId);
-  return { school, steps, total, authUserIds, storageObjects, ...contacts };
+  return { school, steps, total, userIds, authAccounts, authUserIds, storageObjects, ...contacts };
+}
+
+/** The plan's Auth line: a count of real logins, or why it could not be counted. */
+function describeAuthAccounts(plan) {
+  if (plan.authAccounts === null) {
+    return `Supabase Auth accounts: not checked — this database has no auth schema; all ${plan.userIds.length} user id(s) will be tried`;
+  }
+  const have = plan.authAccounts.length, users = plan.userIds.length;
+  if (have === users) return `Supabase Auth accounts: ${have} (every user has a login)`;
+  return `Supabase Auth accounts: ${have} (of ${users} users; the other ${users - have} have no login)`;
+}
+
+/**
+ * Deletes the given Supabase Auth accounts through the admin API. "Not found" counts as already
+ * gone. Any other error is retried, `attempts` times in all, waiting `waitMs` x the attempt number
+ * between tries, because one TLS handshake failure from Lagos stopped a run on 2 Oct 2026. An error
+ * that persists is returned as a failure, and the caller stops before the database: a login left
+ * behind with no app account is the worse outcome.
+ */
+async function deleteAuthAccounts(admin, ids, { attempts = 3, waitMs = 1000 } = {}) {
+  const failures = [];
+  for (const id of ids) {
+    for (let attempt = 1; ; attempt++) {
+      const { error } = await admin.auth.admin.deleteUser(id);
+      if (!error || /not found/i.test(error.message)) break;
+      if (attempt >= attempts) { failures.push({ id, message: error.message }); break; }
+      await new Promise(resolve => setTimeout(resolve, waitMs * attempt));
+    }
+  }
+  return failures;
 }
 
 /** The super admin who runs the deletion, by email. The purge function checks the same rule. */
@@ -280,7 +332,7 @@ async function main() {
     console.log(`School: ${plan.school.name} (${plan.school.slug}) — database ${host}`);
     console.log(execute ? 'EXECUTING:' : 'DRY RUN — nothing will be changed:');
     for (const s of plan.steps) if (s.rows) console.log(`  delete ${String(s.rows).padStart(7)}  ${s.table}`);
-    console.log(`Supabase Auth accounts: ${plan.authUserIds.length}`);
+    console.log(describeAuthAccounts(plan));
     console.log(`Supabase Storage files: ${files === null ? 'not checked — this database has no storage schema' : files.length}`);
     printContacts(plan);
     if (!execute) return;
@@ -292,12 +344,9 @@ async function main() {
     if (withSupabase) {
       const { createClient } = require('@supabase/supabase-js');
       const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-      let failed = 0;
-      for (const id of plan.authUserIds) {
-        const { error } = await admin.auth.admin.deleteUser(id);
-        if (error && !/not found/i.test(error.message)) { failed += 1; console.error(`  auth ${id}: ${error.message}`); }
-      }
-      if (failed) throw new Error(`${failed} Auth account(s) could not be deleted; the database was NOT touched. Fix and rerun — it is safe to repeat.`);
+      const failures = await deleteAuthAccounts(admin, plan.authUserIds);
+      for (const f of failures) console.error(`  auth ${f.id}: ${f.message} (after 3 attempts)`);
+      if (failures.length) throw new Error(`${failures.length} Auth account(s) could not be deleted; the database was NOT touched. Fix and rerun — it is safe to repeat.`);
       console.log(`Auth accounts deleted (or already gone): ${plan.authUserIds.length}`);
 
       // Through the Storage API — deleting storage.objects rows directly would leave the files.
@@ -312,7 +361,9 @@ async function main() {
       if (left && left.length) throw new Error(`${left.length} stored file(s) still present after removal; the database was NOT touched.`);
       console.log(`Stored files deleted: ${files === null ? 'n/a' : files.length}`);
     } else {
-      console.log('--skip-supabase: NOT deleted, and after this run the database no longer lists the Auth accounts. Keep this list:');
+      console.log(plan.authUserIds.length || (files && files.length)
+        ? '--skip-supabase: NOT deleted, and after this run the database no longer lists them. Keep this list:'
+        : '--skip-supabase: no Auth accounts and no stored files to leave behind.');
       for (const id of plan.authUserIds) console.log(`  auth ${id}`);
       for (const f of files || []) console.log(`  file ${f.bucket}/${f.name}`);
     }
@@ -328,4 +379,4 @@ if (require.main === module) {
   main().catch(err => { console.error(err.message); process.exit(1); });
 }
 
-module.exports = { STEPS, NOT_DELETED, planSchoolDeletion, executeSchoolDeletion, resolveOperator, storagePrefixes };
+module.exports = { STEPS, NOT_DELETED, planSchoolDeletion, executeSchoolDeletion, resolveOperator, storagePrefixes, deleteAuthAccounts, describeAuthAccounts };

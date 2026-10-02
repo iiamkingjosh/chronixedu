@@ -19,7 +19,7 @@ import { Client } from 'pg';
 import { seed, IDS as I, pool } from './helpers';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { planSchoolDeletion, executeSchoolDeletion, resolveOperator, STEPS, NOT_DELETED } = require('../../scripts/delete-school-data.js');
+const { planSchoolDeletion, executeSchoolDeletion, resolveOperator, STEPS, NOT_DELETED, deleteAuthAccounts, describeAuthAccounts } = require('../../scripts/delete-school-data.js');
 
 const OPERATOR = 'a1a1a1a1-0000-4000-8000-000000000001';
 const PURGE = `SELECT chronixedu_purge.purge_school_audit_logs($1, $2) AS n`;
@@ -179,6 +179,57 @@ describe('stored files', () => {
     } finally {
       await pool.query(`CREATE SCHEMA storage; CREATE TABLE storage.objects (bucket_id text, name text)`);
     }
+  });
+});
+
+describe('Auth accounts: logins, not users rows', () => {
+  // On 2 Oct 2026 the plan reported "Supabase Auth accounts: 109" for a school whose 109 users had
+  // no login between them, sent 109 deletes for accounts that did not exist, and one network blip
+  // on one of them stopped the run. The test database has no Supabase Auth; build the one table
+  // the script reads (the auth schema itself exists, for the stub functions).
+  beforeAll(async () => {
+    await pool.query(`CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY, email text)`);
+  });
+  afterAll(async () => { await pool.query(`DROP TABLE IF EXISTS auth.users`); });
+
+  it('counts the users that really have a login, and acts on those alone', async () => {
+    await pool.query(`TRUNCATE auth.users`);
+    await pool.query(`INSERT INTO auth.users (id, email) VALUES ($1, 'principal@a.test')`, [I.principalA]);
+    const plan = await planSchoolDeletion(client, I.schoolA);
+    expect(plan.userIds.length).toBeGreaterThan(1); // many users rows, established first
+    expect(plan.authAccounts).toEqual([I.principalA]);
+    expect(plan.authUserIds).toEqual([I.principalA]);
+    expect(describeAuthAccounts(plan)).toBe(`Supabase Auth accounts: 1 (of ${plan.userIds.length} users; the other ${plan.userIds.length - 1} have no login)`);
+    expect(describeAuthAccounts({ ...plan, authAccounts: plan.userIds })).toBe(`Supabase Auth accounts: ${plan.userIds.length} (every user has a login)`);
+  });
+
+  it('says it could not check, and tries every user id, when the database has no auth.users', async () => {
+    await pool.query(`DROP TABLE auth.users`);
+    try {
+      const plan = await planSchoolDeletion(client, I.schoolA);
+      expect(plan.authAccounts).toBeNull();
+      expect(plan.authUserIds).toEqual(plan.userIds);
+      expect(describeAuthAccounts(plan)).toMatch(/^Supabase Auth accounts: not checked — .* all \d+ user id\(s\) will be tried$/);
+    } finally {
+      await pool.query(`CREATE TABLE auth.users (id uuid PRIMARY KEY, email text)`);
+    }
+  });
+
+  it('retries a passing error, treats "not found" as gone, and still stops on an error that persists', async () => {
+    const calls: string[] = [];
+    const answers: Record<string, Array<{ message: string } | null>> = {
+      ok: [null],
+      blip: [{ message: 'TLS handshake failure' }, null],
+      gone: [{ message: 'User not found' }],
+      down: [{ message: 'connect ECONNREFUSED' }, { message: 'connect ECONNREFUSED' }, { message: 'connect ECONNREFUSED' }],
+    };
+    const admin = { auth: { admin: { deleteUser: async (id: string) => {
+      calls.push(id);
+      return { error: answers[id].shift() ?? null };
+    } } } };
+    const failures = await deleteAuthAccounts(admin, ['ok', 'blip', 'gone', 'down'], { attempts: 3, waitMs: 0 });
+    expect(failures).toEqual([{ id: 'down', message: 'connect ECONNREFUSED' }]);
+    expect(calls).toEqual(['ok', 'blip', 'blip', 'gone', 'down', 'down', 'down']);
   });
 });
 

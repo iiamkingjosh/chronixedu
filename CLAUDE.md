@@ -564,6 +564,11 @@ Monorepo, npm workspaces:
 - Migration 047: `validate_assessment_components_total` skips a config that no longer exists,
   so a config and its components can be deleted together. Before 047 no school could be deleted.
   Emptying or unbalancing a live config is still refused.
+- **"Auth accounts" in a deletion plan are real logins**: users with an `auth.users` row, read before
+  anything changes. It used to count users rows, so a fixture school with 109 users and no logins
+  reported "109 Auth accounts", and one network error on a delete with nothing to delete stopped the
+  run (2 Oct 2026). The Auth step retries a brief error twice. An error that persists still stops the
+  run before the database: a login left behind with no app account is the worse outcome.
 - Schools are deleted only by `delete-school-data.js`, which removes their Storage files (through
   the Storage API, before the database step) along with every row. The three orphaned files in
   production came from the old demo seeder, which deleted schools but not their files. Moses
@@ -872,7 +877,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 34 suites, 341 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 34 suites, 344 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

@@ -16,6 +16,12 @@
 - The amount a school pays is fixed the moment they start checkout, and a payment that comes back verified at a different amount is refused rather than accepted — so a price change or a stale page can't settle for the wrong figure.
 - A trial school and a cancelled subscription can't be charged — checkout refuses both before ever reaching Paystack.
 
+## The school-deletion script reports real login accounts (2026-10-02)
+
+### For Chronix administrators
+- Before deleting anything, the deletion script now says how many of the school's users actually have a login, for example "0 (of 6 users; the other 6 have no login)". It used to count every user as an account.
+- It only removes logins that exist, and retries a brief network error before stopping. A failure that persists still stops it before anything in the database is touched.
+
 ## Shorter messages on the password-reset page and after adding people (2026-10-02)
 
 ### For schools
