@@ -21,10 +21,12 @@ export type EmailOutcome = 'sent' | 'queued' | 'lost' | 'disabled';
 /** Sends an email via SendGrid. Never throws: a refused send is logged and queued for retry, and
  *  the result says which of those happened, so a caller that tells a person "we emailed them" can
  *  tell the truth (item H2, 1 Oct 2026; it returned nothing, and callers counted that as sent). */
-export async function sendEmail(to: string, subject: string, text: string): Promise<EmailOutcome> {
+export async function sendEmail(to: string, subject: string, text: string, html?: string): Promise<EmailOutcome> {
   if (!apiKey) return 'disabled';
   try {
-    await sgMail.send({ to, from: { email: FROM_EMAIL, name: FROM_NAME }, subject, text });
+    // An HTML part is optional; the text part always goes too. A refused send is queued as text
+    // only (email_queue has no HTML column), so a retried email arrives plain but complete.
+    await sgMail.send({ to, from: { email: FROM_EMAIL, name: FROM_NAME }, subject, text, ...(html ? { html } : {}) });
     return 'sent';
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

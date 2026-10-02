@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
-import { resetPasswordRedirect } from '../config/appUrls';
+import { appBaseUrl, resetPasswordRedirect } from '../config/appUrls';
 import { logger } from '../config/logger';
 import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
@@ -24,6 +24,7 @@ import { redis } from '../middleware/rateLimit';
 import '../services/analyticsService';
 import '../services/feeReminderService';
 import '../services/subscriptionService';
+import { onboardingWelcomeEmail } from '../services/onboardingWelcomeEmail';
 
 const router = Router();
 
@@ -1803,32 +1804,11 @@ router.post(
       let welcomeEmailReason = 'email is not configured on this server';
       {
         const firstName = (step4Data.first_name as string | undefined) ?? '';
-        const appUrl = (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '');
-        const loginUrl = `${appUrl}/login`;
-        const emailBody =
-          `Hi ${firstName},\n\n` +
-          `Welcome to Chronix Edu! Your school's account has been successfully set up and is now live and ready to use.\n\n` +
-          `Set your password using this link:\n\n` +
-          `${setPasswordLink}\n\n` +
-          `The link works once and expires. If it has expired, go to ${loginUrl}, choose "Forgot password" and enter ${principalEmail}; a new link will be sent to this address.\n\n` +
-          `Your login email is ${principalEmail}. Nobody at Chronix knows or will ask for your password.\n\n` +
-          `GETTING STARTED\n\n` +
-          `Here is a quick path to get your school fully set up:\n\n` +
-          `1. Set your password using the link above, then log in at ${loginUrl}\n` +
-          `2. Add your school logo and branding under Settings → School Identity\n` +
-          `3. Set up your classes and subjects under Settings → Roster\n` +
-          `4. Add your teachers under Settings → Users\n` +
-          `5. Register your students under Registrar → Students\n\n` +
-          `If you have any questions getting started, simply reply to this email or reach us at support@chronixtechnology.com — we are happy to help.\n\n` +
-          `You can review our Terms of Service, Privacy Policy, Data Processing Agreement, and Acceptable Use Policy at ${appUrl}/legal at any time.\n\n` +
-          `Welcome aboard, and we look forward to supporting your school's journey.\n\n` +
-          `Warm regards,\n` +
-          `The Chronix Technology Team\n` +
-          `support@chronixtechnology.com`;
+        const welcome = onboardingWelcomeEmail({ firstName, principalEmail, setPasswordLink, appUrl: appBaseUrl() });
 
         if (isEmailConfigured()) {
           // "sent" only when SendGrid took it: sendEmail queues a refused send and returns normally.
-          const outcome = await sendEmail(principalEmail, 'Welcome to Chronix Edu — Your School Portal is Now Live', emailBody);
+          const outcome = await sendEmail(principalEmail, 'Welcome to Chronix Edu — Your School Portal is Now Live', welcome.text, welcome.html);
           if (outcome === 'sent') {
             welcomeEmail = 'sent';
           } else {
@@ -2444,7 +2424,7 @@ router.post(
         `  Email:    ${email}`,
         `  Password: ${password}`,
         ``,
-        `Log in at: ${process.env.APP_URL ?? 'https://edu.chronixtechnology.com'}/login`,
+        `Log in at: ${appBaseUrl()}/login`,
         ``,
         `Please change your password after your first login.`,
         ``,
@@ -2484,7 +2464,7 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'RESET_LINK_FAILED', message: error.message } });
       }
 
-      const resetLink = data?.properties?.action_link ?? `${process.env.APP_URL ?? 'https://edu.chronixtechnology.com'}/login`;
+      const resetLink = data?.properties?.action_link ?? `${appBaseUrl()}/login`;
 
       const emailBody = [
         `Hi ${first_name},`,
@@ -2496,7 +2476,7 @@ router.post(
         `  ${resetLink}`,
         ``,
         `This link expires in 24 hours. After setting your password, log in at:`,
-        `  ${process.env.APP_URL ?? 'https://edu.chronixtechnology.com'}/login`,
+        `  ${appBaseUrl()}/login`,
         ``,
         `Chronix Technology Limited`,
       ].join('\n');

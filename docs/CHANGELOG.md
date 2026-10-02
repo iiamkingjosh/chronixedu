@@ -16,6 +16,15 @@
 - The amount a school pays is fixed the moment they start checkout, and a payment that comes back verified at a different amount is refused rather than accepted — so a price change or a stale page can't settle for the wrong figure.
 - A trial school and a cancelled subscription can't be charged — checkout refuses both before ever reaching Paystack.
 
+## A new school's welcome email points to the right address (2026-10-02)
+
+### For schools
+- The welcome email a new school's principal receives now links to the Chronix Edu website for signing in, the getting-started steps and the legal pages. It wrongly pointed to "localhost", an address that only works on the sender's own computer. The set-password link itself was always correct.
+- The email now has a "Set your password" button. The full link is still shown in the plain-text version.
+
+### For Chronix administrators
+- The server now refuses to start if its website address (`APP_URL`) is not set, instead of quietly using "localhost".
+
 ## The school-deletion script reports real login accounts (2026-10-02)
 
 ### For Chronix administrators

@@ -2,6 +2,7 @@ import pool from '../db/client';
 import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from './emailService';
 import { logger } from '../config/logger';
+import { appBaseUrl } from '../config/appUrls';
 
 export async function getSchoolName(schoolId: string): Promise<string> {
   const r = await pool.query<{ name: string }>('SELECT name FROM schools WHERE id = $1', [schoolId]);
@@ -125,7 +126,7 @@ export async function sendWelcomeEmails(
     logger.error('welcome_email_failed', { school_id: schoolId, stage: 'prepare', error: err instanceof Error ? err.message : String(err) });
     return everyone;
   }
-  const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  const appUrl = appBaseUrl();
   const notSent: string[] = [];
   const outcomes: Record<string, number> = {};
   let noLogin = 0;

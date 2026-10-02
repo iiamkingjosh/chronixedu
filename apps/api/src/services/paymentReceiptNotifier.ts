@@ -3,6 +3,7 @@ import { getParentsForStudent } from '../db/queries/parents';
 import { generateReceipt } from './receiptService';
 import { sendEmail } from './emailService';
 import { logger } from '../config/logger';
+import { appBaseUrl } from '../config/appUrls';
 
 function formatCurrency(amount: number | string): string {
   return `₦${Number(amount).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -32,7 +33,7 @@ export async function notifyPaymentReceipt(schoolId: string, paymentId: string, 
     await generateReceipt(schoolId, payment);
     const parents = await getParentsForStudent(studentId);
 
-    const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+    const appUrl = appBaseUrl();
     const receiptLink = `${appUrl}/parent/fees`;
 
     // The receipt must say what is LEFT, not only what was received.

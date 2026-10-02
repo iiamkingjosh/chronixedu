@@ -11,4 +11,5 @@ module.exports = {
   // so there is no need to delete them — doing so made any test file that depends
   // on this fixture fragile against any other concurrent or closely-timed Jest run.
   globalSetup: '<rootDir>/jest.globalSetup.ts',
+  setupFiles: ['<rootDir>/jest.setupEnv.js'],
 };

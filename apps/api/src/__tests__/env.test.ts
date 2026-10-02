@@ -7,6 +7,7 @@ function validEnv(overrides: Record<string, string | undefined> = {}): Record<st
     SUPABASE_URL: 'https://example.supabase.co',
     SUPABASE_PUBLISHABLE_KEY: 'publishable-key',
     SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+    APP_URL: 'https://edu.example.test',
     ...overrides,
   };
 }
@@ -25,6 +26,12 @@ describe('validateEnv', () => {
   it('throws when SUPABASE_URL is not a valid URL', () => {
     const env = validEnv({ SUPABASE_URL: 'not-a-url' });
     expect(() => validateEnv(env)).toThrow(/SUPABASE_URL/);
+  });
+
+  it('refuses to start without APP_URL, whatever NEXTAUTH_URL says (no localhost default)', () => {
+    expect(() => validateEnv(validEnv({ APP_URL: undefined, NEXTAUTH_URL: 'http://localhost:3000' }))).toThrow(/APP_URL is required/);
+    expect(() => validateEnv(validEnv({ APP_URL: 'not-a-url' }))).toThrow(/APP_URL must be a valid URL/);
+    expect(validateEnv(validEnv()).APP_URL).toBe('https://edu.example.test');
   });
 
   it('throws when DATABASE_URL does not use a postgres scheme', () => {

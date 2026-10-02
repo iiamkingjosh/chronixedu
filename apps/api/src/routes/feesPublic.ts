@@ -3,6 +3,7 @@ import { logAudit } from '../db/queries/auditLog';
 import { recordPayment } from '../db/queries/fees';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
 import { verifyPaystackTransaction, verifyPaystackWebhookSignature } from '../services/paystackService';
+import { appBaseUrl } from '../config/appUrls';
 
 // This router carries ONLY the two Paystack endpoints that must be reachable
 // without a bearer token: the browser redirect callback and the server-to-server
@@ -18,9 +19,7 @@ interface PaystackPaymentMetadata {
   recorded_by?: string | null;
 }
 
-function getAppBaseUrl(): string {
-  return (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-}
+const getAppBaseUrl = appBaseUrl;
 
 // ── GET /:schoolId/payments/paystack/callback ────────────────────────────────────
 

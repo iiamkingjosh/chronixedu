@@ -260,6 +260,33 @@ describe("the principal's address: typed twice, read back, and given a link, nev
     expect(body).not.toMatch(/temporary password/i);
   });
 
+  it("sends the principal to APP_URL, not to NEXTAUTH_URL's leftover localhost, in text and HTML", async () => {
+    // On 2 Oct 2026 production's onboarding email sent a new school to http://localhost:3000 four
+    // times: the route read NEXTAUTH_URL, a leftover, while everything else read APP_URL.
+    const saved = { APP_URL: process.env.APP_URL, NEXTAUTH_URL: process.env.NEXTAUTH_URL };
+    process.env.APP_URL = 'https://app.example.test';
+    process.env.NEXTAUTH_URL = 'http://localhost:3000';
+    try {
+      (emailService.isEmailConfigured as jest.Mock).mockReturnValue(true);
+      const { sid } = await throughStep3('Address School');
+      await step(sid, 4, { first_name: 'Ada', last_name: 'Obi', email: 'ada@address.test', email_confirmation: 'ada@address.test' });
+      const done = await complete(sid, { accepted_legal_terms: true, principal_email_read_back: true });
+      expect(done.status).toBe(200);
+
+      expect(emailService.sendEmail).toHaveBeenCalledTimes(1);
+      const [, , text, html] = (emailService.sendEmail as jest.Mock).mock.calls[0];
+      for (const part of [text, html]) {
+        expect(part).toContain('https://app.example.test/login');
+        expect(part).toContain('https://app.example.test/legal');
+        expect(part).not.toContain('localhost');
+      }
+      expect(text).toContain(SET_PASSWORD_LINK);
+      expect(html).toContain(`href="${SET_PASSWORD_LINK.replace(/&/g, '&amp;')}"`);
+    } finally {
+      for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+    }
+  });
+
   it('says NOT sent, and why, when SendGrid refuses the email: sendEmail returns normally either way', async () => {
     (emailService.isEmailConfigured as jest.Mock).mockReturnValue(true);
     (emailService.sendEmail as jest.Mock).mockResolvedValueOnce('queued');

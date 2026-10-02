@@ -18,4 +18,6 @@ process.env.SUPABASE_URL ??= 'http://127.0.0.1:9';
 process.env.SUPABASE_PUBLISHABLE_KEY ??= 'test';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test';
 process.env.ROOT_ADMIN_EMAIL ??= 'root@chronix.test';
+// The web app's address in every link the API builds (config/appUrls.ts has no default).
+process.env.APP_URL ??= 'http://localhost:3000';
 delete process.env.REDIS_URL;

@@ -28,8 +28,9 @@ const envSchema = z.object({
   TERMII_API_KEY: z.string().optional(),
   TERMII_SENDER_ID: z.string().default('ChronixEdu'),
   PAYSTACK_SECRET_KEY: z.string().optional(),
-  APP_URL: z.string().url('APP_URL must be a valid URL').optional(),
-  NEXTAUTH_URL: z.string().url('NEXTAUTH_URL must be a valid URL').optional(),
+  // The web app's public address: every link the API sends starts with it (config/appUrls.ts).
+  // Required, with no default: an unset value used to fall back to localhost, which nobody chose.
+  APP_URL: z.string({ message: 'APP_URL is required (the web app\'s public address)' }).url('APP_URL must be a valid URL'),
   // Public base URL of this API service. Used to build the Paystack callback_url a
   // payer returns to after paying — if neither is set it falls back to localhost and
   // payers land on a dead page, so keep one of them set in every deployed environment.

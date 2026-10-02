@@ -192,6 +192,14 @@ Monorepo, npm workspaces:
   (SECURITY.md Round 18). Rate-limit keys, lockout keys and the audit `ip_address` column all
   go through `clientIp`. A new `req.ip` reader is a regression; `audit_logs.ip_address` rows
   before 30 Sep 2026 hold proxy addresses.
+- **Every link the API sends starts with `appBaseUrl()`** (`config/appUrls.ts`), which reads
+  `APP_URL` and nothing else. There is no default: the API refuses to start without `APP_URL`
+  (`config/env.ts`), and `appBaseUrl()` throws if reached without it. Tests state theirs
+  (`jest.setupEnv.js`, `__db_tests__/env.ts`). Until 2 Oct 2026 there were eight expressions with
+  three fallbacks, and the onboarding email read `NEXTAUTH_URL`, a leftover `http://localhost:3000`
+  in production. So a new school's first email sent its principal to their own machine.
+  `NEXTAUTH_URL` is read nowhere. `appUrls.test.ts` fails if anything outside `appUrls.ts` reads
+  `APP_URL` or names `NEXTAUTH_URL`.
 - **The API is a second origin, so every JSON request preflights.** `edu.` and
   `api.chronixtechnology.com` are different origins, and a JSON POST is not a simple request.
   - **The cache:** `config/cors.ts` sends `Access-Control-Max-Age: 7200`, which is Chrome's cap.
@@ -877,7 +885,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 34 suites, 344 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 34 suites, 345 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
 import { settlePayment } from '../db/queries/platformBilling';
 import { verifyPaystackTransaction, verifyPaystackWebhookSignature } from '../services/paystackService';
+import { appBaseUrl } from '../config/appUrls';
 
 /**
  * The two Paystack endpoints for a school's OWN subscription payment that must be
@@ -16,9 +17,7 @@ import { verifyPaystackTransaction, verifyPaystackWebhookSignature } from '../se
  */
 const router = Router();
 
-function getAppBaseUrl(): string {
-  return (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-}
+const getAppBaseUrl = appBaseUrl;
 
 function redirectReason(outcome: 'amount_mismatch' | 'not_found'): string {
   return outcome === 'amount_mismatch' ? 'amount_mismatch' : 'unknown_reference';
