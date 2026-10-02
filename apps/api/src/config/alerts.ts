@@ -90,6 +90,12 @@ export const ALERTS = {
     events: ['trial_expiry_paid_plan_in_trial_status'],
     fields: ['subscription_id', 'plan', 'status'],
   },
+  system_actor_missing: {
+    why: 'The trial gate cannot find the system account it signs its audit records with (migration 053), so it changed nothing: no trial is moving to grace or read-only',
+    level: 'error',
+    events: ['trial_expiry_system_actor_missing'],
+    fields: ['pending'],
+  },
   unrecognised_plan_tier: {
     why: 'The feature gate met a school with no recognised plan tier and let it through',
     level: 'error',
@@ -106,7 +112,7 @@ export const ALERTS = {
     why: 'A scheduled job failed: fee reminders, the trial gate, the email retry queue, its retention or analytics did not run',
     level: 'error',
     events: [
-      'trial_expiry_cron_error', 'trial_expiry_no_system_admin', 'fee_reminder_cron_error', 'fee_reminders_failed',
+      'trial_expiry_cron_error', 'fee_reminder_cron_error', 'fee_reminders_failed',
       'email_queue_cron_error', 'email_queue_retention_cron_error', 'platform_analytics_cron_error', 'analytics_cron_error',
     ],
     fields: ['error', 'pending'],

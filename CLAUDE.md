@@ -96,7 +96,10 @@ Monorepo, npm workspaces:
    components) written into its settings, so every school "had" choices nobody made. Since
    1 Oct 2026 nothing is seeded (`newSchoolAcademicConfig`), and publishing refuses until a
    scale is set. And `is_demo DEFAULT FALSE` made every school a customer until someone said
-   otherwise; it is now stated at creation (migration 049). The check is mechanical: ask
+   otherwise; it is now stated at creation (migration 049). And the trial gate signed its changes
+   with `role = 'super_admin' LIMIT 1`: "which admin did this" answered by whichever row Postgres
+   returned first, a test fixture on Chronix High School's 8 Sep suspension. It now signs with a
+   fixed system account (migration 053). The check is mechanical: ask
    whether a field answers *what* or *whether*, and record the second separately when you
    need it.
 9. **Advisory output is indistinguishable from no output once you have decided to push.**
@@ -510,6 +513,20 @@ Monorepo, npm workspaces:
   moves a trial to premium), extending the trial (status recomputed from the new date), or a PATCH.
   Read-only schools send no fee reminders; queued notifications still deliver in-app and by email,
   without SMS.
+- **The gate signs its audit rows with the system account** (migration 053, `config/systemActor.ts`,
+  since 2 Oct 2026), never with an admin. It is a `super_admin` row only because
+  `platform_audit_logs.platform_admin_id` is a NOT NULL foreign key.
+  - **It cannot act as an admin.** It has no Supabase identity and an empty hash. A CHECK keeps it
+    inactive, so it fails every `is_active` test that grants a super_admin anything.
+  - **The admin screens.** `GET /super-admin/admins` lists it marked `is_system`, and the four admin
+    routes answer 404 `SYSTEM_ACCOUNT`.
+  - **A missing row alarms.** The gate looks it up on every run and alerts `system_actor_missing`
+    if it is gone.
+  - **The test fixtures.** The DB seed and the integration fixture both recreate it after the DB
+    suite's TRUNCATE. `systemActor.test.ts` keeps both, and the migration, in step.
+  - **The rule.** A new automated platform audit write signs with `SYSTEM_ACTOR_ID`. Never select
+    "a" super_admin: the unit test fails on `role = 'super_admin' … LIMIT 1`.
+  - **It is one more `users` row with no login, on purpose.** It is not a fixture, so never delete it.
 - `GET /:schoolId/subscription-status` feeds the staff banner (`components/SubscriptionNotice.tsx`);
   any member of the school may read it, and it answers while read-only.
 - **A school pays Chronix online** (migration 052, `routes/platformBilling.ts` +
@@ -886,7 +903,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 35 suites, 350 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 36 suites, 354 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

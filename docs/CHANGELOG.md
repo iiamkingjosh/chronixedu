@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Automated changes are signed by the system, not by an admin (2026-10-02)
+
+### For Chronix administrators
+- When a trial moves into grace or read-only, the platform audit log now names "Chronix System" as the actor. It used to name whichever admin account happened to come first, which could be a test account.
+- "Chronix System" appears in the Platform Admins list marked "System". It cannot sign in and has no actions.
+- If that account is ever missing, the trial job changes nothing and raises an alert.
+
 ## New platform admins set their own password (2026-10-02)
 
 ### For Chronix administrators

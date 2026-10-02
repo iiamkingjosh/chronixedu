@@ -17,6 +17,8 @@ interface PlatformAdmin {
   created_at: string;
   last_login_at: string | null;
   is_active: boolean;
+  /** The account automated changes are signed with (migration 053). Listed so its name is explicable; never managed. */
+  is_system: boolean;
 }
 
 // No password: the new admin sets their own with Forgot password, and the address is their only key,
@@ -364,19 +366,24 @@ export default function PlatformAdminsPage() {
                       {isSelf && (
                         <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[#003366]/10 text-[#003366]">You</span>
                       )}
+                      {admin.is_system && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600" title="Signs automated changes, such as the trial gate's. Not a person; it cannot sign in.">System</span>
+                      )}
                     </td>
                     <td className="px-5 py-3 text-gray-600">{admin.email}</td>
                     <td className="px-5 py-3 text-gray-500">{formatDate(admin.created_at)}</td>
                     <td className="px-5 py-3 text-gray-500">{formatDate(admin.last_login_at)}</td>
                     <td className="px-5 py-3">
-                      {admin.is_active ? (
+                      {admin.is_system ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">Cannot sign in</span>
+                      ) : admin.is_active ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-green-50 text-green-700 border border-green-200">Active</span>
                       ) : (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 text-red-700 border border-red-200">Suspended</span>
                       )}
                     </td>
                     <td className="px-5 py-3 whitespace-nowrap">
-                      {isSelf ? (
+                      {isSelf || admin.is_system ? (
                         <span className="text-xs text-gray-400">—</span>
                       ) : (
                         <div className="flex items-center gap-3">

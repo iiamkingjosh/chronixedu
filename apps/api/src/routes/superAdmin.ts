@@ -26,6 +26,7 @@ import '../services/feeReminderService';
 import '../services/subscriptionService';
 import { onboardingWelcomeEmail } from '../services/onboardingWelcomeEmail';
 import { platformAdminWelcomeBody, PLATFORM_ADMIN_WELCOME_SUBJECT } from '../services/welcomeEmail';
+import { SYSTEM_ACTOR_ID, isSystemActor } from '../config/systemActor';
 
 const router = Router();
 
@@ -2350,12 +2351,16 @@ router.get(
   ...guard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // The system account (migration 053) is listed, marked is_system, because the platform audit
+      // screen names it as the actor on the trial gate's changes and someone will look for it here.
+      // The screen offers it no actions, and the four routes below refuse it whatever the screen does.
       const result = await pool.query(
-        `SELECT id, email, first_name, last_name, created_at, last_login_at, is_active
+        `SELECT id, email, first_name, last_name, created_at, last_login_at, is_active, (id = $1) AS is_system
          FROM users
          WHERE role = 'super_admin'
            AND email NOT LIKE 'deleted-admin-%@deleted.chronixedu.local'
-         ORDER BY created_at ASC`
+         ORDER BY created_at ASC`,
+        [SYSTEM_ACTOR_ID]
       );
       return res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -2447,6 +2452,19 @@ router.post(
   }
 );
 
+/**
+ * The system account (migration 053) is not a person. Each admin route refuses it before doing
+ * anything: reactivating it would make it an active admin nobody can use, which the last-admin guard
+ * would then count, and deleting it would anonymise the name on every change it has signed. The
+ * database's CHECK stops the first in any case; this answers plainly instead of failing halfway.
+ */
+function refuseSystemActor(res: Response) {
+  return res.status(404).json({
+    success: false,
+    error: { code: 'SYSTEM_ACCOUNT', message: 'This is the system account that signs automated changes. It is not a person and cannot be managed.' },
+  });
+}
+
 // ── POST /admins/:id/resend-welcome ──────────────────────────────────────────
 // Sends a platform admin the welcome email again (no credential in it), when the first was missed.
 
@@ -2455,6 +2473,7 @@ router.post(
   ...guard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (isSystemActor(req.params.id)) return refuseSystemActor(res);
       const admin = await pool.query<{ id: string; email: string; first_name: string; is_active: boolean }>(
         `SELECT id, email, first_name, is_active FROM users WHERE id = $1 AND role = 'super_admin' AND school_id IS NULL`,
         [req.params.id]
@@ -2525,6 +2544,7 @@ router.patch(
   ...rootGuard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (isSystemActor(req.params.id)) return refuseSystemActor(res);
       const parsed = schoolActionSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
@@ -2582,6 +2602,7 @@ router.patch(
   ...rootGuard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (isSystemActor(req.params.id)) return refuseSystemActor(res);
       const parsed = schoolActionSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
@@ -2634,6 +2655,7 @@ router.delete(
   ...rootGuard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      if (isSystemActor(req.params.id)) return refuseSystemActor(res);
       const parsed = deleteAdminSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });

@@ -20,6 +20,7 @@ process.env.OUTSIDE_WORLD_KEYS_EMPTIED = '1';
 
 import { Client } from 'pg';
 import { createClient } from '@supabase/supabase-js';
+import { SYSTEM_ACTOR } from './src/config/systemActor';
 
 // These fixture IDs are hardcoded across all integration tests.
 // They must exist in the database before tests run.
@@ -99,6 +100,16 @@ export default async function globalSetup(): Promise<void> {
   await client.connect();
 
   try {
+    // 0. Migration 053's system account, which the trial gate signs with and refuses to run
+    //    without. The migration creates it, but the DB suite's seed TRUNCATEs users, and CI and the
+    //    Definition of done both run this suite straight after that one, against the same database.
+    await client.query(
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password)
+       VALUES ($1, NULL, $2, '', 'super_admin', $3, $4, false, false)
+       ON CONFLICT (id) DO NOTHING`,
+      [SYSTEM_ACTOR.id, SYSTEM_ACTOR.email, SYSTEM_ACTOR.firstName, SYSTEM_ACTOR.lastName]
+    );
+
     // 1. School
     await client.query(
       `INSERT INTO schools (id, name, slug, is_active, is_demo) VALUES ($1, 'Integration Test School', 'integration-test-school', false, false)

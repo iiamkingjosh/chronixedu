@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 30 — 2026-10-02  
 **Scope:** The platform-admin welcome email: a plain-text password, and a resend link that could not work; two gaps in the platform audit trail found while proving it was never used  
-**Round 30 total findings:** 4 (0 Critical · 0 High · 1 Medium · 3 Low) — 2 remediated, 2 open
+**Round 30 total findings:** 4 (0 Critical · 0 High · 1 Medium · 3 Low) — 3 remediated, 1 open
 
 ---
 
@@ -55,22 +55,45 @@ All 5 fail on the previous route.
 
 **The missing three were deleted afterwards.**
 - They come from a run of the admin-deletion tests against production at 09:19 UTC on 7 Aug, 38 minutes before those tests were committed (`5d8e534`).
-- That suite's teardown deletes every `platform_audit_logs` row naming its admins as actor or target. It does so today (`tests/superAdmin.test.ts`), and nine integration files delete from the table.
+- That suite's teardown deletes every `platform_audit_logs` row naming its admins as actor or target. It does so today (`tests/superAdmin.test.ts`), and seven integration files delete from the table: `impersonation`, `onboardingWizard`, `phase4Integration`, `platformAuth`, `schoolSuspension`, `subscriptionExpiry` and `superAdmin` (counted by the reviewer; the first draft said nine).
 - Why the user rows outlived their audit rows that morning is not in git: the run used an uncommitted working copy.
 
 **The gap.** Migrations 036–038 protect `audit_logs`; nothing protects `platform_audit_logs`, the record of every platform-admin action, deletions and data wipes included. Any DELETE succeeds, and test code issued them for months. Doctrine 6's accident-proofing does not cover it.
 
-**Not fixed here.** Making it append-only needs a decision. The integration teardowns would need changing, as for `audit_logs`, and the school deletion script deletes a school's rows from it, so it would need a 048-style purge path.
+**Decided 2 Oct 2026: protect it, in three commits, in this order,** queued behind the email banner. Nothing deletes these rows in production today.
+1. The seven teardowns guard around their audit rows, as the `audit_logs` teardowns already do. Never a session flag or role that lets tests delete (CLAUDE.md: that turns the invariant into a convention).
+2. A purge path for a school's platform rows, equivalent to migration 048, so `delete-school-data.js` can still reach zero.
+3. Only then the append-only migration. Done first, it would break all seven suites the same day.
 
-### L-03 — The trial gate signs its changes with an arbitrary super_admin 🟡 Open (decision for Moses)
+### L-03 — The trial gate signed its changes with an arbitrary super_admin ✅ Remediated
 
-**File:** `apps/api/src/services/subscriptionService.ts` (`getSystemAdminId`).
+**Files:** `migrations/053_system_actor.sql` (new), `apps/api/src/config/systemActor.ts` (new), `apps/api/src/services/subscriptionService.ts`, `apps/api/src/routes/superAdmin.ts` (`/admins` routes), `apps/api/src/config/alerts.ts`, `apps/web/app/super-admin/admins/page.tsx`, and the two test fixtures (`__db_tests__/helpers.ts`, `jest.globalSetup.ts`).
 
 - `runTrialExpiryCheck` records each change it makes (grace, read-only, healing a paid plan) in `platform_audit_logs`, attributed to `SELECT id FROM users WHERE role = 'super_admin' LIMIT 1`.
 - That query has no ORDER BY and no `is_active` filter, so it returns whichever super_admin Postgres finds first, fixtures and deactivated accounts included.
 - **Observed:** Chronix High School's 8 Sep 2026 auto-suspend is recorded as done by `e48f826d`, a test fixture that the root admin deleted on 1 Oct.
 - The record answers "who did this?" with "whichever row came first" (doctrine 8). No admin did it; the system did.
-- **Not fixed here.** The honest fix records the system as the actor, which needs either a nullable `platform_admin_id` or a dedicated system account. Both change a NOT NULL column or add a user, so the choice is Moses's. Until then, deleting the fixture admins narrows what the query can return but does not make it right.
+
+**Fix: a system account, decided 2 Oct 2026.** A NULL or a magic string in `platform_admin_id` would make every reader handle a special case. A real row answers "who did this" honestly.
+- **The account.** Migration 053 creates it with a fixed id, `system@chronixedu.internal`, role `super_admin`, inactive, an empty password hash and no Supabase identity. The gate looks it up by that id (`SYSTEM_ACTOR_ID`), never by role.
+- **It cannot act as an admin.** Every `role = 'super_admin'` query was audited before building:
+  - Login looks the local row up by the Supabase user's id, and it has no identity, so it cannot sign in or hold a token.
+  - Everything that grants a super_admin row anything requires `is_active`: the last-admin guard, the purge function's operator (048) and the deletion script's operator.
+  - School, announcement, message and dashboard queries are scoped by school, id or the principal role. A row with no school never appears in them.
+  - Impersonation needs a school and refuses `super_admin` targets.
+- **Kept inactive by the database.** A CHECK (`users_system_account_never_active`) refuses `is_active = true` for that id, whatever a future route or script does. This is the durable half.
+- **The admin routes.** The audit found one exposure. Reactivate would have flipped it active, giving an admin nobody can use that the last-admin guard would then count. Delete would have anonymised the name on every change it signed. `GET /admins` now lists it, marked `is_system`, so the name on the audit screen is explicable. The screen gives it no actions, and resend, suspend, reactivate and delete answer 404 `SYSTEM_ACCOUNT` whatever the screen does.
+- **A missing account alarms.** The gate looks it up on every run, before it knows whether it has work. Without the account it changes nothing and logs `trial_expiry_system_actor_missing`, which alerts as `system_actor_missing`. It used to check only on a day with work, so in a quiet week a missing row would have looked like a gate with nothing to do (doctrine 9).
+- **Both test fixtures recreate it.** The DB suite's seed truncates `users`, and the integration fixture seeds into whatever that left, so each puts the account back. `systemActor.test.ts` checks both, and the migration, against the constant.
+- **History is not rewritten.** The 8 Sep record stays attributed to `e48f826d`.
+
+**Tests:** `systemActor.db.test.ts` (new, 4):
+- the gate signs with the system account after the old query is shown picking another admin;
+- a missing account fails a run with no work and a run with work, logging the event both times, with the trial unmoved and nothing signed;
+- the database refuses to activate it, after the same statement activates an ordinary admin;
+- the list marks it, and the four routes refuse it with the row, the audit log, email and Supabase all untouched, after the same routes work on an ordinary admin.
+
+All 4 fail on the previous code. `systemActor.test.ts` (unit, 4) also fails the build if any code again selects `role = 'super_admin' … LIMIT 1`.
 
 ---
 

@@ -3,14 +3,19 @@ import pool from '../db/client';
 import { logger } from '../config/logger';
 import { cache, schoolCacheKey } from './cacheService';
 import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
+import { SYSTEM_ACTOR_ID } from '../config/systemActor';
 
 const CRON_NAME = 'trial-expiry-check';
 
 registerCron(CRON_NAME, '0 9 * * *', 'Moves expired trials into grace, then read-only');
 
-/** Returns a real super_admin user id to attribute system-generated audit log entries to. */
-async function getSystemAdminId(): Promise<string | null> {
-  const result = await pool.query<{ id: string }>(`SELECT id FROM users WHERE role = 'super_admin' LIMIT 1`);
+/**
+ * The account the gate signs its audit rows with (migration 053, `config/systemActor.ts`), by its
+ * fixed id. It used to take `role = 'super_admin' LIMIT 1`: whichever admin came first, which put a
+ * test fixture's name on Chronix High School's 8 Sep 2026 suspension (SECURITY.md Round 30, L-03).
+ */
+async function getSystemActorId(): Promise<string | null> {
+  const result = await pool.query<{ id: string }>(`SELECT id FROM users WHERE id = $1`, [SYSTEM_ACTOR_ID]);
   return result.rows[0]?.id ?? null;
 }
 
@@ -57,22 +62,26 @@ export async function runTrialExpiryCheck(): Promise<TrialExpiryResult> {
 
   const result: TrialExpiryResult = { entered_grace: 0, entered_read_only: 0, healed: 0 };
   const work = due.rows.filter(r => r.plan !== 'trial' || r.subscription_status !== r.target && r.subscription_status !== 'read_only');
+
+  // Checked on every run, before the gate knows whether it has work. A state change must never
+  // happen without an audit record, so without the account the gate changes nothing. If it only
+  // said so on a day with work, a missing row would look, in a quiet week, exactly like a gate with
+  // nothing to do (doctrine 9). So it alerts the first time the job fires.
+  const systemActorId = await getSystemActorId();
+  if (!systemActorId) {
+    logger.error('trial_expiry_system_actor_missing', { pending: work.length });
+    throw new Error('The system account (migration 053) is missing, so the trial gate cannot sign its changes; nothing was changed');
+  }
+
   if (work.length === 0) {
     logger.info('trial_expiry_check', { ...result });
     return result;
   }
 
-  const systemAdminId = await getSystemAdminId();
-  if (!systemAdminId) {
-    // A state change must never happen without an audit record.
-    logger.error('trial_expiry_no_system_admin', { pending: work.length });
-    throw new Error('No super_admin exists to attribute trial-gate changes to; nothing was changed');
-  }
-
   const audit = (client: { query: (sql: string, params: unknown[]) => Promise<unknown> }, schoolId: string, action: string, metadata: object) =>
     client.query(
       `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_school_id, metadata) VALUES ($1, $2, $3, $4)`,
-      [systemAdminId, action, schoolId, JSON.stringify(metadata)]
+      [systemActorId, action, schoolId, JSON.stringify(metadata)]
     );
 
   for (const row of work) {
