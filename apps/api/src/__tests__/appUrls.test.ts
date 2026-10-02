@@ -6,7 +6,18 @@
 import fs from 'fs';
 import path from 'path';
 import { appBaseUrl, resetPasswordRedirect } from '../config/appUrls';
-import { onboardingWelcomeEmail } from '../services/onboardingWelcomeEmail';
+import { onboardingWelcomeEmail, BRAND_NAVY, EMAIL_CARD_BACKGROUND, EMAIL_PAGE_BACKGROUND, EMAIL_TEXT } from '../services/onboardingWelcomeEmail';
+
+/** WCAG 2 contrast ratio between two #rrggbb colours. */
+function contrast(a: string, b: string): number {
+  const lum = (hex: string) => {
+    const [r, g, bl] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
+      .map(c => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
 
 describe('appBaseUrl', () => {
   const saved = { APP_URL: process.env.APP_URL, NEXTAUTH_URL: process.env.NEXTAUTH_URL };
@@ -75,6 +86,39 @@ describe('the onboarding welcome email', () => {
     const anchors = [...mail.html.matchAll(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].filter(m => m[2] !== 'Set your password');
     expect(anchors.length).toBeGreaterThan(0);
     for (const [, href, label] of anchors) expect(href.replace(/^mailto:/, '')).toBe(label);
+  });
+
+  it("uses Chronix navy for the button and for every other link, never the client's default blue", () => {
+    expect(BRAND_NAVY).toBe('#003366'); // navy.DEFAULT in apps/web/tailwind.config.ts
+    const button = mail.html.match(/<a href="[^"]+" style="([^"]*)">Set your password<\/a>/);
+    expect(button).not.toBeNull();
+    expect(button![1]).toMatch(/(^|;)background:#003366;/);
+    const others = [...mail.html.matchAll(/<a ([^>]*)>([^<]+)<\/a>/g)].filter(m => m[2] !== 'Set your password');
+    expect(others.length).toBeGreaterThan(0);
+    for (const [, attrs, label] of others) expect({ label, colour: attrs.match(/style="color:(#[0-9A-Fa-f]{6})"/)?.[1] }).toEqual({ label, colour: '#003366' });
+  });
+
+  it('brings its own light page, so its colours do not depend on the reader\'s dark mode', () => {
+    // No background of its own meant the client supplied one: on a dark theme, navy would vanish.
+    expect(mail.html).toMatch(/^<!doctype html>/);
+    expect(mail.html).toContain('<meta name="color-scheme" content="light">');
+    expect(mail.html).toContain('<meta name="supported-color-schemes" content="light">');
+    expect(mail.html).toContain(`<body style="margin:0;padding:0;background-color:${EMAIL_PAGE_BACKGROUND}">`);
+    const card = mail.html.indexOf(`background-color:${EMAIL_CARD_BACKGROUND};color:${EMAIL_TEXT}`);
+    expect(card).toBeGreaterThan(0);
+    // The content, button included, sits inside the white card.
+    expect(mail.html.indexOf('Set your password')).toBeGreaterThan(card);
+    expect(mail.html.indexOf('Hi Ada')).toBeGreaterThan(card);
+  });
+
+  it('every colour pairing in it reads at WCAG AA or better', () => {
+    expect(EMAIL_CARD_BACKGROUND).toBe('#ffffff');
+    expect(contrast(BRAND_NAVY, EMAIL_CARD_BACKGROUND)).toBeGreaterThanOrEqual(4.5); // links on the card
+    expect(contrast('#ffffff', BRAND_NAVY)).toBeGreaterThanOrEqual(4.5); // the button's label
+    expect(contrast(EMAIL_TEXT, EMAIL_CARD_BACKGROUND)).toBeGreaterThanOrEqual(4.5); // body text
+    // The calculator's control: the measured failures that started this read as failures.
+    expect(contrast(BRAND_NAVY, '#222222')).toBeLessThan(1.5); // navy on a dark client background
+    expect(contrast('#ffffff', '#FF761B')).toBeLessThan(3); // white on orange
   });
 
   it('escapes what an operator typed', () => {

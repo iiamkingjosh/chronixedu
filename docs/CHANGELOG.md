@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## The welcome email uses Chronix colours (2026-10-02)
+
+### For schools
+- A new school's welcome email now has its own white page, so it reads the same in light and dark mode. Without it, a dark-mode email program put the email on a dark background.
+- The "Set your password" button is now Chronix navy, the same as the main buttons in the app. The other links are navy too, instead of the email program's default blue (or purple once clicked).
+
 ## The ERP can now pull Chronix's revenue number (2026-10-02)
 
 ### For Chronix administrators
