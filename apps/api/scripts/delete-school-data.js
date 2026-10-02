@@ -208,6 +208,8 @@ function describeAuthAccounts(plan) {
     return `Supabase Auth accounts: not checked — this database has no auth schema; all ${plan.userIds.length} user id(s) will be tried`;
   }
   const have = plan.authAccounts.length, users = plan.userIds.length;
+  // "Every user has a login" is vacuously true of a school with no users, and said so on 2 Oct 2026.
+  if (users === 0) return 'Supabase Auth accounts: 0 (the school has no users)';
   if (have === users) return `Supabase Auth accounts: ${have} (every user has a login)`;
   return `Supabase Auth accounts: ${have} (of ${users} users; the other ${users - have} have no login)`;
 }

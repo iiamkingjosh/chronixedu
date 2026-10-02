@@ -201,6 +201,7 @@ describe('Auth accounts: logins, not users rows', () => {
     expect(plan.authUserIds).toEqual([I.principalA]);
     expect(describeAuthAccounts(plan)).toBe(`Supabase Auth accounts: 1 (of ${plan.userIds.length} users; the other ${plan.userIds.length - 1} have no login)`);
     expect(describeAuthAccounts({ ...plan, authAccounts: plan.userIds })).toBe(`Supabase Auth accounts: ${plan.userIds.length} (every user has a login)`);
+    expect(describeAuthAccounts({ ...plan, userIds: [], authAccounts: [] })).toBe('Supabase Auth accounts: 0 (the school has no users)');
   });
 
   it('says it could not check, and tries every user id, when the database has no auth.users', async () => {

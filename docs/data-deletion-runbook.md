@@ -317,6 +317,30 @@ because this repository is public.
 independent scan went from 221 rows to 0, its purge record exists, and the confirming dry run said
 "Nothing to delete".
 
+**Two May High School rows, the same afternoon.** Moses onboarded "May High School" to test the
+welcome email, and an abandoned first wizard run had left a second school row behind. He asked
+Claude to delete both. It was the first run against a school with a real login, so the first
+exercise of the plan reading `auth.users`.
+
+| School | Rows | Logins | Result |
+|---|---|---|---|
+| `0122310c` (the abandoned run) | 3: the school, its onboarding session, one platform audit row | 0, and no users | deleted |
+| `1a936ddd` (the completed run) | 9, including the principal | 1 | deleted; the login was removed through the Auth API before the database step |
+
+For each:
+- the snapshot and the dry run agreed table by table;
+- the independent scan went to 0 rows, with `auth.users`, `auth.identities` and `auth.sessions` at 0;
+- the purge record survived;
+- the confirming dry run said "Nothing to delete".
+
+The principal's address was on no SendGrid suppression list. SMS is off, so nothing went to Termii.
+
+**Afterwards:** 42 schools, 0 customers, 7 logins platform-wide, 8 `SCHOOL_AUDIT_PURGED` records,
+and no unfinished onboarding session.
+
+The empty school's plan said "0 (every user has a login)", which is vacuously true. It now says
+"0 (the school has no users)".
+
 **Learned:**
 - **A name is not an identity.** "Delete the demo school" meant three runs. The script addresses a
   school by id and confirms it by slug for this reason.
