@@ -7,6 +7,14 @@ import fs from 'fs';
 import path from 'path';
 import { appBaseUrl, resetPasswordRedirect } from '../config/appUrls';
 import { onboardingWelcomeEmail, BRAND_NAVY, EMAIL_CARD_BACKGROUND, EMAIL_PAGE_BACKGROUND, EMAIL_TEXT } from '../services/onboardingWelcomeEmail';
+import { FOOTER_BUTTON_LABEL } from '../services/emailLayout';
+
+/**
+ * The email's buttons: white on navy, and labelled with an action rather than an address, so they
+ * cannot contradict their link. "Reach out to us" joined "Set your password" when the shared layout's
+ * footer arrived (emailLayout.test.ts covers it). Every link that shows an address must show its own.
+ */
+const BUTTONS = ['Set your password', FOOTER_BUTTON_LABEL];
 
 /** WCAG 2 contrast ratio between two #rrggbb colours. */
 function contrast(a: string, b: string): number {
@@ -83,7 +91,7 @@ describe('the onboarding welcome email', () => {
   });
 
   it('every other link shows its own address as its text, so text and destination never differ', () => {
-    const anchors = [...mail.html.matchAll(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].filter(m => m[2] !== 'Set your password');
+    const anchors = [...mail.html.matchAll(/<a href="([^"]+)"[^>]*>([^<]+)<\/a>/g)].filter(m => !BUTTONS.includes(m[2]));
     expect(anchors.length).toBeGreaterThan(0);
     for (const [, href, label] of anchors) expect(href.replace(/^mailto:/, '')).toBe(label);
   });
@@ -93,7 +101,7 @@ describe('the onboarding welcome email', () => {
     const button = mail.html.match(/<a href="[^"]+" style="([^"]*)">Set your password<\/a>/);
     expect(button).not.toBeNull();
     expect(button![1]).toMatch(/(^|;)background:#003366;/);
-    const others = [...mail.html.matchAll(/<a ([^>]*)>([^<]+)<\/a>/g)].filter(m => m[2] !== 'Set your password');
+    const others = [...mail.html.matchAll(/<a ([^>]*)>([^<]+)<\/a>/g)].filter(m => !BUTTONS.includes(m[2]));
     expect(others.length).toBeGreaterThan(0);
     for (const [, attrs, label] of others) expect({ label, colour: attrs.match(/style="color:(#[0-9A-Fa-f]{6})"/)?.[1] }).toEqual({ label, colour: '#003366' });
   });
@@ -115,6 +123,10 @@ describe('the onboarding welcome email', () => {
     expect(EMAIL_CARD_BACKGROUND).toBe('#ffffff');
     expect(contrast(BRAND_NAVY, EMAIL_CARD_BACKGROUND)).toBeGreaterThanOrEqual(4.5); // links on the card
     expect(contrast('#ffffff', BRAND_NAVY)).toBeGreaterThanOrEqual(4.5); // the button's label
+    // The footer's "Reach out to us", read from the email as rendered: its cell's colour, its label's colour.
+    const footer = mail.html.match(new RegExp(`<td align="center" bgcolor="(#[0-9a-fA-F]{6})"[^>]*>\\s*<a [^>]*color:(#[0-9a-fA-F]{6});[^>]*>${FOOTER_BUTTON_LABEL}</a>`));
+    expect(footer).not.toBeNull();
+    expect(contrast(footer![2], footer![1])).toBeGreaterThanOrEqual(4.5);
     expect(contrast(EMAIL_TEXT, EMAIL_CARD_BACKGROUND)).toBeGreaterThanOrEqual(4.5); // body text
     // The calculator's control: the measured failures that started this read as failures.
     expect(contrast(BRAND_NAVY, '#222222')).toBeLessThan(1.5); // navy on a dark client background

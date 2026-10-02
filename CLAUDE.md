@@ -386,6 +386,22 @@ Monorepo, npm workspaces:
   their user, so no school deletion could reach them: the table's only link to a school is
   `to_email` → `users.email` (SECURITY.md Round 29, L-02). Anything new that stores what it sends
   needs its own retention decision in the same commit.
+- **An email in Chronix's own voice is built on `services/emailLayout.ts`** (`renderEmail`, since 2 Oct
+  2026).
+  - **What the layout gives it:** a light page with its own colours, so dark mode cannot hide navy; a
+    white 600px card; then the Chronix banner and an HTML "Reach out to us" button to support.
+  - **Which emails get it:** only those that speak for Chronix (decided 2 Oct 2026). An email a school
+    sends its parents (fee reminders, receipts, notifications) carries no Chronix advertising.
+  - **The banner:** `apps/web/public/email/banner.png`, served by the web app. Never Supabase Storage,
+    which is going private. It is pinned by SHA-256 in `emailLayout.test.ts`. On 2 Oct the version
+    carrying a "Set up your school" button was saved under the approved name, and only its size gave it
+    away; a changed banner now needs a new hash in the same commit.
+  - **Deploy the image first.** The web serves the image and the API names it, so an API deploy that
+    references a new image before the web has it sends broken images. Push the image alone (the API's
+    watch patterns exclude `apps/web`), confirm the URL, then push the code.
+  - **What never carries the banner:** the plain-text part, and a queued retry, because `email_queue`
+    has no HTML column. The Supabase password-reset email is a dashboard template, so any banner there
+    is added by hand.
 - **A test stub of a platform object must mirror production verbatim in every property a
   test depends on** — not "equivalently". `scripts/sql/test_supabase_stubs.sql`'s `auth.uid()`
   called `auth.jwt()` by schema-qualified name where production's names only

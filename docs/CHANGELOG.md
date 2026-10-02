@@ -1,5 +1,13 @@
 # Chronix Edu — Changelog
 
+## The welcome email carries the Chronix Edu banner (2026-10-02)
+
+### For schools
+- The email a new school's principal receives when onboarding completes now ends with the Chronix Edu banner and a "Reach out to us" button that writes to support@chronixtechnology.com.
+- With images turned off, as many email apps do by default, the banner shows as a line of text and the button still works.
+- The email now fits a phone screen: a long email address or link wraps instead of pushing the page sideways.
+- Emails a school sends its parents (fee reminders, receipts, notifications) do not carry Chronix's banner.
+
 ## Automated changes are signed by the system, not by an admin (2026-10-02)
 
 ### For Chronix administrators
