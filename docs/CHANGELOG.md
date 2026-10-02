@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## The ERP can now pull Chronix's revenue number (2026-10-02)
+
+### For Chronix administrators
+- The shared key the ERP uses to ask edu for the current revenue total is set in production, and the connection has been tested live end to end — a real request, with the real key, came back with a real answer.
+- That answer is ₦0 right now, correctly: no school is a paying customer yet, so there's nothing to total. It will show real money the moment a real school pays, with nothing further to build or switch on.
+
 ## A school can pay its own Chronix subscription online (2026-10-02)
 
 ### For schools

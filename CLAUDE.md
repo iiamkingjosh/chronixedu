@@ -559,6 +559,13 @@ Monorepo, npm workspaces:
 - **Unset `ERP_INTEGRATION_API_KEY` means the integration is OFF: 503, never 200.** A
   partner route that starts serving because a secret went missing is the failure the
   middleware exists to prevent, and it is tested.
+- **The key is set in production and the endpoint has been verified live** (2 Oct 2026):
+  `ERP_INTEGRATION_API_KEY` is configured on the API service, and a direct call carrying
+  the matching `x-api-key` returned a real `200` with `total_mrr_kobo: 0`, not a refusal.
+  The `0` is correct, not a gap — every school in production is a test fixture, demo
+  data, or Moses's own `is_demo` pilot (see "What this is"), `getPlatformRevenue`
+  excludes demo tenants by design, and there is no real paying school yet. The figure
+  moves the moment one pays; nothing further needs building for that to happen.
 - Keep partner routes in `routes/partner.ts`, never folded into `superAdmin.ts`. Every
   route in that file carries `...guard` (human session + super_admin); mixing the two
   guards in one file makes "a route drifted past the wrong guard" a one-line mistake in
