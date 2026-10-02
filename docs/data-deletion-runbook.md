@@ -265,6 +265,56 @@ what the script's dry run listed. So a 0 from the scan means absent, not unscann
 **After both:** 45 schools, all `is_demo`; 0 customers; 0 customer subscriptions; 2
 `SCHOOL_AUDIT_PURGED` records. Measured by direct query.
 
+## Rehearsal: demo schools with queued mail (2 Oct 2026, production)
+
+The reviewer asked for the runbook to be run end to end on a real target with queued mail attached,
+before a real school depends on it.
+- **Targets:** the three demo schools holding the 5 fixture parents whose welcome emails, with a
+  password in the body, sat in `email_queue` (SECURITY.md Round 29, L-02).
+- **Addressed by id, confirmed by slug.** All three are named "Bulk Import Commit Test School", and
+  six schools carried that name, so a name could not pick them out.
+
+| School | Users | Queued mail | `audit_logs` | Result |
+|---|---|---|---|---|
+| `f5094c7f` | 4 | 1 | 1 | deleted |
+| `dc8ede9c` | 64 | 2 | 4 | deleted |
+| `cc6e5fae` | 109 | 2 | 4 | **not run**: the session's safety check refused it; left for Moses |
+
+For each deleted school:
+1. **Steps 1–2.** There were no `platform_subscriptions` rows. The schools were not suspended:
+   fixtures receive no writes, and the in-transaction zero check covers one that lands anyway.
+2. **Control, before anything changed.** An independent scanner, which does not use the script or
+   its table list, recorded the school's user ids and found the school: 15 and 226 rows.
+3. **Dry run.** It named the school and matched the scan. It listed 4 and 64 Auth accounts, which
+   did not exist: these fixtures never had login identities, and the script treats "not found" as
+   already gone.
+4. **Execute.** Run with `--with-supabase` and operator `info@chronixtechnology.com`. It committed
+   with the in-transaction zero check.
+5. **Step 5: sub-processors.**
+   - SendGrid: the five suppression lists (bounces, blocks, spam reports, invalid emails,
+     unsubscribes) were read through the API. None of the 68 addresses was on any of them.
+   - The matcher's control: 5 known entries matched 5.
+   - Termii: there were no phone numbers.
+6. **Independent scan afterwards:**
+   - 0 rows across 242 columns in 44 tables;
+   - `auth.users`, `auth.identities` and `auth.sessions`: 0;
+   - `email_queue` rows to the school's addresses: 0;
+   - Storage: 0;
+   - one purge record for each school.
+7. **Confirming dry run.** It printed "Nothing to delete", exit 0.
+
+The addresses were kept in the session's scratchpad for step 5. They are not reproduced here,
+because this repository is public.
+
+**Afterwards:** 43 schools, all `is_demo`, and 5 `SCHOOL_AUDIT_PURGED` records.
+
+**Learned:**
+- **A name is not an identity.** "Delete the demo school" meant three runs. The script addresses a
+  school by id and confirms it by slug for this reason.
+- **A queued email outlives its user.** The script reaches one only while the user row exists: it
+  deletes `email_queue` (step 6) before `users` (step 11). Rows orphaned earlier were unreachable
+  until the retention job (SECURITY.md Round 29, L-02).
+
 ## Known gaps
 
 - **Files are not in the export.** The CSV export is complete for the database. Report cards can

@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Failed emails are no longer kept forever (2026-10-02)
+
+### For Chronix administrators
+- An email the provider refused is kept for retrying for 7 days, then deleted, whether it was eventually sent or not. Until now none was ever deleted.
+- The old queue has been emptied. It held 1,990 such emails, most of them welcome emails from before 1 Oct that contained a temporary password. None of those passwords still worked.
+
 ## New staff and parents set their own password (2026-10-01)
 
 ### For schools

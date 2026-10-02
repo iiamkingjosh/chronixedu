@@ -103,11 +103,11 @@ export const ALERTS = {
     fields: ['status', 'error', 'reason'],
   },
   cron_failed: {
-    why: 'A scheduled job failed: fee reminders, the trial gate, the email retry queue or analytics did not run',
+    why: 'A scheduled job failed: fee reminders, the trial gate, the email retry queue, its retention or analytics did not run',
     level: 'error',
     events: [
       'trial_expiry_cron_error', 'trial_expiry_no_system_admin', 'fee_reminder_cron_error', 'fee_reminders_failed',
-      'email_queue_cron_error', 'platform_analytics_cron_error', 'analytics_cron_error',
+      'email_queue_cron_error', 'email_queue_retention_cron_error', 'platform_analytics_cron_error', 'analytics_cron_error',
     ],
     fields: ['error', 'pending'],
   },

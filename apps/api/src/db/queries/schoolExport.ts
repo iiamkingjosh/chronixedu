@@ -83,7 +83,7 @@ export const NOT_EXPORTED: Record<string, string> = {
   school_analytics_snapshots: 'Derived: dashboard figures recomputed from the exported data.',
   notification_logs: 'Delivery log of messages sent on the school’s behalf — operational, not school records.',
   notifications: 'Per-user in-app notifications generated from events that are themselves exported.',
-  email_queue: 'Transient outbound email queue; holds no record the school created.',
+  email_queue: 'Transient: SendGrid refusals awaiting retry, each deleted after 7 days (EMAIL_QUEUE_RETENTION_DAYS, since 2 Oct 2026; before that nothing deleted them). Holds no record the school created.',
   support_sessions: 'Chronix’s record of its own support access — Chronix’s audit, available on request.',
   onboarding_sessions: 'Chronix’s record of setting the school up.',
   platform_subscriptions: 'The commercial relationship between the school and Chronix, not school data; available from Chronix.',

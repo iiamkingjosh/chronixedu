@@ -318,8 +318,13 @@ Monorepo, npm workspaces:
   **"Sent" means SendGrid accepted it.** `sendEmail` never throws; it returns
   `'sent' | 'queued' | 'lost' | 'disabled'`. Anything that tells a person an email went reads that
   value, never the absence of an error. `email_queue` keeps the body of every refused email, so
-  never put a password in an email body: 1,954 old welcome emails still sit there with one
-  (SECURITY.md Round 29, L-02).
+  never put a password in an email body.
+- **`email_queue` keeps a row for 7 days, whatever its status** (`EMAIL_QUEUE_RETENTION_DAYS`; the
+  daily `email-queue-retention` job, 03:15 Lagos). Before 2 Oct 2026 nothing deleted one. 1,954
+  welcome emails with a password sat there for up to 104 days, and 1,958 of 1,993 rows had lost
+  their user, so no school deletion could reach them: the table's only link to a school is
+  `to_email` → `users.email` (SECURITY.md Round 29, L-02). Anything new that stores what it sends
+  needs its own retention decision in the same commit.
 - **A test stub of a platform object must mirror production verbatim in every property a
   test depends on** — not "equivalently". `scripts/sql/test_supabase_stubs.sql`'s `auth.uid()`
   called `auth.jwt()` by schema-qualified name where production's names only
@@ -757,7 +762,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 33 suites, 336 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 34 suites, 339 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

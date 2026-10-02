@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 29 — 2026-10-01  
 **Scope:** Welcome emails for new staff and parents: a password in the body, "sent" for mail that did not go, and the old ones still queued  
-**Round 29 total findings:** 3 (0 Critical · 0 High · 1 Medium · 2 Low) — two remediated, one open pending the owner
+**Round 29 total findings:** 3 (0 Critical · 0 High · 1 Medium · 2 Low) — all remediated
 
 ---
 
@@ -50,23 +50,48 @@
 - When SendGrid refuses the onboarding email, `/complete` now says NOT sent, gives the reason, and logs `welcome_email_failed`.
 - The other callers ignore the value and are unchanged.
 
-### L-02 — `email_queue` holds 1,954 old welcome emails with plaintext passwords ⏳ Open [MOSES]
+### L-02 — `email_queue` kept every refused email for good, including 1,954 welcome emails with a password ✅ Remediated
 
-**Measured** read-only in production on 1 Oct 2026, counts only:
-- 1,954 rows have a `Password:` line in the body: 1,851 `failed` and 103 `sent`, dated 19 Jun – 17 Sep 2026. Each is a different address: 1,761 `test.com`, 191 `example.com`, 2 `gmail.com`.
-- 1,948 of those addresses no longer have an account. The 6 that do are all in demo schools:
-  - The Chronix High School principal's queued email predates the current account by a day, and that password has since been changed. It is dead.
-  - The other 5 are fixture parents in one demo school, created 31 Aug, still active, who never changed the password. **Those 5 passwords would still sign in.**
-- No row is `pending`, so the retry cron re-sends none.
-- No customer school, and no real person, has a working credential there.
+**Files:** `apps/api/src/services/emailQueueService.ts`, `apps/api/src/db/queries/emailQueue.ts`, `apps/api/src/db/queries/schoolExport.ts`, `apps/api/src/config/alerts.ts`.
 
-**Status.** M-01 stops new rows of this kind, but the existing rows stay until someone deletes them. Proposed:
-1. Delete the rows whose body has a password line.
-2. Deactivate the 5 fixture parents, or delete their demo school with `delete-school-data.js`.
+**Measured** in production, counts only, and checked row for row by the reviewer:
+- The queue held 1,993 rows, the oldest 104 days old.
+- 1,954 had a `Password:` line in the body: 1,851 `failed` and 103 `sent`, dated 19 Jun – 17 Sep 2026. Each was to a different address: 1,761 `test.com`, 191 `example.com`, 2 `gmail.com`.
+- **Two real Gmail addresses, not one.** The first draft of this finding named one.
+  - `jo****@gmail.com` (8 Aug) is the Chronix High School principal. The queued email predates the current account by a day, and the password has since been changed, so it is dead.
+  - `te****@gmail.com` (5 Jul) has no account. The credential died with the account. It is Moses's own test address (his reply, 2 Oct).
+- **The 5 fixture parents could not sign in at all.** This was corrected twice:
+  - The first draft said their passwords "would still sign in".
+  - The reviewer narrowed that to "reaches the change-password screen", because all 5 still had `must_change_password`.
+  - Both overstate it. None of the 5 has a Supabase Auth identity, by id or by address, and login is Supabase `signInWithPassword`. Their `users` rows date from 31 Aug, before bulk import created login identities.
+  - They sat in three demo schools that share one name, "Bulk Import Commit Test School". Six schools carried that name.
+- So no working credential was exposed. The table is readable only with the service role or as the table owner.
 
-Both are production deletes, so they wait for Moses. Separately, `email_queue` keeps every body forever, `sent` rows included. A retention rule is recorded in `docs/AUDIT-2026-09.md`.
+**The mechanism.**
+- **Nothing ever deleted a queued email.**
+- **Most rows could no longer be reached.** `email_queue`'s only link to a school is `to_email` → `users.email`. 1,958 of the 1,993 rows had no surviving user, so no school deletion could ever reach them.
+- **The deletion script is not at fault.** It deletes `email_queue` (step 6) before `users` (step 11), as it must. The orphans are left over from the old demo seeder's raw deletes and from test teardown.
+- **The export said otherwise.** `schoolExport.ts` described the table as "transient", which was not true.
 
-**Tests:**
+**Fix.**
+- **A retention rule.** A daily job (`email-queue-retention`, 03:15 Lagos, through `runExclusive`) deletes every queued email older than `EMAIL_QUEUE_RETENTION_DAYS` (7 days), whatever its status.
+  - **Why 7 days:** the retry job is done with a row within about 2½ hours (5 attempts, 30 minutes apart). A week leaves time to read `last_error` when someone asks why an email never arrived. After that, SendGrid's activity log is the record.
+  - **Pending rows go too.** A row still `pending` after a week is deleted, with a warning (`email_queue_retention_dropped_pending`). The retry job has not run it for a week, and keeping it would rebuild the store. This deliberately goes further than the reviewer's "sent and terminally failed".
+  - **A failed run raises `cron_failed`** (`email_queue_retention_cron_error`).
+  - **The export reason is true now:** `schoolExport.ts` says the table is transient and each row is deleted after 7 days.
+- **The rows, deleted 2 Oct 2026**, as Moses approved.
+  - **The rehearsal came first** (`docs/data-deletion-runbook.md`, "Rehearsal"). Two of the three demo schools holding the 5 were deleted with `delete-school-data.js`, queued mail included. The session's safety check refused the third, which is left for Moses.
+  - **Then the job's own statement, run once:** it deleted 1,887 `failed` and 103 `sent` rows, 1,990 in all. The other 3 went with the two schools.
+  - **The queue is now empty**, and no row mentions a password.
+
+**Tests:** `emailQueueRetention.db.test.ts` (new, 3 tests):
+- Six rows are shown present first. The run deletes the three older than a week (`sent`, `failed`, and a 104-day `failed`) and keeps the three recent ones, whatever their status.
+- A week-old `pending` row is deleted and named in a warning, while a recent one stays.
+- The job is registered at `15 3 * * *`.
+
+All three fail on the pre-change code.
+
+**Tests (M-01, L-01):**
 - `welcomeEmailNoCredential.db.test.ts` (new, 12 tests).
   - Covers all four routes. In each, the matching or confirmed request succeeds first.
   - What its email must not contain: the password Auth was given (the mock records it), or any link. What it must contain: a pointer to `/forgot-password`.

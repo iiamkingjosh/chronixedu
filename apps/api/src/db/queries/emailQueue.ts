@@ -26,6 +26,19 @@ export async function getPendingEmails(maxAttempts: number): Promise<QueuedEmail
   return result.rows;
 }
 
+/** Deletes every queued email created more than `days` days ago, whatever its status, and returns
+ *  how many of each status went. */
+export async function deleteQueuedEmailsOlderThan(days: number): Promise<Record<string, number>> {
+  const result = await pool.query<{ status: string; n: number }>(
+    `WITH gone AS (
+       DELETE FROM email_queue WHERE created_at < now() - make_interval(days => $1) RETURNING status
+     )
+     SELECT status, COUNT(*)::int AS n FROM gone GROUP BY status`,
+    [days]
+  );
+  return Object.fromEntries(result.rows.map(r => [r.status, r.n]));
+}
+
 export async function markEmailSent(id: string): Promise<void> {
   await pool.query(`UPDATE email_queue SET status = 'sent', last_attempt_at = now() WHERE id = $1`, [id]);
 }
