@@ -8,12 +8,17 @@ jest.mock('@sendgrid/mail', () => ({ setApiKey: jest.fn(), send: jest.fn() }));
 jest.mock('../db/queries/emailQueue', () => ({ enqueueEmail: jest.fn() }));
 jest.mock('../db/client', () => ({ __esModule: true, default: { query: jest.fn() } }));
 jest.mock('../config/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() } }));
+jest.mock('../supabaseClient', () => ({ supabase: {}, supabaseAdmin: { auth: { admin: { getUserById: jest.fn() } } } }));
+
+/** The Supabase Auth identities that exist, by id. */
+const IDENTITIES: Record<string, string> = { u1: 'one@example.test', u2: 'two@example.test', u9: 'someone-else@example.test' };
 
 type Mods = {
   sgMail: { send: jest.Mock };
   queue: { enqueueEmail: jest.Mock };
   pool: { query: jest.Mock };
   logger: { error: jest.Mock; warn: jest.Mock };
+  auth: { getUserById: jest.Mock };
   emailService: typeof import('../services/emailService');
   welcome: typeof import('../services/welcomeEmail');
 };
@@ -33,9 +38,13 @@ function load(key: string | undefined): Mods {
       logger: require('../config/logger').logger,
       emailService: require('../services/emailService'),
       welcome: require('../services/welcomeEmail'),
+      auth: require('../supabaseClient').supabaseAdmin.auth.admin,
     };
     /* eslint-enable @typescript-eslint/no-var-requires */
   });
+  mods.auth.getUserById.mockImplementation(async (id: string) => (IDENTITIES[id]
+    ? { data: { user: { id, email: IDENTITIES[id] } }, error: null }
+    : { data: { user: null }, error: { message: 'User not found', status: 404 } }));
   if (saved === undefined) delete process.env.SENDGRID_API_KEY; else process.env.SENDGRID_API_KEY = saved;
   return mods;
 }
@@ -73,8 +82,8 @@ describe('sendEmail says what became of the email', () => {
 
 describe('sendWelcomeEmails names the addresses that did not go', () => {
   const people = [
-    { email: 'one@example.test', name: 'One', role: 'parent' },
-    { email: 'two@example.test', name: 'Two', role: 'parent' },
+    { userId: 'u1', email: 'one@example.test', name: 'One', role: 'parent' },
+    { userId: 'u2', email: 'two@example.test', name: 'Two', role: 'parent' },
   ];
 
   it("'sent' only when SendGrid accepts every one", async () => {
@@ -83,6 +92,8 @@ describe('sendWelcomeEmails names the addresses that did not go', () => {
     m.sgMail.send.mockResolvedValue([{ statusCode: 202 }]);
     await expect(m.welcome.sendWelcomeEmails('school', people, 'Welcome')).resolves.toEqual({ outcome: 'sent', not_sent: [] });
     expect(m.sgMail.send).toHaveBeenCalledTimes(2);
+    // Each account's login was checked before it was mailed.
+    expect(m.auth.getUserById.mock.calls.map(([id]) => id).sort()).toEqual(['u1', 'u2']);
     expect(m.logger.error).not.toHaveBeenCalledWith('welcome_email_failed', expect.anything());
   });
 
@@ -122,6 +133,46 @@ describe('sendWelcomeEmails names the addresses that did not go', () => {
     const m = load('placeholder-not-a-key');
     await expect(m.welcome.sendWelcomeEmails('school', [], 'Welcome')).resolves.toEqual({ outcome: 'none', not_sent: [] });
     expect(m.sgMail.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('an account that cannot sign in is never told to use Forgot password', () => {
+  // Forgot password answers the same 200 for every address (Round 24), so an account with no Supabase
+  // Auth identity told to use it would get a success message and no email, every time, and nothing
+  // would log it. The welcome path refuses instead, names the address, and raises an alert.
+  const people = [
+    { userId: 'u1', email: 'one@example.test', name: 'One', role: 'parent' },
+    { userId: 'u2', email: 'two@example.test', name: 'Two', role: 'parent' },
+  ];
+  const ready = () => { const m = load('placeholder-not-a-key'); m.pool.query.mockResolvedValue({ rows: [{ name: 'Test School' }] }); m.sgMail.send.mockResolvedValue([{ statusCode: 202 }]); return m; };
+
+  it('does not mail an account with no Auth identity, names it, and raises account_cannot_sign_in', async () => {
+    const m = ready();
+    const noLogin = { userId: 'u3', email: 'three@example.test', name: 'Three', role: 'parent' };
+    await expect(m.welcome.sendWelcomeEmails('school', [people[0], noLogin], 'Welcome'))
+      .resolves.toEqual({ outcome: 'partly_sent', not_sent: ['three@example.test'] });
+    expect(m.sgMail.send.mock.calls.map(([msg]) => msg.to)).toEqual(['one@example.test']);
+    expect(m.logger.error).toHaveBeenCalledWith('welcome_email_no_login', expect.objectContaining({ not_sent: 1, of: 2 }));
+    expect(m.logger.error).not.toHaveBeenCalledWith('welcome_email_failed', expect.anything());
+  });
+
+  it('does not mail an account whose Auth identity holds a different address', async () => {
+    const m = ready();
+    const mismatched = { userId: 'u9', email: 'four@example.test', name: 'Four', role: 'parent' };
+    await expect(m.welcome.sendWelcomeEmails('school', [mismatched], 'Welcome'))
+      .resolves.toEqual({ outcome: 'not_sent', not_sent: ['four@example.test'] });
+    expect(m.sgMail.send).not.toHaveBeenCalled();
+    expect(m.logger.error).toHaveBeenCalledWith('welcome_email_no_login', expect.objectContaining({ not_sent: 1, of: 1 }));
+  });
+
+  it('does not mail what it could not check, and says the check failed', async () => {
+    const m = ready();
+    m.auth.getUserById.mockRejectedValue(new Error('other side closed'));
+    await expect(m.welcome.sendWelcomeEmails('school', people, 'Welcome'))
+      .resolves.toEqual({ outcome: 'not_sent', not_sent: ['one@example.test', 'two@example.test'] });
+    expect(m.sgMail.send).not.toHaveBeenCalled();
+    expect(m.logger.error).toHaveBeenCalledWith('welcome_email_failed', expect.objectContaining({ stage: 'verify', not_sent: 2, error: 'other side closed' }));
+    expect(m.logger.error).not.toHaveBeenCalledWith('welcome_email_no_login', expect.anything());
   });
 });
 

@@ -319,6 +319,20 @@ Monorepo, npm workspaces:
   `'sent' | 'queued' | 'lost' | 'disabled'`. Anything that tells a person an email went reads that
   value, never the absence of an error. `email_queue` keeps the body of every refused email, so
   never put a password in an email body.
+- **"Use Forgot password" is only true for an account with a Supabase Auth identity** (same id, same
+  address).
+  - **Why it matters.** Forgot password answers 200 for every address (Round 24), so an account
+    without an identity gets a success message and no email, every time, with nothing logged,
+    because nothing failed. The silent-catch ratchet cannot see that.
+  - **Who creates the identity.** Every path that sends the welcome email creates it first:
+    `createAuthAccountFor` inside `registerStudent`, and `createUser` in add-parent and staff bulk
+    import.
+  - **The check.** `sendWelcomeEmails` confirms it with `getUserById` through the Auth admin API,
+    because the C-4a app role cannot read `auth.users`. An account without one is not mailed, is
+    named as not sent, and raises `account_cannot_sign_in`. So a recipient carries its `userId`.
+  - **What `users` counts.** Production holds 239 `users` rows and 7 Auth identities, because the
+    fixtures never had logins. `users` is not a count of people who can sign in
+    (`docs/AUDIT-2026-09.md`, L-test-data).
 - **`email_queue` keeps a row for 7 days, whatever its status** (`EMAIL_QUEUE_RETENTION_DAYS`; the
   daily `email-queue-retention` job, 03:15 Lagos). Before 2 Oct 2026 nothing deleted one. 1,954
   welcome emails with a password sat there for up to 104 days, and 1,958 of 1,993 rows had lost
@@ -762,7 +776,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 34 suites, 339 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 34 suites, 340 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

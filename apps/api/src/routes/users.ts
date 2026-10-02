@@ -24,7 +24,7 @@ import { parseStaffBulkImportFile, StaffBulkImportParseError } from '../services
 import { runFullStaffValidation, STAFF_ROLES } from '../services/staffBulkImportValidation';
 import { generateStaffBulkImportResultsFile, type CreatedStaffRecord, type FailedStaffRecord } from '../services/staffBulkImportResults';
 import { logger } from '../config/logger';
-import { sendWelcomeEmails } from '../services/welcomeEmail';
+import { sendWelcomeEmails, type WelcomeRecipient } from '../services/welcomeEmail';
 import { cache, schoolCacheKey } from '../services/cacheService';
 
 const router = Router();
@@ -660,6 +660,7 @@ router.post(
 
       const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string }> = [];
       const createdStaff: CreatedStaffRecord[] = [];
+      const staffRecipients: WelcomeRecipient[] = [];
       const failedStaff: FailedStaffRecord[] = [];
 
       // Each row now gets its own password, so the hash cannot be computed once up
@@ -726,6 +727,7 @@ router.post(
         // exists.
         results.push({ row_number: staff.row_number, status: 'created' });
         createdStaff.push({ row_number: staff.row_number, first_name: staff.first_name, last_name: staff.last_name, email: staff.email, role });
+        staffRecipients.push({ userId: insertedUser.id, email: staff.email, name: `${staff.first_name} ${staff.last_name}`, role });
 
         try {
           await logAudit({
@@ -749,7 +751,7 @@ router.post(
       // Welcome emails with no credential in them (item H2); the response says whether they went.
       const welcomeEmails = await sendWelcomeEmails(
         req.params.schoolId,
-        createdStaff.map(st => ({ email: st.email, name: `${st.first_name} ${st.last_name}`, role: st.role })),
+        staffRecipients,
         'Welcome to Chronix Edu — Your Staff Account is Ready',
         { introVerb: 'added' },
       );

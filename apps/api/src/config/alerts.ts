@@ -127,6 +127,12 @@ export const ALERTS = {
     events: ['welcome_email_failed'],
     fields: ['stage', 'error', 'outcome', 'not_sent', 'of', 'outcomes'],
   },
+  account_cannot_sign_in: {
+    why: 'A new account has no Supabase Auth login: it can never sign in, and Forgot password answers 200 and sends nothing, so nobody else would ever notice',
+    level: 'error',
+    events: ['welcome_email_no_login'],
+    fields: ['not_sent', 'of'],
+  },
   auth_account_left_behind: {
     why: "A deleted platform admin's Supabase Auth account could not be deleted: the local lockout blocks login, but the identity remains",
     level: 'error',

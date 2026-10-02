@@ -1,4 +1,5 @@
 import pool from '../db/client';
+import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from './emailService';
 import { logger } from '../config/logger';
 
@@ -68,6 +69,30 @@ export interface WelcomeEmailReport {
 
 const WELCOME_EMAIL_BATCH_SIZE = 50;
 
+/** A new account to welcome. `userId` is its `users.id`, which is also its Supabase Auth id. */
+export interface WelcomeRecipient { userId: string; email: string; name: string; role: string }
+
+/**
+ * Whether this account can sign in: Supabase Auth holds an identity with its id AND its address.
+ * Signing in (`signInWithPassword`, then the local row by that id) and Forgot password both need it.
+ * The welcome email's whole instruction is "use Forgot password", and Forgot password answers the
+ * same 200 for every address (Round 24). So an account without an identity would be told to reset a
+ * password that does not exist, get a success message and no email every time, and nothing would
+ * log it, because nothing failed. Every path that mails today creates the identity first; this is the
+ * check that keeps a future one honest. Asked through the Auth admin API, the authority itself, not
+ * by reading `auth.users`, which the C-4a app role cannot see.
+ */
+async function signInCheck(r: WelcomeRecipient): Promise<{ state: 'yes' | 'no' | 'unknown'; error?: string }> {
+  try {
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(r.userId);
+    if (data?.user) return { state: (data.user.email ?? '').toLowerCase() === r.email.toLowerCase() ? 'yes' : 'no' };
+    if (error && ((error as { status?: number }).status === 404 || /not found/i.test(error.message))) return { state: 'no' };
+    return { state: 'unknown', error: error?.message ?? 'no user and no error' };
+  } catch (err) {
+    return { state: 'unknown', error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /**
  * Sends the welcome email to each new account and says what happened, so the response tells the
  * operator what the logs and alerts know:
@@ -83,7 +108,7 @@ const WELCOME_EMAIL_BATCH_SIZE = 50;
  */
 export async function sendWelcomeEmails(
   schoolId: string,
-  recipients: Array<{ email: string; name: string; role: string }>,
+  recipients: WelcomeRecipient[],
   subject: string,
   opts: { introVerb?: 'registered' | 'added'; extraLine?: string } = {}
 ): Promise<WelcomeEmailReport> {
@@ -103,8 +128,20 @@ export async function sendWelcomeEmails(
   const appUrl = (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
   const notSent: string[] = [];
   const outcomes: Record<string, number> = {};
+  let noLogin = 0;
+  let unverified = 0;
+  let verifyError = '';
   for (let i = 0; i < recipients.length; i += WELCOME_EMAIL_BATCH_SIZE) {
-    const batch = recipients.slice(i, i + WELCOME_EMAIL_BATCH_SIZE);
+    const candidates = recipients.slice(i, i + WELCOME_EMAIL_BATCH_SIZE);
+    // An account that cannot sign in is never told to use Forgot password; it is named as not sent.
+    const checks = await Promise.all(candidates.map(signInCheck));
+    const batch = candidates.filter((r, n) => {
+      if (checks[n].state === 'yes') return true;
+      notSent.push(r.email);
+      if (checks[n].state === 'no') noLogin += 1;
+      else { unverified += 1; verifyError = checks[n].error ?? verifyError; }
+      return false;
+    });
     const results = await Promise.all(batch.map(r => sendEmail(
       r.email,
       subject,
@@ -124,6 +161,9 @@ export async function sendWelcomeEmails(
   }
   if (notSent.length === 0) return { outcome: 'sent', not_sent: [] };
   // Counts only: the addresses are already in sendgrid_email_failed, which is not forwarded.
-  logger.error('welcome_email_failed', { school_id: schoolId, stage: 'send', not_sent: notSent.length, of: recipients.length, outcomes: JSON.stringify(outcomes) });
+  if (noLogin) logger.error('welcome_email_no_login', { school_id: schoolId, not_sent: noLogin, of: recipients.length });
+  if (unverified) logger.error('welcome_email_failed', { school_id: schoolId, stage: 'verify', not_sent: unverified, of: recipients.length, error: verifyError });
+  const refused = notSent.length - noLogin - unverified;
+  if (refused) logger.error('welcome_email_failed', { school_id: schoolId, stage: 'send', not_sent: refused, of: recipients.length, outcomes: JSON.stringify(outcomes) });
   return { outcome: notSent.length === recipients.length ? 'not_sent' : 'partly_sent', not_sent: notSent };
 }

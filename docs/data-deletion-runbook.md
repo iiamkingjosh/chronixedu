@@ -278,7 +278,7 @@ before a real school depends on it.
 |---|---|---|---|---|
 | `f5094c7f` | 4 | 1 | 1 | deleted |
 | `dc8ede9c` | 64 | 2 | 4 | deleted |
-| `cc6e5fae` | 109 | 2 | 4 | **not run**: the session's safety check refused it; left for Moses |
+| `cc6e5fae` | 109 | 2 | 4 | **not run**: the session's safety check refused it. Moses will run it himself, the first run from a human's hands. Its 2 queued emails went in the queue purge. |
 
 For each deleted school:
 1. **Steps 1–2.** There were no `platform_subscriptions` rows. The schools were not suspended:

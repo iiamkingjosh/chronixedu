@@ -30,7 +30,7 @@ import { runFullValidation } from '../services/bulkImportValidation';
 import { generateBulkImportResultsFile, type CreatedStudentRecord, type CreatedParentRecord } from '../services/bulkImportResults';
 import pool from '../db/client';
 import { logger } from '../config/logger';
-import { sendWelcomeEmails } from '../services/welcomeEmail';
+import { sendWelcomeEmails, type WelcomeRecipient } from '../services/welcomeEmail';
 import { cache, schoolCacheKey } from '../services/cacheService';
 
 async function checkParentStudentLink(parentId: string, studentId: string, schoolId: string): Promise<boolean> {
@@ -191,7 +191,7 @@ router.post(
         req.params.schoolId,
         result.new_parents.map(p => {
           const parent = parentsWithHashes.find(ph => ph.email === p.email);
-          return { email: p.email, name: parent ? `${parent.first_name} ${parent.last_name}` : p.email, role: 'parent' };
+          return { userId: p.user_id, email: p.email, name: parent ? `${parent.first_name} ${parent.last_name}` : p.email, role: 'parent' };
         }),
         PARENT_WELCOME_SUBJECT,
         { extraLine: PARENT_PORTAL_LINE },
@@ -394,6 +394,7 @@ router.post(
       const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string; admission_no?: string }> = [];
       const createdStudents: CreatedStudentRecord[] = [];
       const allNewParents: CreatedParentRecord[] = [];
+      const parentRecipients: WelcomeRecipient[] = [];
 
       for (const row of revalidated) {
         if (row.status === 'error') {
@@ -459,6 +460,7 @@ router.post(
               last_name: source?.last_name ?? '',
               email: p.email,
             });
+            parentRecipients.push({ userId: p.user_id, email: p.email, name: `${source?.first_name ?? ''} ${source?.last_name ?? ''}`.trim() || p.email, role: 'parent' });
           }
         } catch (err: unknown) {
           const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
@@ -474,7 +476,7 @@ router.post(
 
       const welcomeEmails = await sendWelcomeEmails(
         req.params.schoolId,
-        allNewParents.map(p => ({ email: p.email, name: `${p.first_name} ${p.last_name}`, role: 'parent' })),
+        parentRecipients,
         PARENT_WELCOME_SUBJECT,
         { extraLine: PARENT_PORTAL_LINE },
       );
@@ -1009,7 +1011,7 @@ router.post(
       // response says whether it went.
       const welcomeEmail = (await sendWelcomeEmails(
         schoolId,
-        isNewAccount ? [{ email, name: `${first_name} ${last_name}`, role: 'parent' }] : [],
+        isNewAccount ? [{ userId: parentUserId, email, name: `${first_name} ${last_name}`, role: 'parent' }] : [],
         PARENT_WELCOME_SUBJECT,
         { extraLine: PARENT_PORTAL_LINE },
       )).outcome;

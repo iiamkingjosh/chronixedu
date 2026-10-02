@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 29 — 2026-10-01  
 **Scope:** Welcome emails for new staff and parents: a password in the body, "sent" for mail that did not go, and the old ones still queued  
-**Round 29 total findings:** 3 (0 Critical · 0 High · 1 Medium · 2 Low) — all remediated
+**Round 29 total findings:** 4 (0 Critical · 0 High · 1 Medium · 2 Low · 1 Info) — all closed
 
 ---
 
@@ -59,12 +59,14 @@
 - 1,954 had a `Password:` line in the body: 1,851 `failed` and 103 `sent`, dated 19 Jun – 17 Sep 2026. Each was to a different address: 1,761 `test.com`, 191 `example.com`, 2 `gmail.com`.
 - **Two real Gmail addresses, not one.** The first draft of this finding named one.
   - `jo****@gmail.com` (8 Aug) is the Chronix High School principal. The queued email predates the current account by a day, and the password has since been changed, so it is dead.
-  - `te****@gmail.com` (5 Jul) has no account. The credential died with the account. It is Moses's own test address (his reply, 2 Oct).
-- **The 5 fixture parents could not sign in at all.** This was corrected twice:
-  - The first draft said their passwords "would still sign in".
-  - The reviewer narrowed that to "reaches the change-password screen", because all 5 still had `must_change_password`.
-  - Both overstate it. None of the 5 has a Supabase Auth identity, by id or by address, and login is Supabase `signInWithPassword`. Their `users` rows date from 31 Aug, before bulk import created login identities.
-  - They sat in three demo schools that share one name, "Bulk Import Commit Test School". Six schools carried that name.
+  - `te****@gmail.com` (5 Jul) has no account. The credential died with the account. Moses confirmed it is his own test address (2 Oct).
+- **The 5 fixture parents could not sign in at all.** This was corrected twice, and both errors had one root:
+  - The first draft said their passwords "would still sign in". The reviewer narrowed that to "reaches the change-password screen", because all 5 still had `must_change_password`.
+  - Both readings came from `public.users`. Login is Supabase `signInWithPassword`, which resolves against `auth.users`, and neither of us had queried it.
+  - None of the 5 has an identity there, by id or by address. Their `users` rows date from 31 Aug, before bulk import created login identities.
+  - "One demo school" came from the same habit. Grouping by `DISTINCT s.name` collapsed six schools into one label; the 5 sat in three of the six schools named "Bulk Import Commit Test School".
+  - The root, in the reviewer's words: concluding from the table at hand rather than the one that governs the behaviour.
+  - It is wider than the 5. Production holds 239 `users` rows and 7 Auth identities, so 232 accounts cannot authenticate at all. The four remaining "Bulk Import Commit Test School" schools hold 121 users, and none of them has an identity (`docs/AUDIT-2026-09.md`, L-test-data).
 - So no working credential was exposed. The table is readable only with the service role or as the table owner.
 
 **The mechanism.**
@@ -90,6 +92,26 @@
 - The job is registered at `15 3 * * *`.
 
 All three fail on the pre-change code.
+
+### I-01 — "Use Forgot password" relied on an Auth identity that nothing checked ✅ Guarded
+
+**Raised by the reviewer**, who checked the obvious worry first. H2's email tells a bulk-imported parent to use Forgot password: does that parent have a login? Yes. Every path that sends the email creates the Supabase Auth identity first: `createAuthAccountFor` inside `registerStudent`, and `createUser` in add-parent and staff bulk import. So there was no defect.
+
+**The coupling was load-bearing and unrecorded.** A future path could create a `users` row without an identity and still send the email:
+- The person would be told to reset a password that does not exist.
+- Forgot password answers the same 200 for every address (Round 24), so they would get a success message and no email, every time.
+- Nothing would log it, because nothing failed. Round 28's silent-catch ratchet cannot see it either: there is no error to swallow.
+
+**The guard.** `sendWelcomeEmails` asks Supabase Auth whether each recipient has an identity with its id and its address.
+- It uses `getUserById` through the admin API, because the C-4a app role cannot read `auth.users`.
+- A recipient without an identity is not mailed, is named in `not_sent`, and raises a new alert, `account_cannot_sign_in`, with counts only.
+- If the check itself cannot complete, nothing is sent either, and `welcome_email_failed` is logged at stage `verify`.
+- Each recipient now carries its `userId`, and `registerStudent` returns the new parents' ids for it.
+
+**Tests:**
+- `welcomeEmailNoCredential.db.test.ts`: add-parent where the account is created without an identity. It answers 201, the account exists, `welcome_email` is `'not_sent'`, no email goes, and exactly one `welcome_email_no_login` is logged. The neighbouring test, with an identity, sends: that is the control.
+- `welcomeEmailOutcome.test.ts` (3 new): no identity; an identity holding a different address; the check failing. The "all sent" test now also asserts that each login was checked.
+- All five fail against the pre-change welcome service.
 
 **Tests (M-01, L-01):**
 - `welcomeEmailNoCredential.db.test.ts` (new, 12 tests).

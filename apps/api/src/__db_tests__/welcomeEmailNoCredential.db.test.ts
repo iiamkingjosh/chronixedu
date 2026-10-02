@@ -21,14 +21,23 @@ import { buildApp, seed, tokens, IDS as I, pool } from './helpers';
 import { logger } from '../config/logger';
 
 const issuedPasswords = new Map<string, string>();
+// The Auth identities that exist (id -> address), as the welcome path's sign-in check sees them.
+const identities = new Map<string, string>();
+// Addresses whose account is created WITHOUT an identity: a path that skips createAuthAccountFor.
+const loseIdentityFor = new Set<string>();
 jest.mock('../supabaseClient', () => ({
   supabase: {},
   supabaseAdmin: { auth: { admin: {
     createUser: jest.fn(async ({ email, password }: { email: string; password: string }) => {
       issuedPasswords.set(email, password);
       // eslint-disable-next-line @typescript-eslint/no-var-requires
-      return { data: { user: { id: require('crypto').randomUUID() } }, error: null };
+      const id: string = require('crypto').randomUUID();
+      if (!loseIdentityFor.has(email)) identities.set(id, email);
+      return { data: { user: { id } }, error: null };
     }),
+    getUserById: jest.fn(async (id: string) => (identities.has(id)
+      ? { data: { user: { id, email: identities.get(id) } }, error: null }
+      : { data: { user: null }, error: { message: 'User not found', status: 404 } })),
   } } },
 }));
 jest.mock('../services/emailService', () => ({
@@ -75,6 +84,8 @@ const userCount = async (email: string) =>
 beforeEach(async () => {
   await seed();
   issuedPasswords.clear();
+  identities.clear();
+  loseIdentityFor.clear();
   (emailService.sendEmail as jest.Mock).mockReset().mockImplementation(async () => 'sent');
   (emailService.isEmailConfigured as jest.Mock).mockImplementation(() => true);
 });
@@ -135,6 +146,24 @@ describe('adding a parent to a student: the address is typed twice', () => {
     expect(mails.map(m => m.to)).toEqual([email]);
     expectNoCredentialIn(mails);
     expect(mails[0].body).not.toContain(res.body.data.temp_password);
+  });
+
+  it('refuses to tell an account with no Auth login to use Forgot password, and raises the alert', async () => {
+    // A path that creates the users row but not the Supabase Auth identity. Forgot password answers
+    // the same 200 for every address (Round 24), so that person would get a success message and no
+    // email, every time, and nothing would log it. The welcome path refuses rather than sends.
+    const email = `guardian-${randomUUID()}@example.test`;
+    loseIdentityFor.add(email);
+    const error = jest.spyOn(logger, 'error');
+    const res = await add(parent(email, email));
+    expect(res.status).toBe(201);
+    expect(await userCount(email)).toBe(1);
+    expect(res.body.data.welcome_email).toBe('not_sent');
+    expect(sent()).toEqual([]);
+    const calls = error.mock.calls as unknown as Array<[string, Record<string, unknown>]>;
+    expect(calls.filter(([event]) => event === 'welcome_email_no_login'))
+      .toEqual([['welcome_email_no_login', expect.objectContaining({ not_sent: 1, of: 1 })]]);
+    error.mockRestore();
   });
 
   it('refuses when the two entries differ, and creates nothing', async () => {

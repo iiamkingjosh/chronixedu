@@ -83,7 +83,7 @@ export interface RegistrationResult {
   admission_no: string;
   temp_password: string;
   enrollment: { class_id: string; session_id: string } | null;
-  new_parents: Array<{ email: string; temp_password: string }>;
+  new_parents: Array<{ user_id: string; email: string; temp_password: string }>;
 }
 
 /**
@@ -198,7 +198,7 @@ export async function registerStudent(
     const student = studentResult.rows[0];
 
     // Handle parents — find existing account by email or create new
-    const newParents: Array<{ email: string; temp_password: string }> = [];
+    const newParents: Array<{ user_id: string; email: string; temp_password: string }> = [];
 
     for (const parent of parents) {
       const existingUser = await client.query<{ id: string }>(
@@ -223,7 +223,7 @@ export async function registerStudent(
           [authId, schoolId, parent.email, parent.passwordHash, parent.first_name, parent.last_name, parent.phone ?? null]
         );
         parentUserId = newUser.rows[0].id;
-        newParents.push({ email: parent.email, temp_password: parent.tempPassword });
+        newParents.push({ user_id: parentUserId, email: parent.email, temp_password: parent.tempPassword });
       }
 
       await client.query(
