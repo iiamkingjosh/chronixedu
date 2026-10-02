@@ -1,5 +1,10 @@
 # Chronix Edu — Changelog
 
+## Signing in again waits for one round trip less (2026-10-02)
+
+### For schools
+- Before every request to the server, the browser first asks whether the request is allowed. It used to forget the answer after 5 seconds, so every sign-in and most pages waited for that extra exchange. It now remembers it for 2 hours. The first visit of the day still makes it once.
+
 ## Failed emails are no longer kept forever (2026-10-02)
 
 ### For Chronix administrators

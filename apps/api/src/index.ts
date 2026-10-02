@@ -50,6 +50,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
 import { validateEnv } from './config/env';
 import { logger } from './config/logger';
+import { corsOptions } from './config/cors';
 
 const env = validateEnv();
 
@@ -102,16 +103,7 @@ app.use(helmet({
     },
   },
 }));
-app.use(cors({
-  origin: (origin, cb) => {
-    // Disallowed origins get cb(null, false) — cors omits the Allow-Origin header
-    // so browsers block the response, without throwing into a 500 that would
-    // otherwise echo the rejected origin back in the error body.
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(null, false);
-  },
-  credentials: true,
-}));
+app.use(cors(corsOptions(allowedOrigins)));
 app.use(express.json({
   limit: '2mb',
   verify: (req, _res, buf) => {

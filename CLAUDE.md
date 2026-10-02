@@ -192,6 +192,19 @@ Monorepo, npm workspaces:
   (SECURITY.md Round 18). Rate-limit keys, lockout keys and the audit `ip_address` column all
   go through `clientIp`. A new `req.ip` reader is a regression; `audit_logs.ip_address` rows
   before 30 Sep 2026 hold proxy addresses.
+- **The API is a second origin, so every JSON request preflights.** `edu.` and
+  `api.chronixtechnology.com` are different origins, and a JSON POST is not a simple request.
+  - **The cache:** `config/cors.ts` sends `Access-Control-Max-Age: 7200`, which is Chrome's cap.
+  - **What it fixed:** without the header, Chrome re-asked every 5 seconds, and the preflight was the
+    0.9–2.9 s of "Queueing" in the sign-in baseline. Measured 2 Oct 2026: 2,319 ms cold, 376 ms on a
+    warm connection, 1 ms cached.
+  - **The cost:** a tightened `CORS_ORIGIN` takes up to 2 hours to reach browsers that have already
+    cached a preflight.
+  - **Serving the API under `edu.chronixtechnology.com/api/*` would delete the preflight, and is
+    deliberately not done.** It puts a proxy in front of the API, which changes what arrives as the
+    client address. The rate limits, the login lockout and `audit_logs.ip_address` all key on that
+    address through `clientIp`, and all three would keep working while keying on the wrong value.
+    If it is ever done, redo Round 18's measurement first, before the change.
 - **Redis is best-effort on the request path** (SECURITY.md Round 19, decided: fail open).
   The shared client has `commandTimeout: 500`; every read or write of a limit, lockout or
   cache goes through `bestEffort(event, op)` in `middleware/rateLimit.ts`, which logs and
