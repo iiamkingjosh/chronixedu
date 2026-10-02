@@ -284,7 +284,11 @@ For each deleted school:
 1. **Steps 1–2.** There were no `platform_subscriptions` rows. The schools were not suspended:
    fixtures receive no writes, and the in-transaction zero check covers one that lands anyway.
 2. **Control, before anything changed.** An independent scanner, which does not use the script or
-   its table list, recorded the school's user ids and found the school: 15 and 226 rows.
+   its table list, recorded the school's user ids and found the school: 8 and 131 rows, the same
+   per-table counts as the dry run (`email_queue` aside, which it checks by address). Corrected
+   2 Oct: this first said "15 and 226 rows", which were column matches. A row naming the school
+   in two columns, such as `users.id` and `users.school_id`, was counted twice. Zero afterwards
+   is unaffected.
 3. **Dry run.** It named the school and matched the scan. It listed 4 and 64 Auth accounts, which
    did not exist: these fixtures never had login identities, and the script treats "not found" as
    already gone.
