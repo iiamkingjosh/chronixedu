@@ -750,13 +750,17 @@ Monorepo, npm workspaces:
   048's first draft failed that way.
 - **Regions: the API, web, Redis and the database belong on one continent** (measured 2 Oct 2026).
   - **Where everything is.** Supabase Postgres and its pooler are in `eu-west-1` (Ireland). All
-    three Railway services (API, web, Redis) run in `sfo` (US West) until the move to EU West
-    (Amsterdam, `europe-west4-drams3a`); Moses makes the change in the dashboard. Lagos traffic
-    enters at Cloudflare and Railway's `ams1` edge, both in Amsterdam.
-  - **What that cost.** A request went Lagos → Amsterdam → San Francisco, and every query crossed
+    three Railway services (API, web, Redis) run in EU West (Amsterdam, `europe-west4-drams3a`)
+    since 2 Oct 2026; they were in `sfo` (US West). Lagos traffic enters at Cloudflare and Railway's
+    `ams1` edge, both in Amsterdam.
+  - **What `sfo` cost.** A request went Lagos → Amsterdam → San Francisco, and every query crossed
     back to Ireland. One database round trip was 153 ms (`GET /health` `dbLatencyMs`, a bare
     `SELECT 1` on a warm pool). A sign-in took 2,576 ms in the container (Railway `totalDuration`,
     four real sign-ins), about 17 round trips.
+  - **After the move (measured 2 Oct 2026):** `dbLatencyMs` 19 ms; `/health` 25–34 ms in the container
+    (was 156–161). A sign-in took 431 ms in the container (851 ms for the first after a deploy). The
+    first estimate had said 1–5 ms and 150–350 ms; it assumed a region next to Dublin, which Railway
+    does not have.
   - **Why EU West:** it sits next to both `eu-west-1` and the `ams1` edge. Being nearer Nigeria is
     not the reason. Railway has no Irish region, so an Amsterdam–Dublin round trip, typically
     15–25 ms, is the floor.

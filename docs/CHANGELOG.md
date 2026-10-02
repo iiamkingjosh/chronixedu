@@ -16,6 +16,11 @@
 - The amount a school pays is fixed the moment they start checkout, and a payment that comes back verified at a different amount is refused rather than accepted — so a price change or a stale page can't settle for the wrong figure.
 - A trial school and a cancelled subscription can't be charged — checkout refuses both before ever reaching Paystack.
 
+## Signing in takes about half a second instead of two and a half (2026-10-02)
+
+### For schools
+- The app now runs in Europe, beside its database. It used to run in California, so every step of signing in crossed the Atlantic twice. In the server, signing in now takes about 0.4 s, down from about 2.6 s, and every page's data loads faster for the same reason.
+
 ## A password-reset link that does not work now says why (2026-10-02)
 
 ### For schools
