@@ -14,6 +14,11 @@
  * Recognised but not usable here: PKCE's `?code=…`. It needs a code verifier this page never holds.
  * If Supabase ever sends it, nobody can reset a password until this page is taught it, and the page
  * reports that.
+ *
+ * The messages say what happened and nothing about why: the person needs only that, and the
+ * "Request a new link" button beside each one. The cause stays distinct where it is useful, in what
+ * the page reports to the server (2 Oct 2026, after the first version explained token mechanics on
+ * screen).
  */
 
 export type ResetLanding =
@@ -26,20 +31,12 @@ export type ResetLanding =
 export type LandingOutcome = 'no_parameters' | 'supabase_error' | 'unsupported_format' | 'token_refused';
 
 export const MESSAGES = {
-  usedOrExpired:
-    'This reset link has already been used or has expired. Each link works once, for a limited time. ' +
-    'Some email services open links to check them, which can use a link up before you click it. Request a new link below.',
-  unsupportedFormat:
-    'This reset link arrived in a form this page cannot read. Your link is not at fault. ' +
-    'Please contact your school administrator or Chronix support, and request a new link below in case it works.',
-  noParameters:
-    'This page needs the link from your password-reset email, and none came with it. ' +
-    'If you did click the link in the email, it may have been changed on the way. Request a new link below.',
-  sessionExpired:
-    'This reset link has expired: it stays valid for a limited time after you open it. Request a new link below.',
-  noAccount:
-    'Your login was recognised, but no Chronix Edu account is attached to it. This is a problem on our side, not with your link. ' +
-    'Please contact your school administrator.',
+  usedOrExpired: 'This link has already been used, or it has expired.',
+  otherSupabaseError: 'This link could not be used.',
+  unsupportedFormat: 'This link could not be read. Please request a new one.',
+  noParameters: 'This page needs the link from your password-reset email.',
+  sessionExpired: 'This link has expired.',
+  noAccount: 'Your sign-in has no Chronix Edu account. Please contact your school administrator.',
 } as const;
 
 const params = (s: string) => new URLSearchParams(s.replace(/^[#?]/, ''));
@@ -57,13 +54,8 @@ export function readResetLanding(search: string, hash: string): ResetLanding {
   for (const p of [fragment, query]) {
     if (p.get('error') || p.get('error_code')) {
       const errorCode = p.get('error_code');
-      if (errorCode === 'otp_expired') return { kind: 'supabase_error', errorCode, message: MESSAGES.usedOrExpired };
-      const description = p.get('error_description') ?? p.get('error') ?? 'an unknown error';
-      return {
-        kind: 'supabase_error',
-        errorCode,
-        message: `The reset service did not accept this link: "${description}". Request a new link below.`,
-      };
+      // Supabase's code goes to the server with the report; its description is not for the person.
+      return { kind: 'supabase_error', errorCode, message: errorCode === 'otp_expired' ? MESSAGES.usedOrExpired : MESSAGES.otherSupabaseError };
     }
   }
 
@@ -79,7 +71,7 @@ export function confirmResetFailure(code: string | undefined, apiMessage: string
   if (code === 'INVALID_TOKEN') return { message: MESSAGES.sessionExpired, report: true };
   if (code === 'NO_APP_ACCOUNT') return { message: MESSAGES.noAccount, report: false };
   if (code === 'PASSWORD_UPDATE_FAILED') {
-    return { message: `Your new password was not accepted${apiMessage ? `: ${apiMessage}` : '.'} Please choose another.`, report: false };
+    return { message: `Your new password was not accepted${apiMessage ? `: ${apiMessage}` : '.'}`, report: false };
   }
   return { message: apiMessage ?? 'Could not reset your password. Please try again.', report: false };
 }

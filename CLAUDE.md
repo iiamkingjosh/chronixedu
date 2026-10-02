@@ -229,14 +229,18 @@ Monorepo, npm workspaces:
   - **The email.** Supabase sends it through custom SMTP (SendGrid, `no-reply@chronixtechnology.com`),
     with a custom template. Its link has the `{{ .ConfirmationURL }}` shape:
     `…supabase.co/auth/v1/verify?token&type=recovery&redirect_to=https://edu.chronixtechnology.com/reset-password`.
-  - **SendGrid click tracking is on, account-wide.** It wraps every link in `ct.sendgrid.net`, so
-    SendGrid sees every recovery token. A mail scanner that follows links can use a token up before
-    the person clicks.
+  - **SendGrid click tracking was on, account-wide, until 2 Oct 2026.** It wrapped every link in
+    `ct.sendgrid.net`, so SendGrid saw every recovery token, and a mail scanner following the tracking
+    link could use one up before the person clicked. Moses turned click and open tracking off; read
+    back through the API's key at 11:45 UTC. Whether Supabase's SMTP sends through that same account
+    shows only in a reset email: its link must not start `ct.sendgrid.net`. Keep tracking off.
   - **What arrives.** supabase-js defaults to the implicit flow, so a working link lands with
     `#access_token…&type=recovery`, and a used or expired one with
     `#error=access_denied&error_code=otp_expired`.
   - **The page.** `lib/resetLanding.ts` reads both shapes, plus PKCE's `?code=`, which it recognises
-    but cannot use (that needs a verifier the page never holds). Each cause gets its own message.
+    but cannot use (that needs a verifier the page never holds). Each cause gets its own message,
+    one short sentence saying what happened and never why: the "Request a new link" button carries
+    the next step, and the report to the server carries the cause.
   - **The report.** The page reports a landing it cannot use to `POST /api/auth/reset-landing`, with
     no address and no token. An unreadable link alerts (`password_reset_cannot_complete`), as does a
     login with no app account at confirm-reset (`NO_APP_ACCOUNT`). Routine failures are warnings.

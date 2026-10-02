@@ -631,11 +631,11 @@ export default function StudentRegistrationPage() {
                 ))}
               </ul>
               {credentials.welcome_email === 'sent' && (
-                <p className="text-xs text-green-700">Each parent/guardian has been emailed how to set their own password with Forgot password.</p>
+                <p className="text-xs text-green-700">Welcome email sent.</p>
               )}
               {(credentials.welcome_email === 'not_sent' || credentials.welcome_email === 'partly_sent') && (
                 <p className="text-xs font-semibold text-amber-700">
-                  The welcome email was NOT sent to {credentials.welcome_email_not_sent.join(', ')}. Hand them the credentials slip, or ask them to use Forgot password on the login page.
+                  Welcome email not sent to {credentials.welcome_email_not_sent.join(', ')}. Give them the credentials slip.
                 </p>
               )}
             </div>

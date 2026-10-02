@@ -136,7 +136,7 @@ export default function StaffBulkImportPage() {
             Download the import template (.xlsx)
           </a>
           <p className="text-xs text-gray-500">
-            Each new staff member is emailed that their account is ready and how to set their own password with Forgot password. The email carries no password, so check every address before you import.
+            Each new staff member is emailed when their account is ready. Check every address before you import.
           </p>
           <form onSubmit={handleUpload} className="space-y-4">
             <input
@@ -196,7 +196,7 @@ export default function StaffBulkImportPage() {
                 {preview.mailed_addresses.map(a => <li key={a}>{a}</li>)}
               </ul>
               <p className="text-xs text-gray-500">
-                Anyone who reads one of these mailboxes can set that account&apos;s password with Forgot password, so a mistyped address hands the account to a stranger.
+                A mistyped address gives the account to whoever owns that mailbox.
               </p>
               <label className="flex items-start gap-2 text-sm text-gray-800">
                 <input
@@ -238,13 +238,12 @@ export default function StaffBulkImportPage() {
         <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
           <p className="text-lg font-semibold text-gray-900">{commitResult.created} staff account(s) created</p>
           {commitResult.welcome_emails === 'sent' && (
-            <p className="text-sm text-green-700">Each new staff member has been emailed how to set their own password with Forgot password.</p>
+            <p className="text-sm text-green-700">Welcome emails sent.</p>
           )}
           {(commitResult.welcome_emails === 'not_sent' || commitResult.welcome_emails === 'partly_sent') && (
             <div className="text-sm text-amber-700">
               <p className="font-semibold">
-                {commitResult.welcome_emails === 'partly_sent' ? 'Some welcome emails were NOT sent.' : 'The welcome emails were NOT sent.'}{' '}
-                Tell these staff members to set their password with Forgot password on the login page:
+                Welcome email not sent to these staff. They can use Forgot password on the login page:
               </p>
               <ul className="font-mono mt-1">{commitResult.welcome_emails_not_sent.map(a => <li key={a}>{a}</li>)}</ul>
             </div>

@@ -226,7 +226,7 @@ export default function StudentBulkImportPage() {
                 {mailedAddresses.map(a => <li key={a}>{a}</li>)}
               </ul>
               <p className="text-xs text-gray-500">
-                Each address gets a welcome email saying the account is ready and how to set a password with Forgot password. Anyone who reads that mailbox can do so, so a mistyped address hands the account to a stranger.
+                A mistyped address gives the account to whoever owns that mailbox.
               </p>
               <label className="flex items-start gap-2 text-sm text-gray-800">
                 <input
@@ -271,13 +271,12 @@ export default function StudentBulkImportPage() {
             {commitResult.failed > 0 && <span className="text-red-600">, {commitResult.failed} failed</span>}
           </p>
           {commitResult.welcome_emails === 'sent' && (
-            <p className="text-sm text-green-700">Each new parent has been emailed how to set their own password with Forgot password.</p>
+            <p className="text-sm text-green-700">Welcome emails sent.</p>
           )}
           {(commitResult.welcome_emails === 'not_sent' || commitResult.welcome_emails === 'partly_sent') && (
             <div className="text-sm text-amber-700">
               <p className="font-semibold">
-                {commitResult.welcome_emails === 'partly_sent' ? 'Some welcome emails were NOT sent.' : 'The welcome emails were NOT sent.'}{' '}
-                Tell these parents to set their password with Forgot password on the login page:
+                Welcome email not sent to these parents. They can use Forgot password on the login page:
               </p>
               <ul className="font-mono mt-1">{commitResult.welcome_emails_not_sent.map(a => <li key={a}>{a}</li>)}</ul>
             </div>

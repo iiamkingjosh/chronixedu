@@ -200,7 +200,7 @@ function AddParentModal({ schoolId, studentId, onClose, onAdded }: {
             Primary contact
           </label>
         </div>
-        <p className="text-xs text-gray-500">If this email has no account yet, a new parent account will be created and temporary credentials returned. The parent is emailed how to set their own password; the email carries no password.</p>
+        <p className="text-xs text-gray-500">If this email has no account yet, a new parent account is created and emailed.</p>
         {apiError && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
             <p className="text-sm text-red-700">{apiError}</p>
@@ -597,10 +597,10 @@ export default function StudentProfilePage() {
                 : 'Linked to their existing account.'}
             </p>
             {newParentCredentials.welcome_email === 'sent' && (
-              <p className="text-xs text-green-700 mt-1">They have been emailed how to set their own password with Forgot password.</p>
+              <p className="text-xs text-green-700 mt-1">Welcome email sent.</p>
             )}
             {newParentCredentials.welcome_email === 'not_sent' && (
-              <p className="text-xs font-semibold text-amber-700 mt-1">The welcome email was NOT sent. Give them the credentials above, or ask them to use Forgot password on the login page.</p>
+              <p className="text-xs font-semibold text-amber-700 mt-1">Welcome email not sent. Give them the credentials above.</p>
             )}
             <button
               type="button"

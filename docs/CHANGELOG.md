@@ -16,6 +16,12 @@
 - The amount a school pays is fixed the moment they start checkout, and a payment that comes back verified at a different amount is refused rather than accepted — so a price change or a stale page can't settle for the wrong figure.
 - A trial school and a cancelled subscription can't be charged — checkout refuses both before ever reaching Paystack.
 
+## Shorter messages on the password-reset page and after adding people (2026-10-02)
+
+### For schools
+- When a password-reset link cannot be used, the page now says what happened in one short sentence, for example "This link has already been used, or it has expired." The "Request a new link" button is right there. The longer explanations are gone.
+- After adding parents or staff, the screen now says simply whether the welcome email was sent, and who to help if it was not.
+
 ## Signing in takes about half a second instead of two and a half (2026-10-02)
 
 ### For schools
