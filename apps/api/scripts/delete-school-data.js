@@ -78,6 +78,8 @@ const STEPS = [
   own('academic_sessions'),
   own('support_sessions'),
   own('onboarding_sessions'),
+  // References platform_subscriptions, so it goes first (child before parent).
+  own('platform_subscription_payments'),
   own('platform_subscriptions'),
   own('school_settings'),
   // Removed only through migration 048's function; a plain DELETE is refused by the trigger.

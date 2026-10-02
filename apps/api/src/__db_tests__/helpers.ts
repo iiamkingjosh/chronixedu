@@ -11,6 +11,7 @@ import scoresRoutes from '../routes/scores';
 import resultsRoutes from '../routes/results';
 import studentsRoutes from '../routes/students';
 import feesRoutes from '../routes/fees';
+import platformBillingRoutes from '../routes/platformBilling';
 import dashboardRoutes from '../routes/dashboard';
 import teacherDashboardRoutes from '../routes/teacherDashboard';
 import parentRoutes from '../routes/parent';
@@ -73,7 +74,7 @@ export function buildApp(): express.Express {
   const app = express();
   app.use(express.json());
   app.use('/api/schools', detectSupportSession, verifyToken, requirePasswordChanged, requireActiveSchool, requireWritableSubscription);
-  for (const r of [scoresRoutes, resultsRoutes, studentsRoutes, feesRoutes, dashboardRoutes, teacherDashboardRoutes, parentRoutes, studentRoutes, usersRoutes, sessionsRoutes, rosterRoutes, noticesRoutes, schoolsRoutes]) {
+  for (const r of [scoresRoutes, resultsRoutes, studentsRoutes, feesRoutes, platformBillingRoutes, dashboardRoutes, teacherDashboardRoutes, parentRoutes, studentRoutes, usersRoutes, sessionsRoutes, rosterRoutes, noticesRoutes, schoolsRoutes]) {
     app.use('/api/schools', r);
   }
   app.use(errorHandler);

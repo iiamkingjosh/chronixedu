@@ -118,6 +118,7 @@ export const ALERTS = {
       'audit_write_failed', 'behaviour_audit_write_failed', 'announcement_audit_write_failed',
       'payment_recorded_audit_log_failed', 'staff_bulk_import_user_create_audit_log_failed',
       'staff_bulk_import_summary_audit_log_failed', 'payment_bulk_import_summary_audit_log_failed',
+      'platform_billing_payment_audit_log_failed',
     ],
     fields: ['action', 'error', 'err'],
   },
@@ -145,6 +146,12 @@ export const ALERTS = {
     events: ['api_base_url_not_configured'],
     fields: [],
   },
+  platform_billing_amount_verification_failed: {
+    why: "A school's Paystack payment for its own Chronix subscription verified at a different amount than it was charged for at checkout — settlement was refused rather than trusted",
+    level: 'error',
+    events: ['platform_billing_amount_mismatch'],
+    fields: ['payment_id', 'expected_kobo', 'verified_kobo'],
+  },
 } as const satisfies Record<string, AlertSpec>;
 
 export type AlertName = keyof typeof ALERTS;
@@ -170,6 +177,7 @@ export const NOT_ALERTED: Record<string, string> = {
   payment_bulk_import_results_file_failed: 'As students_bulk_import_results_file_failed.',
   analytics_snapshot_failed: 'One school\'s analytics snapshot; nothing a school relies on today, and a whole failed run raises cron_failed.',
   onboarding_set_password_link_failed: 'The operator is on the onboarding screen when it happens, gets a 502 saying so, and nothing was activated; they retry.',
+  platform_billing_webhook_malformed: 'A per-request shape check (missing rawBody), same posture as an invalid Paystack signature just below it, which is not alerted either; a persistent instance shows as delivery failures on Paystack’s own dashboard first.',
 };
 
 /** A condition is sent at most once per this window per process; the next event says how many were held back. */

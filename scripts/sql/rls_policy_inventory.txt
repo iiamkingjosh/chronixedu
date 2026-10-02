@@ -67,6 +67,8 @@ platform_metrics_snapshots|platform_metrics_snapshots_super_admin|ALL|authentica
 platform_pricing_config|platform_pricing_config_super_admin|ALL|authenticated|Q=((auth.jwt() ->> 'role'::text) = 'super_admin'::text)|C=-
 platform_pricing_config|service_role_bypass|ALL|service_role|Q=true|C=true
 platform_subscriptions|platform_subscriptions_super_admin|ALL|authenticated|Q=((auth.jwt() ->> 'role'::text) = 'super_admin'::text)|C=-
+platform_subscription_payments|platform_subscription_payments_super_admin|ALL|authenticated|Q=((auth.jwt() ->> 'role'::text) = 'super_admin'::text)|C=-
+platform_subscription_payments|service_role_bypass|ALL|service_role|Q=true|C=true
 principal_remarks|principal_remarks_tenant|ALL|public|Q=(EXISTS ( SELECT 1 FROM students s WHERE ((s.id = principal_remarks.student_id) AND (s.school_id = ((auth.jwt() ->> 'school_id'::text))::uuid))))|C=-
 principal_remarks|service_role_bypass|ALL|service_role|Q=true|C=-
 report_cards|report_cards_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)

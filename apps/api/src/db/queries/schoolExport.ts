@@ -87,6 +87,7 @@ export const NOT_EXPORTED: Record<string, string> = {
   support_sessions: 'Chronix’s record of its own support access — Chronix’s audit, available on request.',
   onboarding_sessions: 'Chronix’s record of setting the school up.',
   platform_subscriptions: 'The commercial relationship between the school and Chronix, not school data; available from Chronix.',
+  platform_subscription_payments: 'The school’s payments to Chronix for its own subscription (migration 052) — the commercial relationship between the school and Chronix, same reasoning as platform_subscriptions; available from Chronix.',
   platform_audit_logs: 'Chronix’s audit of its own administrators’ actions.',
   platform_announcements: 'Platform-wide messages from Chronix to all schools.',
   platform_metrics_snapshots: 'Platform-wide aggregate figures; no single school’s data.',

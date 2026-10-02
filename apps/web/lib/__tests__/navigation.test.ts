@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 /**
- * The principal's sidebar: eleven daily links in four groups, and eleven settings links in
+ * The principal's sidebar: eleven daily links in four groups, and thirteen settings links in
  * three, behind one entry. Pins the structure, and the one property a plain equality check
  * cannot see — "Report Cards" beside "Report Card" was a wrong-click generator and is not a
  * duplicate to `===`. Labels are compared lowercased with a trailing "s" removed, which is
@@ -38,9 +38,9 @@ describe('the principal sidebar', () => {
     expect(PRINCIPAL_NAV_GROUPS.map((g) => g.items.length)).toEqual([2, 3, 3, 3]);
   });
 
-  it('keeps settings as twelve links in three groups', () => {
-    expect(SETTINGS_NAV).toHaveLength(12);
-    expect(SETTINGS_NAV_GROUPS.map((g) => g.items.length)).toEqual([6, 4, 2]);
+  it('keeps settings as thirteen links in three groups', () => {
+    expect(SETTINGS_NAV).toHaveLength(13);
+    expect(SETTINGS_NAV_GROUPS.map((g) => g.items.length)).toEqual([6, 4, 3]);
   });
 
   it('has no two labels naming the same thing, singular or plural, across both sections', () => {

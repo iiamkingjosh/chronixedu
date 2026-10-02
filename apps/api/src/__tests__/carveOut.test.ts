@@ -78,19 +78,27 @@ describe('a platform payment route cannot exist outside the read-only carve-out'
   });
 
   it('control: an uncarved checkout route IS caught', () => {
+    // A path shape not already in the real allowlist (which carries exactly one entry,
+    // POST .../platform-billing/checkout, since routes/platformBilling.ts shipped) — this
+    // demonstrates the walker catching a route the allowlist does NOT yet know about.
     const fake = express.Router();
-    fake.post('/:schoolId/platform-billing/checkout', (_req, res) => { res.end(); });
+    fake.post('/:schoolId/renew/offline', (_req, res) => { res.end(); });
     expect(uncarvedPaymentRoutes(writeRoutesOf(fake, 'routes/fake'))).toHaveLength(1);
   });
 
   it('control: the same route, carved out, is not', () => {
     const fake = express.Router();
-    fake.post('/:schoolId/platform-billing/checkout', (_req, res) => { res.end(); });
-    READ_ONLY_WRITE_ALLOWLIST.push({ method: 'POST', path: /^\/[0-9a-f-]{36}\/platform-billing\/checkout$/, why: 'test' });
+    fake.post('/:schoolId/renew/offline', (_req, res) => { res.end(); });
+    // Snapshot and restore rather than resetting to [] — the allowlist carries a real
+    // production entry since routes/platformBilling.ts shipped its checkout route, and
+    // this test must not erase it for the tests that run after it in this file.
+    const before = [...READ_ONLY_WRITE_ALLOWLIST];
+    READ_ONLY_WRITE_ALLOWLIST.push({ method: 'POST', path: /^\/[0-9a-f-]{36}\/renew\/offline$/, why: 'test' });
     try {
       expect(uncarvedPaymentRoutes(writeRoutesOf(fake, 'routes/fake'))).toEqual([]);
     } finally {
       READ_ONLY_WRITE_ALLOWLIST.length = 0;
+      READ_ONLY_WRITE_ALLOWLIST.push(...before);
     }
   });
 
@@ -101,8 +109,13 @@ describe('a platform payment route cannot exist outside the read-only carve-out'
   it('the naming contract does not accidentally claim an existing route (e.g. parent fee payments)', () => {
     // Parent → school fee payments are the school's income, deliberately OFF while read-only
     // (online_payments is one of the plan's extras). They must not match the platform
-    // pattern, or carving them out would reopen them.
-    expect(routes.filter(r => PLATFORM_PAYMENT_PATH.test(r.path))).toEqual([]);
+    // pattern, or carving them out would reopen them. The only real write route that SHOULD
+    // match is platform billing's own checkout route (routes/platformBilling.ts) — asserted
+    // by name here so a second, unintended match would fail this rather than pass silently.
+    const matching = routes.filter(r => PLATFORM_PAYMENT_PATH.test(r.path));
+    expect(matching).toEqual([
+      { file: 'routes/platformBilling', method: 'POST', path: '/:schoolId/platform-billing/checkout' },
+    ]);
     expect(PLATFORM_PAYMENT_PATH.test('/:schoolId/payments/paystack/initiate')).toBe(false);
   });
 });

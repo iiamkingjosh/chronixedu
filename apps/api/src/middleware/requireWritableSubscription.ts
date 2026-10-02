@@ -7,17 +7,30 @@ const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
  * Writes a READ-ONLY school may still make: the routes that let it pay Chronix and so
  * restore its own access. Blocking those would turn every lapse into a support call.
  *
- * EMPTY TODAY, and that is a fact rather than an oversight: no route under /api/schools
- * lets a school pay its Chronix subscription yet. Recovery today is a payment recorded by a
+ * ONE ENTRY TODAY (migration 052 / routes/platformBilling.ts's checkout route): a
+ * principal, bursar or super_admin may start a Paystack checkout for the school's own
+ * subscription while read-only, so paying is how a lapsed school gets itself back to full
+ * access without a support call. Recovery otherwise is still a payment recorded by a
  * super_admin (POST /api/super-admin/subscriptions/:id/record-payment), which is outside
- * this guard. The payment system adds its routes here, each with a test that it works while
- * read-only (doctrine 7: check each operation, one at a time). /api/auth/* — login, change
- * password — is not under /api/schools and is never blocked.
+ * this guard, or extending the trial, or a PATCH. carveOut.test.ts walks every write route
+ * mounted under /api/schools and fails if one matching PLATFORM_PAYMENT_PATH is not
+ * admitted here (doctrine 7: check each operation, one at a time) — the checkout route's
+ * own test asserts it still answers while the school is read_only.
+ * /api/auth/* — login, change password — is not under /api/schools and is never blocked.
+ * The webhook and browser callback that settle a checkout (routes/platformBillingPublic.ts)
+ * never reach this guard at all: they are mounted before the auth chain, same as
+ * routes/feesPublic.ts, because Paystack cannot supply a bearer token for either.
  *
  * `path` is matched against the path relative to the /api/schools mount, e.g.
  * "/<schoolId>/platform-billing/checkout".
  */
-export const READ_ONLY_WRITE_ALLOWLIST: Array<{ method: string; path: RegExp; why: string }> = [];
+export const READ_ONLY_WRITE_ALLOWLIST: Array<{ method: string; path: RegExp; why: string }> = [
+  {
+    method: 'POST',
+    path: /^\/[0-9a-f-]{36}\/platform-billing\/checkout$/i,
+    why: "Lets a read-only (lapsed-trial) school pay Chronix online to restore its own access — blocking it would turn every lapse into a support call.",
+  },
+];
 
 /**
  * THE CONTRACT for any route that lets a school pay Chronix: its path must match this, so

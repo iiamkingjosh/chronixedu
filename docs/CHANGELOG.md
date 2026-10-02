@@ -1,5 +1,15 @@
 # Chronix Edu — Changelog
 
+## A school can pay its own Chronix subscription online (2026-10-02)
+
+### For schools
+- Settings → Platform Billing (principal, bursar) shows what the school currently owes Chronix, when it's next billed, and a "Pay now" button that opens Paystack. There's no late fee and no partial amount — it's always the current per-student rate, same as the amount already shown.
+- A school whose trial has lapsed into read-only can still use this page to pay and restore full access itself, without contacting support.
+
+### For Chronix administrators
+- The amount a school pays is fixed the moment they start checkout, and a payment that comes back verified at a different amount is refused rather than accepted — so a price change or a stale page can't settle for the wrong figure.
+- A trial school and a cancelled subscription can't be charged — checkout refuses both before ever reaching Paystack.
+
 ## Signing in again waits for one round trip less (2026-10-02)
 
 ### For schools

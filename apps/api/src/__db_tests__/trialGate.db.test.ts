@@ -186,12 +186,33 @@ describe('the trial gate: trial, 14 days of grace, then read-only', () => {
     await trialEndedDaysAgo(I.schoolA, 15);
     await runTrialExpiryCheck();
     expect((await postNotice(tokens.principalA())).status).toBe(423);
+    // Snapshot and restore rather than resetting to [] — the allowlist carries a real
+    // production entry since routes/platformBilling.ts shipped its checkout route.
+    const before = [...READ_ONLY_WRITE_ALLOWLIST];
     READ_ONLY_WRITE_ALLOWLIST.push({ method: 'POST', path: /^\/[0-9a-f-]{36}\/notices$/, why: 'test stand-in for a payment route' });
     try {
       expect((await postNotice(tokens.principalA())).status).toBe(201);
     } finally {
       READ_ONLY_WRITE_ALLOWLIST.length = 0;
+      READ_ONLY_WRITE_ALLOWLIST.push(...before);
     }
+  });
+
+  it('the real platform-billing checkout route is itself carved out, end to end', async () => {
+    // The actual route, not a stand-in — routes/platformBilling.ts's checkout, carved out
+    // via its own READ_ONLY_WRITE_ALLOWLIST entry rather than a test-pushed one.
+    await trialEndedDaysAgo(I.schoolA, 15);
+    await runTrialExpiryCheck();
+    const res = await request(app)
+      .post(`${base}/platform-billing/checkout`)
+      .set('Authorization', tokens.principalA());
+    // trialEndedDaysAgo leaves the subscription on plan 'trial' (the trial-expiry job only
+    // ever changes subscription_status, never plan — CLAUDE.md, Platform billing), so the
+    // route's own TRIAL_NOT_BILLABLE refusal fires. The point of this test is only that it
+    // is REACHED past the read-only guard (409, business-rule refusal) rather than stopped
+    // by it (423 SCHOOL_READ_ONLY).
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('TRIAL_NOT_BILLABLE');
   });
 
   it('recording a payment against a read-only trial restores it: active, and on premium', async () => {

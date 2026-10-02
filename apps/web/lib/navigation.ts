@@ -95,6 +95,7 @@ export const SETTINGS_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Fee Settings', href: '/settings/fees', description: 'Fee rules, including the minimum part payment.' },
       { label: 'Payout Setup', href: '/settings/payout', description: 'The bank account parents\u2019 fee payments settle to. Chronix never touches this money.' },
+      { label: 'Platform Billing', href: '/settings/billing', description: 'What this school pays Chronix for its own subscription, and paying it online.' },
     ],
   },
 ];
@@ -188,9 +189,14 @@ export function getMainNavForRole(role: string): NavItem[] {
 }
 
 /**
- * Which school Settings pages a role reaches: all of them, only Payout Setup, or none. One rule,
- * read by the school sidebar AND the palette, so they cannot disagree. A super admin gets none:
- * no school of their own (see getMainNavForRole).
+ * Which school Settings pages a role reaches: all of them, only the two money-handling screens
+ * (Payout Setup and Platform Billing — 'payout', the name predates Platform Billing joining it),
+ * or none. One rule, read by the palette (lib/commandPalette.ts filters its 'payout' entries to
+ * exactly those two hrefs) — the sidebar itself (settings/layout.tsx) shows every group to every
+ * role and leaves the real gate to each page's own guard, backed by the API
+ * (requireRole('principal', 'bursar', 'super_admin') on Platform Billing's own routes, same
+ * roles canAccessPayoutSettings already names). A super admin gets none: no school of their own
+ * (see getMainNavForRole).
  */
 export function settingsAccessForRole(role: string): 'all' | 'payout' | 'none' {
   if (role === 'super_admin') return 'none';

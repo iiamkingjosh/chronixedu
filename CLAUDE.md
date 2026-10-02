@@ -470,19 +470,43 @@ Monorepo, npm workspaces:
   `/api/schools/:id` get 423 `SCHOOL_READ_ONLY` (`middleware/requireWritableSubscription.ts`), extras off.
   **Never touches `schools.is_active`** — that is an administrator's decision with its own route. The
   status rides on the cached school row (`findSchoolById`); anything that changes it clears
-  `schoolCacheKey(id, 'data')`. `READ_ONLY_WRITE_ALLOWLIST` is where routes that let a school pay go,
-  empty until the payment system exists. **Name a subscription-payment route with a
+  `schoolCacheKey(id, 'data')`. `READ_ONLY_WRITE_ALLOWLIST` is where routes that let a school pay go —
+  one entry today, the checkout route below. **Name a subscription-payment route with a
   `platform-billing`, `subscription`, `renew` or `checkout` path segment** (`PLATFORM_PAYMENT_PATH`):
   `carveOut.test.ts` walks every write route mounted behind the guard and fails if one matching that
   contract is not carved out. A payment route named otherwise escapes the test, so the name is the
-  contract. Recovery: a recorded payment (which also
+  contract. Recovery: paying online (below), a recorded payment (which also
   moves a trial to premium), extending the trial (status recomputed from the new date), or a PATCH.
   Read-only schools send no fee reminders; queued notifications still deliver in-app and by email,
   without SMS.
 - `GET /:schoolId/subscription-status` feeds the staff banner (`components/SubscriptionNotice.tsx`);
   any member of the school may read it, and it answers while read-only.
-- Not built yet, deliberately: checkout and webhooks. They wait on a rate being set and a real
-  school's amount looking right.
+- **A school pays Chronix online** (migration 052, `routes/platformBilling.ts` +
+  `routes/platformBillingPublic.ts`, `/settings/billing` for principal/bursar/super_admin): checkout
+  is carved into `READ_ONLY_WRITE_ALLOWLIST` (a lapsed school pays to restore itself without a support
+  call), refuses a trial plan (`TRIAL_NOT_BILLABLE`) and a ₦0 amount (`NOTHING_TO_PAY`) before ever
+  calling Paystack, and snapshots the amount in kobo on `platform_subscription_payments` at the moment
+  of checkout — the billed amount is rate × enrolment *then*, never re-derived, and there is no
+  proration or late fee: a payment settles for exactly that amount or not at all, and `next_billing_date`
+  simply advances to whatever `next_term_start` is by the time it's read, same as any other read.
+- **The trust model, and why it diverges from `routes/feesPublic.ts`.** Fee payments resolve identity
+  from Paystack's `metadata` cross-checked against the URL's `:schoolId` — fine when a parent is paying
+  into a school's own account. Here the money is Chronix's own revenue, not a tenant's, so identity is
+  resolved ONLY from the local `reference`-keyed row this server wrote before calling Paystack
+  (`findPendingPaymentForSchool`/`settlePayment` in `db/queries/platformBilling.ts`) — never from the
+  webhook or callback's `metadata`, not even cross-checked. `platformBillingFullStack.test.ts` proves
+  settlement by reference alone while `metadata.school_id` is deliberately wrong. The webhook
+  (`POST /api/schools/platform-billing/webhook`) and callback (`GET .../platform-billing/callback`) carry
+  no `:schoolId` segment at all, for the same reason feesPublic's don't take a bearer: Paystack supplies
+  neither a session nor a tenant — mounted before the auth chain, same place.
+- **No subaccount, no bearer split.** The ERP integration pays schools out through Paystack subaccounts
+  because the money is a tenant's; here Chronix is the merchant of record for its own subscription
+  revenue, so `initializePaystackTransaction` is called with neither. Copying the ERP's split would
+  misroute Chronix's own revenue to whichever subaccount a school happened to have for fee collection.
+- `settlePayment` refuses a verified amount that doesn't match what was snapshotted at checkout
+  (`amount_mismatch`, logged and alerted — `config/alerts.ts`'s
+  `platform_billing_amount_verification_failed`) rather than trusting Paystack's or the webhook's figure;
+  the callback redirects with `?payment=error&reason=amount_mismatch` so the school sees it too.
 
 ## A school's data: export and deletion (DPA §11, Terms §22)
 

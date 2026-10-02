@@ -19,7 +19,7 @@ const ROLES = ['super_admin', 'principal', 'teacher', 'registrar', 'bursar', 'pa
 function expectedHrefs(role: string): string[] {
   const own = getMainNavForRole(role).map((i) => i.href);
   const access = settingsAccessForRole(role);
-  const settings = access === 'all' ? SETTINGS_NAV.map((i) => i.href) : access === 'payout' ? ['/settings/payout'] : [];
+  const settings = access === 'all' ? SETTINGS_NAV.map((i) => i.href) : access === 'payout' ? ['/settings/payout', '/settings/billing'] : [];
   return [...own, ...settings].sort();
 }
 
@@ -34,6 +34,7 @@ describe('the palette offers exactly the pages each role can open', () => {
     for (const role of ['principal', 'teacher', 'registrar', 'bursar']) expect(expectedHrefs(role).length).toBeGreaterThan(0);
     expect(expectedHrefs('teacher')).not.toContain('/settings/identity');
     expect(expectedHrefs('bursar')).toContain('/settings/payout');
+    expect(expectedHrefs('bursar')).toContain('/settings/billing');
     expect(expectedHrefs('bursar')).not.toContain('/settings/users');
   });
 });

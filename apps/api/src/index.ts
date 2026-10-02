@@ -27,6 +27,8 @@ import announcementsRoutes from './routes/announcements';
 import notificationsRoutes from './routes/notifications';
 import feesRoutes from './routes/fees';
 import feesPublicRoutes from './routes/feesPublic';
+import platformBillingRoutes from './routes/platformBilling';
+import platformBillingPublicRoutes from './routes/platformBillingPublic';
 import analyticsRoutes from './routes/analytics';
 import timetableRoutes from './routes/timetable';
 import classCommentsRoutes from './routes/classComments';
@@ -124,6 +126,10 @@ logger.info('auth_router_mounted');
 // webhook / unauthenticated browser redirect). Every other /api/schools route
 // still requires auth via the chain that follows.
 app.use('/api/schools', feesPublicRoutes);
+// Platform billing — a school paying Chronix for its own subscription. Same reason as
+// feesPublicRoutes above: Paystack cannot supply a bearer token for either the webhook or
+// the browser callback.
+app.use('/api/schools', platformBillingPublicRoutes);
 
 // Support session impersonation — must be before school-level routes
 app.use('/api/schools', detectSupportSession);
@@ -158,6 +164,7 @@ app.use('/api/schools', messagesRoutes);
 app.use('/api/schools', announcementsRoutes);
 app.use('/api/schools', notificationsRoutes);
 app.use('/api/schools', feesRoutes);
+app.use('/api/schools', platformBillingRoutes);
 app.use('/api/schools', analyticsRoutes);
 app.use('/api/schools', timetableRoutes);
 app.use('/api/schools', classCommentsRoutes);
