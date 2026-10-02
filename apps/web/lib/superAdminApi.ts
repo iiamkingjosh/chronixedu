@@ -722,8 +722,8 @@ export async function deletePlatformAdmin(id: string, confirmationEmail: string)
   return res.data;
 }
 
-export async function resendPlatformAdminWelcome(id: string): Promise<{ email: string }> {
-  const res = await apiFetch<ApiResponse<{ email: string }>>(`/api/super-admin/admins/${id}/resend-welcome`, {
+export async function resendPlatformAdminWelcome(id: string): Promise<{ email: string; welcome_email: 'sent' | 'not_sent' }> {
+  const res = await apiFetch<ApiResponse<{ email: string; welcome_email: 'sent' | 'not_sent' }>>(`/api/super-admin/admins/${id}/resend-welcome`, {
     method: 'POST',
   });
   return res.data;

@@ -352,7 +352,8 @@ Monorepo, npm workspaces:
   the next test's seed.
 - **A welcome email carries no credential** (item H2, option (iii), 1 Oct 2026). Staff and parent
   welcome emails (`services/welcomeEmail.ts`) say the account is ready and how to set a password
-  with Forgot password. The principal's carries a one-time set-password link (Round 27). The mailbox
+  with Forgot password. Platform admins too, since 2 Oct 2026 (`platformAdminWelcomeBody`; SECURITY.md
+  Round 30): `POST /super-admin/admins` refuses a `password` and takes the address twice. The principal's carries a one-time set-password link (Round 27). The mailbox
   is then the key, so check the address before any account exists:
   - one parent: the address is typed twice (`email_confirmation`);
   - a bulk import: the preview returns `mailed_addresses`, and the commit refuses without
@@ -885,7 +886,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 34 suites, 345 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 35 suites, 350 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

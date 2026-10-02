@@ -25,6 +25,7 @@ import '../services/analyticsService';
 import '../services/feeReminderService';
 import '../services/subscriptionService';
 import { onboardingWelcomeEmail } from '../services/onboardingWelcomeEmail';
+import { platformAdminWelcomeBody, PLATFORM_ADMIN_WELCOME_SUBJECT } from '../services/welcomeEmail';
 
 const router = Router();
 
@@ -2366,42 +2367,64 @@ router.get(
 // ── POST /admins ──────────────────────────────────────────────────────────────
 // Creates a new platform admin account (Supabase Auth + local users row).
 
+// The address is typed twice: it is the account's only key, and this account can reach every school.
 const createPlatformAdminSchema = z.object({
-  first_name: z.string().min(1),
-  last_name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(8),
+  first_name: z.string().trim().min(1),
+  last_name: z.string().trim().min(1),
+  email: z.string().trim().email(),
+  email_confirmation: z.string().trim(),
+}).refine(d => d.email.toLowerCase() === d.email_confirmation.toLowerCase(), {
+  path: ['email_confirmation'],
+  message: 'The two email addresses do not match',
 });
+
+/** Sends the platform-admin welcome (no credential in it) and says plainly whether it went. */
+async function sendPlatformAdminWelcome(email: string, firstName: string, adminId: string): Promise<'sent' | 'not_sent'> {
+  if (!isEmailConfigured()) {
+    logger.warn('platform_admin_welcome_not_sent', { admin_id: adminId, reason: 'email is not configured on this server' });
+    return 'not_sent';
+  }
+  const outcome = await sendEmail(email, PLATFORM_ADMIN_WELCOME_SUBJECT, platformAdminWelcomeBody({ name: firstName, email, appUrl: appBaseUrl() }));
+  if (outcome === 'sent') return 'sent';
+  logger.error('welcome_email_failed', { stage: 'send', outcome, admin_id: adminId });
+  return 'not_sent';
+}
 
 router.post(
   '/admins',
   ...rootGuard,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // Refused, not ignored: a caller that sends a password must not believe it was set.
+      if (req.body && typeof req.body === 'object' && 'password' in req.body) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'PASSWORD_NOT_ACCEPTED', message: 'A platform admin sets their own password with Forgot password; this route takes none.' },
+        });
+      }
       const parsed = createPlatformAdminSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
-      const { first_name, last_name, email, password } = parsed.data;
+      const { first_name, last_name, email } = parsed.data;
 
+      // No password (2 Oct 2026), as for a principal at onboarding: nobody, the root admin included,
+      // ever knows it. The admin sets one with Forgot password, which mails a link to this address.
       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        password,
         email_confirm: true,
         user_metadata: { first_name, last_name, role: 'super_admin' },
       });
-      if (authError) {
-        return res.status(400).json({ success: false, error: { code: 'AUTH_CREATE_FAILED', message: authError.message } });
+      if (authError || !authData?.user) {
+        return res.status(400).json({ success: false, error: { code: 'AUTH_CREATE_FAILED', message: authError?.message ?? 'Failed to create the account' } });
       }
 
       const userId = authData.user.id;
-      const bcrypt = await import('bcryptjs');
-      const hashed = bcrypt.hashSync(password, 12);
 
       await pool.query(
         `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
-         VALUES ($1, NULL, $2, $3, 'super_admin', $4, $5)`,
-        [userId, email, hashed, first_name, last_name]
+         VALUES ($1, NULL, $2, '', 'super_admin', $3, $4)`,
+        [userId, email, first_name, last_name]
       );
 
       await pool.query(
@@ -2415,25 +2438,9 @@ router.post(
         ]
       );
 
-      const welcomeBody = [
-        `Hi ${first_name},`,
-        ``,
-        `You have been added as a platform administrator on Chronix Edu.`,
-        ``,
-        `Your login details:`,
-        `  Email:    ${email}`,
-        `  Password: ${password}`,
-        ``,
-        `Log in at: ${appBaseUrl()}/login`,
-        ``,
-        `Please change your password after your first login.`,
-        ``,
-        `Chronix Technology Limited`,
-      ].join('\n');
+      const welcomeEmail = await sendPlatformAdminWelcome(email, first_name, userId);
 
-      await sendEmail(email, 'You have been added as a Chronix Edu platform admin', welcomeBody);
-
-      return res.status(201).json({ success: true, data: { user_id: userId, email } });
+      return res.status(201).json({ success: true, data: { user_id: userId, email, welcome_email: welcomeEmail } });
     } catch (err) {
       return next(err);
     }
@@ -2441,8 +2448,7 @@ router.post(
 );
 
 // ── POST /admins/:id/resend-welcome ──────────────────────────────────────────
-// Generates a Supabase recovery link and emails it to an existing platform admin.
-// Used when the original welcome email was missed or needs to be re-triggered.
+// Sends a platform admin the welcome email again (no credential in it), when the first was missed.
 
 router.post(
   '/admins/:id/resend-welcome',
@@ -2459,29 +2465,9 @@ router.post(
 
       const { email, first_name } = admin.rows[0];
 
-      const { data, error } = await supabaseAdmin.auth.admin.generateLink({ type: 'recovery', email });
-      if (error) {
-        return res.status(500).json({ success: false, error: { code: 'RESET_LINK_FAILED', message: error.message } });
-      }
-
-      const resetLink = data?.properties?.action_link ?? `${appBaseUrl()}/login`;
-
-      const emailBody = [
-        `Hi ${first_name},`,
-        ``,
-        `You have been added as a platform administrator on Chronix Edu.`,
-        ``,
-        `Use the link below to set your password and access the platform:`,
-        ``,
-        `  ${resetLink}`,
-        ``,
-        `This link expires in 24 hours. After setting your password, log in at:`,
-        `  ${appBaseUrl()}/login`,
-        ``,
-        `Chronix Technology Limited`,
-      ].join('\n');
-
-      await sendEmail(email, 'You have been added as a Chronix Edu platform admin', emailBody);
+      // The same email as at creation: no credential and no link. It used to mint a recovery link with no
+      // redirect, which landed on the home page, where nothing reads it, and said it lasted 24 hours.
+      const welcomeEmail = await sendPlatformAdminWelcome(email, first_name, req.params.id);
 
       await pool.query(
         `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, metadata, ip_address)
@@ -2489,7 +2475,7 @@ router.post(
         [req.user!.user_id, req.params.id, JSON.stringify({ email }), clientIp(req) ?? null]
       );
 
-      return res.json({ success: true, data: { email } });
+      return res.json({ success: true, data: { email, welcome_email: welcomeEmail } });
     } catch (err) {
       return next(err);
     }

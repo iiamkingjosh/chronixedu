@@ -1,8 +1,76 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 29 — 2026-10-01  
-**Scope:** Welcome emails for new staff and parents: a password in the body, "sent" for mail that did not go, and the old ones still queued  
-**Round 29 total findings:** 4 (0 Critical · 0 High · 1 Medium · 2 Low · 1 Info) — all closed
+**Latest audit:** Round 30 — 2026-10-02  
+**Scope:** The platform-admin welcome email: a plain-text password, and a resend link that could not work; two gaps in the platform audit trail found while proving it was never used  
+**Round 30 total findings:** 4 (0 Critical · 0 High · 1 Medium · 3 Low) — 2 remediated, 2 open
+
+---
+
+## Round 30 — 2026-10-02
+
+### M-01 — A new platform admin was emailed their password in plain text ✅ Remediated (never exercised)
+
+**Files:** `apps/api/src/routes/superAdmin.ts` (`POST /admins`, `POST /admins/:id/resend-welcome`), `apps/api/src/services/welcomeEmail.ts`, `apps/web/app/super-admin/admins/page.tsx`, `apps/web/lib/superAdminApi.ts`.
+
+**The risk.**
+- `POST /admins` took a password the root admin typed and set it on the new account.
+- It then emailed that password in plain text: "Email: … Password: …". This is the H2 defect (Round 29) on the account type that can reach every school.
+- The password lived on in the mailbox and in SendGrid. If SendGrid refused the email, it also lived in `email_queue`, now for 7 days.
+- A mistyped address handed a stranger a working super-admin login, and the root admin knew every platform admin's password.
+
+**Never exercised.** The proof is the audit trail, checked 2 Oct 2026:
+- The route writes `PLATFORM_ADMIN_CREATED` to `platform_audit_logs`, and waits for it, before it sends the email. If that insert fails, the route stops before sending. So a send leaves that row behind.
+- Production's `platform_audit_logs` holds 15 action types and not one `PLATFORM_ADMIN_CREATED`.
+- That table can be deleted from (L-02 below), so the one thing that could have removed such a row was checked too: no integration test has ever called this route, so no teardown erased one.
+- The only super_admin with a Supabase login is the root admin. Every account this route creates gets one.
+
+So the route never completed in production, no password was emailed by it, and none needs rotating. The first draft cited an empty `email_queue`, which proved nothing: that table only ever held emails SendGrid refused, so a successful send never left a row in it.
+
+**Fix,** the same treatment as H2:
+- **No password is taken or set.** The route refuses a `password` field with 400 `PASSWORD_NOT_ACCEPTED`, rather than ignoring it, so a caller cannot believe it set one. The Supabase Auth account is created with no password, and the local `password_hash` is empty, as for a principal at onboarding.
+- **The address is typed twice** (`email_confirmation`, case- and space-insensitive): it is the account's only key. The web form's second box refuses pasting.
+- **The welcome email carries no credential:** the account exists, its login address, and how to set a password with Forgot password (`platformAdminWelcomeBody`).
+- **The response says whether it went** (`welcome_email: 'sent' | 'not_sent'`), and so does the screen. A refused send is not counted as sent; it logs `welcome_email_failed`, which raises `welcome_email_not_sent`.
+
+### L-01 — "Resend welcome" sent a recovery link that could not work ✅ Remediated
+
+- `POST /admins/:id/resend-welcome` minted a Supabase recovery link with no `redirectTo`. Such a link lands on the Site URL, the home page, where nothing reads the token: the same failure as a reset sent from the Supabase dashboard (CLAUDE.md, Auth).
+- Its email also said the link lasted 24 hours.
+- It now sends the same no-credential welcome as creation, and makes no link at all.
+
+**Tests:** `platformAdminWelcome.db.test.ts` (new, 5):
+- creating an admin calls Supabase with no password, stores an empty hash, and sends one email that names the login address and `/forgot-password`, with no password line and no link;
+- a `password` field is refused and nothing is created;
+- mismatched addresses are refused and nothing is created;
+- a send SendGrid refused answers `not_sent`;
+- resend sends the same no-credential email and calls `generateLink` not at all.
+
+All 5 fail on the previous route.
+
+### L-02 — `platform_audit_logs` can be deleted from, and test teardown did 🟡 Open (decision for Moses)
+
+**Found** checking the reviewer's question: production has four anonymised platform admins but one `PLATFORM_ADMIN_DELETED` row. Can the delete path skip its audit row?
+
+**The route cannot.** `DELETE /admins/:id` inserts `PLATFORM_ADMIN_DELETED` before it anonymises the account, and has since it was written (`a8506c0`, 19 Jun 2026). If the insert fails, nothing is anonymised. The one row that exists is the root admin deleting a leftover fixture (`e48f826d`) on 1 Oct.
+
+**The missing three were deleted afterwards.**
+- They come from a run of the admin-deletion tests against production at 09:19 UTC on 7 Aug, 38 minutes before those tests were committed (`5d8e534`).
+- That suite's teardown deletes every `platform_audit_logs` row naming its admins as actor or target. It does so today (`tests/superAdmin.test.ts`), and nine integration files delete from the table.
+- Why the user rows outlived their audit rows that morning is not in git: the run used an uncommitted working copy.
+
+**The gap.** Migrations 036–038 protect `audit_logs`; nothing protects `platform_audit_logs`, the record of every platform-admin action, deletions and data wipes included. Any DELETE succeeds, and test code issued them for months. Doctrine 6's accident-proofing does not cover it.
+
+**Not fixed here.** Making it append-only needs a decision. The integration teardowns would need changing, as for `audit_logs`, and the school deletion script deletes a school's rows from it, so it would need a 048-style purge path.
+
+### L-03 — The trial gate signs its changes with an arbitrary super_admin 🟡 Open (decision for Moses)
+
+**File:** `apps/api/src/services/subscriptionService.ts` (`getSystemAdminId`).
+
+- `runTrialExpiryCheck` records each change it makes (grace, read-only, healing a paid plan) in `platform_audit_logs`, attributed to `SELECT id FROM users WHERE role = 'super_admin' LIMIT 1`.
+- That query has no ORDER BY and no `is_active` filter, so it returns whichever super_admin Postgres finds first, fixtures and deactivated accounts included.
+- **Observed:** Chronix High School's 8 Sep 2026 auto-suspend is recorded as done by `e48f826d`, a test fixture that the root admin deleted on 1 Oct.
+- The record answers "who did this?" with "whichever row came first" (doctrine 8). No admin did it; the system did.
+- **Not fixed here.** The honest fix records the system as the actor, which needs either a nullable `platform_admin_id` or a dedicated system account. Both change a NOT NULL column or add a user, so the choice is Moses's. Until then, deleting the fixture admins narrows what the query can return but does not make it right.
 
 ---
 
@@ -84,7 +152,7 @@
 - **The rows, deleted 2 Oct 2026**, as Moses approved.
   - **The rehearsal came first** (`docs/data-deletion-runbook.md`, "Rehearsal"). Two of the three demo schools holding the 5 were deleted with `delete-school-data.js`, queued mail included. The session's safety check refused the third, which is left for Moses.
   - **Then the job's own statement, run once:** it deleted 1,887 `failed` and 103 `sent` rows, 1,990 in all. The other 3 went with the two schools.
-  - **The queue is now empty**, and no row mentions a password.
+  - **The queue is now empty**, and no row mentions a password. Re-checked by the reviewer later on 2 Oct: 0 rows. The job's first scheduled run comes after this; the 1,990 went when its statement was run once by hand.
 
 **Tests:** `emailQueueRetention.db.test.ts` (new, 3 tests):
 - Six rows are shown present first. The run deletes the three older than a week (`sent`, `failed`, and a 104-day `failed`) and keeps the three recent ones, whatever their status.

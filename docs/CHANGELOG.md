@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## New platform admins set their own password (2026-10-02)
+
+### For Chronix administrators
+- Adding a platform admin no longer asks for a password, and the email they receive contains none. It says their account is ready and how to set a password with "Forgot password". The address is typed twice.
+- "Resend welcome" sends that same email. It used to send a link that could not work.
+- The screen says whether the email was sent.
+
 ## The welcome email uses Chronix colours (2026-10-02)
 
 ### For schools

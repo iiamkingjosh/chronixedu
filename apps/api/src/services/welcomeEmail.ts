@@ -59,6 +59,36 @@ export function welcomeEmailBody(opts: WelcomeEmailOptions): string {
   ].join('\n');
 }
 
+/**
+ * The email a new platform admin receives (2 Oct 2026). Like the staff and parent welcome (H2) it
+ * carries no credential: the account exists, its login address, and how to set a password with Forgot
+ * password. It used to carry the password the root admin had typed, for the account type that can reach
+ * every school; and "resend welcome" sent a recovery link with no redirect, which landed on the home
+ * page where nothing reads it.
+ */
+export function platformAdminWelcomeBody({ name, email, appUrl }: { name: string; email: string; appUrl: string }): string {
+  return [
+    `Hello ${name},`,
+    '',
+    'You have been added as a platform administrator on Chronix Edu.',
+    '',
+    `Your account is ready. Your login email is ${email}.`,
+    '',
+    'To set your password:',
+    `  1. Go to ${appUrl}/forgot-password`,
+    `  2. Enter ${email}`,
+    '  3. Open the link we send to this address and choose your password.',
+    '',
+    `Then log in at ${appUrl}/login.`,
+    '',
+    'Nobody at Chronix knows or will ask for your password. If you did not expect this email, reply to it.',
+    '',
+    '— Chronix Technology Limited',
+  ].join('\n');
+}
+
+export const PLATFORM_ADMIN_WELCOME_SUBJECT = 'You have been added as a Chronix Edu platform admin';
+
 /** What became of a set of welcome emails, for the response to say plainly. */
 export type WelcomeEmailOutcome = 'sent' | 'partly_sent' | 'not_sent' | 'none';
 
