@@ -439,6 +439,32 @@ async function handleForgotPassword(req: Request, res: Response, next: NextFunct
 router.post('/forgot-password', handleForgotPassword);
 router.post('/reset-password', handleForgotPassword);
 
+const resetLandingSchema = z.object({
+  outcome: z.enum(['no_parameters', 'supabase_error', 'unsupported_format', 'token_refused']),
+  error_code: z.string().regex(/^[A-Za-z0-9_]{1,64}$/).optional(),
+});
+
+/**
+ * The reset page reports a landing it could not use (2 Oct 2026). Every such failure used to happen
+ * only in the browser and leave no trace on any server, on the one path by which staff and parents
+ * set a password since H2. Public, because the person has no session; the /api/auth limiter applies
+ * (5 a minute). It takes an outcome and Supabase's error code: no address, no token.
+ *
+ * A link the page cannot read (`unsupported_format`) means nobody can reset a password, so it alerts.
+ * The others are routine (a used or expired link, a page opened without one, a session that lapsed
+ * before the form was sent), so they are warnings: visible and countable, not paged.
+ */
+router.post('/reset-landing', (req: Request, res: Response) => {
+  const parsed = resetLandingSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Unknown reset-landing outcome' } });
+  }
+  const { outcome, error_code } = parsed.data;
+  if (outcome === 'unsupported_format') logger.error('password_reset_link_unreadable', { outcome, error_code });
+  else logger.warn('password_reset_landing_failed', { outcome, error_code });
+  return res.status(204).end();
+});
+
 /** Complete password reset using the recovery access_token from the email link. */
 router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -466,9 +492,14 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
     const email = userData.user.email;
     const local = await findUserByEmail(email);
     if (!local) {
+      // The link worked: Supabase holds a login for this address, and no app account sits behind it.
+      // It used to answer "invalid or expired" and log nothing, which sent the person back to
+      // request another link that would fail the same way. Not an enumeration oracle: reaching
+      // here takes a valid recovery token, which only the mailbox's owner holds.
+      logger.error('password_reset_no_local_account', { auth_user_id: userData.user.id });
       return res.status(401).json({
         success: false,
-        error: { code: 'INVALID_OR_EXPIRED_TOKEN', message: 'This reset link is invalid or has expired. Please request a new one.' },
+        error: { code: 'NO_APP_ACCOUNT', message: 'This login has no Chronix Edu account. Your link is fine: please contact your school administrator.' },
       });
     }
 

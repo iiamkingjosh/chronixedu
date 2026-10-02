@@ -14,6 +14,7 @@ const mockAdminCreateUser = jest.fn();
 const mockAdminListUsers = jest.fn();
 const mockAdminGetUser = jest.fn();
 const mockAdminUpdateUserById = jest.fn();
+const mockGetUserByToken = jest.fn();
 
 jest.mock('../supabaseClient', () => ({
   supabase: {
@@ -24,6 +25,7 @@ jest.mock('../supabaseClient', () => ({
   },
   supabaseAdmin: {
     auth: {
+      getUser: (...args: unknown[]) => mockGetUserByToken(...args),
       admin: {
         createUser: (...args: unknown[]) => mockAdminCreateUser(...args),
         listUsers: (...args: unknown[]) => mockAdminListUsers(...args),
@@ -383,5 +385,80 @@ describe('POST /api/auth/forgot-password — one answer for every address', () =
     finishSend();
     await accepted;
     expect((await ask(UNKNOWN)).body).toEqual(known.body);
+  });
+});
+
+describe('POST /api/auth/confirm-reset — a login with no app account says so, and is logged', () => {
+  // A valid recovery link for a login with no users row used to answer "invalid or expired" and log
+  // nothing, sending the person back for another link that would fail the same way (2 Oct 2026).
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const { findUserByEmail } = require('../db/queries/users');
+  const { logger } = require('../config/logger');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  const mockFindUser = findUserByEmail as jest.Mock;
+  const confirm = () => request(app).post('/api/auth/confirm-reset')
+    .send({ password: 'a-new-password', confirm_password: 'a-new-password', access_token: 'recovery-session' });
+
+  beforeEach(() => {
+    mockGetUserByToken.mockResolvedValue({ data: { user: { id: 'auth-1', email: 'parent@school.test' } }, error: null });
+    mockAdminUpdateUserById.mockResolvedValue({ data: {}, error: null });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('completes the reset when the login has an app account (the control)', async () => {
+    mockFindUser.mockResolvedValue({ id: 'auth-1', email: 'parent@school.test', school_id: null });
+    const res = await confirm();
+    expect(res.status).toBe(200);
+    expect(mockAdminUpdateUserById).toHaveBeenCalledWith('auth-1', { password: 'a-new-password' });
+  });
+
+  it('answers NO_APP_ACCOUNT, changes nothing, and logs it for the alert', async () => {
+    mockFindUser.mockResolvedValue(null);
+    const error = jest.spyOn(logger, 'error');
+    const res = await confirm();
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('NO_APP_ACCOUNT');
+    expect(mockAdminUpdateUserById).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalledWith('password_reset_no_local_account', { auth_user_id: 'auth-1' });
+  });
+});
+
+describe('POST /api/auth/reset-landing — a landing the reset page could not use leaves a trace', () => {
+  // Every failure on /reset-password used to happen only in the browser, so nothing on any server
+  // saw it (2 Oct 2026). A link the page cannot read pages someone; routine failures are warnings.
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const { logger } = require('../config/logger');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  const report = (body: object) => request(app).post('/api/auth/reset-landing').send(body);
+  afterEach(() => jest.restoreAllMocks());
+
+  it('a link the page cannot read is logged at error, which alerts', async () => {
+    const error = jest.spyOn(logger, 'error');
+    const res = await report({ outcome: 'unsupported_format' });
+    expect(res.status).toBe(204);
+    expect(error).toHaveBeenCalledWith('password_reset_link_unreadable', { outcome: 'unsupported_format', error_code: undefined });
+  });
+
+  it("a used or expired link is a warning with Supabase's code, and does not alert", async () => {
+    const error = jest.spyOn(logger, 'error');
+    const warn = jest.spyOn(logger, 'warn');
+    const res = await report({ outcome: 'supabase_error', error_code: 'otp_expired' });
+    expect(res.status).toBe(204);
+    expect(warn).toHaveBeenCalledWith('password_reset_landing_failed', { outcome: 'supabase_error', error_code: 'otp_expired' });
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ outcome: 'anything_else' }],
+    [{ outcome: 'supabase_error', error_code: 'someone@example.com' }],
+    [{ outcome: 'supabase_error', error_code: 'x'.repeat(65) }],
+    [{}],
+  ])('refuses %j without logging it', async body => {
+    const error = jest.spyOn(logger, 'error');
+    const warn = jest.spyOn(logger, 'warn');
+    const res = await report(body);
+    expect(res.status).toBe(400);
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalledWith('password_reset_landing_failed', expect.anything());
   });
 });
