@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { readResetLanding, confirmResetFailure, type LandingOutcome } from '@/lib/resetLanding';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
   throw new Error('NEXT_PUBLIC_API_URL is required in production');
@@ -23,22 +24,18 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>;
 
-function parseRecoveryToken(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  const hash = window.location.hash.startsWith('#')
-    ? window.location.hash.slice(1)
-    : window.location.hash;
-  const hashParams = new URLSearchParams(hash);
-  const hashToken = hashParams.get('access_token');
-  const hashType = hashParams.get('type');
-  if (hashToken && hashType === 'recovery') return hashToken;
-
-  const queryToken = new URLSearchParams(window.location.search).get('access_token');
-  const queryType = new URLSearchParams(window.location.search).get('type');
-  if (queryToken && queryType === 'recovery') return queryToken;
-
-  return null;
+/**
+ * Tells the API about a landing this page could not use, so a failure that happens only in the
+ * browser leaves a trace on a server (it used to leave none). Carries no address and no token.
+ * Best-effort: the person is already shown the reason, and a failed report must not hide it.
+ */
+function reportLanding(outcome: LandingOutcome, errorCode?: string | null) {
+  fetch(`${API_BASE}/api/auth/reset-landing`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ outcome, ...(errorCode ? { error_code: errorCode } : {}) }),
+    keepalive: true,
+  }).catch(() => { /* best-effort: the reason is already on screen */ });
 }
 
 export default function ResetPasswordPage() {
@@ -59,16 +56,15 @@ export default function ResetPasswordPage() {
   });
 
   useEffect(() => {
-    const token = parseRecoveryToken();
-    if (!token) {
-      setTokenError(
-        'This reset link is invalid or has expired. Please request a new password reset link.'
-      );
+    const landing = readResetLanding(window.location.search, window.location.hash);
+    // Remove tokens and error details from the URL so they are not kept in browser history.
+    window.history.replaceState(null, '', window.location.pathname);
+    if (landing.kind === 'token') {
+      setAccessToken(landing.accessToken);
       return;
     }
-    setAccessToken(token);
-    // Remove tokens from the URL so they are not kept in browser history.
-    window.history.replaceState(null, '', window.location.pathname);
+    setTokenError(landing.message);
+    reportLanding(landing.kind, landing.kind === 'supabase_error' ? landing.errorCode : null);
   }, []);
 
   async function onSubmit(values: FormValues) {
@@ -88,10 +84,10 @@ export default function ResetPasswordPage() {
       const json = await res.json();
 
       if (!res.ok) {
-        const message =
-          json.error?.message ??
-          (typeof json.error === 'string' ? json.error : 'Could not reset password');
-        throw new Error(typeof message === 'string' ? message : 'Could not reset password');
+        const apiMessage = typeof json.error?.message === 'string' ? json.error.message : undefined;
+        const failure = confirmResetFailure(json.error?.code, apiMessage);
+        if (failure.report) reportLanding('token_refused', json.error?.code);
+        throw new Error(failure.message);
       }
 
       setDone(true);

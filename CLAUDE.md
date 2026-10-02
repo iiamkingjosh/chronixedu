@@ -224,6 +224,24 @@ Monorepo, npm workspaces:
   email is attempted** (`sendResetEmail` runs after the response; a failure is logged by user id).
   Never await the send in the handler, or vary the answer on its result: the answer or its timing
   would again say whether an account exists (SECURITY.md Round 24).
+- **The reset email and where it lands.** Observed 2 Oct 2026 by following a real email from the
+  app's own flow. Most of this lives in dashboards and in no file.
+  - **The email.** Supabase sends it through custom SMTP (SendGrid, `no-reply@chronixtechnology.com`),
+    with a custom template. Its link has the `{{ .ConfirmationURL }}` shape:
+    `…supabase.co/auth/v1/verify?token&type=recovery&redirect_to=https://edu.chronixtechnology.com/reset-password`.
+  - **SendGrid click tracking is on, account-wide.** It wraps every link in `ct.sendgrid.net`, so
+    SendGrid sees every recovery token. A mail scanner that follows links can use a token up before
+    the person clicks.
+  - **What arrives.** supabase-js defaults to the implicit flow, so a working link lands with
+    `#access_token…&type=recovery`, and a used or expired one with
+    `#error=access_denied&error_code=otp_expired`.
+  - **The page.** `lib/resetLanding.ts` reads both shapes, plus PKCE's `?code=`, which it recognises
+    but cannot use (that needs a verifier the page never holds). Each cause gets its own message.
+  - **The report.** The page reports a landing it cannot use to `POST /api/auth/reset-landing`, with
+    no address and no token. An unreadable link alerts (`password_reset_cannot_complete`), as does a
+    login with no app account at confirm-reset (`NO_APP_ACCOUNT`). Routine failures are warnings.
+  - **Never send a reset from the Supabase dashboard.** It attaches no `redirect_to`, so the link lands
+    on the Site URL (the home page), where nothing reads it. Use the app's Forgot password.
 - Roles (`public.users.role`): `super_admin, principal, teacher, registrar, bursar, parent, student`.
 - Middleware chain on `/api/schools`: `detectSupportSession → verifyToken →
   requirePasswordChanged → requireActiveSchool → router`. Routes additionally
@@ -730,6 +748,32 @@ Monorepo, npm workspaces:
   tried as a non-superuser. Production's `postgres` has CREATEROLE + BYPASSRLS but is not a
   superuser, and the local test database runs as one, so a superuser run hides permission failures.
   048's first draft failed that way.
+- **Regions: the API, web, Redis and the database belong on one continent** (measured 2 Oct 2026).
+  - **Where everything is.** Supabase Postgres and its pooler are in `eu-west-1` (Ireland). All
+    three Railway services (API, web, Redis) run in `sfo` (US West) until the move to EU West
+    (Amsterdam, `europe-west4-drams3a`); Moses makes the change in the dashboard. Lagos traffic
+    enters at Cloudflare and Railway's `ams1` edge, both in Amsterdam.
+  - **What that cost.** A request went Lagos → Amsterdam → San Francisco, and every query crossed
+    back to Ireland. One database round trip was 153 ms (`GET /health` `dbLatencyMs`, a bare
+    `SELECT 1` on a warm pool). A sign-in took 2,576 ms in the container (Railway `totalDuration`,
+    four real sign-ins), about 17 round trips.
+  - **Why EU West:** it sits next to both `eu-west-1` and the `ams1` edge. Being nearer Nigeria is
+    not the reason. Railway has no Irish region, so an Amsterdam–Dublin round trip, typically
+    15–25 ms, is the floor.
+  - **Redis moves with the API.** Every rate-limit and lockout call goes through `bestEffort` under
+    a 500 ms `commandTimeout`. Across the ocean, each one is a ~155 ms round trip.
+  - **Redis has a volume.** Changing its region migrates the data, with downtime for the length of
+    the migration (Railway docs, "Regions"). Meanwhile rate limits and lockouts fail open,
+    `redis_unavailable` alerts, and a support session cannot start. Private networking
+    (`redis.railway.internal`) is unaffected by region.
+  - **Proving a region:**
+    - `GET /health` five times, with `x-health-token`, for `dbLatencyMs`;
+    - Railway's http-log `totalDuration` for real `POST /api/auth/login` requests;
+    - a new `migration_runs` row;
+    - a boot `pg_tls_verified` line naming the bundled CA.
+
+    Supabase's own password hashing is part of every sign-in by design. It is the floor, never
+    something to "optimise".
 - **Railway auto-deploys from `main`, so pushing IS deploying.** The old runbook order
   ("migrations first, then deploy the API") cannot be honoured by pushing — the code is
   live the moment you push, schema ready or not. Either apply the migration before
@@ -820,7 +864,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 34 suites, 340 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 34 suites, 341 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

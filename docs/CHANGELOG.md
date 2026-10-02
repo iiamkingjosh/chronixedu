@@ -16,6 +16,20 @@
 - The amount a school pays is fixed the moment they start checkout, and a payment that comes back verified at a different amount is refused rather than accepted — so a price change or a stale page can't settle for the wrong figure.
 - A trial school and a cancelled subscription can't be charged — checkout refuses both before ever reaching Paystack.
 
+## A password-reset link that does not work now says why (2026-10-02)
+
+### For schools
+- If a reset link cannot be used, the page now says which reason applies:
+  - the link was already used or has expired (some email services use a link up by checking it before you click);
+  - the page was opened without a link;
+  - the problem is on our side, not with your link.
+
+  It used to show the same "invalid or expired" message every time.
+- If your new password is refused, the page shows the reason instead of saying the link expired.
+
+### For Chronix administrators
+- A reset link that cannot be used is now recorded on the server. A link the page cannot read, or a login with no account behind it, raises an alert.
+
 ## Signing in again waits for one round trip less (2026-10-02)
 
 ### For schools

@@ -128,6 +128,12 @@ export const ALERTS = {
     events: ['welcome_email_failed'],
     fields: ['stage', 'error', 'outcome', 'not_sent', 'of', 'outcomes'],
   },
+  password_reset_cannot_complete: {
+    why: 'Someone with a valid password-reset link still cannot set a password: the link arrived in a shape the reset page cannot read, or the login has no app account',
+    level: 'error',
+    events: ['password_reset_link_unreadable', 'password_reset_no_local_account'],
+    fields: ['outcome', 'error_code', 'auth_user_id'],
+  },
   account_cannot_sign_in: {
     why: 'A new account has no Supabase Auth login: it can never sign in, and Forgot password answers 200 and sends nothing, so nobody else would ever notice',
     level: 'error',
