@@ -723,6 +723,32 @@ Monorepo, npm workspaces:
   tried as a non-superuser. Production's `postgres` has CREATEROLE + BYPASSRLS but is not a
   superuser, and the local test database runs as one, so a superuser run hides permission failures.
   048's first draft failed that way.
+- **Regions: the API, web, Redis and the database belong on one continent** (measured 2 Oct 2026).
+  - **Where everything is.** Supabase Postgres and its pooler are in `eu-west-1` (Ireland). All
+    three Railway services (API, web, Redis) run in `sfo` (US West) until the move to EU West
+    (Amsterdam, `europe-west4-drams3a`); Moses makes the change in the dashboard. Lagos traffic
+    enters at Cloudflare and Railway's `ams1` edge, both in Amsterdam.
+  - **What that cost.** A request went Lagos → Amsterdam → San Francisco, and every query crossed
+    back to Ireland. One database round trip was 153 ms (`GET /health` `dbLatencyMs`, a bare
+    `SELECT 1` on a warm pool). A sign-in took 2,576 ms in the container (Railway `totalDuration`,
+    four real sign-ins), about 17 round trips.
+  - **Why EU West:** it sits next to both `eu-west-1` and the `ams1` edge. Being nearer Nigeria is
+    not the reason. Railway has no Irish region, so an Amsterdam–Dublin round trip, typically
+    15–25 ms, is the floor.
+  - **Redis moves with the API.** Every rate-limit and lockout call goes through `bestEffort` under
+    a 500 ms `commandTimeout`. Across the ocean, each one is a ~155 ms round trip.
+  - **Redis has a volume.** Changing its region migrates the data, with downtime for the length of
+    the migration (Railway docs, "Regions"). Meanwhile rate limits and lockouts fail open,
+    `redis_unavailable` alerts, and a support session cannot start. Private networking
+    (`redis.railway.internal`) is unaffected by region.
+  - **Proving a region:**
+    - `GET /health` five times, with `x-health-token`, for `dbLatencyMs`;
+    - Railway's http-log `totalDuration` for real `POST /api/auth/login` requests;
+    - a new `migration_runs` row;
+    - a boot `pg_tls_verified` line naming the bundled CA.
+
+    Supabase's own password hashing is part of every sign-in by design. It is the floor, never
+    something to "optimise".
 - **Railway auto-deploys from `main`, so pushing IS deploying.** The old runbook order
   ("migrations first, then deploy the API") cannot be honoured by pushing — the code is
   live the moment you push, schema ready or not. Either apply the migration before
