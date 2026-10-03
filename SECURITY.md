@@ -1,8 +1,58 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 32 — 2026-10-03  
-**Scope:** School audit rows never recorded an IP address  
-**Round 32 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated
+**Latest audit:** Round 33 — 2026-10-03  
+**Scope:** The API sent passwords, login tokens and request data to Sentry  
+**Round 33 total findings:** 2 (0 Critical · 2 High · 0 Medium · 0 Low) — H-01 remediated; H-02 open (password rotation)
+
+---
+
+## Round 33 — 2026-10-03
+
+### H-01 — The API sent passwords, login tokens and request data to Sentry ✅ Remediated
+
+**File:** `apps/api/src/config/sentry.ts`.
+
+**Found** while scoping two-factor sign-in for platform admins: a recovery code must never reach Sentry, so what reaches Sentry today was measured first.
+- **The configuration.** `Sentry.init` named only `httpIntegration()`, so the SDK's defaults applied. They record the incoming request's body (up to 10 KB), its headers, cookies and query string. That record goes onto every error event and every sampled trace.
+- **The measurement.** The API's exact options were run against a fake Sentry ingest on 127.0.0.1. Then:
+  - a `POST /api/auth/login` that errored sent the typed password and the email;
+  - a traced login that **succeeded** sent them too;
+  - every request sent its `Authorization` bearer token, `x-support-session-id` and `x-health-token`.
+- **The exposure.**
+  - Production samples 20% of requests as traces, so about one login in five sent its password to Sentry, and every sampled authenticated request sent a live session token, a super admin's included.
+  - The DPA names Sentry a sub-processor for technical data only (CLAUDE.md, Conventions), and this was neither.
+
+**What Sentry holds now** (checked 3 Oct 2026, by counts only; no event was opened, so no secret was read back):
+- **Traces:** no POST trace of any kind in the 90-day window, so no traced login. GET traces exist for super-admin pages and the dataset export. By the measurement, those carry a bearer token. Tokens expire after one hour, so every stored one is dead.
+- **Errors:** four events in 90 days. One is `POST /api/auth/reset-landing`, whose body by design carries no address and no token. Three have no request.
+- **Not checked:** whether the Sentry project's server-side data scrubbing ("Use Default Scrubbers") is on. It is a dashboard setting, and it would be a second layer, not the fix.
+- **Not known:** what earlier traces held before they aged out. That is H-02 below, a separate item. It is not the rotation of the two passwords leaked through git (Round 23), which closes when those two are changed.
+
+**Fix:**
+- **The body is never read.** `httpIntegration({ maxIncomingRequestBodySize: 'none' })`.
+- **Every error and every trace is cut down before it is sent** (`beforeSend`, `beforeSendTransaction`, `scrubRequest`):
+  - the request keeps its method and its path;
+  - headers, cookies, body and query string go;
+  - query strings and client-address attributes are removed from the trace's attributes, its spans and its breadcrumbs, where the measurement also found them (`http.query`, `http.url`, `http.target`, and `http.client_ip` from `X-Forwarded-For`).
+- **`sendDefaultPii: false`** is stated rather than left to a default.
+
+**Tests:** `sentryScrub.test.ts` runs the real options against a local ingest.
+- **The requests:** one login that errors and one that succeeds under tracing. Each carries a secret in every place a request carries one: the body (password and email), `Authorization`, `x-support-session-id`, `x-health-token`, a cookie, the query string, `X-Real-IP` and `X-Forwarded-For`.
+- **The search:** it covers everything Sentry received, not one field.
+- **The control:** it first asserts the error and the trace both arrived and name the route, so a Sentry that sent nothing cannot pass.
+- **Against the old options:** it fails at the first secret, the password.
+
+**Not changed, and open:** the web app's browser SDK may record API URLs, query strings included, as fetch breadcrumbs. This is unmeasured (`docs/AUDIT-2026-09.md`). The web server receives no password and no token: the browser sends both straight to the API.
+
+### H-02 — Every password typed into production since 16 Jun 2026 must be treated as exposed 🟡 Open
+
+**Why it is its own item.** H-01 is fixed in code. What it sent cannot be recalled, and cannot be checked: a trace that aged out of Sentry is gone from view, not proven harmless.
+- **The window:** the API has run Sentry with 20% tracing since 16 Jun 2026 (`078d206`). Every sampled login sent its password.
+- **Not the same as the git leak:** the rotation item from Round 23 covers the two passwords that leaked through git, and closes when those two change. This one is wider, and does not close with it.
+
+**Who:** every account that can sign in. Production has seven logins (`auth.users` joined to `users`, 3 Oct 2026), and all seven signed in after 16 Jun: the super admin, a principal, a teacher, a parent, a bursar and two students. A user row without a login had no password to send. Names and addresses stay out of this repository.
+
+**Closes when:** each of the seven has a new password set after H-01's fix went live in production. Before the fix, a new password was exposed again the next time it was typed. It is checked mechanically, not by asking: a fingerprint of each stored password hash is taken when the fix is live (kept outside the repository), and a changed fingerprint is a changed password. Tracked in `docs/AUDIT-2026-09.md`.
 
 ---
 

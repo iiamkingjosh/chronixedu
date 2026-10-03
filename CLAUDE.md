@@ -283,6 +283,12 @@ Monorepo, npm workspaces:
 - DB access lives in `apps/api/src/db/queries/*`; routes orchestrate, services hold business logic.
 - API logging via `logger` (winston). No `console.log` in app code.
 - **Sentry gets technical data only**, because the DPA names it a sub-processor on that basis.
+  **The API sends a request's method and path, and nothing else** (`config/sentry.ts`, since 3 Oct
+  2026, SECURITY.md Round 33). The SDK's defaults sent the body, headers and query string with every
+  error and every sampled trace: a traced login sent its password, and every request its bearer
+  token. Body capture is off, and `scrubRequest` cuts every event and trace before it is sent.
+  `sentryScrub.test.ts` plants a secret in each place a request carries one and searches everything
+  Sentry receives. A new Sentry integration or option must keep that test green.
   `Sentry.setUser` takes the user **id** and nothing else (it sent emails until 1 Oct 2026,
   SECURITY.md Round 21). Replay keeps `maskAllText`, `maskAllInputs` and `blockAllMedia`
   stated explicitly in `instrumentation-client.ts` (named `sentry.client.config.ts` until 1 Oct 2026). Never put a name, email, phone number or
