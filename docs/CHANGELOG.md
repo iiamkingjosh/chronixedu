@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## The data export includes every stored file (2026-10-03)
+
+### For schools
+- Settings → Data Export has a new "Download .zip". It holds every spreadsheet, plus every file stored for the school: student photos, signatures, the logo and stamp, assignment attachments and submissions, report cards, receipts and transcripts.
+- A list inside the zip, `manifest.csv`, accounts for every file: its size and checksum, and which record it belongs to. A file a record refers to but which is no longer stored is listed as missing, never left out without a word.
+- There are no links in the export, so nothing in it can expire. The individual spreadsheets can still be downloaded one at a time.
+
 ## The rate panel says when the rate was changed outside Chronix Edu (2026-10-03)
 
 ### For Chronix administrators

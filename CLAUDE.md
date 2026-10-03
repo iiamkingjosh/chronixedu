@@ -628,10 +628,24 @@ Monorepo, npm workspaces:
 - **Export:** principal → Settings → Data Export (`GET /:schoolId/export[/:dataset]`,
   `db/queries/schoolExport.ts`). Every public table is either an `EXPORT_DATASETS` source or in
   `NOT_EXPORTED` with a reason, and `schoolExport.db.test.ts` fails on a table that is neither. A new
-  table needs that decision in the same commit. Files in Storage are not in the export yet.
+  table needs that decision in the same commit.
+- **The full export is one zip, files included** (`GET /:schoolId/export/archive`,
+  `services/schoolExportArchive.ts`, since 3 Oct 2026). It holds every dataset as CSV, every
+  stored file as bytes, and `manifest.csv`.
+  - **No links of any kind:** a signed URL in an export expires.
+  - **Streamed,** so time-to-first-byte limits never apply and memory stays flat.
+  - **Every file is accounted for** in the manifest: `included`, `unreferenced`, `missing_in_storage`
+    (a record names it, Storage does not hold it; the export continues) or `read_failed`. Never
+    dropped silently.
+  - **One list of locations.** The files come from `config/storagePrefixes.json`, the list the
+    deletion script reads. `storagePrefixes.test.ts` fails if an upload in `src` writes outside it.
+  - **One list of file columns.** The records that name files are `FILE_COLUMNS`; every
+    `*_url`/`*_path` column must be there or in `NOT_FILE_COLUMNS` (`schoolExportArchive.db.test.ts`).
+  - **Registered before `/:dataset`,** which would read "archive" as a dataset name. Audited before
+    the first byte.
 - **Deletion:** `apps/api/scripts/delete-school-data.js` and `docs/data-deletion-runbook.md`. Same
   ratchet: every table is in `STEPS` or `NOT_DELETED` (`schoolDeletion.db.test.ts`). A new upload
-  path goes in `storagePrefixes()`. A completed run leaves **zero rows** for the school in every
+  path goes in `config/storagePrefixes.json`, shared with the export. A completed run leaves **zero rows** for the school in every
   table, checked inside the transaction, which rolls back otherwise. `audit_logs` goes only through
   migration 048's `chronixedu_purge.purge_school_audit_logs(school, operator)`, decided 1 Oct 2026
   (option (a)). A plain DELETE is still refused, content UPDATE and write-once `processed_at` are
@@ -967,7 +981,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 39 suites, 372 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 40 suites, 376 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

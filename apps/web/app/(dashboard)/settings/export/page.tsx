@@ -5,9 +5,10 @@ import { useAuth } from '@/app/providers';
 import { apiFetch, apiFetchBlob } from '@/lib/api';
 
 /**
- * The school's complete data export: every record, one spreadsheet (CSV) per kind. This is
- * what the Data Processing Agreement promises on termination, and it stays available while
- * a school is read-only — its data is its own whether or not it renews.
+ * The school's complete data export: every record, one spreadsheet (CSV) per kind, and since
+ * 3 Oct 2026 everything at once as a .zip that also holds every stored file. This is what the
+ * Data Processing Agreement promises on termination, and it stays available while a school is
+ * read-only — its data is its own whether or not it renews.
  */
 interface Dataset { key: string; label: string; rows: number }
 
@@ -24,26 +25,31 @@ export default function DataExportPage() {
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load the export list'));
   }, [schoolId]);
 
-  async function download(d: Dataset) {
+  async function save(path: string, filename: string, busyKey: string, failure: string) {
     if (!schoolId) return;
-    setBusy(d.key);
+    setBusy(busyKey);
     setError('');
     try {
-      const blob = await apiFetchBlob(`/api/schools/${schoolId}/export/${d.key}`);
+      const blob = await apiFetchBlob(`/api/schools/${schoolId}${path}`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${d.key}.csv`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : `Could not download ${d.label}`);
+      setError(err instanceof Error ? err.message : failure);
     } finally {
       setBusy(null);
     }
   }
+
+  const download = (d: Dataset) => save(`/export/${d.key}`, `${d.key}.csv`, d.key, `Could not download ${d.label}`);
+  // Everything at once (3 Oct 2026): every spreadsheet, every stored file, and manifest.csv, which
+  // accounts for each file, including any a record names but storage no longer holds.
+  const downloadAll = () => save('/export/archive', `chronix-edu-export-${new Date().toISOString().slice(0, 10)}.zip`, 'archive', 'Could not download the full export');
 
   return (
     <div className="max-w-2xl mx-auto p-8">
@@ -52,6 +58,24 @@ export default function DataExportPage() {
         Every record the school holds, one spreadsheet (CSV) each. Downloads are recorded in the audit log.
       </p>
       {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+      <div className="card px-4 py-4 mb-6 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-gray-900">Everything, in one file</p>
+          <p className="text-xs text-gray-500">
+            Every spreadsheet below, plus every stored file (photos, signatures, logos, assignments,
+            report cards, receipts and transcripts), as a .zip. A list inside it accounts for every
+            file. It can take a few minutes for a large school.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={downloadAll}
+          disabled={busy !== null}
+          className="shrink-0 rounded-md bg-[#003366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#002244] disabled:opacity-50"
+        >
+          {busy === 'archive' ? 'Preparing…' : 'Download .zip'}
+        </button>
+      </div>
       {!datasets && !error && <p className="text-sm text-gray-500">Loading…</p>}
       {datasets && (
         <ul className="card divide-y divide-gray-100">

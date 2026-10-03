@@ -40,6 +40,7 @@ import { sendTermiiSms } from '../services/termiiService';
 import { logger } from '../config/logger';
 import { findSubscriptionGate } from '../db/queries/schools';
 import { exportSummary, exportDatasetCsv } from '../db/queries/schoolExport';
+import { streamSchoolArchive } from '../services/schoolExportArchive';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -277,6 +278,39 @@ router.get(
       return res.json({ success: true, data: { datasets: await exportSummary(req.params.schoolId) } });
     } catch (err) {
       return next(err);
+    }
+  }
+);
+
+// The whole export as one zip: every dataset, every stored file and a manifest
+// (services/schoolExportArchive.ts, 3 Oct 2026). Registered before /:dataset, which would
+// otherwise read "archive" as a dataset name. Audited BEFORE the first byte, so an export never
+// leaves without its record. Once bytes have gone, a failure can no longer become an error
+// response; it ends the stream, which the browser shows as a failed download, and is alerted.
+router.get(
+  '/:schoolId/export/archive',
+  verifyToken,
+  requireSchoolAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await logAudit({
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'SCHOOL_DATA_EXPORTED',
+        entity: 'school_export',
+        entityId: req.params.schoolId,
+        oldValue: null,
+        newValue: { dataset: 'archive' },
+      });
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="chronix-edu-export-${new Date().toISOString().slice(0, 10)}.zip"`);
+      const counts = await streamSchoolArchive(req.params.schoolId, res);
+      logger.info('school_export_archive_sent', { school_id: req.params.schoolId, ...counts });
+    } catch (err) {
+      if (!res.headersSent) return next(err);
+      logger.error('school_export_archive_failed', { school_id: req.params.schoolId, error: err instanceof Error ? err.message : String(err) });
+      res.destroy(err instanceof Error ? err : undefined);
     }
   }
 );

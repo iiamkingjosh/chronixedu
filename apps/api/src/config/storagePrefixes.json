@@ -1,0 +1,9 @@
+{
+  "_about": "Where a school's files live in Supabase Storage. Read by BOTH the data export (src/config/storagePrefixes.ts) and the deletion script (scripts/delete-school-data.js), so a path is exported and deleted together or neither. storagePrefixes.test.ts fails if an upload in src writes outside these. {schoolId} is the school's id; bucket \"assets\" means SUPABASE_STORAGE_BUCKET, default school-assets.",
+  "prefixes": [
+    { "bucket": "assets", "template": "schools/{schoolId}/" },
+    { "bucket": "report-cards", "template": "{schoolId}/" },
+    { "bucket": "report-cards", "template": "receipts/{schoolId}/" },
+    { "bucket": "report-cards", "template": "transcripts/{schoolId}/" }
+  ]
+}

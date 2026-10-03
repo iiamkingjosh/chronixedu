@@ -353,9 +353,9 @@ The empty school's plan said "0 (every user has a login)", which is vacuously tr
 
 ## Known gaps
 
-- **Files are not in the export.** The CSV export is complete for the database. Report cards can
-  be regenerated, but student photos and assignment submissions exist only as files. The DPA's
-  "CSV or PDF" is arguably met for records, not for uploads. Adding a file bundle is a feature;
-  see `docs/AUDIT-2026-09.md`.
+- ~~Files are not in the export.~~ Closed 3 Oct 2026: Settings → Data Export → "Download .zip"
+  holds every record as CSV and every stored file, with a manifest. Before deleting a school that
+  is leaving, offer it this zip. It reads the same prefixes this runbook's script deletes
+  (`apps/api/src/config/storagePrefixes.json`).
 - **Termii** has no deletion route (table above). SendGrid suppressions are manual but covered by
   the procedure.

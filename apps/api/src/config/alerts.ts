@@ -117,6 +117,12 @@ export const ALERTS = {
     ],
     fields: ['error', 'pending'],
   },
+  school_export_failed: {
+    why: "A school's full data export (the zip of every record and file) failed partway: the principal received a broken download",
+    level: 'error',
+    events: ['school_export_archive_failed'],
+    fields: ['error'],
+  },
   audit_write_failed: {
     why: 'A sensitive change was made but its audit record could not be written (CLAUDE.md doctrine 10)',
     level: 'error',

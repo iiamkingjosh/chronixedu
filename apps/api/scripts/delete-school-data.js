@@ -126,20 +126,21 @@ async function countAll(client, schoolId) {
 }
 
 /**
- * Where the API stores a school's files (grep ".upload(" under apps/api/src):
+ * Where the API stores a school's files: src/config/storagePrefixes.json, the one list the data
+ * export reads too (3 Oct 2026), so a path is exported and deleted together or neither.
  *   school-assets (SUPABASE_STORAGE_BUCKET): schools/<id>/ — logo, signature, stamp, student
  *     photos, staff signatures, assignment attachments and submissions
  *   report-cards: <id>/ (report cards), receipts/<id>/, transcripts/<id>/
- * A new upload path outside these prefixes must be added here.
+ * A new upload path goes in that file; storagePrefixes.test.ts fails until it does.
  */
+const STORAGE_PREFIX_CONFIG = require('../src/config/storagePrefixes.json');
+
 function storagePrefixes(schoolId) {
   const assets = process.env.SUPABASE_STORAGE_BUCKET || 'school-assets';
-  return [
-    { bucket: assets, prefix: `schools/${schoolId}/` },
-    { bucket: 'report-cards', prefix: `${schoolId}/` },
-    { bucket: 'report-cards', prefix: `receipts/${schoolId}/` },
-    { bucket: 'report-cards', prefix: `transcripts/${schoolId}/` },
-  ];
+  return STORAGE_PREFIX_CONFIG.prefixes.map(p => ({
+    bucket: p.bucket === 'assets' ? assets : p.bucket,
+    prefix: p.template.replace('{schoolId}', schoolId),
+  }));
 }
 
 /** The school's stored files, read from storage.objects; null where this database has no Storage. */
