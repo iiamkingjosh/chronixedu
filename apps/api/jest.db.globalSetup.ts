@@ -28,6 +28,8 @@ export default async function globalSetup(): Promise<void> {
     // function survived each local rebuild and a "revert to the old code" run still had it, so the
     // run measured leftovers rather than the code under test.
     await client.query('DROP SCHEMA IF EXISTS chronixedu_purge CASCADE;');
+    // Migration 055's break-glass function for platform-admin two-factor.
+    await client.query('DROP SCHEMA IF EXISTS chronixedu_two_factor CASCADE;');
     await client.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;');
     await client.query(fs.readFileSync(path.join(root, 'scripts/sql/test_supabase_stubs.sql'), 'utf8'));
     const dir = path.join(root, 'migrations');

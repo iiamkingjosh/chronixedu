@@ -100,5 +100,7 @@ terms|service_role_bypass|ALL|service_role|Q=true|C=true
 terms|terms_tenant_isolation|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)
 timetable_slots|service_role_bypass|ALL|service_role|Q=true|C=-
 timetable_slots|timetable_slots_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)
+user_recovery_codes|service_role_bypass|ALL|service_role|Q=true|C=true
+user_totp|service_role_bypass|ALL|service_role|Q=true|C=true
 users|service_role_bypass|ALL|service_role|Q=true|C=true
 users|users_tenant_isolation|ALL|public|Q=((school_id = ((auth.jwt() ->> 'school_id'::text))::uuid) OR (id = auth.uid()))|C=((school_id = ((auth.jwt() ->> 'school_id'::text))::uuid) OR (id = auth.uid()))

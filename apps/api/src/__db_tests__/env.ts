@@ -20,4 +20,6 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test';
 process.env.ROOT_ADMIN_EMAIL ??= 'root@chronix.test';
 // The web app's address in every link the API builds (config/appUrls.ts has no default).
 process.env.APP_URL ??= 'http://localhost:3000';
+// Encrypts admins' authenticator secrets (services/totpSecretBox.ts); a fixed test-only key.
+process.env.TOTP_ENCRYPTION_KEY ??= 'dGVzdC1vbmx5LXRvdHAta2V5LTMyLWJ5dGVzLWxvbmc=';
 delete process.env.REDIS_URL;

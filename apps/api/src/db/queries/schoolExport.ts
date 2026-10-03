@@ -92,6 +92,8 @@ export const NOT_EXPORTED: Record<string, string> = {
   platform_announcements: 'Platform-wide messages from Chronix to all schools.',
   platform_metrics_snapshots: 'Platform-wide aggregate figures; no single school’s data.',
   platform_pricing_config: 'The platform rate; no school data.',
+  user_totp: 'A sign-in credential (an encrypted authenticator secret, migration 055), never part of an export: anyone holding it can sign in as that person.',
+  user_recovery_codes: 'Sign-in credentials (hashes of one-time recovery codes, migration 055), never part of an export.',
   schema_migrations: 'Database bookkeeping.',
   migration_runs: 'Database bookkeeping.',
 };

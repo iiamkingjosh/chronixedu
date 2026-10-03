@@ -275,6 +275,48 @@ Monorepo, npm workspaces:
   redirects to `/login` on 401 unless called with `deferAuthRedirect: true`,
   which throws `SessionExpiredError` so the caller can save unsaved work first.
 
+## Two-factor sign-in for platform admins (being built since 3 Oct 2026)
+
+- **Scope: `super_admin` only.** Whether principals get it is a separate decision, not a stretch goal.
+- **Four commits, in order:**
+  1. recovery and storage (migration 055);
+  2. enrolment;
+  3. the sign-in step;
+  4. enforcement, only after Moses has enrolled and proven a recovery code.
+
+  `docs/admin-two-factor-runbook.md` covers the key and break-glass.
+- **TOTP, written in-house** (`services/totp.ts`, over Node's crypto, tested against the RFC 4226 and
+  6238 tables). **SHA-1 is deliberate:** authenticator apps ignore the URI's `algorithm`, so SHA-256
+  codes would silently never match. Do not "improve" it.
+- **The secret is a credential:**
+  - it is AES-256-GCM-encrypted under `TOTP_ENCRYPTION_KEY`, bound to the admin's user id
+    (`services/totpSecretBox.ts`);
+  - the API refuses to start without the key;
+  - it is never logged, never sent to Sentry, never put in an audit row;
+  - losing the key puts every enrolled admin through break-glass.
+- **Recovery codes:** ten one-time codes, 80 bits each, in Crockford base32, shown once and stored as
+  SHA-256 (`services/recoveryCodes.ts`). Each is spent atomically (`consumeRecoveryCode`).
+- **Removing an ACTIVE second factor is always recorded.** A trigger writes `TWO_FACTOR_REMOVED`,
+  signed by the system account, with the admin in `metadata`. That covers break-glass, a plain
+  DELETE, and deleting the user.
+- **Break-glass is `chronixedu_two_factor.break_glass_reset(user_id, reason)`,** run by the table owner
+  only. Never grant EXECUTE on it. Its schema is in the DB suite's drop list.
+- **Decisions already taken; do not reopen without new facts:**
+  - **(b) Switch-on:** one authenticator code switches it on. Typing a recovery code back is not
+    required (Moses, 3 Oct 2026).
+  - **(c) Failure limits held in the database,** per account, because Redis fails open (Round 19).
+    With Redis down, the Redis counters alone would allow unlimited guesses at six digits. The first
+    lock alerts: a correct password followed by wrong codes means the password is known.
+  - **(d) The unauthenticated second step runs on the login connection.** It never uses the app pool.
+    Its grants are enumerated in `docs/c4a/grants.sql` in the same commit (CLAUDE.md, Auth: anything
+    added to that connection widens its role).
+  - **(e) Order:** 2FA comes before the platform audit-log protection (Round 30 L-02). If a test is
+    ever pointed at production again, the protection jumps the queue.
+- **No token before the second factor.** After the password, an enrolled admin gets an opaque, hashed,
+  single-use, five-minute challenge, never a JWT. A wrong code counts against the per-email lockout
+  and `rl:login`, which today matches only `POST /login`, so the verify route must be added to it.
+  The lockout counters clear only after the second factor passes, never at the password.
+
 ## Conventions
 
 - API response envelope: `{ success: true, data }` / `{ success: false, error: { code, message } }`.
@@ -1006,7 +1048,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 40 suites, 377 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 41 suites, 390 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

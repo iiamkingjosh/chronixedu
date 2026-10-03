@@ -74,6 +74,13 @@ const STEPS = [
   own('messages'),
   own('notification_logs'),
   { table: 'notifications', where: `user_id IN ${U}` },
+  // Two-factor credentials (migration 055) go with their user. Only platform admins, who have no
+  // school, can enrol today, so these match nothing; if school staff ever can, deletion already
+  // covers them and the zero-rows check proves it. Deleting an active user_totp row writes a
+  // TWO_FACTOR_REMOVED record with target_user_id NULL, which the platform_audit_logs step below
+  // does not match, so the record of the removal survives the deletion.
+  { table: 'user_recovery_codes', where: `user_id IN ${U}` },
+  { table: 'user_totp', where: `user_id IN ${U}` },
   { table: 'email_queue', where: `to_email IN (SELECT email FROM users WHERE school_id = $1)` },
   own('school_analytics_snapshots'),
   { table: 'parent_students', where: `student_id IN ${S} OR parent_id IN ${U}` },

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseTotpKey } from '../services/totpSecretBox';
 
 const envSchema = z.object({
   DATABASE_URL: z
@@ -43,6 +44,12 @@ const envSchema = z.object({
   // falling open. A minimum length is enforced because a short shared secret is the
   // kind of thing that gets set to "test" during a deploy and never changed.
   ERP_INTEGRATION_API_KEY: z.string().min(32, 'ERP_INTEGRATION_API_KEY must be at least 32 characters').optional(),
+  // Encrypts platform admins' authenticator secrets at rest (services/totpSecretBox.ts, 3 Oct 2026).
+  // Required, with no default: without it no enrolled admin could sign in, and an API that started
+  // anyway would fail at the second factor instead of at boot. Keep a copy in the password manager.
+  TOTP_ENCRYPTION_KEY: z
+    .string({ message: 'TOTP_ENCRYPTION_KEY is required (32 random bytes, base64)' })
+    .refine((v) => parseTotpKey(v) !== null, 'TOTP_ENCRYPTION_KEY must be exactly 32 bytes, base64'),
 });
 
 export type Env = z.infer<typeof envSchema>;
