@@ -238,6 +238,20 @@ Monorepo, npm workspaces:
   its **own** HS256 JWT (`JWT_SECRET`, 1h) with `user_id, school_id, role, email,
   title, must_change_password, subscription_tier`. Supabase-issued tokens are
   not used anywhere else.
+- **No Supabase session outlives a password check** (SECURITY.md Round 35).
+  - **The rule:** `signInAndRevoke` (`services/passwordCheck.ts`) is the only way the API checks a
+    password: sign-in, the 2FA re-check and the payout step-up. It revokes the session it creates at
+    once. Both Supabase clients keep no session and refresh nothing. Never call `signInWithPassword`
+    anywhere else.
+  - **Why:** each sign-in used to leave a session that never expired, 56 of them for 7 accounts.
+- **`confirm-reset` takes only a reset link's own session, within the hour, once**
+  (`services/resetLink.ts`).
+  - **What qualifies:** the token's `amr` must say `otp` or `recovery`, never `password`. Its
+    timestamp, which survives refreshes, must be within 60 minutes.
+  - **After a reset:** every Supabase session of the account is revoked, and its app sessions end.
+  - **Why:** it used to accept any session's token, so a lingering session was a password reset
+    that bypassed sign-in and the second factor.
+  - **Unchanged:** it asks for no current password, because a reset is for someone who has lost it.
 - **`POST /forgot-password` answers the same 200 and body for every well-formed request, before any
   email is attempted** (`sendResetEmail` runs after the response; a failure is logged by user id).
   Never await the send in the handler, or vary the answer on its result: the answer or its timing
@@ -321,8 +335,8 @@ Monorepo, npm workspaces:
       `POST /login`). So someone holding a stolen session can lock the admin out of sign-in.
       Accepted (3 Oct 2026): a stolen platform-admin session is already the bad day, and break-glass
       is the way out.
-    - The check's own Supabase client keeps no session, and the session `signInWithPassword` creates
-      is revoked at once.
+    - It is `signInAndRevoke`, the same check sign-in uses, so no Supabase session outlives it
+      (Auth, above).
   - **One authenticator code switches it on** (decision b). That code's time step is recorded, so it
     cannot be replayed.
   - **Switching it on ends every other session** the admin had (`users.sessions_valid_after`), and

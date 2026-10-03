@@ -276,3 +276,12 @@ export async function findPrincipalsBySchool(schoolId: string): Promise<{ email:
   );
   return result.rows;
 }
+
+/**
+ * Ends every app session the user had before now (users.sessions_valid_after, migration 056). Used
+ * after a password reset (SECURITY.md Round 35) and by 2FA enrolment. verifyToken enforces it for
+ * platform admins' tokens only, today; see the comment there before relying on it for anyone else.
+ */
+export async function endSessionsBeforeNow(userId: string): Promise<void> {
+  await pool.query(`UPDATE users SET sessions_valid_after = now() WHERE id = $1`, [userId]);
+}

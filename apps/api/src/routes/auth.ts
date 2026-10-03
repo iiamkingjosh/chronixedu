@@ -7,12 +7,14 @@ import bcrypt from 'bcryptjs';
 import { Client } from 'pg';
 import pool, { resolveSsl } from '../db/client';
 import { verifyToken, requireRole } from '../middleware/auth';
-import { findUserByEmail, updatePasswordHash, getPasswordHashById, changeOwnPassword } from '../db/queries/users';
+import { findUserByEmail, updatePasswordHash, getPasswordHashById, changeOwnPassword, endSessionsBeforeNow } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
 import { redis } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
 import { logger } from '../config/logger';
 import { isLockedOut, recordFailedAttempt, clearFailedAttempts } from '../services/loginLockout';
+import { signInAndRevoke } from '../services/passwordCheck';
+import { judgeResetToken } from '../services/resetLink';
 import { resetPasswordRedirect } from '../config/appUrls';
 
 const router = express.Router();
@@ -160,9 +162,12 @@ router.post('/login', async (req, res, next) => {
       });
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    // Checked through Supabase, and the Supabase session that creates is revoked at once
+    // (services/passwordCheck.ts, SECURITY.md Round 35): the app runs on its own JWT, and every
+    // sign-in used to leave behind a session that never expired.
+    const userId = await signInAndRevoke(email, password);
 
-    if (error) {
+    if (!userId) {
       const { counted, locked } = await recordFailedAttempt(email, ip);
       if (locked) {
         return res.status(429).json({
@@ -175,8 +180,6 @@ router.post('/login', async (req, res, next) => {
         error: { code: 'INVALID_CREDENTIALS', message: counted ? 'Incorrect email or password' : 'Invalid credentials.' },
       });
     }
-
-    const userId = data.user.id;
 
     // H-08: always release the pg client, even when an early return or exception occurs.
     const pg = getLoginClient();
@@ -456,6 +459,22 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
       });
     }
 
+    // Only a reset link's own session, opened within the hour, may set a password without the current
+    // one (services/resetLink.ts, Round 35). Any session's token used to do, and sign-in left sessions
+    // that never expired: each was a standing password reset that bypassed sign-in. Refused with the
+    // same answer as an expired link; the reason is logged, never the token.
+    const verdict = judgeResetToken(access_token);
+    if (!verdict.ok) {
+      logger.warn('password_reset_token_refused', { reason: verdict.reason, auth_user_id: userData.user.id });
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'INVALID_TOKEN',
+          message: 'This reset link is invalid or has expired. Please request a new one.',
+        },
+      });
+    }
+
     const email = userData.user.email;
     const local = await findUserByEmail(email);
     if (!local) {
@@ -483,6 +502,21 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
 
     const passwordHash = bcrypt.hashSync(password, 12);
     await updatePasswordHash(email, passwordHash);
+
+    // A reset ends what came before it (Round 35):
+    //  - every Supabase session of the account, this reset link's included, so the link works once;
+    //  - every app session (users.sessions_valid_after; enforced for platform admins' tokens today).
+    // A failed revocation does not undo the reset: the password has changed. It is alerted.
+    await endSessionsBeforeNow(local.id);
+    try {
+      const { error: revokeError } = await supabaseAdmin.auth.admin.signOut(access_token, 'global');
+      if (revokeError) throw revokeError;
+    } catch (err) {
+      logger.error('password_reset_sessions_not_revoked', {
+        user_id: local.id,
+        error: err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err),
+      });
+    }
 
     // Immediately clear the must-change-password cache so requirePasswordChanged
     // unblocks this user on their very next request, rather than waiting out the

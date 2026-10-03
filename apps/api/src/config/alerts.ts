@@ -182,10 +182,10 @@ export const ALERTS = {
     events: ['two_factor_locked'],
     fields: ['user_id', 'failed_attempts', 'route'],
   },
-  password_check_left_session: {
-    why: 'A password re-check could not revoke the Supabase session it created, so one more never-expiring session remains for that account (docs/AUDIT-2026-09.md)',
+  supabase_session_not_revoked: {
+    why: "A Supabase session that should have been revoked was not: after a password check (sign-in, 2FA re-check, payout step-up) or after a password reset. Until revoked it never expires, and its token could reach confirm-reset (SECURITY.md Round 35). Revoke the user's sessions",
     level: 'error',
-    events: ['password_check_session_not_revoked'],
+    events: ['password_check_session_not_revoked', 'password_reset_sessions_not_revoked'],
     fields: ['user_id', 'error'],
   },
 } as const satisfies Record<string, AlertSpec>;

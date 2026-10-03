@@ -19,9 +19,11 @@ jest.mock('../src/services/emailService', () => ({
 // supabase.auth.signInWithPassword (the exact mechanism login uses) before it
 // will touch payout config. Mock it the same way src/__tests__/auth.test.ts
 // does — default to "correct password", individual tests override to
-// simulate a wrong one. supabaseAdmin is unused by the payout routes under
-// test here, so it's left as an empty stub.
-const mockSignInWithPassword = jest.fn().mockResolvedValue({ data: {}, error: null });
+// simulate a wrong one. A correct password answers with the user, as Supabase does;
+// services/passwordCheck.ts treats an answer without one as a refusal. No session is
+// returned, so there is nothing to revoke and supabaseAdmin stays an empty stub.
+const STEP_UP_OK = { data: { user: { id: 'step-up-auth-user' }, session: null }, error: null };
+const mockSignInWithPassword = jest.fn().mockResolvedValue(STEP_UP_OK);
 jest.mock('../src/supabaseClient', () => ({
   supabase: {
     auth: {
@@ -153,7 +155,7 @@ describe('Payout settings', () => {
 
   beforeEach(() => {
     mockSignInWithPassword.mockClear();
-    mockSignInWithPassword.mockResolvedValue({ data: {}, error: null });
+    mockSignInWithPassword.mockResolvedValue(STEP_UP_OK);
   });
 
   afterAll(async () => {

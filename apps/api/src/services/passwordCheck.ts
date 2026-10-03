@@ -1,37 +1,39 @@
-import { createClient } from '@supabase/supabase-js';
-import { supabaseAdmin } from '../supabaseClient';
+import { supabase, supabaseAdmin } from '../supabaseClient';
 import { logger } from '../config/logger';
 
 /**
- * Checks a signed-in person's password again, before a sensitive act (2FA enrolment), the same way
- * sign-in checks it: through Supabase Auth, not the local users.password_hash, which can be stale.
+ * The one way the API checks a password (SECURITY.md Round 35): POST /login, the 2FA enrolment
+ * re-check, and the payout step-up in routes/schools.ts. Through Supabase Auth, not the local
+ * users.password_hash, which can be stale.
  *
  * signInWithPassword creates a Supabase session as a side effect, with a refresh token that never
- * expires. Production held 56 such sessions for 7 accounts on 3 Oct 2026, the oldest from 19 Aug,
- * one left behind by every sign-in (docs/AUDIT-2026-09.md). This check leaves none:
- *  - its own client, which keeps no session in memory and refreshes nothing, so the shared client
- *    in supabaseClient.ts is never handed this person's session;
- *  - the session it creates is revoked at once (admin signOut, this session only).
- * A failed revocation does not fail the check; it is logged and alerted, never swallowed.
+ * expires. Every sign-in since 19 Aug 2026 left one: production held 56 for its 7 accounts on 3 Oct.
+ * A live session can mint an access token whenever it likes, and confirm-reset set a new password for
+ * any access token, with no current password, so each was a standing password reset reached without
+ * signing in. So the session is revoked at once (admin signOut, this session only), and the client
+ * that made it keeps no session in memory (supabaseClient.ts).
+ *
+ * A failed revocation does not fail the check: the password was right. It is logged and alerted
+ * (supabase_session_not_revoked), never swallowed. The token itself is never logged.
  */
-function checkingClient() {
-  return createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_PUBLISHABLE_KEY!, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
+export async function signInAndRevoke(email: string, password: string): Promise<string | null> {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data?.user) return null;
+  if (data.session) {
+    try {
+      const { error: revokeError } = await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'local');
+      if (revokeError) throw revokeError;
+    } catch (err) {
+      logger.error('password_check_session_not_revoked', {
+        user_id: data.user.id,
+        // Supabase's AuthError is an Error, but a plain { message } must not log as "[object Object]".
+        error: err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err),
+      });
+    }
+  }
+  return data.user.id;
 }
 
 export async function passwordMatches(email: string, password: string): Promise<boolean> {
-  const { data, error } = await checkingClient().auth.signInWithPassword({ email, password });
-  if (error || !data.session) return false;
-  try {
-    const { error: revokeError } = await supabaseAdmin.auth.admin.signOut(data.session.access_token, 'local');
-    if (revokeError) throw revokeError;
-  } catch (err) {
-    logger.error('password_check_session_not_revoked', {
-      user_id: data.user?.id ?? null,
-      // Supabase's AuthError is an Error, but a plain { message } must not log as "[object Object]".
-      error: err instanceof Error ? err.message : (err as { message?: string })?.message ?? String(err),
-    });
-  }
-  return true;
+  return (await signInAndRevoke(email, password)) !== null;
 }

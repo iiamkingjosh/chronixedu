@@ -15,6 +15,14 @@ const mockAdminListUsers = jest.fn();
 const mockAdminGetUser = jest.fn();
 const mockAdminUpdateUserById = jest.fn();
 const mockGetUserByToken = jest.fn();
+const mockAdminSignOut = jest.fn();
+
+/** A token shaped like Supabase's (header.payload.signature); confirm-reset reads only its payload's amr. */
+function supabaseToken(amr: Array<{ method: string; timestamp: number }>): string {
+  const part = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ sub: 'auth-1', amr })}.signature`;
+}
+const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 jest.mock('../supabaseClient', () => ({
   supabase: {
@@ -31,6 +39,7 @@ jest.mock('../supabaseClient', () => ({
         listUsers: (...args: unknown[]) => mockAdminListUsers(...args),
         getUser: (...args: unknown[]) => mockAdminGetUser(...args),
         updateUserById: (...args: unknown[]) => mockAdminUpdateUserById(...args),
+        signOut: (...args: unknown[]) => mockAdminSignOut(...args),
       },
     },
   },
@@ -388,6 +397,62 @@ describe('POST /api/auth/forgot-password — one answer for every address', () =
   });
 });
 
+describe('POST /api/auth/login — the Supabase session a sign-in creates is revoked (Round 35)', () => {
+  it('revokes it at once, and it never reaches the response', async () => {
+    mockAdminSignOut.mockResolvedValue({ error: null });
+    mockSignIn.mockResolvedValueOnce({ data: { user: { id: 'auth-uuid-1' }, session: { access_token: 'supabase-session-token' } }, error: null });
+    mockQuery
+      .mockResolvedValueOnce({ rows: [{ id: 'local-uuid-1', school_id: 'school-1', role: 'teacher', title: null, email: 'a@b.com', first_name: 'A', last_name: 'B', is_active: true, support_code: '123456', must_change_password: false }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ subscription_tier: 'premium' }] });
+    const res = await request(app).post('/api/auth/login').send({ email: 'a@b.com', password: 'password123' });
+    expect(res.status).toBe(200);
+    expect(mockAdminSignOut).toHaveBeenCalledWith('supabase-session-token', 'local');
+    expect(JSON.stringify(res.body)).not.toContain('supabase-session-token');
+  });
+});
+
+describe('POST /api/auth/confirm-reset — only a fresh reset link resets, once (Round 35)', () => {
+  /* eslint-disable @typescript-eslint/no-var-requires */
+  const { findUserByEmail, endSessionsBeforeNow } = require('../db/queries/users');
+  const { logger } = require('../config/logger');
+  /* eslint-enable @typescript-eslint/no-var-requires */
+  const reset = (access_token: string) => request(app).post('/api/auth/confirm-reset')
+    .send({ password: 'a-new-password', confirm_password: 'a-new-password', access_token });
+
+  beforeEach(() => {
+    mockGetUserByToken.mockResolvedValue({ data: { user: { id: 'auth-1', email: 'parent@school.test' } }, error: null });
+    mockAdminUpdateUserById.mockResolvedValue({ data: {}, error: null });
+    mockAdminSignOut.mockResolvedValue({ error: null });
+    (findUserByEmail as jest.Mock).mockResolvedValue({ id: 'auth-1', email: 'parent@school.test', school_id: null });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('a reset link opened a minute ago resets, then revokes every Supabase session and ends app sessions (the control)', async () => {
+    const token = supabaseToken([{ method: 'otp', timestamp: nowSeconds() - 60 }]);
+    const res = await reset(token);
+    expect(res.status).toBe(200);
+    expect(mockAdminUpdateUserById).toHaveBeenCalledWith('auth-1', { password: 'a-new-password' });
+    expect(mockAdminSignOut).toHaveBeenCalledWith(token, 'global');
+    expect(endSessionsBeforeNow).toHaveBeenCalledWith('auth-1');
+  });
+
+  it('a token from a sign-in session is refused, however fresh, and nothing changes', async () => {
+    const warn = jest.spyOn(logger, 'warn');
+    const res = await reset(supabaseToken([{ method: 'password', timestamp: nowSeconds() - 5 }]));
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('INVALID_TOKEN');
+    expect(mockAdminUpdateUserById).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith('password_reset_token_refused', { reason: 'not_a_reset_link', auth_user_id: 'auth-1' });
+  });
+
+  it('a reset link opened over an hour ago is refused, even with a new token', async () => {
+    const res = await reset(supabaseToken([{ method: 'otp', timestamp: nowSeconds() - 3601 }]));
+    expect(res.status).toBe(401);
+    expect(mockAdminUpdateUserById).not.toHaveBeenCalled();
+  });
+});
+
 describe('POST /api/auth/confirm-reset — a login with no app account says so, and is logged', () => {
   // A valid recovery link for a login with no users row used to answer "invalid or expired" and log
   // nothing, sending the person back for another link that would fail the same way (2 Oct 2026).
@@ -396,12 +461,15 @@ describe('POST /api/auth/confirm-reset — a login with no app account says so, 
   const { logger } = require('../config/logger');
   /* eslint-enable @typescript-eslint/no-var-requires */
   const mockFindUser = findUserByEmail as jest.Mock;
-  const confirm = () => request(app).post('/api/auth/confirm-reset')
-    .send({ password: 'a-new-password', confirm_password: 'a-new-password', access_token: 'recovery-session' });
+  // A reset link's own session, opened a minute ago (Round 35: only such a token may reset).
+  const resetLinkToken = () => supabaseToken([{ method: 'otp', timestamp: nowSeconds() - 60 }]);
+  const confirm = (access_token: string = resetLinkToken()) => request(app).post('/api/auth/confirm-reset')
+    .send({ password: 'a-new-password', confirm_password: 'a-new-password', access_token });
 
   beforeEach(() => {
     mockGetUserByToken.mockResolvedValue({ data: { user: { id: 'auth-1', email: 'parent@school.test' } }, error: null });
     mockAdminUpdateUserById.mockResolvedValue({ data: {}, error: null });
+    mockAdminSignOut.mockResolvedValue({ error: null });
   });
   afterEach(() => jest.restoreAllMocks());
 

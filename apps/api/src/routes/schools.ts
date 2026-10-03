@@ -30,7 +30,8 @@ import { findPrincipalsBySchool } from '../db/queries/users';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
 import { newSchoolAcademicConfig, slugify, validateGradeBands } from '../services/schoolService';
 import { cache, schoolCacheKey } from '../services/cacheService';
-import { supabase, supabaseAdmin } from '../supabaseClient';
+import { supabaseAdmin } from '../supabaseClient';
+import { passwordMatches } from '../services/passwordCheck';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
 import { appBaseUrl } from '../config/appUrls';
 import { testEmail, TEST_EMAIL_SUBJECT } from '../services/chronixVoiceEmails';
@@ -1175,8 +1176,8 @@ router.put(
         }
       }
 
-      const { error: stepUpError } = await supabase.auth.signInWithPassword({ email: callerEmail, password: current_password });
-      if (stepUpError) {
+      // Checked through Supabase with the session revoked at once (services/passwordCheck.ts, Round 35).
+      if (!(await passwordMatches(callerEmail, current_password))) {
         if (redis) {
           const r = redis;
           await bestEffort('step_up_lockout_unavailable', async () => {

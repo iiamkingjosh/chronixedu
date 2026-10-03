@@ -1,5 +1,13 @@
 # Chronix Edu — Changelog
 
+## A password reset link works once, within the hour (2026-10-03)
+
+### For everyone
+- A reset link from "Forgot password" now works once, within an hour of being opened. After that, ask
+  for a new one.
+- For Chronix staff, setting a new password through a reset link now also signs that account out of
+  every other session. For school accounts, other sessions run until they expire, within the hour.
+
 ## Two-factor sign-in for platform admins: setting it up (2026-10-03)
 
 ### For Chronix staff
