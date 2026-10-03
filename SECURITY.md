@@ -2,13 +2,13 @@
 
 **Latest audit:** Round 35 — 2026-10-03  
 **Scope:** Supabase sessions left by every sign-in, and what may reset a password  
-**Round 35 total findings:** 1 (0 Critical · 1 High · 0 Medium · 0 Low) — code remediated; existing sessions revoked by Moses (see AUDIT)
+**Round 35 total findings:** 1 (0 Critical · 1 High · 0 Medium · 0 Low) — remediated and verified in production
 
 ---
 
 ## Round 35 — 2026-10-03
 
-### H-01 — Every sign-in left a Supabase session that never expired, and any session's token could reset the password 🟡 Code remediated; revocation of the existing sessions run by Moses
+### H-01 — Every sign-in left a Supabase session that never expired, and any session's token could reset the password ✅ Remediated
 
 **Files:** `apps/api/src/services/passwordCheck.ts`, `apps/api/src/services/resetLink.ts` (new), `apps/api/src/supabaseClient.ts`, `apps/api/src/routes/auth.ts` (`POST /login`, `POST /confirm-reset`), `apps/api/src/routes/schools.ts` (the payout step-up), `apps/api/src/db/queries/users.ts`.
 
@@ -42,6 +42,11 @@
    - **Changed: what counts as a reset.** Only a reset link's own session counts (`amr` method `otp` or `recovery`, never `password`), and only within 60 minutes of the link being opened. The `amr` timestamp survives refreshes, so a reset session left open cannot be used later.
    - **Changed: once only.** A completed reset revokes every Supabase session of the account (`signOut` scope `global`), the link's included. It also ends the account's app sessions (`users.sessions_valid_after`, enforced for platform admins' tokens today).
    - **A refused token** gets the same answer as an expired link, and its reason is logged, never the token.
+
+**Verified in production, 3 Oct 2026:**
+- **The fix went live** at 18:55:14 UTC (deploy `c913e26e`, migration run 100, `8fac70a`).
+- **The revocation:** Moses then ran it once in the SQL editor. No sign-in had happened since 15:06 UTC, so one run covered everything. Sessions went from 56 to 0, live refresh tokens 0, `amr` claims 0, checked from here and by the reviewer.
+- **The discriminator:** a sign-in at 19:15:34 UTC left the count at 0. Before the fix, every sign-in added a permanent row.
 
 **Correction to the reviewer's note:** the sign-in refresh tokens were not in any browser's `localStorage`. The web stores only the app's own token, and never received a Supabase one. The one session whose tokens did reach a browser was the reset link's. The fix and the revocation are unchanged by this.
 
@@ -152,7 +157,7 @@
 
 **Closes when both are true** (corrected 3 Oct 2026, Round 35). As first written it would have closed on rotation alone while the exposure stood.
 1. **Rotation.** Each of the seven has a new password set after H-01's fix went live in production. Before the fix, a new password was exposed again the next time it was typed. It is checked mechanically, not by asking: a fingerprint of each stored password hash was taken when the fix went live (kept outside the repository), and a changed fingerprint is a changed password.
-2. **Revocation.** Every Supabase session of those accounts is revoked, after Round 35's sign-in fix is live. Changing a password does not invalidate an existing Supabase session, and a session's token could reset the password with no current password (Round 35 H-01).
+2. **Revocation.** Every Supabase session of those accounts is revoked, after Round 35's sign-in fix is live. Changing a password does not invalidate an existing Supabase session, and a session's token could reset the password with no current password (Round 35 H-01). **Done, 3 Oct 2026:** 56 sessions to 0 after the fix went live, and a later sign-in left none. Only rotation remains.
 
 Tracked in `docs/AUDIT-2026-09.md`.
 
