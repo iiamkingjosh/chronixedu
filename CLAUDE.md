@@ -480,7 +480,7 @@ Monorepo, npm workspaces:
 
 - `platform_subscriptions.amount_naira` is **derived, never written**: the per-student rate
   (`platform_pricing_config.price_per_student_kobo`, a singleton, unset in production until
-  Moses sets it) × the school's **billable students**, recomputed by a BEFORE trigger on every
+  Moses sets it on the Subscriptions page) × the school's **billable students**, recomputed by a BEFORE trigger on every
   write (migrations 044, 045). The API refuses `amount_naira` from a caller (400 naming the
   field) rather than ignoring it.
 - **A billable student has a `student_classes` row for the school's CURRENT academic
@@ -501,6 +501,29 @@ Monorepo, npm workspaces:
   a session in place is an honest ₦0.00. `BL001` → 409 `BILLING_RATE_NOT_CONFIGURED`.
 - `GET /super-admin/schools/:id/billing-preview` returns the count, the rate and the amount
   from the same function the trigger uses; the create-subscription modal shows it read-only.
+- **The rate is set in the product, by the root admin only** (Subscriptions → Per-student rate,
+  `PUT /super-admin/pricing`, since 3 Oct 2026). Until then it could only be typed into the database
+  by hand, with no record of who set Chronix's price, when, or what it replaced.
+  - **One transaction:** lock the table, read the prior value under that lock, write the new one,
+    reprice every paid subscription, and write `PRICING_RATE_SET` (prior, new, how many repriced).
+  - **Why it reprices:** `amount_naira` is derived only when a subscription row is written. Without
+    the repricing, a rate change would leave every subscription showing the old price until
+    something touched it.
+  - **What it leaves alone:** trials stay ₦0, and a checkout already started keeps its snapshot.
+  - **Repricing everyone is a decision for today, not a default** (3 Oct 2026). With no paying
+    school, it is right. Once schools pay, the same save rewrites what each already owes mid-term,
+    with no effective date and nobody told. Decide grandfathering or an effective date before the
+    first rate change that affects a paying school; nothing is built for it.
+  - **₦0 is refused** (CHECK `> 0` in 044, and the API). A school that pays nothing belongs on a
+    trial plan, not a ₦0 rate.
+  - **The confirm step reads out the bill:** each paid school's billable students × rate = total
+    (`GET /super-admin/pricing/preview`, the same rows and arithmetic the save uses). Typing 80 for
+    800 looks harmless as a rate and obvious as a total, and the ceiling cannot catch it.
+  - **"Last set by" is read from the `PRICING_RATE_SET` audit row.** There is no who column, so
+    the audit row is the single source for that fact.
+  - **The ceiling:** the API takes whole kobo (`MAX_PRICE_PER_STUDENT_KOBO`, ₦100,000), to catch a
+    naira/kobo slip. The screen converts typed naira with string arithmetic (`lib/money.ts`), never
+    `* 100` on a float. Never set the rate by SQL: it would skip the audit and the repricing.
 - Tests that need a paid subscription set a rate first (`platform_pricing_config` upsert);
   the fixture's default is production's — none. `partnerRevenue.db.test.ts` and
   `tests/superAdmin.test.ts` choose amounts through rate × enrolment, never a literal.
@@ -925,7 +948,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 37 suites, 360 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 38 suites, 366 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

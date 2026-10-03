@@ -144,7 +144,7 @@ function nextBillingBasisSql(ps: string): string {
 function billingRefusal(err: unknown): { code: string; message: string } | null {
   const code = (err as { code?: string })?.code;
   if (code === 'BL001') {
-    return { code: 'BILLING_RATE_NOT_CONFIGURED', message: 'No per-student rate is configured. Set platform_pricing_config before creating or changing a paid subscription.' };
+    return { code: 'BILLING_RATE_NOT_CONFIGURED', message: 'No per-student rate is set. The root admin sets it under Subscriptions → Per-student rate, before any paid subscription can be created or changed.' };
   }
   if (code === 'BL002') {
     return { code: 'NO_CURRENT_SESSION', message: 'This school has no current academic session, so a paid subscription cannot be priced. Set its current session first.' };
@@ -1060,6 +1060,157 @@ function enrolmentNote(onRoll: number, billable: number, hasCurrentSession: bool
   if (billable === 0) return 'none_enrolled';
   return billable < onRoll ? 'some_not_enrolled' : null;
 }
+
+// ── GET/PUT /pricing: the per-student rate ───────────────────────────────────
+// The rate every paid subscription is priced from (migration 044: rate × billable students, derived
+// by a trigger on platform_subscriptions). Until 3 Oct 2026 nothing in the product could set it. It
+// had to be typed into the database by hand, which records no one, no time and no prior value, for
+// the figure that sets Chronix's own price. And no paid subscription can exist until it is set.
+
+/**
+ * A ceiling to catch a naira/kobo slip (a 100x error), not a pricing decision: ₦100,000 per student
+ * per term. The rate decided on 30 Sep 2026 is ₦800 (CLAUDE.md, Platform billing).
+ */
+const MAX_PRICE_PER_STUDENT_KOBO = 10_000_000;
+
+const pricingSchema = z.object({
+  price_per_student_kobo: z.number().int().positive().max(MAX_PRICE_PER_STUDENT_KOBO),
+});
+
+router.get(
+  '/pricing',
+  ...guard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const rate = await pool.query<{ price_per_student_kobo: string; updated_at: string }>(
+        `SELECT price_per_student_kobo, updated_at FROM platform_pricing_config LIMIT 1`
+      );
+      const last = await pool.query<{ created_at: string; first_name: string; last_name: string }>(
+        `SELECT pal.created_at, u.first_name, u.last_name
+           FROM platform_audit_logs pal JOIN users u ON u.id = pal.platform_admin_id
+          WHERE pal.action_type = 'PRICING_RATE_SET'
+          ORDER BY pal.created_at DESC LIMIT 1`
+      );
+      const r = rate.rows[0];
+      const l = last.rows[0];
+      return res.json({
+        success: true,
+        data: {
+          price_per_student_kobo: r ? Number(r.price_per_student_kobo) : null,
+          updated_at: r?.updated_at ?? null,
+          // Who set it through this route. A rate typed into the database by hand has no record.
+          last_set: l ? { at: l.created_at, by: `${l.first_name} ${l.last_name}` } : null,
+          max_price_per_student_kobo: MAX_PRICE_PER_STUDENT_KOBO,
+          // The screen shows the form only to the one admin the PUT admits; the PUT enforces it anyway.
+          can_edit: req.user?.email?.toLowerCase() === ROOT_ADMIN_EMAIL,
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// What a proposed rate would charge each paid subscription, before anything is saved. The confirm
+// step reads it out ("6 billable students × ₦800 = ₦4,800 per term"): an order-of-magnitude slip
+// (80 for 800) is invisible in the rate and unmissable in the total, which the ceiling cannot catch.
+// The same rows, and the same arithmetic, that PUT reprices: not trial; and a school with no current
+// session keeps its last amount (migration 045). Kobo throughout.
+const pricingPreviewSchema = z.object({
+  price_per_student_kobo: z.coerce.number().int().positive().max(MAX_PRICE_PER_STUDENT_KOBO),
+});
+
+router.get(
+  '/pricing/preview',
+  ...guard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = pricingPreviewSchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const rateKobo = parsed.data.price_per_student_kobo;
+      const { rows } = await pool.query<{
+        school_name: string; is_demo: boolean; plan: string; billable_students: number;
+        has_current_session: boolean; current_amount_kobo: string;
+      }>(
+        `SELECT s.name AS school_name, s.is_demo, ps.plan,
+                billable_student_count(ps.school_id) AS billable_students,
+                EXISTS (SELECT 1 FROM academic_sessions a WHERE a.school_id = ps.school_id AND a.is_current) AS has_current_session,
+                ROUND(ps.amount_naira * 100)::bigint AS current_amount_kobo
+           FROM platform_subscriptions ps JOIN schools s ON s.id = ps.school_id
+          WHERE ps.plan <> 'trial'
+          ORDER BY s.name`
+      );
+      return res.json({
+        success: true,
+        data: {
+          price_per_student_kobo: rateKobo,
+          subscriptions: rows.map(r => ({
+            school_name: r.school_name,
+            is_demo: r.is_demo,
+            plan: r.plan,
+            billable_students: r.billable_students,
+            current_amount_kobo: Number(r.current_amount_kobo),
+            // Kept, not repriced, without a current session: the trigger leaves the last amount (045).
+            new_amount_kobo: r.has_current_session ? r.billable_students * rateKobo : Number(r.current_amount_kobo),
+            kept_reason: r.has_current_session ? null : 'no_current_session',
+          })),
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.put(
+  '/pricing',
+  ...rootGuard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    const parsed = pricingSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+    }
+    const newKobo = parsed.data.price_per_student_kobo;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      // One writer at a time, and the prior value read under that same lock (doctrine 10). The row
+      // may not exist yet, so a row lock alone could not keep two first saves apart.
+      await client.query('LOCK TABLE platform_pricing_config IN SHARE ROW EXCLUSIVE MODE');
+      const prior = await client.query<{ price_per_student_kobo: string }>(
+        `SELECT price_per_student_kobo FROM platform_pricing_config WHERE id = true`
+      );
+      const previousKobo = prior.rows[0] ? Number(prior.rows[0].price_per_student_kobo) : null;
+      await client.query(
+        `INSERT INTO platform_pricing_config (id, price_per_student_kobo, updated_at) VALUES (true, $1, now())
+         ON CONFLICT (id) DO UPDATE SET price_per_student_kobo = EXCLUDED.price_per_student_kobo, updated_at = now()`,
+        [newKobo]
+      );
+      // Reprice every paid subscription now. amount_naira is derived only when a subscription row is
+      // written, so without this each would keep showing the old price until something touched it.
+      // Trials are ₦0 whatever the rate; a school with no current session keeps its last amount
+      // (migration 045). A checkout already started keeps the amount it snapshotted (migration 052).
+      const repriced = await client.query(`UPDATE platform_subscriptions SET updated_at = now() WHERE plan <> 'trial'`);
+      await client.query(
+        `INSERT INTO platform_audit_logs (platform_admin_id, action_type, metadata, ip_address)
+         VALUES ($1, 'PRICING_RATE_SET', $2, $3)`,
+        [req.user!.user_id, JSON.stringify({ previous_kobo: previousKobo, new_kobo: newKobo, subscriptions_repriced: repriced.rowCount ?? 0 }), clientIp(req)]
+      );
+      await client.query('COMMIT');
+      return res.json({
+        success: true,
+        data: { price_per_student_kobo: newKobo, previous_kobo: previousKobo, subscriptions_repriced: repriced.rowCount ?? 0 },
+      });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined); // silent-ok: the original error is answered next
+      return next(err);
+    } finally {
+      client.release();
+    }
+  }
+);
 
 // ── GET /schools/:id/billing-preview ─────────────────────────────────────────
 // What a subscription for this school is billed, from the same definition the database

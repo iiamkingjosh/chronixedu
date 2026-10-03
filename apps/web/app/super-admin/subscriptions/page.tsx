@@ -17,6 +17,7 @@ import {
   type SubscriptionStatus,
   describeNextBilling,
 } from '@/lib/superAdminApi';
+import PricingPanel from './PricingPanel';
 
 const LIMIT = 25;
 
@@ -112,6 +113,8 @@ export default function SuperAdminSubscriptionsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 font-heading">Subscriptions</h1>
       </div>
+
+      <PricingPanel />
 
       {error && (
         <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>

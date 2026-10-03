@@ -300,6 +300,56 @@ export async function getSubscriptions(params: ListSubscriptionsParams = {}): Pr
   return res.data;
 }
 
+/** The per-student rate every paid subscription is priced from (PUT is root admin only). */
+export interface PricingResponse {
+  /** Whole kobo; null until it is first set, and while it is, no paid subscription can be created. */
+  price_per_student_kobo: number | null;
+  updated_at: string | null;
+  /** The last change made through the product. A rate typed into the database by hand has none. */
+  last_set: { at: string; by: string } | null;
+  max_price_per_student_kobo: number;
+  can_edit: boolean;
+}
+
+export interface SetPricingResponse {
+  price_per_student_kobo: number;
+  previous_kobo: number | null;
+  subscriptions_repriced: number;
+}
+
+/** What a proposed rate would charge each paid subscription, before anything is saved. Kobo throughout. */
+export interface PricingPreview {
+  price_per_student_kobo: number;
+  subscriptions: Array<{
+    school_name: string;
+    is_demo: boolean;
+    plan: string;
+    billable_students: number;
+    current_amount_kobo: number;
+    new_amount_kobo: number;
+    /** 'no_current_session': the school keeps its last amount (it cannot be priced without one). */
+    kept_reason: 'no_current_session' | null;
+  }>;
+}
+
+export async function previewPricing(pricePerStudentKobo: number): Promise<PricingPreview> {
+  const res = await apiFetch<ApiResponse<PricingPreview>>(`/api/super-admin/pricing/preview?price_per_student_kobo=${pricePerStudentKobo}`);
+  return res.data;
+}
+
+export async function getPricing(): Promise<PricingResponse> {
+  const res = await apiFetch<ApiResponse<PricingResponse>>('/api/super-admin/pricing');
+  return res.data;
+}
+
+export async function setPricing(pricePerStudentKobo: number): Promise<SetPricingResponse> {
+  const res = await apiFetch<ApiResponse<SetPricingResponse>>('/api/super-admin/pricing', {
+    method: 'PUT',
+    body: JSON.stringify({ price_per_student_kobo: pricePerStudentKobo }),
+  });
+  return res.data;
+}
+
 export async function getMRR(): Promise<MRRResponse> {
   const res = await apiFetch<ApiResponse<MRRResponse>>('/api/super-admin/subscriptions/mrr');
   return res.data;

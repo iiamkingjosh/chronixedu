@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## The per-student rate is set on the Subscriptions page (2026-10-03)
+
+### For Chronix administrators
+- The Subscriptions page shows the per-student rate every paid subscription is priced from, and who last set it. Until it is set, no paid subscription can be created; the page says so.
+- The root admin sets the rate there, in naira. Before saving, it shows what each paid school would be billed ("6 billable students × ₦800 = ₦4,800 per term"), so a slip like 80 for 800 is easy to spot. Saving reprices every paid subscription at once, and records the change, with the rate it replaced, in the platform audit log. Trials stay free, and a rate of ₦0 is refused.
+- Before this, the rate could only be typed into the database by hand.
+
 ## More Chronix emails carry the banner, and say truthfully whether they went (2026-10-02)
 
 ### For schools

@@ -268,7 +268,7 @@ function CreateSubscriptionModal({ schoolId, onClose, onDone }: { schoolId: stri
                 <dd className="font-medium text-gray-900">{preview.amount_naira !== null ? formatNaira(Number(preview.amount_naira)) : '—'}</dd>
               </div>
               {!preview.rate_configured && (
-                <p className="pt-1 text-amber-700">No per-student rate is configured. Set platform_pricing_config before creating a paid subscription.</p>
+                <p className="pt-1 text-amber-700">No per-student rate is set, so a paid subscription cannot be created yet. The root admin sets it on the Subscriptions page.</p>
               )}
               {enrolmentMessage(preview) && (
                 <p className="pt-1 text-amber-700">{enrolmentMessage(preview)}</p>
