@@ -15,11 +15,11 @@ import {
 const singular = (label: string) => label.toLowerCase().replace(/s$/, '');
 
 describe('the platform-admin sidebar', () => {
-  it('is the ten platform pages in four groups, each with a description, none twice', () => {
-    expect(SUPER_ADMIN_NAV).toHaveLength(10);
-    expect(SUPER_ADMIN_NAV_GROUPS.map((g) => g.items.length)).toEqual([3, 3, 2, 2]);
-    expect(new Set(SUPER_ADMIN_NAV.map((i) => i.href)).size).toBe(10);
-    expect(new Set(SUPER_ADMIN_NAV.map((i) => singular(i.label))).size).toBe(10);
+  it('is the eleven platform pages in four groups, each with a description, none twice', () => {
+    expect(SUPER_ADMIN_NAV).toHaveLength(11);
+    expect(SUPER_ADMIN_NAV_GROUPS.map((g) => g.items.length)).toEqual([3, 3, 2, 3]);
+    expect(new Set(SUPER_ADMIN_NAV.map((i) => i.href)).size).toBe(11);
+    expect(new Set(SUPER_ADMIN_NAV.map((i) => singular(i.label))).size).toBe(11);
     for (const i of SUPER_ADMIN_NAV) expect(`${i.label}: ${i.description ?? ''}`.length).toBeGreaterThan(i.label.length + 10);
   });
 

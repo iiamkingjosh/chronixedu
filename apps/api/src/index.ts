@@ -36,6 +36,7 @@ import principalRemarksRoutes from './routes/principalRemarks';
 import noticesRoutes from './routes/notices';
 import partnerRoutes from './routes/partner';
 import superAdminRoutes from './routes/superAdmin';
+import twoFactorRoutes from './routes/twoFactor';
 import { detectSupportSession } from './middleware/detectSupportSession';
 import { verifyToken, requirePasswordChanged } from './middleware/auth';
 import { requireActiveSchool } from './middleware/requireActiveSchool';
@@ -176,6 +177,8 @@ app.use('/api/partner', partnerRoutes);
 
 // Super admin platform routes — guarded by requireRole('super_admin'),
 // must NOT have detectSupportSession applied.
+// Platform-admin two-factor (routes/twoFactor.ts), mounted ahead of the rest of /api/super-admin.
+app.use('/api/super-admin/two-factor', twoFactorRoutes);
 app.use('/api/super-admin', superAdminRoutes);
 
 app.get('/health', async (req, res) => {

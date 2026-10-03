@@ -1,15 +1,28 @@
 # Platform-admin two-factor: keys, recovery and break-glass
 
-Two-factor sign-in for platform admins (`super_admin`) is being built in four commits, decided
-3 Oct 2026:
+Two-factor sign-in for platform admins (`super_admin`) is being built in steps, decided 3 Oct 2026:
 
-1. Recovery and storage (migration 055). **This is what exists today.**
-2. Enrolment: the security page, the QR code, and recovery codes shown once.
+1. Recovery and storage (migration 055). Built.
+2. Enrolment: the security page, the QR code, and recovery codes shown once (migration 056). Built.
 3. The sign-in step: a code after the password, before any token is issued.
-4. Enforcement: a platform admin without the second factor can reach only enrolment.
+4. Enforcement: a platform admin without the second factor can reach only enrolment. It will sign
+   out every platform-admin session that has not passed the second factor, including the one in use.
+5. Moving to a new phone while the old one still works. Until then, the only way is break-glass.
 
-Until commit 4 is live, nobody is required to use it. This runbook covers the parts that already
-matter: the encryption key, and what to do when an admin loses both phone and recovery codes.
+Commits 1 and 2 exist: an admin can switch it on at **Administration → Two-factor Sign-in**
+(`/super-admin/security`). Until commit 4 is live, nobody is required to use it, and it is not asked
+for at sign-in until commit 3.
+
+## Switching it on
+
+1. Open Two-factor Sign-in and confirm your password. A wrong password counts against the sign-in
+   lockout, the same five tries as signing in.
+2. Scan the QR code with an authenticator app (Google Authenticator, Microsoft Authenticator,
+   1Password), or type the key shown beside it.
+3. Enter the 6-digit code. It switches on, every other session on the account is signed out, and ten
+   recovery codes appear once. Copy or download them before pressing "I have saved them".
+
+There is no switch to turn it off. New recovery codes can be made with a current code.
 
 ## The encryption key: `TOTP_ENCRYPTION_KEY`
 

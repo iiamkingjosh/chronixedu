@@ -18,6 +18,8 @@ import { newSchoolAcademicConfig } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
 import { getRecentErrorCount } from '../services/platformAnalyticsService';
 import { redis } from '../middleware/rateLimit';
+import { terminateActiveSupportSessions } from '../services/supportSessions';
+import { removeTwoFactor } from '../db/queries/twoFactor';
 // Imported for their module-level registerCron() side effects, so GET /health/crons
 // reflects every scheduled job even before the crons have started running.
 import '../services/analyticsService';
@@ -2689,32 +2691,6 @@ async function countOtherActiveAdmins(excludeId: string): Promise<number> {
   return parseInt(result.rows[0]?.count ?? '0', 10);
 }
 
-// Ends any support sessions this platform admin currently has open and blacklists
-// their scoped impersonation tokens. Without this, suspending or deleting an admin
-// mid-impersonation would leave that session usable until it naturally expired.
-async function terminateActiveSupportSessions(adminId: string): Promise<void> {
-  const activeSessions = await pool.query<{ id: string }>(
-    `SELECT id FROM support_sessions WHERE platform_admin_id = $1 AND ended_at IS NULL`,
-    [adminId]
-  );
-  if (activeSessions.rows.length === 0) return;
-
-  if (redis) {
-    for (const { id } of activeSessions.rows) {
-      const storedToken = await redis.get(`support_session_token:${id}`);
-      if (storedToken) {
-        await redis.set(`blacklisted_token:${storedToken}`, '1', 'EX', 30 * 60);
-        await redis.del(`support_session_token:${id}`);
-      }
-    }
-  }
-
-  await pool.query(
-    `UPDATE support_sessions SET ended_at = NOW() WHERE platform_admin_id = $1 AND ended_at IS NULL`,
-    [adminId]
-  );
-}
-
 router.patch(
   '/admins/:id/suspend',
   ...rootGuard,
@@ -2876,6 +2852,10 @@ router.delete(
          WHERE id = $1`,
         [req.params.id, `deleted-admin-${req.params.id}@deleted.chronixedu.local`, randomUUID()]
       );
+      // The row is anonymised, not deleted, so nothing cascades: the admin's two-factor secret and
+      // recovery codes would outlive them. Removing an active factor is recorded by migration 055's
+      // trigger (TWO_FACTOR_REMOVED).
+      await removeTwoFactor(req.params.id);
 
       // Immediately update the is_active cache so verifyToken blocks the admin on
       // the next request instead of trusting the up-to-5-minute-stale cached value.

@@ -158,6 +158,7 @@ export const SUPER_ADMIN_NAV_GROUPS: NavGroup[] = [
     items: [
       { label: 'Audit Logs', href: '/super-admin/audit', description: 'Who did what across the platform, and when.' },
       { label: 'Platform Admins', href: '/super-admin/admins', description: 'Chronix staff accounts with platform access.' },
+      { label: 'Two-factor Sign-in', href: '/super-admin/security', description: 'Your authenticator app and recovery codes.' },
     ],
   },
 ];

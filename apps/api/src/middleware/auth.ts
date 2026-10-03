@@ -93,18 +93,26 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
       }
     }
 
+    // A platform admin's own token (not a support-session token, which carries the impersonated
+    // user) is checked against the live row on every request, never the cache: enrolling in two-factor
+    // ends every other session the admin had (users.sessions_valid_after, migration 056), and a cached
+    // "active" could let one run on for five minutes. Only platform admins can enrol, so only their
+    // tokens are checked; widen this if anyone else ever can. Platform-admin requests are few.
+    const adminToken = payload.role === 'super_admin' && !payload.is_support_session;
     const cacheKey = `user_active:${payload.user_id}`;
     let isActive = true;
+    let sessionsValidAfter: Date | null = null;
     let cached: string | null | undefined = null;
-    if (redis) {
+    if (redis && !adminToken) {
       const r = redis;
       cached = await bestEffort('user_active_cache_unavailable', () => r.get(cacheKey));
     }
     if (cached !== null && cached !== undefined) {
       isActive = cached === '1';
     } else {
-      const result = await pool.query('SELECT is_active FROM users WHERE id = $1', [payload.user_id]);
+      const result = await pool.query('SELECT is_active, sessions_valid_after FROM users WHERE id = $1', [payload.user_id]);
       isActive = result.rows[0]?.is_active !== false;
+      sessionsValidAfter = result.rows[0]?.sessions_valid_after ?? null;
       if (redis) {
         const r = redis;
         const value = isActive ? '1' : '0';
@@ -114,6 +122,13 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
 
     if (!isActive) {
       return res.status(403).json({ success: false, error: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended' } });
+    }
+    // Whole seconds, because a JWT's iat is: a token issued in the same second as the cut-off is
+    // kept, which is what lets the enrolling session's fresh token survive its own cut-off.
+    const issuedAt = (payload as { iat?: number }).iat;
+    if (adminToken && sessionsValidAfter && typeof issuedAt === 'number'
+        && issuedAt < Math.floor(new Date(sessionsValidAfter).getTime() / 1000)) {
+      return res.status(401).json({ success: false, error: { code: 'SESSION_ENDED', message: 'This session has ended. Please sign in again.' } });
     }
   } catch (err) {
     logger.error('auth_suspension_check_failed', { error: err instanceof Error ? err.message : String(err) });

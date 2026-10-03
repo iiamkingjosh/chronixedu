@@ -176,6 +176,18 @@ export const ALERTS = {
     events: ['platform_billing_amount_mismatch'],
     fields: ['payment_id', 'expected_kobo', 'verified_kobo'],
   },
+  two_factor_locked: {
+    why: "A platform admin's second factor locked after repeated wrong codes. Whoever typed them had the admin's session or password: treat it as known, and check the platform audit log",
+    level: 'error',
+    events: ['two_factor_locked'],
+    fields: ['user_id', 'failed_attempts', 'route'],
+  },
+  password_check_left_session: {
+    why: 'A password re-check could not revoke the Supabase session it created, so one more never-expiring session remains for that account (docs/AUDIT-2026-09.md)',
+    level: 'error',
+    events: ['password_check_session_not_revoked'],
+    fields: ['user_id', 'error'],
+  },
 } as const satisfies Record<string, AlertSpec>;
 
 export type AlertName = keyof typeof ALERTS;

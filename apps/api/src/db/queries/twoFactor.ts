@@ -1,12 +1,33 @@
+import type { PoolClient } from 'pg';
 import pool from '../client';
 import { encryptTotpSecret, decryptTotpSecret } from '../../services/totpSecretBox';
 import { hashRecoveryCode } from '../../services/recoveryCodes';
+import { logPlatformAudit, type PlatformAuditEntry } from './platformAudit';
 
 /**
- * Platform-admin two-factor storage (migration 055). The secret is encrypted before it reaches the
- * database and decrypted after it leaves; recovery codes arrive as plain text from the admin and
- * leave this module only as hashes. Nothing here logs either.
+ * Platform-admin two-factor storage (migrations 055, 056). The secret is encrypted before it reaches
+ * the database and decrypted after it leaves; recovery codes arrive as plain text and leave this
+ * module only as hashes. Nothing here logs either.
  */
+
+/** Wrong codes in a row before the factor locks, and for how long (decision c, migration 056). */
+export const TOTP_LOCK_AFTER = 10;
+export const TOTP_LOCK_MINUTES = 15;
+
+async function inTransaction<T>(work: (c: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const out = await work(client);
+    await client.query('COMMIT');
+    return out;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined); // silent-ok: the original error is rethrown next
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 
 /**
  * Stores a new, not yet active secret. Refuses (returns false) when the admin already has an
@@ -34,28 +55,98 @@ export async function readTotpSecret(userId: string): Promise<{ secret: Buffer; 
   return { secret: decryptTotpSecret(rows[0].secret_ciphertext, userId), activatedAt: rows[0].activated_at };
 }
 
-/** Replaces the admin's whole set of recovery codes with these, in one transaction. */
-export async function replaceRecoveryCodes(userId: string, codes: string[]): Promise<void> {
+export interface TotpState {
+  activatedAt: Date | null;
+  lockedUntil: Date | null;
+  failedAttempts: number;
+}
+
+/** Where the admin's second factor stands, without decrypting anything. */
+export async function readTotpState(userId: string): Promise<TotpState | null> {
+  const { rows } = await pool.query<{ activated_at: Date | null; locked_until: Date | null; failed_attempts: number }>(
+    `SELECT activated_at, locked_until, failed_attempts FROM user_totp WHERE user_id = $1`,
+    [userId]
+  );
+  if (!rows[0]) return null;
+  return { activatedAt: rows[0].activated_at, lockedUntil: rows[0].locked_until, failedAttempts: rows[0].failed_attempts };
+}
+
+export function isLocked(state: TotpState | null, now: Date = new Date()): boolean {
+  return !!state?.lockedUntil && state.lockedUntil > now;
+}
+
+async function writeRecoveryCodes(client: PoolClient, userId: string, codes: string[]): Promise<void> {
   const hashes = codes.map((c) => {
     const h = hashRecoveryCode(c);
-    if (!h) throw new Error('replaceRecoveryCodes: a generated code did not normalise');
+    if (!h) throw new Error('writeRecoveryCodes: a generated code did not normalise');
     return h;
   });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query(`DELETE FROM user_recovery_codes WHERE user_id = $1`, [userId]);
-    await client.query(
-      `INSERT INTO user_recovery_codes (user_id, code_hash) SELECT $1, unnest($2::text[])`,
-      [userId, hashes]
+  await client.query(`DELETE FROM user_recovery_codes WHERE user_id = $1`, [userId]);
+  await client.query(`INSERT INTO user_recovery_codes (user_id, code_hash) SELECT $1, unnest($2::text[])`, [userId, hashes]);
+}
+
+/** Replaces the admin's whole set of recovery codes with these, in one transaction. */
+export async function replaceRecoveryCodes(userId: string, codes: string[], audit?: PlatformAuditEntry): Promise<void> {
+  await inTransaction(async (c) => {
+    await writeRecoveryCodes(c, userId, codes);
+    if (audit) await logPlatformAudit(audit, c);
+  });
+}
+
+/**
+ * Switches a pending enrolment on, in one transaction with its audit row (doctrine 10):
+ *  - the factor becomes active, with the confirming code's step as the last one used (replay);
+ *  - the recovery codes are written;
+ *  - every session the admin had is ended (users.sessions_valid_after; verifyToken refuses older
+ *    tokens), so a session stolen before enrolment does not outlive it.
+ * False when there was no pending enrolment to switch on.
+ */
+export async function activateTotp(userId: string, step: number, codes: string[], audit: PlatformAuditEntry): Promise<boolean> {
+  return inTransaction(async (c) => {
+    const { rowCount } = await c.query(
+      `UPDATE user_totp SET activated_at = now(), last_used_step = $2, failed_attempts = 0, locked_until = NULL
+        WHERE user_id = $1 AND activated_at IS NULL`,
+      [userId, step]
     );
-    await client.query('COMMIT');
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => undefined); // silent-ok: the original error is rethrown next
-    throw err;
-  } finally {
-    client.release();
-  }
+    if (rowCount !== 1) return false;
+    await writeRecoveryCodes(c, userId, codes);
+    await c.query(`UPDATE users SET sessions_valid_after = now() WHERE id = $1`, [userId]);
+    await logPlatformAudit(audit, c);
+    return true;
+  });
+}
+
+/**
+ * Accepts a code's time step for an ACTIVE factor and resets the failure count. Refuses a step at or
+ * before the last one used (a replayed code) and refuses while locked; the WHERE makes both hold
+ * even when two requests race with the same code.
+ */
+export async function acceptTotpStep(userId: string, step: number): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE user_totp SET last_used_step = $2, failed_attempts = 0
+      WHERE user_id = $1 AND activated_at IS NOT NULL
+        AND (last_used_step IS NULL OR last_used_step < $2)
+        AND (locked_until IS NULL OR locked_until <= now())`,
+    [userId, step]
+  );
+  return rowCount === 1;
+}
+
+/**
+ * Counts one wrong code. At TOTP_LOCK_AFTER in a row the factor locks for TOTP_LOCK_MINUTES; the
+ * count is cleared only by a right code, so after a lock ends each further wrong code locks again.
+ */
+export async function recordTotpFailure(userId: string): Promise<{ failedAttempts: number; locked: boolean }> {
+  const { rows } = await pool.query<{ failed_attempts: number; locked_until: Date | null }>(
+    `UPDATE user_totp
+        SET failed_attempts = failed_attempts + 1,
+            locked_until = CASE WHEN failed_attempts + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
+      WHERE user_id = $1
+      RETURNING failed_attempts, locked_until`,
+    [userId, TOTP_LOCK_AFTER, TOTP_LOCK_MINUTES]
+  );
+  const failedAttempts = rows[0]?.failed_attempts ?? 0;
+  return { failedAttempts, locked: failedAttempts >= TOTP_LOCK_AFTER };
 }
 
 /**
@@ -79,4 +170,14 @@ export async function unusedRecoveryCodeCount(userId: string): Promise<number> {
     [userId]
   );
   return rows[0].n;
+}
+
+/**
+ * Removes an admin's second factor and recovery codes, for an admin who is being removed. Deleting
+ * an active factor is recorded by migration 055's trigger (TWO_FACTOR_REMOVED).
+ */
+export async function removeTwoFactor(userId: string, client?: PoolClient): Promise<void> {
+  const q = client ?? pool;
+  await q.query(`DELETE FROM user_recovery_codes WHERE user_id = $1`, [userId]);
+  await q.query(`DELETE FROM user_totp WHERE user_id = $1`, [userId]);
 }

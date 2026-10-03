@@ -229,7 +229,7 @@ Monorepo, npm workspaces:
   returns `undefined`, and all five limiters carry `passOnStoreError: true`. A bare
   `await redis.x()` on a request path is a regression: it turns a Redis outage back into
   500s and 503s. The exceptions are the support-session token store and blacklist writers
-  in `superAdmin.ts`. While Redis is down both brute-force controls are off; since 1 Oct 2026 the first failure
+  in `services/supportSessions.ts` and `superAdmin.ts`. While Redis is down both brute-force controls are off; since 1 Oct 2026 the first failure
   raises the `redis_unavailable` Sentry alert (`config/alerts.ts`), once per 15 minutes. Until
   then nothing alarmed (`docs/AUDIT-2026-09.md`). The one exception to fail-fast is boot: the
   limiters' script loads wait for Redis's first `ready` (`redisTransport`, bounded 10 s), because
@@ -280,9 +280,11 @@ Monorepo, npm workspaces:
 - **Scope: `super_admin` only.** Whether principals get it is a separate decision, not a stretch goal.
 - **Four commits, in order:**
   1. recovery and storage (migration 055);
-  2. enrolment;
+  2. enrolment (migration 056, `routes/twoFactor.ts`, `/super-admin/security`);
   3. the sign-in step;
-  4. enforcement, only after Moses has enrolled and proven a recovery code.
+  4. enforcement, only after Moses has enrolled and proven a recovery code;
+  5. moving to a new phone while the old one works. Until then the only way is break-glass, which
+     is acceptable for one admin and not for three.
 
   `docs/admin-two-factor-runbook.md` covers the key and break-glass.
 - **TOTP, written in-house** (`services/totp.ts`, over Node's crypto, tested against the RFC 4226 and
@@ -312,6 +314,37 @@ Monorepo, npm workspaces:
     added to that connection widens its role).
   - **(e) Order:** 2FA comes before the platform audit-log protection (Round 30 L-02). If a test is
     ever pointed at production again, the protection jumps the queue.
+- **Enrolment (commit 2):**
+  - **The password comes first.** It is re-entered and checked through Supabase, as sign-in checks
+    it (`services/passwordCheck.ts`), so a stolen session alone cannot enrol an attacker's phone.
+    - A wrong password counts against the sign-in lockout (`services/loginLockout.ts`, shared with
+      `POST /login`). So someone holding a stolen session can lock the admin out of sign-in.
+      Accepted (3 Oct 2026): a stolen platform-admin session is already the bad day, and break-glass
+      is the way out.
+    - The check's own Supabase client keeps no session, and the session `signInWithPassword` creates
+      is revoked at once.
+  - **One authenticator code switches it on** (decision b). That code's time step is recorded, so it
+    cannot be replayed.
+  - **Switching it on ends every other session** the admin had (`users.sessions_valid_after`), and
+    ends their open support sessions. The enrolling session continues on a fresh token. `verifyToken`
+    checks a platform admin's own token against the live row on every request, never the cache, and
+    only theirs. Widen that if anyone else can ever enrol.
+  - **Secrets travel only in POST response bodies marked `no-store`:** the secret, the QR code's
+    contents and the recovery codes. Never in a GET or a URL, which reach browser history and every
+    log on the way.
+  - **New recovery codes need a current code.** Otherwise a stolen session could mint codes and walk
+    past the factor. Wrong codes count against the database counter and the sign-in lockout.
+  - **Removing an admin clears their 2FA** (`removeTwoFactor`). Removal anonymises the row, so
+    nothing cascades.
+- **There is no way to switch two-factor off yourself** (decided 3 Oct 2026). The way out of a lost
+  phone is recovery codes, then break-glass. If it is ever built: the password and a current code,
+  audited.
+- **Every new platform audit row goes through `logPlatformAudit`** (`db/queries/platformAudit.ts`,
+  `ipAddress` required). The 20 direct INSERTs that predate it are left alone, and no new one is
+  added (`docs/AUDIT-2026-09.md`).
+- **Commit 4 will end every live platform-admin token** that lacks the second-factor claim,
+  including the one in use at that moment. That is deliberate; its commit message must say so, so
+  the sign-out is not read as a fault.
 - **No token before the second factor.** After the password, an enrolled admin gets an opaque, hashed,
   single-use, five-minute challenge, never a JWT. A wrong code counts against the per-email lockout
   and `rl:login`, which today matches only `POST /login`, so the verify route must be added to it.
@@ -372,7 +405,7 @@ Monorepo, npm workspaces:
   `getMainNavForRole`, plus `SETTINGS_NAV_GROUPS` gated by `settingsAccessForRole`, the one rule
   the school sidebar also reads (`all` | `payout` | `none`). Add a page to `navigation.ts` and
   both the sidebar and the palette get it; never add one to the palette alone, or it will offer
-  a page the role's guard refuses. **The platform-admin area is the same rule**: its ten pages
+  a page the role's guard refuses. **The platform-admin area is the same rule**: its eleven pages
   are `SUPER_ADMIN_NAV_GROUPS` in `navigation.ts` (they used to be a private list inside
   `app/super-admin/layout.tsx`). That layout renders its sidebar from them and mounts the palette,
   and `getMainNavForRole('super_admin')` returns them, not `PRINCIPAL_NAV`: a super admin has no
@@ -1055,7 +1088,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 41 suites, 390 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 42 suites, 402 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

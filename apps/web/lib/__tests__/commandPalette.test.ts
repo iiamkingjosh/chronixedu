@@ -49,7 +49,7 @@ describe('platform pages and school pages never cross', () => {
   const SCHOOL = new Set([...PRINCIPAL_NAV, ...TEACHER_NAV, ...REGISTRAR_NAV, ...BURSAR_NAV, ...SETTINGS_NAV].map((i) => i.href));
 
   it('the two sets are real and disjoint', () => {
-    expect(PLATFORM.size).toBe(10);
+    expect(PLATFORM.size).toBe(11);
     expect(SCHOOL.size).toBeGreaterThan(20);
     expect([...PLATFORM].filter((h) => SCHOOL.has(h))).toEqual([]);
   });

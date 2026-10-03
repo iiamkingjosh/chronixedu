@@ -9,9 +9,10 @@ import pool, { resolveSsl } from '../db/client';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { findUserByEmail, updatePasswordHash, getPasswordHashById, changeOwnPassword } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
-import { redis, bestEffort } from '../middleware/rateLimit';
+import { redis } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
 import { logger } from '../config/logger';
+import { isLockedOut, recordFailedAttempt, clearFailedAttempts } from '../services/loginLockout';
 import { resetPasswordRedirect } from '../config/appUrls';
 
 const router = express.Router();
@@ -134,10 +135,6 @@ const loginSchema = z.object({
   password: z.string().min(1),
 });
 
-const MAX_ATTEMPTS = 5;
-const MAX_IP_ATTEMPTS = 20; // higher threshold to avoid blocking shared NAT addresses
-const LOCK_WINDOW_SECONDS = 15 * 60; // 15 minutes
-
 router.post('/login', async (req, res, next) => {
   const parsed = loginSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -149,60 +146,33 @@ router.post('/login', async (req, res, next) => {
   const { email, password } = parsed.data;
 
   try {
-    const emailKey = `login_attempts:${email.toLowerCase()}`;
     const ip = clientIp(req) ?? 'unknown';
-    const ipKey = `login_attempts_ip:${ip}`;
 
-    // Atomic Redis-based lockout — immune to concurrent-request race conditions.
-    // No lockout in dev when Redis is unset — and none while Redis is DOWN: each call is
-    // best-effort (SECURITY.md Round 19, decided: fail open). A Redis failure is logged
-    // as login_lockout_unavailable and the login proceeds on the password check alone;
-    // it is never turned into a 500, and never into a lockout.
-    if (redis) {
-      const r = redis;
-      const counts = await bestEffort('login_lockout_unavailable', () => Promise.all([r.get(emailKey), r.get(ipKey)]));
-      if (counts) {
-        const [emailCount, ipCount] = counts;
-        if (emailCount !== null && parseInt(emailCount, 10) >= MAX_ATTEMPTS) {
-          return res.status(429).json({
-          success: false,
-          error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
-        });
-        }
-        if (ipCount !== null && parseInt(ipCount, 10) >= MAX_IP_ATTEMPTS) {
-          return res.status(429).json({
-          success: false,
-          error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
-        });
-        }
-      }
+    // The per-email and per-address lockout (services/loginLockout.ts), shared with every other
+    // place a person proves who they are. No lockout in dev when Redis is unset, and none while
+    // Redis is DOWN: each call is best-effort (SECURITY.md Round 19, decided: fail open). A Redis
+    // failure is logged as login_lockout_unavailable and the login proceeds on the password check
+    // alone; it is never turned into a 500, and never into a lockout.
+    if (await isLockedOut(email, ip)) {
+      return res.status(429).json({
+        success: false,
+        error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
+      });
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      if (redis) {
-        const r = redis;
-        const attempts = await bestEffort('login_lockout_unavailable', async () => {
-          const [emailAttempts, ipAttempts] = await Promise.all([r.incr(emailKey), r.incr(ipKey)]);
-          if (emailAttempts === 1) await r.expire(emailKey, LOCK_WINDOW_SECONDS);
-          if (ipAttempts === 1) await r.expire(ipKey, LOCK_WINDOW_SECONDS);
-          return [emailAttempts, ipAttempts] as const;
-        });
-        if (attempts && (attempts[0] >= MAX_ATTEMPTS || attempts[1] >= MAX_IP_ATTEMPTS)) {
-          return res.status(429).json({
+      const { counted, locked } = await recordFailedAttempt(email, ip);
+      if (locked) {
+        return res.status(429).json({
           success: false,
           error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
-        });
-        }
-        return res.status(401).json({
-          success: false,
-          error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect email or password' },
         });
       }
       return res.status(401).json({
         success: false,
-        error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials.' },
+        error: { code: 'INVALID_CREDENTIALS', message: counted ? 'Incorrect email or password' : 'Invalid credentials.' },
       });
     }
 
@@ -245,10 +215,7 @@ router.post('/login', async (req, res, next) => {
 
     // Clear lockout counters on successful login. Best-effort: a correct password is
     // never refused because the counters could not be cleared.
-    if (redis) {
-      const r = redis;
-      await bestEffort('login_lockout_unavailable', () => Promise.all([r.del(emailKey), r.del(ipKey)]));
-    }
+    await clearFailedAttempts(email, ip);
 
     const payload = {
       user_id: local.id,

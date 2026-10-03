@@ -1,5 +1,18 @@
 # Chronix Edu — Changelog
 
+## Two-factor sign-in for platform admins: setting it up (2026-10-03)
+
+### For Chronix staff
+- A new page, Administration → Two-factor Sign-in, sets up an authenticator app: confirm your password,
+  scan the QR code, enter the code. You then get ten one-time recovery codes, shown once, to copy or
+  download.
+- Switching it on signs out every other session on your account. The one you are using carries on.
+- New recovery codes can be made at any time with a current code; they replace the old set.
+- It is not yet asked for at sign-in. That comes next, and it becomes required for platform admins
+  after that.
+- There is no switch to turn it off. If the phone is lost, a recovery code gets you in. If those are
+  lost too, the platform owner resets it from the database (docs/admin-two-factor-runbook.md).
+
 ## Data Export: the spreadsheets most often wanted come first (2026-10-03)
 
 ### For schools
