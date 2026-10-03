@@ -526,6 +526,7 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
 
     if (local.school_id) {
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId: local.school_id,
         userId: local.id,
         actionType: 'PASSWORD_RESET_COMPLETE',
@@ -599,6 +600,7 @@ router.post('/change-password', verifyToken, async (req: Request, res: Response,
 
     if (req.user!.school_id) {
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId: req.user!.school_id,
         userId,
         actionType: 'PASSWORD_SELF_CHANGE',

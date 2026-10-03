@@ -2,6 +2,7 @@
 import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { logAudit } from '../db/queries/auditLog';
 import { findClassById } from '../db/queries/roster';
 import { findStudentById } from '../db/queries/students';
@@ -159,6 +160,7 @@ router.post(
       const saved = await bulkUpsertAttendance(schoolId, class_id, term.id, date, validEntries, markedBy);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId,
         userId: markedBy,
@@ -186,6 +188,7 @@ router.post(
         // fire-and-forget write swallowed its own failure — the alert simply never went.
         // A failure is logged rather than failing the attendance save, which did happen.
         await logAudit({
+          ipAddress: clientIp(req) ?? null,
           supportSession: req.supportSession,
           schoolId,
           userId: markedBy,

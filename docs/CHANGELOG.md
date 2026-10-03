@@ -1,5 +1,12 @@
 # Chronix Edu — Changelog
 
+## Audit records carry the address, and the export can be checked (2026-10-03)
+
+### For schools
+- Every change recorded in the audit log now carries the address it came from: scores, results, settings, payments and exports. Before, none did.
+- Each full export now leaves a second record when it finishes, with what it contained (files, missing files, total size) and a fingerprint of its `manifest.csv`, so a downloaded copy can be checked against the record.
+- In the export's manifest, receipts and transcripts are now matched to the payment or student they belong to, instead of being listed as unreferenced.
+
 ## The data export includes every stored file (2026-10-03)
 
 ### For schools

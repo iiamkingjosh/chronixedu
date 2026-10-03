@@ -62,6 +62,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { getActiveTerm, findClassById, listClasses } from '../db/queries/roster';
 import { isTeacherAssignedToClass } from '../db/queries/attendance';
 import { createNotice, deleteNotice, findNoticeById, listNoticesForStaff } from '../db/queries/notices';
@@ -219,6 +220,7 @@ router.post(
       });
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId,
         userId: req.user!.user_id,
         actionType: 'NOTICE_CREATED',
@@ -263,6 +265,7 @@ router.delete(
       // The row is gone, so the audit entry is the only remaining record of what it said.
       // It carries the content rather than just the id for that reason.
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId,
         userId: req.user!.user_id,
         actionType: 'NOTICE_DELETED',

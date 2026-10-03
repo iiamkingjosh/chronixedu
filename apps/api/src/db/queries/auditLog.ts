@@ -10,6 +10,15 @@ interface AuditLogEntry {
   oldValue?: unknown;
   newValue?: unknown;
   supportSession?: SupportSessionContext;
+  /**
+   * The caller's address, clientIp(req) (X-Real-IP; CLAUDE.md, Auth), or null where there is no
+   * request. REQUIRED, so the compiler refuses an audit call that does not say (3 Oct 2026). Until
+   * then no audit_logs row had ever recorded one: 262 rows in production, 0 with an address, while
+   * CLAUDE.md said the column went through clientIp. A request context (AsyncLocalStorage) was
+   * tried first and rejected: multer resumes from stream events and loses it, so every upload's
+   * audit row would have recorded null without a word.
+   */
+  ipAddress: string | null;
 }
 
 export async function logAudit(entry: AuditLogEntry): Promise<void> {
@@ -29,9 +38,9 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
     : entry.newValue;
 
   await pool.query(
-    `INSERT INTO audit_logs (school_id, user_id, action_type, entity, entity_id, old_value, new_value)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [entry.schoolId, entry.userId, entry.actionType, entry.entity, entry.entityId ?? null, entry.oldValue ?? null, newValue ?? null]
+    `INSERT INTO audit_logs (school_id, user_id, action_type, entity, entity_id, old_value, new_value, ip_address)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [entry.schoolId, entry.userId, entry.actionType, entry.entity, entry.entityId ?? null, entry.oldValue ?? null, newValue ?? null, entry.ipAddress]
   );
 }
 
@@ -40,7 +49,8 @@ export async function logSettingsChange(
   userId: string,
   field: string,
   oldValue: unknown,
-  newValue: unknown
+  newValue: unknown,
+  ipAddress: string | null
 ): Promise<void> {
   await logAudit({
     schoolId,
@@ -50,5 +60,6 @@ export async function logSettingsChange(
     entityId: schoolId,
     oldValue: { field, value: oldValue },
     newValue: { field, value: newValue },
+    ipAddress,
   });
 }

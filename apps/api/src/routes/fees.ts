@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole, AuthUser } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { requireFeature } from '../middleware/requireFeature';
 import { logger } from '../config/logger';
 import { logAudit } from '../db/queries/auditLog';
@@ -187,6 +188,7 @@ router.post(
       });
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -446,6 +448,7 @@ router.post(
       notifyPaymentReceipt(req.params.schoolId, result.payment.id, result.invoice.student_id);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -888,6 +891,7 @@ router.post(
 
         try {
           await logAudit({
+            ipAddress: clientIp(req) ?? null,
             supportSession: req.supportSession,
             schoolId: req.params.schoolId,
             userId: req.user!.user_id,
@@ -923,6 +927,7 @@ router.post(
 
       try {
         await logAudit({
+          ipAddress: clientIp(req) ?? null,
           supportSession: req.supportSession,
           schoolId: req.params.schoolId,
           userId: req.user!.user_id,

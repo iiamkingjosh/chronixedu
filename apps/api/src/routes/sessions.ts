@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { redis, bestEffort } from '../middleware/rateLimit';
 import { logAudit } from '../db/queries/auditLog';
 import {
@@ -148,6 +149,7 @@ router.post(
 
       const term = await insertTerm(req.params.sessionId, req.params.schoolId, name, start_date, end_date);
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'TERM_CREATED',
@@ -205,6 +207,7 @@ router.patch(
       }
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId,
         userId: req.user!.user_id,
         actionType: 'TERM_UPDATED',
@@ -256,6 +259,7 @@ router.patch(
       }
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId:   req.params.schoolId,
         userId:     req.user!.user_id,
         actionType: 'SESSION_ACTIVATED',
@@ -315,6 +319,7 @@ router.patch(
       }
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId:   req.params.schoolId,
         userId:     req.user!.user_id,
         actionType: 'TERM_ACTIVATED',

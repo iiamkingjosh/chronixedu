@@ -16,6 +16,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { getActiveTerm } from '../db/queries/roster';
 import { findStudentById } from '../db/queries/students';
 import { fetchPrincipalRemark, upsertPrincipalRemark } from '../db/queries/reportCards';
@@ -103,6 +104,7 @@ router.put(
       // Doctrine 9: this lands on a document a parent keeps, so it is a sensitive write.
       // old + new, like scores.
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
         actionType: 'PRINCIPAL_REMARK_SAVED',

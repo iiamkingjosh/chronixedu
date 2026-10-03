@@ -6,6 +6,7 @@ import { hashSync } from 'bcryptjs';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import * as Sentry from '@sentry/node';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { supabaseAdmin } from '../supabaseClient';
 import {
   registerStudent,
@@ -493,6 +494,7 @@ router.post(
       }
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -832,6 +834,7 @@ router.patch(
       await updateEnrollmentClass(enrollment.id, class_id);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId,
         userId:     req.user!.user_id,
@@ -905,6 +908,7 @@ router.post(
       }
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId,
         userId:     req.user!.user_id,

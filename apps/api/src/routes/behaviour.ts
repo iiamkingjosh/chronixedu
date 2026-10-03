@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { logAudit } from '../db/queries/auditLog';
 import { getActiveTerm, findClassById } from '../db/queries/roster';
 import { findStudentById, findStudentByUserId } from '../db/queries/students';
@@ -127,6 +128,7 @@ router.post(
       // for every incident it is the audit record (doctrine 10). A failure is logged, never
       // swallowed; the incident itself was recorded, so the request still succeeds.
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId,
         userId: req.user!.user_id,
         actionType: severity === 'suspension' ? 'PARENT_NOTIFICATION_SENT' : 'PARENT_NOTIFICATION_QUEUED',

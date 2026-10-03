@@ -89,6 +89,7 @@ router.post(
       // Awaited, and a failure logged rather than swallowed: the broadcast still goes, but a
       // missing audit record for a school-wide broadcast must be visible (doctrine 10).
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId,
         userId: req.user!.user_id,
         actionType: 'ANNOUNCEMENT_CREATED',

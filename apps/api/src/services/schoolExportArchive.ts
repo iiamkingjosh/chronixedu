@@ -70,6 +70,30 @@ export const FILE_COLUMNS: FileColumn[] = [
 /** Columns whose names look like file references but are not, each with why. */
 export const NOT_FILE_COLUMNS: Record<string, string> = {};
 
+/**
+ * Documents the system generates at a path that names their owner, with no column pointing back
+ * (3 Oct 2026). Receipts are written to receipts/<school>/<payment id>.pdf and transcripts to
+ * transcripts/<school>/<student id>.pdf. Without this, every receipt was reported as unreferenced,
+ * permanently and by construction, so a normal file read as an anomaly. The owner is read from the
+ * path and its record looked up, so "unreferenced" keeps its meaning: nothing owns this file. A
+ * blanket "generated" status would have called a receipt normal without checking its payment exists.
+ */
+export interface DerivedFile {
+  ref: string;
+  bucket: () => string;
+  /** Captures the owner's id from the storage path. */
+  pattern: RegExp;
+  /** The school's owner ids ($1). */
+  sql: string;
+}
+
+export const DERIVED_FILES: DerivedFile[] = [
+  { ref: 'payments.id (receipt)', bucket: () => 'report-cards', pattern: /^receipts\/[^/]+\/([0-9a-f-]{36})\.pdf$/i,
+    sql: `SELECT id::text AS id FROM payments WHERE school_id = $1` },
+  { ref: 'students.id (transcript)', bucket: () => 'report-cards', pattern: /^transcripts\/[^/]+\/([0-9a-f-]{36})\.pdf$/i,
+    sql: `SELECT id::text AS id FROM students WHERE school_id = $1` },
+];
+
 /** A file value is a Storage URL (public, signed or authenticated) or a bare path in the column's bucket. */
 export function parseStorageRef(value: string, defaultBucket: string): { bucket: string; path: string } | null {
   const v = value.trim();
@@ -92,13 +116,17 @@ export interface ManifestRow {
   status: ManifestStatus;
 }
 
+/** What went into one export: recorded on its completion audit row, so it can be reconciled. */
 export interface ArchiveCounts {
   datasets: number;
   files_included: number;
   unreferenced: number;
   missing_in_storage: number;
   read_failed: number;
+  /** Total bytes of the files in files/. */
   bytes: number;
+  /** SHA-256 of manifest.csv exactly as written into the zip. */
+  manifest_sha256: string;
 }
 
 /** Every object under a prefix, walking folders (Storage lists one level at a time). */
@@ -136,7 +164,8 @@ const README = [
   '            receipts and transcripts.',
   'manifest.csv  One line per file: where it is in this archive, its size and SHA-256 checksum,',
   '            which record names it, and its status:',
-  '              included            in files/, named by the record shown',
+  '              included            in files/, named by the record shown (a receipt by its',
+  '                                  payment, a transcript by its student)',
   '              unreferenced        in files/, but no record names it',
   '              missing_in_storage  a record names it, but it was not in storage; not in files/',
   '              read_failed         it is in storage but could not be read; not in files/',
@@ -161,7 +190,7 @@ export async function streamSchoolArchive(schoolId: string, out: Writable): Prom
 
   archive.append(README, { name: 'README.txt' });
 
-  const counts: ArchiveCounts = { datasets: 0, files_included: 0, unreferenced: 0, missing_in_storage: 0, read_failed: 0, bytes: 0 };
+  const counts: ArchiveCounts = { datasets: 0, files_included: 0, unreferenced: 0, missing_in_storage: 0, read_failed: 0, bytes: 0, manifest_sha256: '' };
 
   for (const d of EXPORT_DATASETS) {
     const csv = await exportDatasetCsv(schoolId, d.key);
@@ -185,6 +214,21 @@ export async function streamSchoolArchive(schoolId: string, out: Writable): Prom
     }
   }
 
+  // The owners of generated documents, by kind.
+  const derivedOwners = new Map<DerivedFile, Set<string>>();
+  for (const d of DERIVED_FILES) {
+    const { rows } = await pool.query<{ id: string }>(d.sql, [schoolId]);
+    derivedOwners.set(d, new Set(rows.map(r => r.id.toLowerCase())));
+  }
+  const derivedRef = (bucket: string, path: string): string | null => {
+    for (const d of DERIVED_FILES) {
+      if (d.bucket() !== bucket) continue;
+      const m = path.match(d.pattern);
+      if (m && derivedOwners.get(d)!.has(m[1].toLowerCase())) return `${d.ref}:${m[1]}`;
+    }
+    return null;
+  };
+
   const manifest: ManifestRow[] = [];
   const seen = new Set<string>();
   for (const { bucket, prefix } of storagePrefixes(schoolId)) {
@@ -192,7 +236,7 @@ export async function streamSchoolArchive(schoolId: string, out: Writable): Prom
       const key = `${bucket}/${path}`;
       if (seen.has(key)) continue; // report-cards prefixes cannot overlap, but never write a file twice
       seen.add(key);
-      const ref = references.get(key);
+      const named = references.get(key)?.refs.join(' ') ?? derivedRef(bucket, path);
       const zipPath = `files/${bucket}/${path}`;
       let bytes: Buffer | null = null;
       for (let attempt = 1; attempt <= 2 && !bytes; attempt += 1) {
@@ -204,17 +248,17 @@ export async function streamSchoolArchive(schoolId: string, out: Writable): Prom
       }
       if (!bytes) {
         counts.read_failed += 1;
-        manifest.push({ zip_path: '', bucket, storage_path: path, bytes: null, sha256: null, referenced_by: ref?.refs.join(' ') ?? '', status: 'read_failed' });
+        manifest.push({ zip_path: '', bucket, storage_path: path, bytes: null, sha256: null, referenced_by: named ?? '', status: 'read_failed' });
         continue;
       }
       archive.append(bytes, { name: zipPath });
       counts.bytes += bytes.length;
-      const status: ManifestStatus = ref ? 'included' : 'unreferenced';
-      if (ref) counts.files_included += 1; else counts.unreferenced += 1;
+      const status: ManifestStatus = named ? 'included' : 'unreferenced';
+      if (named) counts.files_included += 1; else counts.unreferenced += 1;
       manifest.push({
         zip_path: zipPath, bucket, storage_path: path, bytes: bytes.length,
         sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
-        referenced_by: ref?.refs.join(' ') ?? '', status,
+        referenced_by: named ?? '', status,
       });
     }
   }
@@ -230,7 +274,9 @@ export async function streamSchoolArchive(schoolId: string, out: Writable): Prom
   }
 
   const columns: Array<keyof ManifestRow> = ['zip_path', 'bucket', 'storage_path', 'bytes', 'sha256', 'referenced_by', 'status'];
-  const manifestCsv = [columns.join(','), ...manifest.map(m => columns.map(c => csvCell(m[c])).join(','))].join('\n');
+  const manifestCsv = Buffer.from([columns.join(','), ...manifest.map(m => columns.map(c => csvCell(m[c])).join(','))].join('\n'), 'utf8');
+  // The fingerprint of the manifest the school receives, for the completion audit row.
+  counts.manifest_sha256 = crypto.createHash('sha256').update(manifestCsv).digest('hex');
   archive.append(manifestCsv, { name: 'manifest.csv' });
 
   await archive.finalize();

@@ -1,3 +1,4 @@
+import { clientIp } from '../middleware/clientIp';
 import { Router, Request, Response, NextFunction } from 'express';
 import { logAudit } from '../db/queries/auditLog';
 import { recordPayment } from '../db/queries/fees';
@@ -81,6 +82,7 @@ router.get(
 
         if (metadata.recorded_by) {
           await logAudit({
+            ipAddress: clientIp(req) ?? null,
             supportSession: req.supportSession,
             schoolId,
             userId: metadata.recorded_by,
@@ -182,6 +184,10 @@ router.post(
 
         if (metadata.recorded_by) {
           await logAudit({
+            // Null, not clientIp(req): this request is Paystack's server, not the person the row
+            // names, and recording its address against them would be false. The browser callback,
+            // which IS the payer, records theirs.
+            ipAddress: null,
             supportSession: req.supportSession,
             schoolId: req.params.schoolId,
             userId: metadata.recorded_by,

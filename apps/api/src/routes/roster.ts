@@ -3,6 +3,7 @@ import { z } from 'zod';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import {
   findClassByName, insertClass, updateClass, listClasses,
   findClassById, classHasReferences, deleteClass,
@@ -451,6 +452,7 @@ router.post(
       cache.del(`roster:${schoolId}:assignments:${teacher_id}`);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId,
         userId: req.user!.user_id,
         actionType: 'TEACHER_ASSIGNMENTS_BULK_CREATED',
@@ -510,6 +512,7 @@ router.post(
       cache.delByPrefix(`roster:${schoolId}:assignments:`);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         schoolId,
         userId: req.user!.user_id,
         actionType: 'TEACHER_ASSIGNMENTS_COPIED',

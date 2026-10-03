@@ -192,9 +192,16 @@ Monorepo, npm workspaces:
 - **The client's address is `clientIp(req)` — `X-Real-IP` — never `req.ip`.** On Railway,
   `X-Forwarded-For` holds two Railway addresses and no client, and the edge overwrites both
   headers, so `trust proxy` at any depth yields a Railway proxy; measured 30 Sep 2026
-  (SECURITY.md Round 18). Rate-limit keys, lockout keys and the audit `ip_address` column all
-  go through `clientIp`. A new `req.ip` reader is a regression; `audit_logs.ip_address` rows
-  before 30 Sep 2026 hold proxy addresses.
+  (SECURITY.md Round 18). Rate-limit keys, lockout keys and both audit tables' `ip_address`
+  go through `clientIp`. A new `req.ip` reader is a regression.
+  - **`audit_logs.ip_address` was never written until 3 Oct 2026** (SECURITY.md Round 32). 262 rows
+    in production had none, while this file said they did. `platform_audit_logs`, written directly
+    in `superAdmin.ts`, did.
+  - **`logAudit` now requires `ipAddress`, so the compiler refuses an audit call that does not say
+    where it came from.** Pass `clientIp(req) ?? null`. Write `null`, with a comment, where there is
+    no request, or where the request is not the actor's own: a Paystack webhook, or settlement. Do
+    not use a request context (AsyncLocalStorage): `multer` loses it, so every upload's audit row
+    would record null without a word (measured).
 - **Every link the API sends starts with `appBaseUrl()`** (`config/appUrls.ts`), which reads
   `APP_URL` and nothing else. There is no default: the API refuses to start without `APP_URL`
   (`config/env.ts`), and `appBaseUrl()` throws if reached without it. Tests state theirs
@@ -641,8 +648,15 @@ Monorepo, npm workspaces:
     deletion script reads. `storagePrefixes.test.ts` fails if an upload in `src` writes outside it.
   - **One list of file columns.** The records that name files are `FILE_COLUMNS`; every
     `*_url`/`*_path` column must be there or in `NOT_FILE_COLUMNS` (`schoolExportArchive.db.test.ts`).
-  - **Registered before `/:dataset`,** which would read "archive" as a dataset name. Audited before
-    the first byte.
+  - **Registered before `/:dataset`,** which would read "archive" as a dataset name.
+  - **Two audit rows.** `SCHOOL_DATA_EXPORTED` is written before the first byte, so no export leaves
+    without a record. `SCHOOL_DATA_EXPORT_COMPLETED` is written after, carrying the manifest's
+    counts and the SHA-256 of `manifest.csv`, so a school's copy can be reconciled with the record.
+    It is a second row because audit rows cannot be updated.
+  - **Generated documents are owned through their path.** A receipt is
+    `receipts/<school>/<payment>.pdf` and a transcript `transcripts/<school>/<student>.pdf`, and no
+    column points back (`DERIVED_FILES`). The owner is read from the path and looked up, so
+    `unreferenced` means that nothing owns the file.
 - **Deletion:** `apps/api/scripts/delete-school-data.js` and `docs/data-deletion-runbook.md`. Same
   ratchet: every table is in `STEPS` or `NOT_DELETED` (`schoolDeletion.db.test.ts`). A new upload
   path goes in `config/storagePrefixes.json`, shared with the export. A completed run leaves **zero rows** for the school in every
@@ -981,7 +995,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 40 suites, 376 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 40 suites, 377 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

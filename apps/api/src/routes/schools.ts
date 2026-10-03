@@ -294,6 +294,7 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -307,6 +308,26 @@ router.get(
       res.setHeader('Content-Disposition', `attachment; filename="chronix-edu-export-${new Date().toISOString().slice(0, 10)}.zip"`);
       const counts = await streamSchoolArchive(req.params.schoolId, res);
       logger.info('school_export_archive_sent', { school_id: req.params.schoolId, ...counts });
+      // What went, so the record can be reconciled with what the school received: the manifest's
+      // own figures and its SHA-256. A second row, because audit_logs rows cannot be updated
+      // (migrations 036-038) and the first is written before anything is known. Absent if the
+      // stream failed, which logs school_export_archive_failed (alerted as school_export_failed).
+      try {
+        await logAudit({
+          ipAddress: clientIp(req) ?? null,
+          supportSession: req.supportSession,
+          schoolId: req.params.schoolId,
+          userId: req.user!.user_id,
+          actionType: 'SCHOOL_DATA_EXPORT_COMPLETED',
+          entity: 'school_export',
+          entityId: req.params.schoolId,
+          oldValue: null,
+          newValue: { dataset: 'archive', ...counts },
+        });
+      } catch (auditErr) {
+        // The download has gone; the record of what was in it has not. Alerted, never swallowed.
+        logger.error('audit_write_failed', { school_id: req.params.schoolId, action: 'SCHOOL_DATA_EXPORT_COMPLETED', error: auditErr instanceof Error ? auditErr.message : String(auditErr) });
+      }
     } catch (err) {
       if (!res.headersSent) return next(err);
       logger.error('school_export_archive_failed', { school_id: req.params.schoolId, error: err instanceof Error ? err.message : String(err) });
@@ -326,6 +347,7 @@ router.get(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'No such export' } });
       }
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -424,6 +446,7 @@ router.patch(
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -582,7 +605,8 @@ router.patch(
         req.user!.user_id,
         Object.keys(patch).join(','),
         prior,
-        patch
+        patch,
+        clientIp(req) ?? null
       );
 
       const responseData: Record<string, unknown> = { message: 'Academic config updated' };
@@ -648,7 +672,7 @@ router.patch(
 
       const patch = { min_part_payment_kobo: toKobo(parsed.data.min_part_payment) };
       const prior = await updateFeeConfig(req.params.schoolId, patch);
-      await logSettingsChange(req.params.schoolId, req.user!.user_id, 'min_part_payment_kobo', prior, patch);
+      await logSettingsChange(req.params.schoolId, req.user!.user_id, 'min_part_payment_kobo', prior, patch, clientIp(req) ?? null);
 
       return res.json({ success: true, data: { message: 'Fee settings updated', min_part_payment: parsed.data.min_part_payment } });
     } catch (err) {
@@ -706,7 +730,8 @@ router.patch(
         req.user!.user_id,
         Object.keys(patch).join(','),
         existingConfig,
-        patch
+        patch,
+        clientIp(req) ?? null
       );
 
       return res.json({ success: true, data: { message: 'Notification settings updated' } });
@@ -743,7 +768,8 @@ router.patch(
         req.user!.user_id,
         Object.keys(patch).join(','),
         existing.report_config,
-        patch
+        patch,
+        clientIp(req) ?? null
       );
 
       return res.json({ success: true, data: { message: 'Report card settings updated' } });
@@ -863,6 +889,7 @@ router.post(
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -923,6 +950,7 @@ router.post(
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -983,6 +1011,7 @@ router.post(
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -1215,6 +1244,7 @@ router.put(
         }
 
         await logAudit({
+          ipAddress: clientIp(req) ?? null,
           supportSession: req.supportSession,
           schoolId,
           userId: req.user!.user_id,
@@ -1258,6 +1288,7 @@ router.put(
       await updateSchoolPayoutConfig(schoolId, newConfig);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId,
         userId: req.user!.user_id,

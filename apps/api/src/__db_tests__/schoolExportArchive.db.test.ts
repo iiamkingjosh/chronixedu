@@ -71,8 +71,15 @@ const binary = (res: request.Response, cb: (err: Error | null, body: Buffer) => 
   stream.on('data', (c: Buffer) => chunks.push(c));
   stream.on('end', () => cb(null, Buffer.concat(chunks)));
 };
+// The address the edge passes on (X-Real-IP; CLAUDE.md, Auth), as production's would.
+const CALLER_IP = '102.89.83.237';
 const exportZip = (auth: string, school = A) =>
-  request(app).get(`/api/schools/${school}/export/archive`).set('Authorization', auth).buffer(true).parse(binary);
+  request(app).get(`/api/schools/${school}/export/archive`).set('Authorization', auth).set('X-Real-IP', CALLER_IP).buffer(true).parse(binary);
+
+// A payment with a receipt, a receipt whose payment no longer exists, and a transcript: documents the
+// system generates at a path naming their owner, with no column pointing back.
+const PAYMENT = 'b1000000-0000-4000-8000-0000000000e1';
+const GONE_PAYMENT = 'b1000000-0000-4000-8000-0000000000e2';
 
 beforeEach(async () => {
   await seed();
@@ -96,6 +103,16 @@ beforeEach(async () => {
   await pool.query(
     `INSERT INTO report_cards (student_id, term_id, school_id, pdf_url, generated_at, is_published) VALUES ($1, $2, $3, $4, NOW(), false)`,
     [I.s1, I.termA, A, `${A}/${I.termA}/${I.s1}.pdf`]);
+
+  const invoice = await pool.query<{ id: string }>(
+    `INSERT INTO fee_invoices (school_id, student_id, term_id, total_amount, amount_paid, balance, status)
+     VALUES ($1, $2, $3, 1000, 1000, 0, 'paid') RETURNING id`, [A, I.s1, I.termA]);
+  await pool.query(
+    `INSERT INTO payments (id, invoice_id, school_id, amount, method) VALUES ($1, $2, $3, 1000, 'cash')`,
+    [PAYMENT, invoice.rows[0].id, A]);
+  put('report-cards', `receipts/${A}/${PAYMENT}.pdf`, 'A-receipt');
+  put('report-cards', `receipts/${A}/${GONE_PAYMENT}.pdf`, 'A-orphan-receipt');
+  put('report-cards', `transcripts/${A}/${I.s1}.pdf`, 'A-transcript');
 
   // School B: its own files under its own prefixes, in both buckets.
   put(ASSETS, `schools/${B}/logo.png`, 'B-logo');
@@ -128,6 +145,9 @@ describe('the full export, as one zip', () => {
       `files/${ASSETS}/schools/${A}/old/stray.txt`,
       `files/${ASSETS}/schools/${A}/students/${I.s1}/photo.jpg`,
       `files/report-cards/${A}/${I.termA}/${I.s1}.pdf`,
+      `files/report-cards/receipts/${A}/${PAYMENT}.pdf`,
+      `files/report-cards/receipts/${A}/${GONE_PAYMENT}.pdf`,
+      `files/report-cards/transcripts/${A}/${I.s1}.pdf`,
     ].sort());
     expect(zip.getEntry(`files/${ASSETS}/schools/${A}/logo.png`)!.getData().toString()).toBe('A-logo');
     expect(zip.getEntry(`files/report-cards/${A}/${I.termA}/${I.s1}.pdf`)!.getData().toString()).toBe('A-s1-report');
@@ -150,6 +170,11 @@ describe('the full export, as one zip', () => {
     expect(byPath[`${ASSETS}/schools/${A}/students/${I.s1}/photo.jpg`]).toMatchObject({ status: 'included', referenced_by: `students.photo_url:${I.s1}` });
     expect(byPath[`report-cards/${A}/${I.termA}/${I.s1}.pdf`]).toMatchObject({ status: 'included', sha256: sha('A-s1-report') });
     expect(byPath[`${ASSETS}/schools/${A}/old/stray.txt`]).toMatchObject({ status: 'unreferenced', referenced_by: '' });
+    // A receipt and a transcript are owned through their path, so they are included, not
+    // "unreferenced"; a receipt whose payment is gone really is unreferenced.
+    expect(byPath[`report-cards/receipts/${A}/${PAYMENT}.pdf`]).toMatchObject({ status: 'included', referenced_by: `payments.id (receipt):${PAYMENT}` });
+    expect(byPath[`report-cards/transcripts/${A}/${I.s1}.pdf`]).toMatchObject({ status: 'included', referenced_by: `students.id (transcript):${I.s1}` });
+    expect(byPath[`report-cards/receipts/${A}/${GONE_PAYMENT}.pdf`]).toMatchObject({ status: 'unreferenced', referenced_by: '' });
     // Named by a record, not in storage: listed, not dropped, and not in files/.
     expect(byPath[`${ASSETS}/schools/${A}/students/${I.s2}/photo.jpg`]).toMatchObject({
       status: 'missing_in_storage', zip_path: '', referenced_by: `students.photo_url:${I.s2}`,
@@ -165,11 +190,34 @@ describe('the full export, as one zip', () => {
 
   it('is audited, and refused to anyone but the school\'s principal', async () => {
     expect((await exportZip(tokens.principalA())).status).toBe(200);
-    const audit = await pool.query(`SELECT new_value FROM audit_logs WHERE action_type = 'SCHOOL_DATA_EXPORTED' AND school_id = $1`, [A]);
-    expect(audit.rows.map(r => r.new_value)).toEqual([expect.objectContaining({ dataset: 'archive' })]);
+    const audit = await pool.query(`SELECT new_value, ip_address FROM audit_logs WHERE action_type = 'SCHOOL_DATA_EXPORTED' AND school_id = $1`, [A]);
+    // The address is on the row (3 Oct 2026: no audit_logs row had ever recorded one).
+    expect(audit.rows).toEqual([{ new_value: expect.objectContaining({ dataset: 'archive' }), ip_address: CALLER_IP }]);
 
     expect((await exportZip(tokens.math())).status).toBe(403);
     expect((await exportZip(tokens.principalB())).status).toBe(403);
+  });
+
+  it('records what went, so the export can be reconciled: the manifest\'s figures and its fingerprint', async () => {
+    const res = await exportZip(tokens.principalA());
+    const zip = new AdmZip(res.body as Buffer);
+    const { rows } = await pool.query(
+      `SELECT new_value, ip_address FROM audit_logs WHERE action_type = 'SCHOOL_DATA_EXPORT_COMPLETED' AND school_id = $1`, [A]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ip_address).toBe(CALLER_IP);
+    // The fixture's counts, known in advance: not read back from the export.
+    const sent = ['A-logo', 'A-s1-photo', 'A-s1-report', 'A-stray', 'A-receipt', 'A-orphan-receipt', 'A-transcript'];
+    expect(rows[0].new_value).toEqual({
+      dataset: 'archive',
+      datasets: EXPORT_DATASETS.length,
+      files_included: 5,      // logo, s1's photo, s1's report card, the receipt, the transcript
+      unreferenced: 2,        // the stray file, the receipt whose payment is gone
+      missing_in_storage: 1,  // s2's photo
+      read_failed: 1,         // the unreadable photo
+      bytes: sent.reduce((n, t) => n + Buffer.byteLength(t), 0),
+      // The fingerprint of the manifest the school actually received.
+      manifest_sha256: crypto.createHash('sha256').update(zip.getEntry('manifest.csv')!.getData()).digest('hex'),
+    });
   });
 
   it('names every column that holds a file, so a new one cannot be left out of the export', async () => {

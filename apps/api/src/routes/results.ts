@@ -3,6 +3,7 @@ import { logger } from '../config/logger';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { logAudit } from '../db/queries/auditLog';
 import {
   checkSubjectCompletion,
@@ -170,6 +171,7 @@ router.post(
 
       if (changed) {
         await logAudit({
+          ipAddress: clientIp(req) ?? null,
           supportSession: req.supportSession,
           schoolId,
           userId,
@@ -355,6 +357,7 @@ router.post(
       await batchUpsertStatuses(studentIds, schoolId, term_id, 'approved', userId, ['draft', 'submitted']);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId,
         userId,
@@ -452,6 +455,7 @@ router.post(
       await publishReportCards(schoolId, term_id, studentIds);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId,
         userId,
@@ -471,6 +475,7 @@ router.post(
       let notificationsQueued = true;
       try {
         await logAudit({
+          ipAddress: clientIp(req) ?? null,
           supportSession: req.supportSession,
           schoolId,
           userId,
@@ -585,6 +590,7 @@ router.post(
       }
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId,
         userId,
@@ -608,6 +614,7 @@ router.post(
       let notificationsQueued = true;
       try {
         await logAudit({
+          ipAddress: clientIp(req) ?? null,
           supportSession: req.supportSession,
           schoolId,
           userId,

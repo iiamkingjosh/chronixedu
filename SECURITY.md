@@ -1,8 +1,34 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 31 — 2026-10-03  
-**Scope:** Paystack payments: the verified currency was never checked  
-**Round 31 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated
+**Latest audit:** Round 32 — 2026-10-03  
+**Scope:** School audit rows never recorded an IP address  
+**Round 32 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated
+
+---
+
+## Round 32 — 2026-10-03
+
+### L-01 — No school audit row had ever recorded an IP address ✅ Remediated
+
+**Files:** `apps/api/src/db/queries/auditLog.ts` (`logAudit`, `logSettingsChange`), `apps/api/src/db/queries/scores.ts` (the batch audit insert), `apps/api/src/db/queries/platformBilling.ts`, and every route that audits (46 `logAudit` calls and 6 `logSettingsChange` calls in 16 route files).
+
+**Found** by the reviewer on the first two `SCHOOL_DATA_EXPORTED` rows: both had `ip_address: null`. It was not that route.
+- `logAudit`'s INSERT never named `ip_address`, and the only other writer, the score batch, did not either.
+- Production held **262 `audit_logs` rows, 0 with an address**, ever.
+- CLAUDE.md said "the audit `ip_address` column goes through `clientIp`", and that rows before 30 Sep "hold proxy addresses". That was true of `platform_audit_logs`, which `superAdmin.ts` writes directly, and false of `audit_logs`, which holds every school-level sensitive write: scores, results, settings, payments and exports.
+
+**Fix: the compiler enforces it.**
+- `AuditLogEntry.ipAddress` is required (`string | null`), and so is the batch's `opts.ipAddress`. A call that does not state an address does not compile, now or later.
+- Every request-time call passes `clientIp(req) ?? null`.
+- `null` is written, with the reason in a comment, where there is no request, or where the request is not the actor's own: the fee webhook (Paystack's server) and platform settlement.
+- **A request context was tried first and rejected.** One middleware writing the address into `AsyncLocalStorage` would have reached every call without touching them. Measured: `multer` resumes from stream events and loses the context, so every upload's audit row (logo, stamp, signature, photo, assignment) would have recorded null without a word.
+
+**Not changed:** the 262 existing rows stay as written. Their addresses were never captured, and nothing can recover them.
+
+**Tests:**
+- `auditLog.test.ts`: the INSERT names `ip_address` and passes the caller's address.
+- `schoolExportArchive.db.test.ts`: both export rows carry the address from `X-Real-IP`.
+- The compiler is the ratchet: removing `ipAddress` from any call fails `tsc`.
 
 ---
 

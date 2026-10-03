@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { logAudit } from '../db/queries/auditLog';
 import { getActiveTerm } from '../db/queries/roster';
 import {
@@ -147,6 +148,7 @@ router.post(
       const saved = await upsertScore(schoolId, student_id, subject_id, term_id, component_id, score, teacherId);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId,
         userId:     teacherId,
@@ -272,6 +274,7 @@ router.post(
       ]);
 
       const result = await bulkUpsertScores({
+        ipAddress: clientIp(req) ?? null,
         schoolId,
         classId: class_id,
         subjectId: subject_id,

@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { logSettingsChange } from '../db/queries/auditLog';
 import {
   insertAssessmentConfig,
@@ -206,7 +207,8 @@ router.patch(
         req.user!.user_id,
         'assessment_config',
         { config_id: config.id, ...config },
-        { config_id: updated.id, components: updated.components }
+        { config_id: updated.id, components: updated.components },
+        clientIp(req) ?? null
       );
 
       return res.json({ success: true, data: updated });

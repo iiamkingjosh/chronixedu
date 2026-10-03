@@ -22,10 +22,11 @@ describe('logAudit', () => {
       entityId: 'cccccccc-0000-0000-0000-000000000001',
       oldValue: { score: 80 },
       newValue: { score: 90 },
+      ipAddress: '102.89.83.237',
     });
 
     expect(mockPool.query).toHaveBeenCalledWith(
-      expect.stringContaining('action_type'),
+      expect.stringContaining('ip_address'),
       [
         'aaaaaaaa-0000-0000-0000-000000000001',
         'bbbbbbbb-0000-0000-0000-000000000001',
@@ -34,6 +35,8 @@ describe('logAudit', () => {
         'cccccccc-0000-0000-0000-000000000001',
         { score: 80 },
         { score: 90 },
+        // The caller's address reaches the row (3 Oct 2026: no audit_logs row had ever recorded one).
+        '102.89.83.237',
       ]
     );
   });
@@ -46,6 +49,7 @@ describe('logAudit', () => {
       userId: 'bbbbbbbb-0000-0000-0000-000000000001',
       actionType: 'IDENTITY_UPDATE',
       entity: 'school_settings',
+      ipAddress: null,
     });
 
     expect(mockPool.query).toHaveBeenCalledWith(

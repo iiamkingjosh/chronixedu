@@ -212,6 +212,8 @@ export interface BulkUpsertOptions {
   notInClass: Set<string>;
   finalisedStudents: Map<string, string>;
   supportSession?: SupportSessionContext;
+  /** clientIp(req), or null; written on every audit row this batch makes (auditLog.ts, ipAddress). */
+  ipAddress: string | null;
 }
 
 /**
@@ -301,8 +303,8 @@ export async function bulkUpsertScores(opts: BulkUpsertOptions): Promise<BulkUps
         ? { performed_by_admin: opts.supportSession.realAdminId, support_session_id: opts.supportSession.sessionId }
         : null;
       await client.query(
-        `INSERT INTO audit_logs (school_id, user_id, action_type, entity, entity_id, old_value, new_value)
-         SELECT $1, $2, t.action_type, 'scores', t.entity_id, t.old_value, t.new_value
+        `INSERT INTO audit_logs (school_id, user_id, action_type, entity, entity_id, old_value, new_value, ip_address)
+         SELECT $1, $2, t.action_type, 'scores', t.entity_id, t.old_value, t.new_value, $7
          FROM unnest($3::text[], $4::uuid[], $5::jsonb[], $6::jsonb[])
            AS t(action_type, entity_id, old_value, new_value)`,
         [
@@ -320,6 +322,7 @@ export async function bulkUpsertScores(opts: BulkUpsertOptions): Promise<BulkUps
             source: 'bulk',
             ...(support ? { _support: support } : {}),
           })),
+          opts.ipAddress,
         ]
       );
     }

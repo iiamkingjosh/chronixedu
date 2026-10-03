@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole } from '../middleware/auth';
+import { clientIp } from '../middleware/clientIp';
 import { supabaseAdmin } from '../supabaseClient';
 import { redis } from '../middleware/rateLimit';
 import { sendEmail } from '../services/emailService';
@@ -215,6 +216,7 @@ router.post(
       });
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -263,7 +265,8 @@ router.patch(
         req.user!.user_id,
         'user_profile',
         { user_id: existing.id, first_name: existing.first_name, last_name: existing.last_name, phone: existing.phone, title: existing.title },
-        { user_id: updated.id, first_name: updated.first_name, last_name: updated.last_name, phone: updated.phone, title: updated.title }
+        { user_id: updated.id, first_name: updated.first_name, last_name: updated.last_name, phone: updated.phone, title: updated.title },
+        clientIp(req) ?? null
       );
 
       return res.json({ success: true, data: updated });
@@ -301,6 +304,7 @@ router.patch(
       }
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -384,6 +388,7 @@ router.patch(
       }
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -437,6 +442,7 @@ router.post(
       ).catch(err => logger.error('password_reset_link_email_failed', { user_id: existing.id, error: err instanceof Error ? err.message : String(err) }));
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -503,6 +509,7 @@ router.post(
       await updateUserSignature(req.params.userId, req.params.schoolId, signatureUrl);
 
       await logAudit({
+        ipAddress: clientIp(req) ?? null,
         supportSession: req.supportSession,
         schoolId: req.params.schoolId,
         userId: req.user!.user_id,
@@ -731,6 +738,7 @@ router.post(
 
         try {
           await logAudit({
+            ipAddress: clientIp(req) ?? null,
             supportSession: req.supportSession,
             schoolId: req.params.schoolId,
             userId: req.user!.user_id,
@@ -769,6 +777,7 @@ router.post(
 
       try {
         await logAudit({
+          ipAddress: clientIp(req) ?? null,
           supportSession: req.supportSession,
           schoolId: req.params.schoolId,
           userId: req.user!.user_id,

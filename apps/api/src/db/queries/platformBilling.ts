@@ -205,6 +205,9 @@ export async function settlePayment(reference: string, verifiedAmountKobo: numbe
 
     try {
       await logAudit({
+        // Null: settlement is triggered by Paystack's webhook or the browser's return trip, never as
+        // the act of the user this row names (who started the checkout), so no address is theirs.
+        ipAddress: null,
         schoolId: payment.school_id,
         userId: payment.initiated_by,
         actionType: 'PLATFORM_BILLING_PAYMENT_SETTLED',
