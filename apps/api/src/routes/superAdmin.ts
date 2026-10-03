@@ -1085,14 +1085,29 @@ router.get(
       const rate = await pool.query<{ price_per_student_kobo: string; updated_at: string }>(
         `SELECT price_per_student_kobo, updated_at FROM platform_pricing_config LIMIT 1`
       );
-      const last = await pool.query<{ created_at: string; first_name: string; last_name: string }>(
-        `SELECT pal.created_at, u.first_name, u.last_name
+      // rate_is_newer: compared in SQL, at the microsecond; a JS Date keeps only milliseconds.
+      const last = await pool.query<{ created_at: string; first_name: string; last_name: string; new_kobo: string | null; rate_is_newer: boolean | null }>(
+        `SELECT pal.created_at, u.first_name, u.last_name, pal.metadata->>'new_kobo' AS new_kobo,
+                (SELECT c.updated_at > pal.created_at FROM platform_pricing_config c) AS rate_is_newer
            FROM platform_audit_logs pal JOIN users u ON u.id = pal.platform_admin_id
           WHERE pal.action_type = 'PRICING_RATE_SET'
           ORDER BY pal.created_at DESC LIMIT 1`
       );
       const r = rate.rows[0];
       const l = last.rows[0];
+      // A change made outside the product, by comparison only, never by belief (3 Oct 2026). The
+      // route writes the rate and its audit row in one transaction, so its updated_at equals the
+      // row's created_at and the value equals the row's new_kobo. Migration 054 moves updated_at on
+      // every UPDATE, so a hand edit cannot leave it behind. Anything else was changed elsewhere:
+      // the first ₦800 was entered by hand in the SQL editor before the screen's first save.
+      // This holds only while every write in the save uses now() (the transaction's time); see the
+      // PUT below and migration 054.
+      let outsideChange: { kind: 'changed' | 'removed'; at: string | null } | null = null;
+      if (r && (!l || l.rate_is_newer === true || Number(l.new_kobo) !== Number(r.price_per_student_kobo))) {
+        outsideChange = { kind: 'changed', at: r.updated_at };
+      } else if (!r && l) {
+        outsideChange = { kind: 'removed', at: null };
+      }
       return res.json({
         success: true,
         data: {
@@ -1100,6 +1115,9 @@ router.get(
           updated_at: r?.updated_at ?? null,
           // Who set it through this route. A rate typed into the database by hand has no record.
           last_set: l ? { at: l.created_at, by: `${l.first_name} ${l.last_name}` } : null,
+          // Not null when the stored rate is not what the last recorded save left: changed, or
+          // removed, outside Chronix Edu. Nothing records who did it; the panel says so.
+          outside_change: outsideChange,
           max_price_per_student_kobo: MAX_PRICE_PER_STUDENT_KOBO,
           // The screen shows the form only to the one admin the PUT admits; the PUT enforces it anyway.
           can_edit: req.user?.email?.toLowerCase() === ROOT_ADMIN_EMAIL,
@@ -1183,6 +1201,9 @@ router.put(
         `SELECT price_per_student_kobo FROM platform_pricing_config WHERE id = true`
       );
       const previousKobo = prior.rows[0] ? Number(prior.rows[0].price_per_student_kobo) : null;
+      // now(), not clock_timestamp(): the rate's updated_at, migration 054's trigger and the audit row's
+      // created_at must share this transaction's one timestamp, or GET /pricing's outside_change
+      // comparison flags every normal save.
       await client.query(
         `INSERT INTO platform_pricing_config (id, price_per_student_kobo, updated_at) VALUES (true, $1, now())
          ON CONFLICT (id) DO UPDATE SET price_per_student_kobo = EXCLUDED.price_per_student_kobo, updated_at = now()`,

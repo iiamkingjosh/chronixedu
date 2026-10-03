@@ -521,6 +521,12 @@ Monorepo, npm workspaces:
     800 looks harmless as a rate and obvious as a total, and the ceiling cannot catch it.
   - **"Last set by" is read from the `PRICING_RATE_SET` audit row.** There is no who column, so
     the audit row is the single source for that fact.
+  - **A change made outside the product shows on the panel** (`outside_change`, since 3 Oct 2026).
+    It shows when the stored rate is newer than, or differs from, the last recorded save, or was
+    removed. This is measured, never inferred. Migration 054 moves `updated_at` on every UPDATE, so a
+    hand edit cannot leave it behind, and the comparison runs in SQL, at the microsecond. The first
+    ₦800 was entered in the SQL editor before the screen's first save, so that save's
+    `previous_kobo: 80000` is true (`docs/AUDIT-2026-09.md`).
   - **The ceiling:** the API takes whole kobo (`MAX_PRICE_PER_STUDENT_KOBO`, ₦100,000), to catch a
     naira/kobo slip. The screen converts typed naira with string arithmetic (`lib/money.ts`), never
     `* 100` on a float. Never set the rate by SQL: it would skip the audit and the repricing.
@@ -961,7 +967,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 39 suites, 368 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 39 suites, 372 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

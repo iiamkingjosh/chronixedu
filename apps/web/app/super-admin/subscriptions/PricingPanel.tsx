@@ -74,6 +74,13 @@ export default function PricingPanel() {
               )}
             </p>
           )}
+          {pricing.outside_change && (
+            <p className="mt-2 text-xs text-amber-700">
+              {pricing.outside_change.kind === 'removed'
+                ? 'The rate was removed outside Chronix Edu, after the last change recorded here. Nothing records who removed it.'
+                : `The stored rate was set or changed outside Chronix Edu${pricing.outside_change.at ? ` (${new Date(pricing.outside_change.at).toLocaleString('en-NG')})` : ''}, after the last change recorded here. Nothing records who changed it.`}
+            </p>
+          )}
           {pricing.can_edit ? (
             <div className="mt-4 flex flex-wrap items-start gap-3">
               <div>

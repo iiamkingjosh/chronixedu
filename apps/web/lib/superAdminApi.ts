@@ -307,6 +307,11 @@ export interface PricingResponse {
   updated_at: string | null;
   /** The last change made through the product. A rate typed into the database by hand has none. */
   last_set: { at: string; by: string } | null;
+  /**
+   * Not null when the stored rate is not what the last recorded save left: set, changed or removed
+   * outside Chronix Edu (in the database directly). Found by comparison, so nothing names who did it.
+   */
+  outside_change: { kind: 'changed' | 'removed'; at: string | null } | null;
   max_price_per_student_kobo: number;
   can_edit: boolean;
 }

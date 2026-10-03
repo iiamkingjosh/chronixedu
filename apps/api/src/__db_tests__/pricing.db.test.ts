@@ -139,3 +139,50 @@ describe('the per-student rate', () => {
     expect(await audits()).toHaveLength(1);
   });
 });
+
+describe('a rate changed outside the product', () => {
+  // On 3 Oct 2026 the first rate was entered by hand in the SQL editor, so the screen's first save
+  // recorded a prior value nothing else recorded. The panel now says when the stored rate is not
+  // what the last recorded save left, by comparison only. Each case follows a recorded save, which
+  // is not flagged (the control).
+  const outside = async () => (await getRate()).body.data.outside_change;
+
+  it('flags a rate entered by hand before any recorded save, and not once the screen saves', async () => {
+    expect(await outside()).toBeNull();
+    await pool.query(`INSERT INTO platform_pricing_config (price_per_student_kobo) VALUES (80000)`);
+    expect(await outside()).toMatchObject({ kind: 'changed' });
+
+    expect((await setRate(80000)).body.data.previous_kobo).toBe(80000);
+    expect(await outside()).toBeNull();
+  });
+
+  it('flags a hand UPDATE after a recorded save, even one that leaves updated_at alone', async () => {
+    await setRate(80000);
+    expect(await outside()).toBeNull();
+    // As text, at the microsecond: a JS Date keeps milliseconds, and the stored value would then
+    // compare as newer than its own truncated copy whether or not anything moved it.
+    const before = (await pool.query(`SELECT updated_at::text AS t FROM platform_pricing_config`)).rows[0].t;
+    expect((await pool.query(`SELECT updated_at > $1::timestamptz AS moved FROM platform_pricing_config`, [before])).rows[0].moved).toBe(false);
+
+    await pool.query(`UPDATE platform_pricing_config SET price_per_student_kobo = 90000`);
+    // Migration 054 moved it although the statement did not.
+    expect((await pool.query(`SELECT updated_at > $1::timestamptz AS moved FROM platform_pricing_config`, [before])).rows[0].moved).toBe(true);
+    expect(await outside()).toMatchObject({ kind: 'changed' });
+  });
+
+  it('flags a hand UPDATE that writes the same value back, from the time alone', async () => {
+    await setRate(80000);
+    expect(await outside()).toBeNull();
+    await pool.query(`UPDATE platform_pricing_config SET price_per_student_kobo = 80000`);
+    expect(await outside()).toMatchObject({ kind: 'changed' });
+  });
+
+  it('flags a rate removed by hand after a recorded save', async () => {
+    await setRate(80000);
+    expect(await outside()).toBeNull();
+    await pool.query(`DELETE FROM platform_pricing_config`);
+    const shown = (await getRate()).body.data;
+    expect(shown.price_per_student_kobo).toBeNull();
+    expect(shown.outside_change).toEqual({ kind: 'removed', at: null });
+  });
+});

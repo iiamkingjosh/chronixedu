@@ -1,5 +1,10 @@
 # Chronix Edu — Changelog
 
+## The rate panel says when the rate was changed outside Chronix Edu (2026-10-03)
+
+### For Chronix administrators
+- If the per-student rate is set, changed or removed directly in the database rather than on the Subscriptions page, the panel now says so, with the time. Such a change is not recorded with who made it, so the panel says that too. Changes made on the page are unaffected.
+
 ## Payments are accepted in naira only (2026-10-03)
 
 ### For schools and parents
