@@ -82,6 +82,25 @@ for C-4b beyond tenant isolation: `current_setting('app.school_id', true)` is ou
 with our own missing_ok flag. **Re-run the boundary check against production's real roles
 before cutover** — the only step that turns "read" into "measured" here.
 
+## The login role and two-factor sign-in (3 Oct 2026)
+
+Platform-admin two-factor (commit 3, migration 057) widened `chronixedu_login`. POST /login now
+decides whether a second factor is owed, and POST /login/verify checks it. Both serve callers who
+are not signed in, so both run on this role (decision d). The widening is enumerated column by column
+in `grants.sql`, and `scripts/sql/c4a_boundary_check.sql` pins it. That check now also covers
+table-level DELETE, which has no column form, so a stray DELETE grant can no longer pass unseen.
+
+**The proof is the probe, not the inventory.** `probe.js` runs each statement the two steps issue, as
+the role, plus five it must be refused (the rows marked `2FA:` in `probe.md`): 68/68 on 3 Oct 2026.
+The static inventory cannot see this. It assigns a statement to the login connection only when it
+is written inline in `routes/auth.ts`. The 2FA statements live in `db/queries/twoFactorStore.ts`,
+`loginChallenges.ts` and `platformAudit.ts`, and are run with the login client passed in. So:
+- `crosscheck.md`'s login section still reads "4 statements";
+- `routes.md` shows no limiter on `/login/verify`, though `isLogin` counts it under rl:login
+  (`rateLimitIsLogin.test.ts`).
+Teaching the inventory to follow a passed-in client is the fix, if these generated files are ever
+relied on for the login role. Until then, read the probe.
+
 ## Where to look hardest
 
 1. **The 62 assembled statements** (`crosscheck.md` §5) — SQL built with `${…}`.

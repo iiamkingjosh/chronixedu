@@ -16,6 +16,17 @@ import { isLockedOut, recordFailedAttempt, clearFailedAttempts } from '../servic
 import { signInAndRevoke } from '../services/passwordCheck';
 import { judgeResetToken } from '../services/resetLink';
 import { resetPasswordRedirect } from '../config/appUrls';
+import { sendEmail } from '../services/emailService';
+import { matchTotpStep, totpStep } from '../services/totp';
+import {
+  isTwoFactorActive, readTotpState, readTotpSecret, isLocked, acceptTotpStep, recordTotpFailure,
+  consumeRecoveryCode, clearTotpFailures, unusedRecoveryCodeCount, TOTP_LOCK_MINUTES,
+} from '../db/queries/twoFactorStore';
+import {
+  createLoginChallenge, findLiveChallenge, recordChallengeFailure, spendChallenge,
+  CHALLENGE_TTL_SECONDS, CHALLENGE_MAX_ATTEMPTS,
+} from '../db/queries/loginChallenges';
+import { logPlatformAudit } from '../db/queries/platformAudit';
 
 const router = express.Router();
 
@@ -132,6 +143,44 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
   }
 });
 
+interface LocalUser {
+  id: string; school_id: string; role: string; title: string; email: string; first_name: string;
+  last_name: string; is_active: boolean; support_code: string; must_change_password: boolean;
+}
+const LOCAL_USER_COLUMNS = 'id, school_id, role, title, email, first_name, last_name, is_active, support_code, must_change_password';
+
+/**
+ * The end of every successful sign-in, on the login connection: stamp last_login_at, read the
+ * school's tier, sign the app's own JWT. `extraClaims` carries `second_factor` after the 2FA step.
+ */
+async function issueSession(pg: Client, local: LocalUser, extraClaims: Record<string, unknown> = {}) {
+  await pg.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [local.id]);
+  let subscriptionTier: string | null = null;
+  if (local.school_id) {
+    const schoolResult = await pg.query<{ subscription_tier: string | null }>(
+      `SELECT subscription_tier FROM schools WHERE id = $1`,
+      [local.school_id]
+    );
+    subscriptionTier = schoolResult.rows[0]?.subscription_tier ?? null;
+  }
+  const payload = {
+    user_id: local.id,
+    school_id: local.school_id,
+    role: local.role,
+    email: local.email,
+    title: local.title,
+    first_name: local.first_name,
+    last_name: local.last_name,
+    subscription_tier: subscriptionTier,
+    support_code: local.support_code,
+    must_change_password: local.must_change_password,
+    ...extraClaims,
+  };
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) throw new Error('JWT_SECRET is not set');
+  return { access_token: jwt.sign(payload, jwtSecret, { expiresIn: '1h' }), user: payload };
+}
+
 const loginSchema = z.object({
   email:    z.email().toLowerCase().trim(),
   password: z.string().min(1),
@@ -183,14 +232,11 @@ router.post('/login', async (req, res, next) => {
 
     // H-08: always release the pg client, even when an early return or exception occurs.
     const pg = getLoginClient();
-    let local: { id: string; school_id: string; role: string; title: string; email: string; first_name: string; last_name: string; is_active: boolean; support_code: string; must_change_password: boolean } | undefined;
-    let subscriptionTier: string | null = null;
+    let local: LocalUser | undefined;
+    let session: Awaited<ReturnType<typeof issueSession>>;
     try {
       await pg.connect();
-      const r = await pg.query(
-        `SELECT id, school_id, role, title, email, first_name, last_name, is_active, support_code, must_change_password FROM users WHERE id = $1`,
-        [userId]
-      );
+      const r = await pg.query<LocalUser>(`SELECT ${LOCAL_USER_COLUMNS} FROM users WHERE id = $1`, [userId]);
       local = r.rows[0];
       if (!local) {
         return res.status(500).json({
@@ -204,14 +250,19 @@ router.post('/login', async (req, res, next) => {
           error: { code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Contact your administrator.' },
         });
       }
-      await pg.query(`UPDATE users SET last_login_at = now() WHERE id = $1`, [local.id]);
-      if (local.school_id) {
-        const schoolResult = await pg.query<{ subscription_tier: string | null }>(
-          `SELECT subscription_tier FROM schools WHERE id = $1`,
-          [local.school_id]
-        );
-        subscriptionTier = schoolResult.rows[0]?.subscription_tier ?? null;
+      // Two-factor, commit 3: a platform admin who has switched it on gets no token for the password
+      // alone, only a challenge for POST /login/verify (migration 057). The lockout counters are NOT
+      // cleared here: clearing them on a correct password would let someone who has the password
+      // reset the count before each round of code guesses. An admin who has not enrolled signs in
+      // as before (enrolling is optional, decided 3 Oct 2026).
+      if (local.role === 'super_admin' && await isTwoFactorActive(local.id, pg)) {
+        const challenge = await createLoginChallenge(pg, local.id, clientIp(req) ?? null);
+        return res.set({ 'Cache-Control': 'no-store' }).json({
+          success: true,
+          data: { two_factor_required: true, challenge, expires_in: CHALLENGE_TTL_SECONDS },
+        });
       }
+      session = await issueSession(pg, local);
     } finally {
       await pg.end();
     }
@@ -219,24 +270,149 @@ router.post('/login', async (req, res, next) => {
     // Clear lockout counters on successful login. Best-effort: a correct password is
     // never refused because the counters could not be cleared.
     await clearFailedAttempts(email, ip);
+    return res.json({ success: true, data: session });
+  } catch (err: unknown) {
+    return next(err);
+  }
+});
 
-    const payload = {
-      user_id: local.id,
-      school_id: local.school_id,
-      role: local.role,
-      email: local.email,
-      title: local.title,
-      first_name: local.first_name,
-      last_name: local.last_name,
-      subscription_tier: subscriptionTier,
-      support_code: local.support_code,
-      must_change_password: local.must_change_password,
-    };
+// ── POST /login/verify ─────────────────────────────────────────────────────────
+// The second step of a platform admin's sign-in (2FA commit 3, migration 057). Takes the challenge
+// from POST /login and either an authenticator code or a recovery code. On the login connection,
+// never the app pool: the caller is not signed in yet (decision d, docs/c4a/grants.sql).
+//
+// Every wrong code counts three times over:
+//  - against the challenge, which dies after CHALLENGE_MAX_ATTEMPTS;
+//  - against the account's consecutive-failure counter (user_totp.failed_attempts). It is per
+//    ACCOUNT, survives new challenges, and only a right code clears it. A per-challenge counter would
+//    reset each time someone with the password asked for a new challenge, so the lock would never
+//    fire. At TOTP_LOCK_AFTER the factor locks for TOTP_LOCK_MINUTES, held in the database because
+//    Redis fails open (decision c);
+//  - against the per-email and per-address sign-in lockout, and rl:login, which covers this route.
+const verifySchema = z
+  .object({
+    challenge: z.string().min(20).max(100),
+    code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app').optional(),
+    recovery_code: z.string().trim().min(16).max(40).optional(),
+  })
+  .refine((d) => (d.code ? 1 : 0) + (d.recovery_code ? 1 : 0) === 1, {
+    message: 'Enter a code from your authenticator app, or one recovery code',
+    path: ['code'],
+  });
 
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) throw new Error('JWT_SECRET is not set');
-    const token = jwt.sign(payload, jwtSecret, { expiresIn: '1h' });
-    return res.json({ success: true, data: { access_token: token, user: payload } });
+function signInAgain(res: Response, code: string, message: string) {
+  return res.status(401).json({ success: false, error: { code, message } });
+}
+
+router.post('/login/verify', async (req: Request, res: Response, next: NextFunction) => {
+  const parsed = verifySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+  }
+  const { challenge: raw, code, recovery_code } = parsed.data;
+  const ip = clientIp(req) ?? 'unknown';
+
+  try {
+    const pg = getLoginClient();
+    let local: LocalUser | undefined;
+    let session: Awaited<ReturnType<typeof issueSession>>;
+    let recovery: { recovery_codes_left: number; notice_email: string } | undefined;
+    try {
+      await pg.connect();
+      const challenge = await findLiveChallenge(pg, raw);
+      if (!challenge) {
+        return signInAgain(res, 'SIGN_IN_EXPIRED', 'This sign-in has expired. Enter your password again.');
+      }
+      const r = await pg.query<LocalUser>(`SELECT ${LOCAL_USER_COLUMNS} FROM users WHERE id = $1`, [challenge.userId]);
+      local = r.rows[0];
+      if (!local || !local.is_active || local.role !== 'super_admin') {
+        return signInAgain(res, 'SIGN_IN_EXPIRED', 'This sign-in has expired. Enter your password again.');
+      }
+      if (await isLockedOut(local.email, ip)) {
+        return res.status(429).json({ success: false, error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' } });
+      }
+      const state = await readTotpState(local.id, pg);
+      if (!state?.activatedAt) {
+        // Two-factor was switched off (break-glass) since the password step.
+        return signInAgain(res, 'SIGN_IN_EXPIRED', 'This sign-in has expired. Enter your password again.');
+      }
+      if (isLocked(state)) {
+        return res.status(423).json({ success: false, error: { code: 'TWO_FACTOR_LOCKED', message: `Too many wrong codes. Try again in ${TOTP_LOCK_MINUTES} minutes.` } });
+      }
+
+      let accepted = false;
+      let stepOffset: number | null = null;
+      if (code) {
+        const stored = await readTotpSecret(local.id, pg);
+        const now = Date.now() / 1000;
+        const step = stored ? matchTotpStep(stored.secret, code, now) : null;
+        if (step !== null && await acceptTotpStep(local.id, step, pg)) {
+          accepted = true;
+          stepOffset = step - totpStep(now);
+        }
+      } else if (recovery_code && await consumeRecoveryCode(local.id, recovery_code, pg)) {
+        accepted = true;
+        await clearTotpFailures(local.id, pg);
+      }
+
+      if (!accepted) {
+        const attempts = await recordChallengeFailure(pg, challenge.id);
+        const { failedAttempts, locked } = await recordTotpFailure(local.id, pg);
+        await recordFailedAttempt(local.email, ip);
+        if (locked) {
+          logger.error('two_factor_locked', { user_id: local.id, failed_attempts: failedAttempts, route: 'sign-in' });
+          await logPlatformAudit({
+            adminId: local.id, actionType: 'TWO_FACTOR_LOCKED', targetUserId: local.id,
+            metadata: { failed_attempts: failedAttempts, route: 'sign-in' }, ipAddress: clientIp(req) ?? null,
+          }, pg);
+          return res.status(423).json({ success: false, error: { code: 'TWO_FACTOR_LOCKED', message: `Too many wrong codes. Try again in ${TOTP_LOCK_MINUTES} minutes.` } });
+        }
+        if (attempts >= CHALLENGE_MAX_ATTEMPTS) {
+          return signInAgain(res, 'SIGN_IN_EXPIRED', 'Too many wrong codes for this sign-in. Enter your password again.');
+        }
+        return res.status(401).json({
+          success: false,
+          error: { code: 'INVALID_CODE', message: code ? 'That code is not right, or it has already been used. Wait for the next one.' : 'That recovery code is not right, or it has already been used.' },
+        });
+      }
+
+      if (!(await spendChallenge(pg, challenge.id))) {
+        return signInAgain(res, 'SIGN_IN_EXPIRED', 'This sign-in has expired. Enter your password again.');
+      }
+
+      if (stepOffset !== null) {
+        // Which step was accepted: -1, 0 or +1. If the server's clock drifts, the offsets slide to
+        // one edge days before codes start failing; the log is the warning (reviewer, 3 Oct 2026).
+        logger.info('totp_code_accepted', { user_id: local.id, step_offset: stepOffset, route: 'sign-in' });
+      }
+      if (recovery_code) {
+        const left = await unusedRecoveryCodeCount(local.id, pg);
+        await logPlatformAudit({
+          adminId: local.id, actionType: 'RECOVERY_CODE_USED', targetUserId: local.id,
+          metadata: { recovery_codes_left: left }, ipAddress: clientIp(req) ?? null,
+        }, pg);
+        // Someone spending a recovery code has usually lost their phone, which is exactly when a
+        // silent send failure matters: "sent" means SendGrid accepted it, so the outcome is read and
+        // told to them, and anything else is alerted.
+        const notice = await sendEmail(
+          local.email,
+          'A recovery code was used on your Chronix Edu account',
+          `A recovery code was just used to sign in to your Chronix Edu platform-admin account.\n\n` +
+          `You have ${left} recovery code${left === 1 ? '' : 's'} left. Once you have your authenticator again, ` +
+          `make a new set at Administration > Two-factor Sign-in.\n\n` +
+          `If this was not you, change your password now and contact Chronix.`
+        );
+        if (notice !== 'sent') logger.error('recovery_code_notice_not_sent', { user_id: local.id, outcome: notice });
+        recovery = { recovery_codes_left: left, notice_email: notice };
+      }
+      session = await issueSession(pg, local, { second_factor: code ? 'totp' : 'recovery_code' });
+    } finally {
+      await pg.end();
+    }
+
+    // Cleared only now, after the second factor, never at the password step.
+    await clearFailedAttempts(local.email, ip);
+    return res.set({ 'Cache-Control': 'no-store' }).json({ success: true, data: { ...session, ...(recovery ? { recovery } : {}) } });
   } catch (err: unknown) {
     return next(err);
   }

@@ -6,7 +6,7 @@ each probe in its own rolled-back transaction. **Phase B** is `grants.sql` as pr
 none of the semantics probed changed between them, but the plan requires re-running this
 against the real roles before cutover.
 
-**38 of 38 probe expectations held; 8 of 8 boundary-check expectations held.** 42 `app_bypass_*` policies for 44 tables (the owner-only ones excluded, by their comment).
+**68 of 68 probe expectations held; 8 of 8 boundary-check expectations held.** 47 `app_bypass_*` policies for 49 tables (the owner-only ones excluded, by their comment).
 
 ## Privilege probes
 
@@ -31,6 +31,21 @@ against the real roles before cutover.
 | login | login: change a role | ✅ denied — permission denied for table users | ✅ denied — permission denied for table users | no | Only last_login_at is writable. |
 | login | login: create a user | ✅ denied — permission denied for table users | ✅ denied — permission denied for table users | no | Why /create-user moved to the app pool: otherwise this role would need it. |
 | login | login: read scores | ✅ denied — permission denied for table scores | ✅ denied — permission denied for table scores | no | The point of the separate role: a flaw on the unauthenticated path reaches no tenant data. |
+| login | 2FA: read the factor | ✅ ok:rows=1 | ✅ ok:rows=1 | no | readTotpState, readTotpSecret, isTwoFactorActive. |
+| login | 2FA: accept a code step | ✅ ok:1 | ✅ ok:1 | no | acceptTotpStep: the replay guard and the reset of the failure count. |
+| login | 2FA: count a wrong code | ✅ ok:1 | ✅ ok:1 | no | recordTotpFailure: the per-account counter, with RETURNING (which needs SELECT on both columns). |
+| login | 2FA: spend a recovery code | ✅ ok:1 | ✅ ok:1 | no | consumeRecoveryCode. |
+| login | 2FA: count recovery codes left | ✅ ok:rows=1 | ✅ ok:rows=1 | no | unusedRecoveryCodeCount. |
+| login | 2FA: prune dead challenges | ✅ ok:1 | ✅ ok:1 | no | createLoginChallenge, first statement: the only retention the table needs. |
+| login | 2FA: issue a challenge | ✅ ok:1 | ✅ ok:1 | no | createLoginChallenge. |
+| login | 2FA: count a wrong code on the challenge | ✅ ok:1 | ✅ ok:1 | no | recordChallengeFailure. |
+| login | 2FA: spend the challenge | ✅ ok:1 | ✅ ok:1 | no | spendChallenge. |
+| login | 2FA: record a lock or a recovery code | ✅ ok:1 | ✅ ok:1 | no | TWO_FACTOR_LOCKED and RECOVERY_CODE_USED, through logPlatformAudit. |
+| login | 2FA: replace the secret | ✅ denied — permission denied for table user_totp | ✅ denied — permission denied for table user_totp | no | Only last_used_step, failed_attempts and locked_until are writable here. |
+| login | 2FA: switch the factor off | ✅ denied — permission denied for table user_totp | ✅ denied — permission denied for table user_totp | no | Removal is break-glass, as the owner, never the sign-in path. |
+| login | 2FA: mint recovery codes | ✅ denied — permission denied for table user_recovery_codes | ✅ denied — permission denied for table user_recovery_codes | no | New codes need a signed-in admin and a current code, on the app pool. |
+| login | 2FA: read the platform audit log | ✅ denied — permission denied for table platform_audit_logs | ✅ denied — permission denied for table platform_audit_logs | no | Insert only. |
+| login | 2FA: rewrite a platform audit row | ✅ denied — permission denied for table platform_audit_logs | ✅ denied — permission denied for table platform_audit_logs | no | Insert only. |
 
 ## Boundary check (`scripts/sql/c4a_boundary_check.sql`)
 

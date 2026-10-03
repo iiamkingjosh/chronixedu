@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { ClientBase, PoolClient } from 'pg';
 import pool from '../client';
 import { encryptTotpSecret, decryptTotpSecret } from '../../services/totpSecretBox';
 import { hashRecoveryCode } from '../../services/recoveryCodes';
@@ -9,6 +9,12 @@ import { logPlatformAudit, type PlatformAuditEntry } from './platformAudit';
  * the database and decrypted after it leaves; recovery codes arrive as plain text and leave this
  * module only as hashes. Nothing here logs either.
  */
+
+/**
+ * Any connection: the app pool by default, or the login connection, which the sign-in step uses so
+ * that an unauthenticated route never reaches the app pool (decision d, docs/c4a/grants.sql).
+ */
+type Db = Pick<ClientBase, 'query'>;
 
 /** Wrong codes in a row before the factor locks, and for how long (decision c, migration 056). */
 export const TOTP_LOCK_AFTER = 10;
@@ -46,8 +52,8 @@ export async function savePendingTotpSecret(userId: string, secret: Buffer): Pro
   return rowCount === 1;
 }
 
-export async function readTotpSecret(userId: string): Promise<{ secret: Buffer; activatedAt: Date | null } | null> {
-  const { rows } = await pool.query<{ secret_ciphertext: Buffer; activated_at: Date | null }>(
+export async function readTotpSecret(userId: string, db: Db = pool): Promise<{ secret: Buffer; activatedAt: Date | null } | null> {
+  const { rows } = await db.query<{ secret_ciphertext: Buffer; activated_at: Date | null }>(
     `SELECT secret_ciphertext, activated_at FROM user_totp WHERE user_id = $1`,
     [userId]
   );
@@ -62,8 +68,8 @@ export interface TotpState {
 }
 
 /** Where the admin's second factor stands, without decrypting anything. */
-export async function readTotpState(userId: string): Promise<TotpState | null> {
-  const { rows } = await pool.query<{ activated_at: Date | null; locked_until: Date | null; failed_attempts: number }>(
+export async function readTotpState(userId: string, db: Db = pool): Promise<TotpState | null> {
+  const { rows } = await db.query<{ activated_at: Date | null; locked_until: Date | null; failed_attempts: number }>(
     `SELECT activated_at, locked_until, failed_attempts FROM user_totp WHERE user_id = $1`,
     [userId]
   );
@@ -121,8 +127,8 @@ export async function activateTotp(userId: string, step: number, codes: string[]
  * before the last one used (a replayed code) and refuses while locked; the WHERE makes both hold
  * even when two requests race with the same code.
  */
-export async function acceptTotpStep(userId: string, step: number): Promise<boolean> {
-  const { rowCount } = await pool.query(
+export async function acceptTotpStep(userId: string, step: number, db: Db = pool): Promise<boolean> {
+  const { rowCount } = await db.query(
     `UPDATE user_totp SET last_used_step = $2, failed_attempts = 0
       WHERE user_id = $1 AND activated_at IS NOT NULL
         AND (last_used_step IS NULL OR last_used_step < $2)
@@ -136,8 +142,8 @@ export async function acceptTotpStep(userId: string, step: number): Promise<bool
  * Counts one wrong code. At TOTP_LOCK_AFTER in a row the factor locks for TOTP_LOCK_MINUTES; the
  * count is cleared only by a right code, so after a lock ends each further wrong code locks again.
  */
-export async function recordTotpFailure(userId: string): Promise<{ failedAttempts: number; locked: boolean }> {
-  const { rows } = await pool.query<{ failed_attempts: number; locked_until: Date | null }>(
+export async function recordTotpFailure(userId: string, db: Db = pool): Promise<{ failedAttempts: number; locked: boolean }> {
+  const { rows } = await db.query<{ failed_attempts: number; locked_until: Date | null }>(
     `UPDATE user_totp
         SET failed_attempts = failed_attempts + 1,
             locked_until = CASE WHEN failed_attempts + 1 >= $2 THEN now() + make_interval(mins => $3) ELSE locked_until END
@@ -153,10 +159,10 @@ export async function recordTotpFailure(userId: string): Promise<{ failedAttempt
  * Spends one recovery code. True only for an unused code of this admin; the UPDATE's own WHERE
  * makes it single-use even when two requests race with the same code.
  */
-export async function consumeRecoveryCode(userId: string, typed: string): Promise<boolean> {
+export async function consumeRecoveryCode(userId: string, typed: string, db: Db = pool): Promise<boolean> {
   const hash = hashRecoveryCode(typed);
   if (!hash) return false;
-  const { rowCount } = await pool.query(
+  const { rowCount } = await db.query(
     `UPDATE user_recovery_codes SET used_at = now()
       WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL`,
     [userId, hash]
@@ -164,12 +170,29 @@ export async function consumeRecoveryCode(userId: string, typed: string): Promis
   return rowCount === 1;
 }
 
-export async function unusedRecoveryCodeCount(userId: string): Promise<number> {
-  const { rows } = await pool.query<{ n: number }>(
+export async function unusedRecoveryCodeCount(userId: string, db: Db = pool): Promise<number> {
+  const { rows } = await db.query<{ n: number }>(
     `SELECT count(*)::int AS n FROM user_recovery_codes WHERE user_id = $1 AND used_at IS NULL`,
     [userId]
   );
   return rows[0].n;
+}
+
+/** Whether the admin has switched two-factor on (an active row, not a pending enrolment). */
+export async function isTwoFactorActive(userId: string, db: Db = pool): Promise<boolean> {
+  const { rowCount } = await db.query(
+    `SELECT 1 FROM user_totp WHERE user_id = $1 AND activated_at IS NOT NULL`,
+    [userId]
+  );
+  return rowCount === 1;
+}
+
+/**
+ * Clears the consecutive-failure count after the admin has proved who they are some other way: a
+ * recovery code at sign-in. A right authenticator code clears it in acceptTotpStep.
+ */
+export async function clearTotpFailures(userId: string, db: Db = pool): Promise<void> {
+  await db.query(`UPDATE user_totp SET failed_attempts = 0 WHERE user_id = $1 AND activated_at IS NOT NULL`, [userId]);
 }
 
 /**

@@ -1,5 +1,16 @@
 # Chronix Edu — Changelog
 
+## Two-factor sign-in: platform admins who switched it on are asked for a code (2026-10-03)
+
+### For Chronix staff
+- If you have switched on two-factor sign-in, signing in now asks for the 6-digit code from your
+  authenticator app after your password. "Use a recovery code" is there if you have lost your phone.
+- Keep the sign-in page open while you enter the code: refreshing it means entering your password
+  again.
+- Using a recovery code tells you how many you have left and emails you about it.
+- Ten wrong codes in a row lock two-factor sign-in for 15 minutes.
+- Nothing changes for school accounts, or for staff who have not switched it on.
+
 ## A password reset link works once, within the hour (2026-10-03)
 
 ### For everyone

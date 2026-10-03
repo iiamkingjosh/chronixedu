@@ -95,6 +95,36 @@ CREATE POLICY login_stamp_users ON users FOR UPDATE TO chronixedu_login USING (t
 DROP POLICY IF EXISTS login_read_schools ON schools;
 CREATE POLICY login_read_schools ON schools FOR SELECT TO chronixedu_login USING (true);
 
+-- Platform-admin two-factor at sign-in (2FA commit 3, migration 057; decision d, 3 Oct 2026). POST
+-- /login decides whether a platform admin owes a second factor, and POST /login/verify checks it.
+-- Both serve callers who are not signed in, so they run on this role, never the app pool. The
+-- widening, enumerated, each column for a statement the code issues (routes/auth.ts,
+-- db/queries/twoFactorStore.ts, db/queries/loginChallenges.ts, db/queries/platformAudit.ts):
+GRANT SELECT (user_id, secret_ciphertext, activated_at, last_used_step, failed_attempts, locked_until)
+  ON user_totp TO chronixedu_login;
+GRANT UPDATE (last_used_step, failed_attempts, locked_until) ON user_totp TO chronixedu_login;
+GRANT SELECT (user_id, code_hash, used_at) ON user_recovery_codes TO chronixedu_login;
+GRANT UPDATE (used_at) ON user_recovery_codes TO chronixedu_login;
+GRANT SELECT (id, user_id, challenge_hash, attempts, consumed_at, expires_at) ON login_challenges TO chronixedu_login;
+GRANT INSERT (challenge_hash, user_id, expires_at, ip_address) ON login_challenges TO chronixedu_login;
+GRANT UPDATE (consumed_at, attempts) ON login_challenges TO chronixedu_login;
+GRANT DELETE ON login_challenges TO chronixedu_login;   -- a new challenge prunes the admin's dead ones
+GRANT INSERT (platform_admin_id, action_type, target_user_id, target_school_id, metadata, ip_address)
+  ON platform_audit_logs TO chronixedu_login;           -- TWO_FACTOR_LOCKED, RECOVERY_CODE_USED
+
+DROP POLICY IF EXISTS login_read_totp ON user_totp;
+CREATE POLICY login_read_totp ON user_totp FOR SELECT TO chronixedu_login USING (true);
+DROP POLICY IF EXISTS login_stamp_totp ON user_totp;
+CREATE POLICY login_stamp_totp ON user_totp FOR UPDATE TO chronixedu_login USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS login_read_recovery_codes ON user_recovery_codes;
+CREATE POLICY login_read_recovery_codes ON user_recovery_codes FOR SELECT TO chronixedu_login USING (true);
+DROP POLICY IF EXISTS login_spend_recovery_codes ON user_recovery_codes;
+CREATE POLICY login_spend_recovery_codes ON user_recovery_codes FOR UPDATE TO chronixedu_login USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS login_challenges_login ON login_challenges;
+CREATE POLICY login_challenges_login ON login_challenges FOR ALL TO chronixedu_login USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS login_audit_platform ON platform_audit_logs;
+CREATE POLICY login_audit_platform ON platform_audit_logs FOR INSERT TO chronixedu_login WITH CHECK (true);
+
 -- Sequences: none. The only sequence in public is migration_runs_id_seq (owner-only).
 -- Functions: none. App SQL calls only pgcrypto built-ins, executable by PUBLIC.
 -- NB: landing this changes the RLS policy set, so scripts/sql/rls_policy_inventory.txt

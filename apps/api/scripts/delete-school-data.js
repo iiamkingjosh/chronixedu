@@ -118,6 +118,7 @@ const NOT_DELETED = {
   platform_pricing_config: 'Chronix price list; no school data.',
   schema_migrations: 'Migration bookkeeping; no school data.',
   migration_runs: 'Migration bookkeeping; no school data.',
+  login_challenges: 'Minutes-long sign-in challenges for platform admins, who have no school (migration 057). Removed with their user by ON DELETE CASCADE, and pruned at each new sign-in.',
 };
 
 async function count(client, table, where, schoolId) {

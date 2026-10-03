@@ -57,7 +57,35 @@ login_expected (table_name, column_name, privilege_type) AS (
          ('users','title','SELECT'), ('users','email','SELECT'), ('users','first_name','SELECT'),
          ('users','last_name','SELECT'), ('users','is_active','SELECT'), ('users','support_code','SELECT'),
          ('users','must_change_password','SELECT'), ('users','last_login_at','UPDATE'),
-         ('schools','id','SELECT'), ('schools','subscription_tier','SELECT')
+         ('schools','id','SELECT'), ('schools','subscription_tier','SELECT'),
+         -- Platform-admin two-factor at sign-in (2FA commit 3, migration 057, 3 Oct 2026).
+         ('user_totp','user_id','SELECT'), ('user_totp','secret_ciphertext','SELECT'),
+         ('user_totp','activated_at','SELECT'), ('user_totp','last_used_step','SELECT'),
+         ('user_totp','failed_attempts','SELECT'), ('user_totp','locked_until','SELECT'),
+         ('user_totp','last_used_step','UPDATE'), ('user_totp','failed_attempts','UPDATE'),
+         ('user_totp','locked_until','UPDATE'),
+         ('user_recovery_codes','user_id','SELECT'), ('user_recovery_codes','code_hash','SELECT'),
+         ('user_recovery_codes','used_at','SELECT'), ('user_recovery_codes','used_at','UPDATE'),
+         ('login_challenges','id','SELECT'), ('login_challenges','user_id','SELECT'),
+         ('login_challenges','challenge_hash','SELECT'), ('login_challenges','attempts','SELECT'),
+         ('login_challenges','consumed_at','SELECT'), ('login_challenges','expires_at','SELECT'),
+         ('login_challenges','challenge_hash','INSERT'), ('login_challenges','user_id','INSERT'),
+         ('login_challenges','expires_at','INSERT'), ('login_challenges','ip_address','INSERT'),
+         ('login_challenges','consumed_at','UPDATE'), ('login_challenges','attempts','UPDATE'),
+         ('platform_audit_logs','platform_admin_id','INSERT'), ('platform_audit_logs','action_type','INSERT'),
+         ('platform_audit_logs','target_user_id','INSERT'), ('platform_audit_logs','target_school_id','INSERT'),
+         ('platform_audit_logs','metadata','INSERT'), ('platform_audit_logs','ip_address','INSERT')
+),
+-- Table-level privileges column_privileges cannot show. DELETE has no column form, so without this a
+-- stray DELETE grant to the login role would pass every check above.
+login_table_expected (table_name, privilege_type) AS (
+  VALUES ('login_challenges', 'DELETE')
+),
+login_table_actual AS (
+  SELECT table_name::text, privilege_type::text
+    FROM information_schema.table_privileges
+   WHERE grantee = 'chronixedu_login' AND table_schema = 'public'
+     AND privilege_type IN ('DELETE', 'TRUNCATE', 'TRIGGER')
 ),
 login_actual AS (
   SELECT table_name::text, column_name::text, privilege_type::text
@@ -122,7 +150,12 @@ UNION ALL
 SELECT format('%s: chronixedu_app holds TRUNCATE', name) FROM app WHERE tr
 UNION ALL
 SELECT format('%s: no policy admits chronixedu_login for %s — every login would find no user', need.tbl, need.cmd)
-  FROM (VALUES ('users', 'SELECT'), ('users', 'UPDATE'), ('schools', 'SELECT')) AS need (tbl, cmd), roles r
+  FROM (VALUES ('users', 'SELECT'), ('users', 'UPDATE'), ('schools', 'SELECT'),
+               ('user_totp', 'SELECT'), ('user_totp', 'UPDATE'),
+               ('user_recovery_codes', 'SELECT'), ('user_recovery_codes', 'UPDATE'),
+               ('login_challenges', 'SELECT'), ('login_challenges', 'INSERT'),
+               ('login_challenges', 'UPDATE'), ('login_challenges', 'DELETE'),
+               ('platform_audit_logs', 'INSERT')) AS need (tbl, cmd), roles r
  WHERE r.login_ok AND NOT EXISTS (SELECT 1 FROM pg_policies p
         WHERE p.schemaname = 'public' AND p.tablename = need.tbl AND p.permissive = 'PERMISSIVE'
           AND p.cmd IN (need.cmd, 'ALL') AND 'chronixedu_login' = ANY (p.roles))
@@ -134,4 +167,12 @@ UNION ALL
 SELECT format('chronixedu_login lacks %s on %s.%s — login fails with permission denied', e.privilege_type, e.table_name, e.column_name)
   FROM login_expected e, roles r WHERE r.login_ok AND NOT EXISTS (SELECT 1 FROM login_actual a
          WHERE (e.table_name, e.column_name, e.privilege_type) = (a.table_name, a.column_name, a.privilege_type))
+UNION ALL
+SELECT format('chronixedu_login holds %s on %s, which the sign-in steps never use', a.privilege_type, a.table_name)
+  FROM login_table_actual a, roles r WHERE r.login_ok AND NOT EXISTS (SELECT 1 FROM login_table_expected e
+         WHERE (e.table_name, e.privilege_type) = (a.table_name, a.privilege_type))
+UNION ALL
+SELECT format('chronixedu_login lacks %s on %s — the sign-in step fails with permission denied', e.privilege_type, e.table_name)
+  FROM login_table_expected e, roles r WHERE r.login_ok AND NOT EXISTS (SELECT 1 FROM login_table_actual a
+         WHERE (e.table_name, e.privilege_type) = (a.table_name, a.privilege_type))
 ORDER BY 1;

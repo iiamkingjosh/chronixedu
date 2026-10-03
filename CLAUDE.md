@@ -295,7 +295,7 @@ Monorepo, npm workspaces:
 - **Four commits, in order:**
   1. recovery and storage (migration 055);
   2. enrolment (migration 056, `routes/twoFactor.ts`, `/super-admin/security`);
-  3. the sign-in step;
+  3. the sign-in step (migration 057, `POST /login/verify`);
   4. enforcement, for admins who have enrolled (enrolling is optional, below);
   5. moving to a new phone while the old one works. Until then the only way is break-glass, which
      is acceptable for one admin and not for three.
@@ -368,10 +368,31 @@ Monorepo, npm workspaces:
      date (doctrine 8).
   3. **The state is shown on the platform dashboard** ("Two-factor: off"), not only on the security
      page. Off-and-seen is a choice; off-and-invisible is doctrine 8 again.
-- **No token before the second factor.** After the password, an enrolled admin gets an opaque, hashed,
-  single-use, five-minute challenge, never a JWT. A wrong code counts against the per-email lockout
-  and `rl:login`, which today matches only `POST /login`, so the verify route must be added to it.
-  The lockout counters clear only after the second factor passes, never at the password.
+- **No token before the second factor (commit 3).**
+  - **The password step.** For an enrolled platform admin, a correct password returns a challenge,
+    never a token: 256 random bits, stored only as SHA-256, five minutes, single-use (migration 057).
+    It is not a JWT, so `verifyToken` refuses it. The lockout counters are not cleared and
+    `last_login_at` is not stamped until the code passes. Everyone else, an unenrolled admin
+    included, signs in as before.
+  - **`POST /login/verify`** takes the challenge and one authenticator code or one recovery code. It
+    runs on the login connection; its grants are enumerated in `docs/c4a/grants.sql` and proven by
+    `scripts/c4a/probe.js` (the `2FA:` rows). The generated inventory cannot see them: read the C-4a
+    README.
+  - **A wrong code counts three times:**
+    - against the challenge, which dies after 5;
+    - against the per-email lockout and `rl:login` (`isLogin` covers both steps);
+    - against the ACCOUNT's consecutive-failure counter (`user_totp.failed_attempts`). It survives new
+      challenges, and only a right code or a recovery code clears it. A per-challenge counter would
+      reset each time someone with the password asked for a new challenge, and the lock would never
+      fire. Tested as 10 wrong codes spread over three challenges.
+  - **Clock drift is logged, not guessed:** every accepted code logs its step offset (-1, 0 or +1,
+    `totp_code_accepted`). A drifting server clock shows as the offsets sliding to one edge, days
+    before codes start failing.
+  - **A recovery code at sign-in** is spent once, audited (`RECOVERY_CODE_USED`), and clears the
+    failure count. The notice email's outcome is read, never assumed: it is told to the person, and
+    anything but `sent` alerts (`recovery_code_notice_not_sent`).
+  - **The challenge lives only in the sign-in page's memory,** so a refresh returns to the password.
+    The screen says so.
 
 ## Conventions
 
@@ -1111,7 +1132,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 42 suites, 402 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 43 suites, 415 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

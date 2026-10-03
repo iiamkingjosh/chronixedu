@@ -89,6 +89,12 @@
       "SELECT",
       "UPDATE"
     ],
+    "login_challenges": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
     "messages": [
       "DELETE",
       "INSERT",
@@ -144,6 +150,18 @@
       "UPDATE"
     ],
     "platform_metrics_snapshots": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "platform_pricing_config": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "platform_subscription_payments": [
       "DELETE",
       "INSERT",
       "SELECT",
@@ -245,6 +263,18 @@
       "SELECT",
       "UPDATE"
     ],
+    "user_recovery_codes": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "user_totp": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
     "users": [
       "DELETE",
       "INSERT",
@@ -256,8 +286,39 @@
     "processed_at"
   ],
   "login_column_privileges": [
+    "INSERT login_challenges.challenge_hash",
+    "INSERT login_challenges.expires_at",
+    "INSERT login_challenges.ip_address",
+    "INSERT login_challenges.user_id",
+    "SELECT login_challenges.attempts",
+    "SELECT login_challenges.challenge_hash",
+    "SELECT login_challenges.consumed_at",
+    "SELECT login_challenges.expires_at",
+    "SELECT login_challenges.id",
+    "SELECT login_challenges.user_id",
+    "UPDATE login_challenges.attempts",
+    "UPDATE login_challenges.consumed_at",
+    "INSERT platform_audit_logs.action_type",
+    "INSERT platform_audit_logs.ip_address",
+    "INSERT platform_audit_logs.metadata",
+    "INSERT platform_audit_logs.platform_admin_id",
+    "INSERT platform_audit_logs.target_school_id",
+    "INSERT platform_audit_logs.target_user_id",
     "SELECT schools.id",
     "SELECT schools.subscription_tier",
+    "SELECT user_recovery_codes.code_hash",
+    "SELECT user_recovery_codes.used_at",
+    "SELECT user_recovery_codes.user_id",
+    "UPDATE user_recovery_codes.used_at",
+    "SELECT user_totp.activated_at",
+    "SELECT user_totp.failed_attempts",
+    "SELECT user_totp.last_used_step",
+    "SELECT user_totp.locked_until",
+    "SELECT user_totp.secret_ciphertext",
+    "SELECT user_totp.user_id",
+    "UPDATE user_totp.failed_attempts",
+    "UPDATE user_totp.last_used_step",
+    "UPDATE user_totp.locked_until",
     "SELECT users.email",
     "SELECT users.first_name",
     "SELECT users.id",
@@ -270,6 +331,6 @@
     "SELECT users.title",
     "UPDATE users.last_login_at"
   ],
-  "app_bypass_policies": 42,
-  "public_tables": 44
+  "app_bypass_policies": 47,
+  "public_tables": 49
 }

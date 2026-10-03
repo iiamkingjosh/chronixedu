@@ -4,7 +4,7 @@ Two-factor sign-in for platform admins (`super_admin`) is being built in steps, 
 
 1. Recovery and storage (migration 055). Built.
 2. Enrolment: the security page, the QR code, and recovery codes shown once (migration 056). Built.
-3. The sign-in step: a code after the password, before any token is issued.
+3. The sign-in step: a code after the password, before any token is issued (migration 057). Built.
 4. Enforcement, for admins who have enrolled. Enrolling is optional (decided 3 Oct 2026) for existing
    admins, required for any platform admin created from now on, and shown on the platform
    dashboard. For an enrolled admin, every session that has not passed the second factor will be
@@ -25,6 +25,19 @@ for at sign-in until commit 3.
    recovery codes appear once. Copy or download them before pressing "I have saved them".
 
 There is no switch to turn it off. New recovery codes can be made with a current code.
+
+## Signing in with it
+
+1. Enter your email and password as usual. Instead of the dashboard, you are asked for a code.
+2. Enter the 6-digit code your authenticator app shows now. Keep the page open: the sign-in lives in
+   the page, so a refresh sends you back to the password.
+3. Lost your phone? Choose "Use a recovery code" and enter one. It works once. You are told how many
+   are left and whether the notice email reached you. Make a new set once you have an authenticator
+   again.
+
+Wrong codes count against the sign-in lockout. After ten in a row, across sign-ins, two-factor locks
+for 15 minutes and Chronix is alerted. A correct password followed by wrong codes means the password
+is known, so change it.
 
 ## The encryption key: `TOTP_ENCRYPTION_KEY`
 

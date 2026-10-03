@@ -48,6 +48,7 @@ fee_invoices|fee_invoices_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'sch
 fee_invoices|service_role_bypass|ALL|service_role|Q=true|C=-
 fee_structures|fee_structures_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)
 fee_structures|service_role_bypass|ALL|service_role|Q=true|C=-
+login_challenges|service_role_bypass|ALL|service_role|Q=true|C=true
 messages|messages_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=-
 messages|service_role_bypass|ALL|service_role|Q=true|C=-
 notices|notices_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=-

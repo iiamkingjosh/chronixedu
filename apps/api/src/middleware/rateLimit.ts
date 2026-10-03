@@ -75,8 +75,14 @@ export const rateLimitStoreLogger: Logger = {
  * production's only path — with a fake transport.
  */
 /** Relative to the /api/auth mount. Trailing slashes are the same route to Express. */
-function isLogin(req: Request): boolean {
-  return req.method === 'POST' && req.path.replace(/\/+$/, '') === '/login';
+/**
+ * The two steps of signing in: the password (POST /login) and, for a platform admin with two-factor
+ * on, the code (POST /login/verify, 3 Oct 2026). Both count failures against rl:login, so a wrong
+ * code is a failed attempt like a wrong password.
+ */
+export function isLogin(req: Pick<Request, 'method' | 'path'>): boolean {
+  const path = req.path.replace(/\/+$/, '');
+  return req.method === 'POST' && (path === '/login' || path === '/login/verify');
 }
 
 export function createRateLimiters(sendCommand?: SendCommandFn) {

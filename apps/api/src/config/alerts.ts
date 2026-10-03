@@ -182,6 +182,12 @@ export const ALERTS = {
     events: ['two_factor_locked'],
     fields: ['user_id', 'failed_attempts', 'route'],
   },
+  recovery_code_notice_not_sent: {
+    why: "A platform admin signed in with a recovery code and the notice email was not accepted by SendGrid. They have usually lost their phone, and may not know how many codes are left; the sign-in response told them, but check the platform audit log (RECOVERY_CODE_USED)",
+    level: 'error',
+    events: ['recovery_code_notice_not_sent'],
+    fields: ['user_id', 'outcome'],
+  },
   supabase_session_not_revoked: {
     why: "A Supabase session that should have been revoked was not: after a password check (sign-in, 2FA re-check, payout step-up) or after a password reset. Until revoked it never expires, and its token could reach confirm-reset (SECURITY.md Round 35). Revoke the user's sessions",
     level: 'error',

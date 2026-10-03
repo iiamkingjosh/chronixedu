@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { getDefaultDashboardPath } from '@/lib/auth';
+import TwoFactorSignIn from '@/components/TwoFactorSignIn';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
   throw new Error('NEXT_PUBLIC_API_URL is required in production');
@@ -54,6 +55,9 @@ export default function LoginPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  // A platform admin with two-factor on gets a challenge, not a token, for the password alone
+  // (2FA commit 3). Held in memory only: a refresh starts again at the password.
+  const [challenge, setChallenge] = useState<string | null>(null);
 
   useEffect(() => {
     const reason = new URLSearchParams(window.location.search).get('reason');
@@ -92,6 +96,10 @@ export default function LoginPage() {
         const message =
           typeof json.error === 'string' ? json.error : json.error?.message ?? 'Login failed';
         throw new Error(message);
+      }
+      if (json.data.two_factor_required) {
+        setChallenge(json.data.challenge);
+        return;
       }
       setAuth(json.data.user, json.data.access_token);
       router.replace(getDefaultDashboardPath(json.data.user.role));
@@ -274,7 +282,23 @@ export default function LoginPage() {
               </div>
             )}
 
+            {challenge && (
+              <TwoFactorSignIn
+                apiBase={API_BASE}
+                challenge={challenge}
+                onSignedIn={(u, token) => {
+                  setAuth(u, token);
+                  router.replace(getDefaultDashboardPath(u.role));
+                }}
+                onRestart={(message) => {
+                  setChallenge(null);
+                  setSubmitError(message);
+                }}
+              />
+            )}
+
             {/* Form */}
+            {!challenge && (
             <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
               {/* Email */}
@@ -366,6 +390,7 @@ export default function LoginPage() {
                 ) : 'Sign in'}
               </button>
             </form>
+            )}
 
             {/* No account */}
             <p className="text-center mt-6" style={{ fontSize: '13px', color: '#8a97a8' }}>

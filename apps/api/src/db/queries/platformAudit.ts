@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { ClientBase } from 'pg';
 import pool from '../client';
 
 /**
@@ -18,7 +18,7 @@ export interface PlatformAuditEntry {
   ipAddress: string | null;
 }
 
-export async function logPlatformAudit(entry: PlatformAuditEntry, client?: PoolClient): Promise<void> {
+export async function logPlatformAudit(entry: PlatformAuditEntry, client?: Pick<ClientBase, 'query'>): Promise<void> {
   await (client ?? pool).query(
     `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, target_school_id, metadata, ip_address)
      VALUES ($1, $2, $3, $4, $5, $6)`,

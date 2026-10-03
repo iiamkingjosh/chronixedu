@@ -41,6 +41,12 @@ const UNDO_REVOKES = `
 const SCHOOL = 'c4a00000-0000-4000-8000-000000000001';
 const USER = 'c4a00000-0000-4000-8000-000000000002';
 const LOGIN_COLS = 'id, school_id, role, title, email, first_name, last_name, is_active, support_code, must_change_password';
+// Platform-admin two-factor at sign-in (2FA commit 3, migration 057): an admin with an active factor,
+// one unused recovery code, one dead challenge (to prune) and one live one (to spend).
+const ADMIN = 'c4a00000-0000-4000-8000-000000000003';
+const LIVE_CHALLENGE = 'c4a00000-0000-4000-8000-000000000004';
+const DEAD_CHALLENGE = 'c4a00000-0000-4000-8000-000000000005';
+const CODE_HASH = 'a'.repeat(64);
 
 /** [role, name, sql, {A, B}, why] — expectations: 'ok' | 'ok:<n>' | 'ok:rows=<n>' | 'denied' | 'trigger' */
 const PROBES = [
@@ -82,6 +88,39 @@ const PROBES = [
     'Why /create-user moved to the app pool: otherwise this role would need it.'],
   ['chronixedu_login', 'login: read scores', `SELECT count(*) FROM scores`, { A: 'denied', B: 'denied' },
     'The point of the separate role: a flaw on the unauthenticated path reaches no tenant data.'],
+
+  // Two-factor at sign-in (2FA commit 3, decision d): each statement POST /login and POST /login/verify
+  // issue, as this role, then what the role must NOT be able to do with the same tables.
+  ['chronixedu_login', '2FA: read the factor', `SELECT count(*)::int AS n FROM (SELECT secret_ciphertext, activated_at, last_used_step, failed_attempts, locked_until FROM user_totp WHERE user_id = '${ADMIN}' AND activated_at IS NOT NULL) x`, { A: 'ok:rows=1', B: 'ok:rows=1' },
+    'readTotpState, readTotpSecret, isTwoFactorActive.'],
+  ['chronixedu_login', '2FA: accept a code step', `UPDATE user_totp SET last_used_step = 1, failed_attempts = 0 WHERE user_id = '${ADMIN}' AND activated_at IS NOT NULL AND (last_used_step IS NULL OR last_used_step < 1) AND (locked_until IS NULL OR locked_until <= now())`, { A: 'ok:1', B: 'ok:1' },
+    'acceptTotpStep: the replay guard and the reset of the failure count.'],
+  ['chronixedu_login', '2FA: count a wrong code', `UPDATE user_totp SET failed_attempts = failed_attempts + 1, locked_until = CASE WHEN failed_attempts + 1 >= 10 THEN now() + make_interval(mins => 15) ELSE locked_until END WHERE user_id = '${ADMIN}' RETURNING failed_attempts, locked_until`, { A: 'ok:1', B: 'ok:1' },
+    'recordTotpFailure: the per-account counter, with RETURNING (which needs SELECT on both columns).'],
+  ['chronixedu_login', '2FA: spend a recovery code', `UPDATE user_recovery_codes SET used_at = now() WHERE user_id = '${ADMIN}' AND code_hash = '${CODE_HASH}' AND used_at IS NULL`, { A: 'ok:1', B: 'ok:1' },
+    'consumeRecoveryCode.'],
+  ['chronixedu_login', '2FA: count recovery codes left', `SELECT count(*)::int AS n FROM (SELECT 1 FROM user_recovery_codes WHERE user_id = '${ADMIN}' AND used_at IS NULL) x`, { A: 'ok:rows=1', B: 'ok:rows=1' },
+    'unusedRecoveryCodeCount.'],
+  ['chronixedu_login', '2FA: prune dead challenges', `DELETE FROM login_challenges WHERE user_id = '${ADMIN}' AND (consumed_at IS NOT NULL OR expires_at <= now())`, { A: 'ok:1', B: 'ok:1' },
+    'createLoginChallenge, first statement: the only retention the table needs.'],
+  ['chronixedu_login', '2FA: issue a challenge', `INSERT INTO login_challenges (challenge_hash, user_id, expires_at, ip_address) VALUES ('${'b'.repeat(64)}', '${ADMIN}', now() + make_interval(secs => 300), '127.0.0.1')`, { A: 'ok:1', B: 'ok:1' },
+    'createLoginChallenge.'],
+  ['chronixedu_login', '2FA: count a wrong code on the challenge', `UPDATE login_challenges SET attempts = attempts + 1 WHERE id = '${LIVE_CHALLENGE}' RETURNING attempts`, { A: 'ok:1', B: 'ok:1' },
+    'recordChallengeFailure.'],
+  ['chronixedu_login', '2FA: spend the challenge', `UPDATE login_challenges SET consumed_at = now() WHERE id = '${LIVE_CHALLENGE}' AND consumed_at IS NULL AND expires_at > now()`, { A: 'ok:1', B: 'ok:1' },
+    'spendChallenge.'],
+  ['chronixedu_login', '2FA: record a lock or a recovery code', `INSERT INTO platform_audit_logs (platform_admin_id, action_type, target_user_id, target_school_id, metadata, ip_address) VALUES ('${ADMIN}', 'C4A_PROBE', '${ADMIN}', NULL, '{}', '127.0.0.1')`, { A: 'ok:1', B: 'ok:1' },
+    'TWO_FACTOR_LOCKED and RECOVERY_CODE_USED, through logPlatformAudit.'],
+  ['chronixedu_login', '2FA: replace the secret', `UPDATE user_totp SET secret_ciphertext = decode('00', 'hex') WHERE user_id = '${ADMIN}'`, { A: 'denied', B: 'denied' },
+    'Only last_used_step, failed_attempts and locked_until are writable here.'],
+  ['chronixedu_login', '2FA: switch the factor off', `DELETE FROM user_totp WHERE user_id = '${ADMIN}'`, { A: 'denied', B: 'denied' },
+    'Removal is break-glass, as the owner, never the sign-in path.'],
+  ['chronixedu_login', '2FA: mint recovery codes', `INSERT INTO user_recovery_codes (user_id, code_hash) VALUES ('${ADMIN}', '${'c'.repeat(64)}')`, { A: 'denied', B: 'denied' },
+    'New codes need a signed-in admin and a current code, on the app pool.'],
+  ['chronixedu_login', '2FA: read the platform audit log', `SELECT count(*) FROM platform_audit_logs`, { A: 'denied', B: 'denied' },
+    'Insert only.'],
+  ['chronixedu_login', '2FA: rewrite a platform audit row', `UPDATE platform_audit_logs SET action_type = 'TAMPERED' WHERE platform_admin_id = '${ADMIN}'`, { A: 'denied', B: 'denied' },
+    'Insert only.'],
 ];
 
 function classify(err) {
@@ -143,6 +182,17 @@ async function checkAfter(c, ddl) {
   // Targeted by id: audit_logs is append-only, so fixtures from earlier runs of this probe
   // cannot be removed, and a probe matching "any unprocessed row for the school" counted 2
   // on the second run. It must hit exactly the row it created.
+  await c.query(`INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
+                 VALUES ($1, NULL, 'c4a-probe-admin@test', '', 'super_admin', 'C4A', 'Admin', true) ON CONFLICT (id) DO NOTHING`, [ADMIN]);
+  await c.query(`INSERT INTO user_totp (user_id, secret_ciphertext, activated_at) VALUES ($1, decode('01aa', 'hex'), now())
+                 ON CONFLICT (user_id) DO UPDATE SET activated_at = now(), last_used_step = NULL, failed_attempts = 0, locked_until = NULL`, [ADMIN]);
+  await c.query(`INSERT INTO user_recovery_codes (user_id, code_hash) VALUES ($1, $2)
+                 ON CONFLICT (user_id, code_hash) DO UPDATE SET used_at = NULL`, [ADMIN, CODE_HASH]);
+  await c.query(`DELETE FROM login_challenges WHERE user_id = $1`, [ADMIN]);
+  await c.query(`INSERT INTO login_challenges (id, challenge_hash, user_id, expires_at, consumed_at) VALUES
+                 ($1, $3, $2, now() - interval '1 minute', now() - interval '2 minutes'),
+                 ($4, $5, $2, now() + interval '1 hour', NULL)`,
+    [DEAD_CHALLENGE, ADMIN, 'd'.repeat(64), LIVE_CHALLENGE, 'e'.repeat(64)]);
   const auditFixture = (await c.query(
     `INSERT INTO audit_logs (school_id, action_type, entity) VALUES ($1, 'C4A_FIXTURE', 'probe') RETURNING id`, [SCHOOL])).rows[0].id;
   for (const probe of PROBES) probe[2] = probe[2].replace('__AUDIT_FIXTURE__', auditFixture);

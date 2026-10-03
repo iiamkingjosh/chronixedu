@@ -6,7 +6,7 @@ import { clientIp } from '../middleware/clientIp';
 import { logger } from '../config/logger';
 import { passwordMatches } from '../services/passwordCheck';
 import { isLockedOut, recordFailedAttempt } from '../services/loginLockout';
-import { generateTotpSecret, otpauthUri, base32Encode, matchTotpStep } from '../services/totp';
+import { generateTotpSecret, otpauthUri, base32Encode, matchTotpStep, totpStep } from '../services/totp';
 import { generateRecoveryCodes } from '../services/recoveryCodes';
 import { terminateActiveSupportSessions } from '../services/supportSessions';
 import { logPlatformAudit } from '../db/queries/platformAudit';
@@ -119,8 +119,11 @@ router.post('/enrolment/confirm', ...guard, async (req: Request, res: Response, 
     if (!stored) return refuse(res, 409, 'NO_ENROLMENT_STARTED', 'Start setting up two-factor sign-in first.');
     if (stored.activatedAt) return refuse(res, 409, 'TWO_FACTOR_ALREADY_ON', 'Two-factor sign-in is already on for this account.');
 
-    const step = matchTotpStep(stored.secret, parsed.data.code, Date.now() / 1000);
+    const now = Date.now() / 1000;
+    const step = matchTotpStep(stored.secret, parsed.data.code, now);
     if (step === null) return refuse(res, 400, 'INVALID_CODE', 'That code is not right. Check the time on your phone, and use the newest code.');
+    // -1, 0 or +1: drift in the server's clock shows here first (see routes/auth.ts, /login/verify).
+    logger.info('totp_code_accepted', { user_id: userId, step_offset: step - totpStep(now), route: 'enrolment' });
 
     const codes = generateRecoveryCodes();
     const switchedOn = await activateTotp(userId, step, codes, {
@@ -156,8 +159,11 @@ router.post('/recovery-codes', ...guard, async (req: Request, res: Response, nex
     if (isLocked(state)) return refuse(res, 423, 'TWO_FACTOR_LOCKED', `Too many wrong codes. Try again in ${TOTP_LOCK_MINUTES} minutes.`);
 
     const stored = await readTotpSecret(userId);
-    const step = stored ? matchTotpStep(stored.secret, parsed.data.code, Date.now() / 1000) : null;
-    if (step === null || !(await acceptTotpStep(userId, step))) {
+    const now = Date.now() / 1000;
+    const step = stored ? matchTotpStep(stored.secret, parsed.data.code, now) : null;
+    const accepted = step !== null && await acceptTotpStep(userId, step);
+    if (accepted) logger.info('totp_code_accepted', { user_id: userId, step_offset: step! - totpStep(now), route: 'recovery-codes' });
+    if (!accepted) {
       const { failedAttempts, locked } = await recordTotpFailure(userId);
       await recordFailedAttempt(email, ip);
       if (locked) {

@@ -79,6 +79,17 @@
   {
     "table": "academic_sessions",
     "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 42,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
       "INSERT"
     ],
     "file": "apps/api/src/db/queries/sessions.ts",
@@ -203,7 +214,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 685,
+    "line": 709,
     "fn": "POST /:schoolId/students/:studentId/promote",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -214,8 +225,30 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 850,
+    "line": 875,
     "fn": "POST /:schoolId/students/promote-bulk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1157,
+    "fn": "GET /pricing/preview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "academic_sessions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1256,
+    "fn": "GET /schools/:id/billing-preview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -225,7 +258,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1448,
+    "line": 1801,
     "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -251,6 +284,17 @@
     "fn": "listAnnouncementsForRole",
     "connection": "pool (db/client.ts)",
     "dynamic": true
+  },
+  {
+    "table": "announcements",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 70,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
   },
   {
     "table": "assessment_components",
@@ -379,6 +423,17 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 53,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_components",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/scores.ts",
     "line": 51,
     "fn": "getComponentInfo",
@@ -391,7 +446,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/scores.ts",
-    "line": 264,
+    "line": 266,
     "fn": "POST /:schoolId/scores/bulk-entry",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -500,6 +555,28 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 51,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 53,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assessment_configs",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/scores.ts",
     "line": 51,
     "fn": "getComponentInfo",
@@ -512,7 +589,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/scores.ts",
-    "line": 264,
+    "line": 266,
     "fn": "POST /:schoolId/scores/bulk-entry",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -581,6 +658,28 @@
     "file": "apps/api/src/db/queries/assignments.ts",
     "line": 304,
     "fn": "gradeSubmission",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignment_submissions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 67,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignment_submissions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 66,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -655,9 +754,53 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 65,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 67,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1851,
+    "line": 2180,
     "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 64,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "assignments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 66,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -755,8 +898,19 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 63,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "attendance",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1779,
+    "line": 2107,
     "fn": "GET /analytics/schools",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -767,7 +921,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1852,
+    "line": 2181,
     "fn": "GET /analytics/feature-adoption",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -811,7 +965,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/db/queries/auditLog.ts",
-    "line": 32,
+    "line": 41,
     "fn": "logAudit",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -830,10 +984,21 @@
   {
     "table": "audit_logs",
     "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 76,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "audit_logs",
+    "ops": [
       "INSERT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 304,
+    "line": 306,
     "fn": "bulkUpsertScores",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -844,7 +1009,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 592,
+    "line": 650,
     "fn": "GET /schools",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -855,7 +1020,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 646,
+    "line": 710,
     "fn": "GET /schools/:schoolId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -866,7 +1031,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1779,
+    "line": 2107,
     "fn": "GET /analytics/schools",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -877,7 +1042,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/notificationWorker.ts",
-    "line": 103,
+    "line": 114,
     "fn": "processNotificationQueue",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -888,7 +1053,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/services/notificationWorker.ts",
-    "line": 115,
+    "line": 128,
     "fn": "processNotificationQueue",
     "connection": "pool (db/client.ts)",
     "dynamic": false,
@@ -952,6 +1117,17 @@
     "dynamic": false
   },
   {
+    "table": "behaviour_records",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 64,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
     "table": "class_teacher_comments",
     "ops": [
       "SELECT"
@@ -984,6 +1160,17 @@
     "fn": "fetchClassTeacherComment",
     "connection": "pool (db/client.ts)",
     "dynamic": false
+  },
+  {
+    "table": "class_teacher_comments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 60,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
   },
   {
     "table": "classes",
@@ -1288,8 +1475,19 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 44,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "classes",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 141,
+    "line": 197,
     "fn": "listClassLevels",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1311,7 +1509,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 365,
+    "line": 368,
     "fn": "getClassSheet",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1322,7 +1520,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 458,
+    "line": 461,
     "fn": "getMyPendingAssignments",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1377,7 +1575,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/results.ts",
-    "line": 262,
+    "line": 265,
     "fn": "GET /:schoolId/results/class-summary",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1388,7 +1586,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 686,
+    "line": 710,
     "fn": "POST /:schoolId/students/:studentId/promote",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1399,7 +1597,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 859,
+    "line": 884,
     "fn": "POST /:schoolId/students/promote-bulk",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1410,7 +1608,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 779,
+    "line": 843,
     "fn": "GET /schools/:schoolId/export",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1432,7 +1630,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 257,
+    "line": 267,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1443,7 +1641,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 412,
+    "line": 422,
     "fn": "getStudentsAtRisk",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1473,10 +1671,22 @@
   {
     "table": "email_queue",
     "ops": [
+      "DELETE",
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/emailQueue.ts",
+    "line": 33,
+    "fn": "deleteQueuedEmailsOlderThan",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "email_queue",
+    "ops": [
       "UPDATE"
     ],
     "file": "apps/api/src/db/queries/emailQueue.ts",
-    "line": 30,
+    "line": 43,
     "fn": "markEmailSent",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1487,7 +1697,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/db/queries/emailQueue.ts",
-    "line": 36,
+    "line": 49,
     "fn": "markEmailRetryFailed",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1604,6 +1814,17 @@
     "dynamic": true
   },
   {
+    "table": "fee_invoices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 73,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
     "table": "fee_structures",
     "ops": [
       "INSERT"
@@ -1633,6 +1854,17 @@
     "file": "apps/api/src/db/queries/fees.ts",
     "line": 110,
     "fn": "generateInvoices",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "fee_structures",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 72,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -1699,6 +1931,17 @@
     "file": "apps/api/src/db/queries/messages.ts",
     "line": 207,
     "fn": "markThreadRead",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "messages",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 71,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -1770,6 +2013,17 @@
     "dynamic": false
   },
   {
+    "table": "notices",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 69,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
     "table": "notification_logs",
     "ops": [
       "INSERT"
@@ -1797,7 +2051,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1848,
+    "line": 2177,
     "fn": "GET /analytics/feature-adoption",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1874,7 +2128,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1269,
+    "line": 1630,
     "fn": "GET /onboarding",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1885,7 +2139,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1313,
+    "line": 1674,
     "fn": "POST /onboarding",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1896,7 +2150,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1341,
+    "line": 1702,
     "fn": "GET /onboarding/:sessionId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1907,7 +2161,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1385,
+    "line": 1746,
     "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1918,7 +2172,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1554,
+    "line": 1861,
     "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1929,7 +2183,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1582,
+    "line": 1889,
     "fn": "POST /onboarding/:sessionId/complete",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -1940,8 +2194,8 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1624,
-    "fn": "POST /onboarding/:sessionId/complete",
+    "line": 1975,
+    "fn": "principalEmail",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -2003,6 +2257,17 @@
   {
     "table": "parent_students",
     "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 40,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "parent_students",
+    "ops": [
       "INSERT"
     ],
     "file": "apps/api/src/db/queries/students.ts",
@@ -2039,7 +2304,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 974,
+    "line": 1001,
     "fn": "POST /:schoolId/students/:studentId/parents",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2050,7 +2315,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 982,
+    "line": 1009,
     "fn": "POST /:schoolId/students/:studentId/parents",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2062,7 +2327,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 851,
+    "line": 915,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2073,7 +2338,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/notificationWorker.ts",
-    "line": 58,
+    "line": 59,
     "fn": "processRow",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2149,9 +2414,31 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 74,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1849,
+    "line": 2178,
     "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "payments",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 92,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -2161,7 +2448,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2001,
+    "line": 2330,
     "fn": "POST /announcements",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2172,7 +2459,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2038,
+    "line": 2367,
     "fn": "GET /announcements",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2183,7 +2470,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2060,
+    "line": 2389,
     "fn": "PATCH /announcements/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2194,7 +2481,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2087,
+    "line": 2416,
     "fn": "PATCH /announcements/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2205,7 +2492,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2106,
+    "line": 2435,
     "fn": "DELETE /announcements/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2217,7 +2504,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2115,
+    "line": 2444,
     "fn": "DELETE /announcements/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2228,7 +2515,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2132,
+    "line": 2461,
     "fn": "POST /announcements/:id/publish",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2239,7 +2526,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2142,
+    "line": 2471,
     "fn": "POST /announcements/:id/publish",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2249,8 +2536,19 @@
     "ops": [
       "INSERT"
     ],
+    "file": "apps/api/src/db/queries/platformAudit.ts",
+    "line": 23,
+    "fn": "logPlatformAudit",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 403,
+    "line": 461,
     "fn": "POST /support-sessions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2261,7 +2559,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 449,
+    "line": 507,
     "fn": "PATCH /support-sessions/:id/end",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2272,7 +2570,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 526,
+    "line": 584,
     "fn": "GET /audit-logs",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2283,7 +2581,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 696,
+    "line": 760,
     "fn": "PATCH /schools/:schoolId/suspend",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2294,7 +2592,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 753,
+    "line": 817,
     "fn": "PATCH /schools/:schoolId/reactivate",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2305,8 +2603,19 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 857,
+    "line": 921,
     "fn": "DELETE /schools/:schoolId/data",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1092,
+    "fn": "GET /pricing",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -2316,7 +2625,18 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1026,
+    "line": 1220,
+    "fn": "PUT /pricing",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1335,
     "fn": "POST /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2327,7 +2647,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1081,
+    "line": 1422,
     "fn": "PATCH /subscriptions/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2338,7 +2658,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1129,
+    "line": 1480,
     "fn": "POST /subscriptions/:id/extend-trial",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2349,7 +2669,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1168,
+    "line": 1548,
     "fn": "POST /subscriptions/:id/record-payment",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2360,7 +2680,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1321,
+    "line": 1682,
     "fn": "POST /onboarding",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2371,8 +2691,19 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1672,
-    "fn": "appUrl",
+    "line": 1945,
+    "fn": "principalEmail",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_audit_logs",
+    "ops": [
+      "INSERT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2003,
+    "fn": "firstName",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -2382,7 +2713,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1936,
+    "line": 2265,
     "fn": "GET /health/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2393,7 +2724,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2171,
+    "line": 2504,
     "fn": "POST /announcements/:id/publish",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2404,7 +2735,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2255,
+    "line": 2614,
     "fn": "POST /admins",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2415,7 +2746,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2334,
+    "line": 2670,
     "fn": "POST /admins/:id/resend-welcome",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2426,7 +2757,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2427,
+    "line": 2738,
     "fn": "PATCH /admins/:id/suspend",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2437,7 +2768,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2469,
+    "line": 2781,
     "fn": "PATCH /admins/:id/reactivate",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2448,7 +2779,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2522,
+    "line": 2835,
     "fn": "DELETE /admins/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2470,8 +2801,8 @@
       "INSERT"
     ],
     "file": "apps/api/src/services/subscriptionService.ts",
-    "line": 46,
-    "fn": "runTrialExpiryCheck",
+    "line": 83,
+    "fn": "audit",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -2481,7 +2812,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1739,
+    "line": 2067,
     "fn": "GET /analytics/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2492,7 +2823,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1935,
+    "line": 2264,
     "fn": "GET /health/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2514,8 +2845,30 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/platformBilling.ts",
+    "line": 51,
+    "fn": "findBillableSubscription",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/platformBilling.ts",
+    "line": 197,
+    "fn": "settlePayment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/platformRevenue.ts",
-    "line": 76,
+    "line": 82,
     "fn": "getPlatformRevenue",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2525,8 +2878,30 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 87,
+    "fn": "findSchoolById",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 352,
+    "fn": "findSubscriptionGate",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 578,
+    "line": 636,
     "fn": "GET /schools",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2537,7 +2912,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 592,
+    "line": 650,
     "fn": "GET /schools",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2548,10 +2923,10 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 640,
+    "line": 701,
     "fn": "GET /schools/:schoolId",
     "connection": "pool (db/client.ts)",
-    "dynamic": false
+    "dynamic": true
   },
   {
     "table": "platform_subscriptions",
@@ -2559,7 +2934,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 900,
+    "line": 964,
     "fn": "GET /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2570,7 +2945,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 914,
+    "line": 978,
     "fn": "GET /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2581,7 +2956,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 942,
+    "line": 1005,
     "fn": "GET /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2592,7 +2967,29 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1007,
+    "line": 1157,
+    "fn": "GET /pricing/preview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1218,
+    "fn": "PUT /pricing",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1309,
     "fn": "POST /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2603,7 +3000,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1015,
+    "line": 1319,
     "fn": "POST /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2614,7 +3011,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1051,
+    "line": 1360,
     "fn": "PATCH /subscriptions/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2625,7 +3022,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1070,
+    "line": 1405,
     "fn": "PATCH /subscriptions/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2636,7 +3033,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1108,
+    "line": 1449,
     "fn": "POST /subscriptions/:id/extend-trial",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2647,7 +3044,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1120,
+    "line": 1464,
     "fn": "POST /subscriptions/:id/extend-trial",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2658,7 +3055,18 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1156,
+    "line": 1507,
+    "fn": "POST /subscriptions/:id/record-payment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1540,
     "fn": "POST /subscriptions/:id/record-payment",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2669,7 +3077,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1721,
+    "line": 2059,
     "fn": "GET /analytics/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2680,18 +3088,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1731,
-    "fn": "GET /analytics/overview",
-    "connection": "pool (db/client.ts)",
-    "dynamic": false
-  },
-  {
-    "table": "platform_subscriptions",
-    "ops": [
-      "SELECT"
-    ],
-    "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1779,
+    "line": 2107,
     "fn": "GET /analytics/schools",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2702,8 +3099,19 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2148,
+    "line": 2477,
     "fn": "POST /announcements/:id/publish",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/planFeatures.ts",
+    "line": 60,
+    "fn": "schoolAllowsFeature",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -2724,7 +3132,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/subscriptionService.ts",
-    "line": 19,
+    "line": 51,
     "fn": "runTrialExpiryCheck",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2735,8 +3143,19 @@
       "UPDATE"
     ],
     "file": "apps/api/src/services/subscriptionService.ts",
-    "line": 41,
-    "fn": "runTrialExpiryCheck",
+    "line": 93,
+    "fn": "audit",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "platform_subscriptions",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/services/subscriptionService.ts",
+    "line": 98,
+    "fn": "audit",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -2762,6 +3181,17 @@
     "fn": "upsertPrincipalRemark",
     "connection": "pool (db/client.ts)",
     "dynamic": false
+  },
+  {
+    "table": "principal_remarks",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 62,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
   },
   {
     "table": "report_cards",
@@ -2802,6 +3232,17 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 58,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/routes/parent.ts",
     "line": 74,
     "fn": "findPublishedReportCard",
@@ -2825,7 +3266,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 750,
+    "line": 774,
     "fn": "GET /:schoolId/students/:studentId/report-card",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -2837,10 +3278,21 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 845,
+    "line": 909,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
+  },
+  {
+    "table": "report_cards",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 62,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
   },
   {
     "table": "result_status",
@@ -2904,8 +3356,19 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 57,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "result_status",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 189,
+    "line": 245,
     "fn": "checkPublishedResultsExist",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2916,7 +3379,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 203,
+    "line": 259,
     "fn": "checkSubmittedResultsExist",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2950,7 +3413,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 844,
+    "line": 908,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -2961,7 +3424,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1853,
+    "line": 2182,
     "fn": "GET /analytics/feature-adoption",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3025,10 +3488,21 @@
   {
     "table": "school_settings",
     "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 75,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
       "INSERT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 73,
+    "line": 77,
     "fn": "insertSchoolSettings",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3039,7 +3513,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 83,
+    "line": 87,
     "fn": "findSchoolById",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3050,7 +3524,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 98,
+    "line": 104,
     "fn": "updateIdentityConfig",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3058,12 +3532,11 @@
   {
     "table": "school_settings",
     "ops": [
-      "INSERT",
-      "UPDATE"
+      "INSERT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 124,
-    "fn": "updateAcademicConfig",
+    "line": 167,
+    "fn": "mergeSettingsColumn",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -3073,7 +3546,29 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 154,
+    "line": 171,
+    "fn": "mergeSettingsColumn",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 175,
+    "fn": "mergeSettingsColumn",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schools.ts",
+    "line": 210,
     "fn": "findAcademicConfig",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3084,7 +3579,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 165,
+    "line": 221,
     "fn": "updateNotificationConfig",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3095,19 +3590,8 @@
       "UPDATE"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 178,
+    "line": 234,
     "fn": "updateReportConfig",
-    "connection": "pool (db/client.ts)",
-    "dynamic": false
-  },
-  {
-    "table": "school_settings",
-    "ops": [
-      "UPDATE"
-    ],
-    "file": "apps/api/src/db/queries/schools.ts",
-    "line": 238,
-    "fn": "updateFeeConfig",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -3117,7 +3601,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 250,
+    "line": 300,
     "fn": "resolveMinPartPayment",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3139,7 +3623,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 639,
+    "line": 699,
     "fn": "GET /schools/:schoolId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3150,7 +3634,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1222,
+    "line": 1606,
     "fn": "ensureSchoolSettings",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3171,8 +3655,41 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 48,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 50,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 52,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "school_settings",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/services/termiiService.ts",
-    "line": 12,
+    "line": 32,
     "fn": "getSmsSenderName",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3183,7 +3700,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/platformRevenue.ts",
-    "line": 76,
+    "line": 82,
     "fn": "getPlatformRevenue",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3194,7 +3711,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 48,
+    "line": 52,
     "fn": "insertSchool",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3205,7 +3722,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 83,
+    "line": 87,
     "fn": "findSchoolById",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3216,7 +3733,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 267,
+    "line": 317,
     "fn": "getSchoolPayoutConfig",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3227,7 +3744,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 277,
+    "line": 327,
     "fn": "updateSchoolPayoutConfig",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3238,7 +3755,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 284,
+    "line": 334,
     "fn": "getSchoolNameAndEmail",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3249,8 +3766,8 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 229,
-    "fn": "POST /login",
+    "line": 161,
+    "fn": "issueSession",
     "connection": "login client (routes/auth.ts getLoginClient)",
     "dynamic": false
   },
@@ -3260,7 +3777,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 470,
+    "line": 528,
     "fn": "GET /support-sessions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3271,7 +3788,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 526,
+    "line": 584,
     "fn": "GET /audit-logs",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -3282,7 +3799,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 578,
+    "line": 636,
     "fn": "GET /schools",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -3293,7 +3810,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 592,
+    "line": 650,
     "fn": "GET /schools",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -3304,7 +3821,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 630,
+    "line": 690,
     "fn": "GET /schools/:schoolId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3315,7 +3832,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 681,
+    "line": 745,
     "fn": "PATCH /schools/:schoolId/suspend",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3326,7 +3843,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 692,
+    "line": 756,
     "fn": "PATCH /schools/:schoolId/suspend",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3337,7 +3854,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 723,
+    "line": 787,
     "fn": "PATCH /schools/:schoolId/reactivate",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3348,7 +3865,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 749,
+    "line": 813,
     "fn": "PATCH /schools/:schoolId/reactivate",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3359,7 +3876,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 773,
+    "line": 837,
     "fn": "GET /schools/:schoolId/export",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3370,7 +3887,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 828,
+    "line": 892,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3381,7 +3898,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 900,
+    "line": 964,
     "fn": "GET /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -3392,7 +3909,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 914,
+    "line": 978,
     "fn": "GET /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -3403,7 +3920,29 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1002,
+    "line": 1157,
+    "fn": "GET /pricing/preview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1249,
+    "fn": "GET /schools/:id/billing-preview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1304,
     "fn": "POST /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3414,7 +3953,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1022,
+    "line": 1331,
     "fn": "POST /subscriptions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3425,7 +3964,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1076,
+    "line": 1416,
     "fn": "PATCH /subscriptions/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3436,7 +3975,18 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1156,
+    "line": 1507,
+    "fn": "POST /subscriptions/:id/record-payment",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1545,
     "fn": "POST /subscriptions/:id/record-payment",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3447,7 +3997,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1269,
+    "line": 1630,
     "fn": "GET /onboarding",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3458,7 +4008,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1297,
+    "line": 1658,
     "fn": "POST /onboarding",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3469,7 +4019,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1305,
+    "line": 1666,
     "fn": "POST /onboarding",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3480,7 +4030,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1350,
+    "line": 1711,
     "fn": "GET /onboarding/:sessionId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3491,7 +4041,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1394,
+    "line": 1755,
     "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3502,7 +4052,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1407,
+    "line": 1768,
     "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3513,7 +4063,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1597,
+    "line": 1904,
     "fn": "POST /onboarding/:sessionId/complete",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3524,8 +4074,8 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1620,
-    "fn": "POST /onboarding/:sessionId/complete",
+    "line": 1971,
+    "fn": "principalEmail",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -3535,7 +4085,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1713,
+    "line": 2048,
     "fn": "GET /analytics/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3546,7 +4096,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1714,
+    "line": 2049,
     "fn": "GET /analytics/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3557,7 +4107,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1716,
+    "line": 2051,
     "fn": "GET /analytics/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3568,7 +4118,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1721,
+    "line": 2059,
     "fn": "GET /analytics/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3579,7 +4129,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1731,
+    "line": 2064,
     "fn": "GET /analytics/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3590,18 +4140,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1736,
-    "fn": "GET /analytics/overview",
-    "connection": "pool (db/client.ts)",
-    "dynamic": false
-  },
-  {
-    "table": "schools",
-    "ops": [
-      "SELECT"
-    ],
-    "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1779,
+    "line": 2107,
     "fn": "GET /analytics/schools",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3612,7 +4151,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1844,
+    "line": 2172,
     "fn": "GET /analytics/feature-adoption",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3623,7 +4162,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1886,
+    "line": 2215,
     "fn": "GET /analytics/growth",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3634,7 +4173,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2148,
+    "line": 2477,
     "fn": "POST /announcements/:id/publish",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3645,7 +4184,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/planFeatures.ts",
-    "line": 23,
+    "line": 60,
     "fn": "schoolAllowsFeature",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3686,11 +4225,22 @@
   {
     "table": "schools",
     "ops": [
-      "UPDATE"
+      "SELECT"
     ],
-    "file": "apps/api/src/services/subscriptionService.ts",
-    "line": 44,
-    "fn": "runTrialExpiryCheck",
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 54,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "schools",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 56,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -3700,7 +4250,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/welcomeEmail.ts",
-    "line": 4,
+    "line": 9,
     "fn": "getSchoolName",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3853,6 +4403,17 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 54,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "scores",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/scores.ts",
     "line": 153,
     "fn": "getExistingScore",
@@ -3879,7 +4440,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 268,
+    "line": 270,
     "fn": "bulkUpsertScores",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3890,7 +4451,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 406,
+    "line": 409,
     "fn": "getClassSheet",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3901,7 +4462,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 458,
+    "line": 461,
     "fn": "getMyPendingAssignments",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3913,7 +4474,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 843,
+    "line": 907,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3924,7 +4485,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 221,
+    "line": 231,
     "fn": "computeStudentSubjectResult",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -3935,7 +4496,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 312,
+    "line": 322,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4242,6 +4803,17 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 47,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": true
+  },
+  {
+    "table": "student_classes",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/scores.ts",
     "line": 86,
     "fn": "findStudentsNotInClass",
@@ -4254,7 +4826,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 392,
+    "line": 395,
     "fn": "getClassSheet",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4265,7 +4837,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 458,
+    "line": 461,
     "fn": "getMyPendingAssignments",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4353,7 +4925,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 779,
+    "line": 843,
     "fn": "GET /schools/:schoolId/export",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4365,7 +4937,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 847,
+    "line": 911,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4376,7 +4948,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 197,
+    "line": 207,
     "fn": "getStudentClassId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4387,7 +4959,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 265,
+    "line": 275,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4398,7 +4970,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 412,
+    "line": 422,
     "fn": "getStudentsAtRisk",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4650,6 +5222,28 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 29,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 34,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/scores.ts",
     "line": 86,
     "fn": "findStudentsNotInClass",
@@ -4662,7 +5256,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 392,
+    "line": 395,
     "fn": "getClassSheet",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4805,7 +5399,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 566,
+    "line": 590,
     "fn": "GET /:schoolId/students/:studentId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4816,7 +5410,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 592,
+    "line": 650,
     "fn": "GET /schools",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -4827,7 +5421,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 779,
+    "line": 843,
     "fn": "GET /schools/:schoolId/export",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4838,7 +5432,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 847,
+    "line": 911,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4849,7 +5443,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 851,
+    "line": 915,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4861,7 +5455,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 854,
+    "line": 918,
     "fn": "DELETE /schools/:schoolId/data",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4872,7 +5466,18 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1716,
+    "line": 1256,
+    "fn": "GET /schools/:id/billing-preview",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 2051,
     "fn": "GET /analytics/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4883,7 +5488,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1892,
+    "line": 2221,
     "fn": "GET /analytics/growth",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4905,7 +5510,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 265,
+    "line": 275,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -4916,8 +5521,41 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 412,
+    "line": 422,
     "fn": "getStudentsAtRisk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 44,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 58,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "students",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 94,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -5004,8 +5642,19 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 56,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subject_result_status",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 203,
+    "line": 259,
     "fn": "checkSubmittedResultsExist",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5214,8 +5863,19 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 45,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "subjects",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 369,
+    "line": 372,
     "fn": "getClassSheet",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5226,7 +5886,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 458,
+    "line": 461,
     "fn": "getMyPendingAssignments",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5281,7 +5941,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 275,
+    "line": 285,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5303,7 +5963,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 356,
+    "line": 414,
     "fn": "POST /support-sessions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5314,7 +5974,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 424,
+    "line": 482,
     "fn": "PATCH /support-sessions/:id/end",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5325,7 +5985,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 470,
+    "line": 528,
     "fn": "GET /support-sessions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5336,7 +5996,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1934,
+    "line": 2263,
     "fn": "GET /health/overview",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5346,8 +6006,8 @@
     "ops": [
       "SELECT"
     ],
-    "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2363,
+    "file": "apps/api/src/services/supportSessions.ts",
+    "line": 16,
     "fn": "terminateActiveSupportSessions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5357,8 +6017,8 @@
     "ops": [
       "UPDATE"
     ],
-    "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2379,
+    "file": "apps/api/src/services/supportSessions.ts",
+    "line": 32,
     "fn": "terminateActiveSupportSessions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5602,6 +6262,17 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 49,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "teacher_assignments",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/scores.ts",
     "line": 39,
     "fn": "checkTeacherAssigned",
@@ -5614,7 +6285,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 458,
+    "line": 461,
     "fn": "getMyPendingAssignments",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5636,7 +6307,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/results.ts",
-    "line": 114,
+    "line": 116,
     "fn": "POST /:schoolId/results/submit",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5658,7 +6329,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 275,
+    "line": 285,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5866,6 +6537,28 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 30,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 43,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "terms",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/scores.ts",
     "line": 86,
     "fn": "findStudentsNotInClass",
@@ -5878,7 +6571,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 373,
+    "line": 376,
     "fn": "getClassSheet",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5889,7 +6582,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 458,
+    "line": 461,
     "fn": "getMyPendingAssignments",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5988,7 +6681,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/results.ts",
-    "line": 263,
+    "line": 266,
     "fn": "GET /:schoolId/results/class-summary",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -5999,7 +6692,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/roster.ts",
-    "line": 498,
+    "line": 504,
     "fn": "POST /:schoolId/teacher-assignments/copy-from-term",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6010,7 +6703,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1458,
+    "line": 1809,
     "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6021,7 +6714,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 197,
+    "line": 207,
     "fn": "getStudentClassId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6032,7 +6725,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 261,
+    "line": 271,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6043,7 +6736,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 265,
+    "line": 275,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6054,8 +6747,19 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 412,
+    "line": 422,
     "fn": "getStudentsAtRisk",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "timetable_slots",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 68,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -6143,8 +6847,19 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1850,
+    "line": 2179,
     "fn": "GET /analytics/feature-adoption",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/config/systemActor.ts",
+    "line": 6,
+    "fn": "(module)",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   },
@@ -6604,8 +7319,30 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 34,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/db/queries/schoolExport.ts",
+    "line": 37,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/db/queries/schools.ts",
-    "line": 61,
+    "line": 65,
     "fn": "schoolHasPrincipal",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6616,7 +7353,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/scores.ts",
-    "line": 392,
+    "line": 395,
     "fn": "getClassSheet",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6756,6 +7493,17 @@
   {
     "table": "users",
     "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/twoFactorStore.ts",
+    "line": 119,
+    "fn": "activateTotp",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
       "SELECT"
     ],
     "file": "apps/api/src/db/queries/users.ts",
@@ -6877,10 +7625,21 @@
   {
     "table": "users",
     "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/db/queries/users.ts",
+    "line": 286,
+    "fn": "endSessionsBeforeNow",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
       "SELECT"
     ],
     "file": "apps/api/src/middleware/auth.ts",
-    "line": 95,
+    "line": 113,
     "fn": "verifyToken",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6891,29 +7650,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/middleware/auth.ts",
-    "line": 100,
-    "fn": "verifyToken",
-    "connection": "pool (db/client.ts)",
-    "dynamic": false
-  },
-  {
-    "table": "users",
-    "ops": [
-      "SELECT"
-    ],
-    "file": "apps/api/src/middleware/auth.ts",
-    "line": 144,
-    "fn": "requirePasswordChanged",
-    "connection": "pool (db/client.ts)",
-    "dynamic": false
-  },
-  {
-    "table": "users",
-    "ops": [
-      "SELECT"
-    ],
-    "file": "apps/api/src/middleware/auth.ts",
-    "line": 149,
+    "line": 175,
     "fn": "requirePasswordChanged",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6924,7 +7661,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 87,
+    "line": 104,
     "fn": "POST /create-user",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6935,9 +7672,20 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 115,
+    "line": 132,
     "fn": "POST /create-user",
     "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "UPDATE"
+    ],
+    "file": "apps/api/src/routes/auth.ts",
+    "line": 157,
+    "fn": "issueSession",
+    "connection": "login client (routes/auth.ts getLoginClient)",
     "dynamic": false
   },
   {
@@ -6946,21 +7694,21 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 210,
+    "line": 239,
     "fn": "POST /login",
     "connection": "login client (routes/auth.ts getLoginClient)",
-    "dynamic": false
+    "dynamic": true
   },
   {
     "table": "users",
     "ops": [
-      "UPDATE"
+      "SELECT"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 226,
-    "fn": "POST /login",
+    "line": 326,
+    "fn": "POST /login/verify",
     "connection": "login client (routes/auth.ts getLoginClient)",
-    "dynamic": false
+    "dynamic": true
   },
   {
     "table": "users",
@@ -6969,7 +7717,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/auth.ts",
-    "line": 310,
+    "line": 468,
     "fn": "POST /seed-test-user",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6980,7 +7728,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 935,
+    "line": 962,
     "fn": "POST /:schoolId/students/:studentId/parents",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -6991,7 +7739,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/students.ts",
-    "line": 967,
+    "line": 994,
     "fn": "POST /:schoolId/students/:studentId/parents",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7002,7 +7750,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 343,
+    "line": 401,
     "fn": "POST /support-sessions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7013,7 +7761,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 470,
+    "line": 528,
     "fn": "GET /support-sessions",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7024,7 +7772,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 526,
+    "line": 584,
     "fn": "GET /audit-logs",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -7035,7 +7783,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 642,
+    "line": 706,
     "fn": "GET /schools/:schoolId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7046,7 +7794,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 779,
+    "line": 843,
     "fn": "GET /schools/:schoolId/export",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7057,7 +7805,18 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1513,
+    "line": 1092,
+    "fn": "GET /pricing",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
+    "file": "apps/api/src/routes/superAdmin.ts",
+    "line": 1825,
     "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7068,7 +7827,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1532,
+    "line": 1844,
     "fn": "PATCH /onboarding/:sessionId/step/:stepNumber",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7079,7 +7838,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1606,
+    "line": 1913,
     "fn": "POST /onboarding/:sessionId/complete",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7090,7 +7849,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 1892,
+    "line": 2221,
     "fn": "GET /analytics/growth",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7101,7 +7860,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2038,
+    "line": 2367,
     "fn": "GET /announcements",
     "connection": "pool (db/client.ts)",
     "dynamic": true
@@ -7112,7 +7871,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2148,
+    "line": 2477,
     "fn": "POST /announcements/:id/publish",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7123,7 +7882,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2200,
+    "line": 2536,
     "fn": "GET /admins",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7134,7 +7893,7 @@
       "INSERT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2249,
+    "line": 2608,
     "fn": "POST /admins",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7145,7 +7904,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2300,
+    "line": 2656,
     "fn": "POST /admins/:id/resend-welcome",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7156,7 +7915,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2352,
+    "line": 2688,
     "fn": "countOtherActiveAdmins",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7167,7 +7926,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2398,
+    "line": 2709,
     "fn": "PATCH /admins/:id/suspend",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7178,7 +7937,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2415,
+    "line": 2726,
     "fn": "PATCH /admins/:id/suspend",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7189,7 +7948,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2452,
+    "line": 2764,
     "fn": "PATCH /admins/:id/reactivate",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7200,7 +7959,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2466,
+    "line": 2778,
     "fn": "PATCH /admins/:id/reactivate",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7211,7 +7970,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2507,
+    "line": 2820,
     "fn": "DELETE /admins/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7222,7 +7981,7 @@
       "UPDATE"
     ],
     "file": "apps/api/src/routes/superAdmin.ts",
-    "line": 2534,
+    "line": 2850,
     "fn": "DELETE /admins/:id",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7255,7 +8014,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/notificationWorker.ts",
-    "line": 58,
+    "line": 59,
     "fn": "processRow",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7266,7 +8025,7 @@
       "SELECT"
     ],
     "file": "apps/api/src/services/resultEngine.ts",
-    "line": 265,
+    "line": 275,
     "fn": "computeClassResults",
     "connection": "pool (db/client.ts)",
     "dynamic": false
@@ -7276,9 +8035,20 @@
     "ops": [
       "SELECT"
     ],
+    "file": "apps/api/src/services/schoolExportArchive.ts",
+    "line": 60,
+    "fn": "(module)",
+    "connection": "pool (db/client.ts)",
+    "dynamic": false
+  },
+  {
+    "table": "users",
+    "ops": [
+      "SELECT"
+    ],
     "file": "apps/api/src/services/subscriptionService.ts",
-    "line": 12,
-    "fn": "getSystemAdminId",
+    "line": 18,
+    "fn": "getSystemActorId",
     "connection": "pool (db/client.ts)",
     "dynamic": false
   }
