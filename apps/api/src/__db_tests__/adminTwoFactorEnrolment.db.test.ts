@@ -16,7 +16,7 @@ import superAdminRoutes from '../routes/superAdmin';
 import { errorHandler } from '../middleware/errorHandler';
 import { logger } from '../config/logger';
 import { totp, base32Decode, TOTP_STEP_SECONDS } from '../services/totp';
-import { consumeRecoveryCode, TOTP_LOCK_AFTER } from '../db/queries/twoFactor';
+import { consumeRecoveryCode, TOTP_LOCK_AFTER } from '../db/queries/twoFactorStore';
 
 const ADMIN = 'c0a20000-0000-4000-8000-000000000001';
 const OTHER_ADMIN = 'c0a20000-0000-4000-8000-000000000002';

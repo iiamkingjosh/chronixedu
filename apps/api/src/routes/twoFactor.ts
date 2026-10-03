@@ -13,7 +13,7 @@ import { logPlatformAudit } from '../db/queries/platformAudit';
 import {
   savePendingTotpSecret, readTotpSecret, readTotpState, isLocked, activateTotp, acceptTotpStep,
   recordTotpFailure, replaceRecoveryCodes, unusedRecoveryCodeCount, TOTP_LOCK_MINUTES,
-} from '../db/queries/twoFactor';
+} from '../db/queries/twoFactorStore';
 
 /**
  * Platform-admin two-factor, commit 2 of 4: enrolment (3 Oct 2026). Mounted at

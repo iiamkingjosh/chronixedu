@@ -6,7 +6,7 @@
 import { pool, seed } from './helpers';
 import {
   savePendingTotpSecret, readTotpSecret, replaceRecoveryCodes, consumeRecoveryCode, unusedRecoveryCodeCount,
-} from '../db/queries/twoFactor';
+} from '../db/queries/twoFactorStore';
 import { generateTotpSecret, base32Encode } from '../services/totp';
 import { generateRecoveryCodes } from '../services/recoveryCodes';
 import { SYSTEM_ACTOR_ID } from '../config/systemActor';

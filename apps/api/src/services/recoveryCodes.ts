@@ -11,7 +11,7 @@ import crypto from 'crypto';
  *
  * Shown once, at the moment they are made, and stored only as SHA-256 hashes. A slow hash is not
  * needed: guessing an 80-bit value from its hash is out of reach, which is what a slow hash buys
- * for a low-entropy password. Each is single-use (db/queries/twoFactor.ts consumes one atomically).
+ * for a low-entropy password. Each is single-use (db/queries/twoFactorStore.ts consumes one atomically).
  */
 
 export const RECOVERY_CODE_COUNT = 10;

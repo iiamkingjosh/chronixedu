@@ -19,7 +19,7 @@ import { getCronStatus } from '../services/cronTracker';
 import { getRecentErrorCount } from '../services/platformAnalyticsService';
 import { redis } from '../middleware/rateLimit';
 import { terminateActiveSupportSessions } from '../services/supportSessions';
-import { removeTwoFactor } from '../db/queries/twoFactor';
+import { removeTwoFactor } from '../db/queries/twoFactorStore';
 // Imported for their module-level registerCron() side effects, so GET /health/crons
 // reflects every scheduled job even before the crons have started running.
 import '../services/analyticsService';
