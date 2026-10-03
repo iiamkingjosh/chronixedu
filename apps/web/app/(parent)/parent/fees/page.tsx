@@ -59,6 +59,7 @@ export default function ParentFeesPage() {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [paymentReason, setPaymentReason] = useState<string | null>(null);
   const [receiptError, setReceiptError] = useState('');
   // Presets rather than a bare number field: it cuts typos and ₦1 test payments, and it
   // lets the part-payment rule be stated before the parent types rather than after.
@@ -70,6 +71,7 @@ export default function ParentFeesPage() {
     const status = params.get('payment');
     if (status) {
       setPaymentStatus(status);
+      setPaymentReason(params.get('reason'));
       params.delete('payment');
       params.delete('reason');
       const query = params.toString();
@@ -216,7 +218,9 @@ export default function ParentFeesPage() {
       )}
       {paymentStatus === 'error' && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-          Something went wrong while confirming your payment. Please contact your school if you were charged.
+          {paymentReason === 'wrong_currency'
+            ? 'Your payment was made in a currency other than naira, so it could not be applied to your invoice. Please contact your school about a refund.'
+            : 'Something went wrong while confirming your payment. Please contact your school if you were charged.'}
         </div>
       )}
 

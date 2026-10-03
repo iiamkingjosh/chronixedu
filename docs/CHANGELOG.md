@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Payments are accepted in naira only (2026-10-03)
+
+### For schools and parents
+- A Paystack payment made in any currency other than naira is no longer recorded against a fee or a subscription. Before, it would have been recorded as if the same figure were in naira, crediting far less than was paid.
+- The parent sees that the payment could not be applied and is asked to contact the school about a refund. The bursar recording a payment by its Paystack reference is told the currency. Chronix is alerted each time.
+
 ## The per-student rate is set on the Subscriptions page (2026-10-03)
 
 ### For Chronix administrators

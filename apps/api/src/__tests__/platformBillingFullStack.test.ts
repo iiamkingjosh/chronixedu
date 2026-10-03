@@ -240,7 +240,8 @@ describe('POST /api/schools/platform-billing/webhook (full middleware stack)', (
 
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ processed: true, outcome: 'settled' });
-    expect(mockBilling.settlePayment).toHaveBeenCalledWith('ref-xyz', 4_800_000);
+    // The currency goes with the amount: settlement refuses anything but naira (3 Oct 2026).
+    expect(mockBilling.settlePayment).toHaveBeenCalledWith('ref-xyz', 4_800_000, 'NGN');
   });
 
   it('rejects a bad signature without settling anything', async () => {
@@ -265,6 +266,17 @@ describe('GET /api/schools/platform-billing/callback (full middleware stack)', (
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toBe('https://edu.chronixtechnology.com/settings/billing?payment=success');
+  });
+
+  it('passes a non-naira currency to settlement and redirects with reason=wrong_currency', async () => {
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amountKobo: 4_800_000, currency: 'USD', reference: 'ref-xyz' });
+    mockBilling.settlePayment.mockResolvedValueOnce({ outcome: 'currency_mismatch', payment: SETTLED_PAYMENT as never });
+
+    const res = await request(buildFullStackApp()).get('/api/schools/platform-billing/callback?reference=ref-xyz');
+
+    expect(mockBilling.settlePayment).toHaveBeenCalledWith('ref-xyz', 4_800_000, 'USD');
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('https://edu.chronixtechnology.com/settings/billing?payment=error&reason=wrong_currency');
   });
 
   it('redirects with a reason when the verified amount does not match what was charged at checkout', async () => {

@@ -19,7 +19,8 @@ const router = Router();
 
 const getAppBaseUrl = appBaseUrl;
 
-function redirectReason(outcome: 'amount_mismatch' | 'not_found'): string {
+function redirectReason(outcome: 'amount_mismatch' | 'currency_mismatch' | 'not_found'): string {
+  if (outcome === 'currency_mismatch') return 'wrong_currency';
   return outcome === 'amount_mismatch' ? 'amount_mismatch' : 'unknown_reference';
 }
 
@@ -44,7 +45,7 @@ router.get(
         return res.redirect(`${redirectBase}?payment=failed`);
       }
 
-      const result = await settlePayment(reference, verification.amountKobo);
+      const result = await settlePayment(reference, verification.amountKobo, verification.currency);
       if (result.outcome === 'settled' || result.outcome === 'already_settled') {
         return res.redirect(`${redirectBase}?payment=success`);
       }
@@ -98,7 +99,7 @@ router.post(
         return res.status(200).json({ success: true, data: { processed: false } });
       }
 
-      const result = await settlePayment(reference, verification.amountKobo);
+      const result = await settlePayment(reference, verification.amountKobo, verification.currency);
       return res.status(200).json({ success: true, data: { processed: result.outcome === 'settled', outcome: result.outcome } });
     } catch (err) {
       return next(err);

@@ -1,8 +1,46 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 30 — 2026-10-02  
-**Scope:** The platform-admin welcome email: a plain-text password, and a resend link that could not work; two gaps in the platform audit trail found while proving it was never used  
-**Round 30 total findings:** 4 (0 Critical · 0 High · 1 Medium · 3 Low) — 3 remediated, 1 open
+**Latest audit:** Round 31 — 2026-10-03  
+**Scope:** Paystack payments: the verified currency was never checked  
+**Round 31 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated
+
+---
+
+## Round 31 — 2026-10-03
+
+### L-01 — A verified Paystack payment's currency was never checked ✅ Remediated (defence in depth: the account is NGN-only)
+
+**Files:** `apps/api/src/services/paystackService.ts` (`isNairaPayment`), `apps/api/src/routes/fees.ts` (recording a payment by its Paystack reference), `apps/api/src/routes/feesPublic.ts` (callback and webhook), `apps/api/src/db/queries/platformBilling.ts` (`settlePayment`), `apps/api/src/routes/platformBillingPublic.ts` (callback and webhook), `apps/api/src/config/alerts.ts`, and the two screens a payment returns to.
+
+**The defect.**
+- `verifyPaystackTransaction` reports the currency Paystack charged in, and five places use its result: the bursar's record-by-reference, the fee callback and webhook, and the platform-billing callback and webhook.
+- None of them read the currency. Each compared only the number, and treated it as kobo.
+- So a payment in another currency, with the right figure and metadata, would have been recorded as that many kobo: 80,000 US cents settling an ₦800 bill.
+
+**The direction of the harm** (corrected by the reviewer: the first account read it as a way to underpay).
+- The kobo is the cheapest minor unit among the currencies Paystack supports (NGN, GHS, ZAR, KES, USD), so the payer always overpays: $800 for ₦800 is about 1,400x, R800 about 86x, GHS 800 about 100x.
+- Nobody gets fees for free this way. The harm is money that arrived and must be refunded in a currency Chronix does not hold, recorded as something it is not: a reconciliation and liability problem.
+- **Defence in depth today, not a live hole.** The Chronix Paystack account is NGN-only (checked 3 Oct 2026 in the dashboard, reported by Moses), so Paystack cannot create a charge in another currency at present. The exposure opens the day any other currency is enabled on the account, and this fix is what then stops it. Enable one only after re-reading this entry.
+
+**Fix.**
+- **One check, used by all five:** `isNairaPayment`, in `paystackService.ts`.
+- **Each path refuses non-NGN money and says so:**
+  - the bursar's record-by-reference answers 400 `PAYMENT_NOT_NAIRA`, naming the currency;
+  - the fee callback redirects with `reason=wrong_currency`, and the parent's fees page explains it;
+  - the fee webhook answers 200 (so Paystack stops retrying), `processed: false`, `reason: 'not_naira'`;
+  - `settlePayment` takes the verified currency and fails the pending platform payment (`currency_mismatch`), as it already did for an amount mismatch. The billing page explains it.
+- **Nothing is recorded, and every refusal alerts** (`payment_not_naira`: `paystack_payment_not_naira`, `platform_billing_currency_mismatch`), because the money may have arrived and need refunding.
+
+**Tests:**
+- `paymentCurrency.db.test.ts` (new, 2), both failing on the previous code, where the dollar fee came back `payment=success` and the dollar platform payment `settled`:
+  - through the real fee callback and database, a naira payment pays an ₦800 invoice, and the same 80,000 in US cents records nothing, leaves the invoice unpaid and alerts;
+  - `settlePayment` settles a naira payment, and fails and alerts on the same figure in USD.
+- Unit, one per path beside its existing naira case:
+  - the bursar's 400;
+  - the fee callback's redirect;
+  - the fee webhook's unrecorded acknowledgement;
+  - the platform callback passing the currency and redirecting with the reason.
+- **The mocks.** `fees.test.ts` and `feesPublic.test.ts` auto-mocked the whole Paystack module, which turned the new check into a stub answering `undefined`: every naira success test was refused. They now keep the stubs for Paystack's calls and run the real check.
 
 ---
 

@@ -108,7 +108,9 @@ export default function PlatformBillingPage() {
       show(
         reason === 'amount_mismatch'
           ? 'Something changed between starting and finishing this payment. Contact Chronix before trying again.'
-          : 'Something went wrong confirming this payment. Contact Chronix if you were charged.',
+          : reason === 'wrong_currency'
+            ? 'This payment was made in a currency other than naira, so it could not be applied. Contact Chronix about a refund.'
+            : 'Something went wrong confirming this payment. Contact Chronix if you were charged.',
         'error'
       );
     }

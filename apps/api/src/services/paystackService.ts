@@ -19,6 +19,19 @@ export interface PaystackVerification {
   metadata?: Record<string, unknown>;
 }
 
+/**
+ * Chronix records naira only (3 Oct 2026). Paystack reports each transaction's currency, and nothing
+ * used to read it, so a payment in another currency would have been recorded as that many kobo. Every
+ * other currency Paystack supports is worth more per minor unit than the kobo, so such a payer always
+ * overpays: 80,000 US cents would settle a ₦800 bill. The harm is money that arrived and must be
+ * refunded in a currency Chronix does not hold, so every refusal is logged and alerted.
+ */
+export const PAYMENT_CURRENCY = 'NGN';
+
+export function isNairaPayment(v: Pick<PaystackVerification, 'currency'>): boolean {
+  return v.currency === PAYMENT_CURRENCY;
+}
+
 interface PaystackVerifyResponse {
   status: boolean;
   message?: string;

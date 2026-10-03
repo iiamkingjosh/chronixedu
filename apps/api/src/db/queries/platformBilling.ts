@@ -125,7 +125,8 @@ export type SettleOutcome =
   | { outcome: 'settled'; payment: PlatformSubscriptionPayment; subscription_reactivated: boolean }
   | { outcome: 'already_settled'; payment: PlatformSubscriptionPayment }
   | { outcome: 'not_found' }
-  | { outcome: 'amount_mismatch'; payment: PlatformSubscriptionPayment };
+  | { outcome: 'amount_mismatch'; payment: PlatformSubscriptionPayment }
+  | { outcome: 'currency_mismatch'; payment: PlatformSubscriptionPayment };
 
 /**
  * Settles a payment by reference, exactly once. Called from both the webhook and the
@@ -139,7 +140,7 @@ export type SettleOutcome =
  * at checkout and refuses to settle on a mismatch rather than trusting whichever number
  * showed up (doctrine: never infer the amount was right because it usually is).
  */
-export async function settlePayment(reference: string, verifiedAmountKobo: number): Promise<SettleOutcome> {
+export async function settlePayment(reference: string, verifiedAmountKobo: number, verifiedCurrency: string): Promise<SettleOutcome> {
   const existing = await pool.query<PlatformSubscriptionPayment>(
     `SELECT * FROM platform_subscription_payments WHERE reference = $1`,
     [reference]
@@ -147,6 +148,17 @@ export async function settlePayment(reference: string, verifiedAmountKobo: numbe
   const payment = existing.rows[0];
   if (!payment) return { outcome: 'not_found' };
   if (payment.status !== 'pending') return { outcome: 'already_settled', payment };
+
+  // Naira only (3 Oct 2026). The snapshot is in kobo; another currency's minor units are not kobo,
+  // so a matching number would settle the bill at the wrong value (80,000 US cents for ₦800). Failed,
+  // like an amount mismatch, and alerted: the money may need refunding.
+  if (verifiedCurrency !== 'NGN') {
+    await pool.query(`UPDATE platform_subscription_payments SET status = 'failed', updated_at = NOW() WHERE id = $1 AND status = 'pending'`, [payment.id]);
+    logger.error('platform_billing_currency_mismatch', {
+      payment_id: payment.id, school_id: payment.school_id, reference, currency: verifiedCurrency,
+    });
+    return { outcome: 'currency_mismatch', payment };
+  }
 
   if (Number(payment.amount_kobo) !== verifiedAmountKobo) {
     await pool.query(`UPDATE platform_subscription_payments SET status = 'failed', updated_at = NOW() WHERE id = $1 AND status = 'pending'`, [payment.id]);

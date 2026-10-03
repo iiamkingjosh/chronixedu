@@ -24,7 +24,12 @@ jest.mock('../db/queries/auditLog');
 jest.mock('../db/queries/parents');
 jest.mock('../db/queries/students');
 jest.mock('../db/queries/roster');
-jest.mock('../services/paystackService');
+// Automatic stubs for every Paystack call, except the naira check, which runs for real: a stub would
+// answer undefined, and the routes would refuse every payment as not naira (3 Oct 2026).
+jest.mock('../services/paystackService', () => ({
+  ...jest.createMockFromModule<object>('../services/paystackService'),
+  isNairaPayment: jest.requireActual('../services/paystackService').isNairaPayment,
+}));
 jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
 jest.mock('../services/reportCardService', () => ({ signReportCardAsset: jest.fn() }));
 jest.mock('../services/paymentReceiptNotifier');
@@ -552,6 +557,25 @@ describe('POST /api/schools/:schoolId/payments', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('PAYMENT_NOT_VERIFIED');
+    expect(mockFees.recordPayment).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 PAYMENT_NOT_NAIRA for a verified payment in another currency, and records nothing', async () => {
+    mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
+    // The same figure and metadata the next test records, but in US cents.
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({
+      status: 'success', amountKobo: 1000000, currency: 'USD',
+      metadata: { school_id: SCHOOL_ID, invoice_id: INVOICE_ID },
+    });
+
+    const res = await request(app)
+      .post(`/api/schools/${SCHOOL_ID}/payments`)
+      .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
+      .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'paystack', paystack_reference: 'ref-123' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('PAYMENT_NOT_NAIRA');
+    expect(res.body.error.message).toContain('paid in USD, not naira');
     expect(mockFees.recordPayment).not.toHaveBeenCalled();
   });
 

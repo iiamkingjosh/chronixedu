@@ -39,6 +39,7 @@ import {
   isPaystackConfigured,
   verifyPaystackTransaction,
   initializePaystackTransaction,
+  isNairaPayment,
 } from '../services/paystackService';
 
 const router = Router();
@@ -404,6 +405,12 @@ router.post(
 
         if (verification.status !== 'success') {
           return res.status(400).json({ success: false, error: { code: 'PAYMENT_NOT_VERIFIED', message: `Paystack transaction status is '${verification.status}', not 'success'` } });
+        }
+
+        // Naira only: another currency's minor units are not kobo (paystackService.ts, isNairaPayment).
+        if (!isNairaPayment(verification)) {
+          logger.error('paystack_payment_not_naira', { route: 'fees_record_payment', currency: verification.currency, school_id: req.params.schoolId, invoice_id, paystack_reference });
+          return res.status(400).json({ success: false, error: { code: 'PAYMENT_NOT_NAIRA', message: `This Paystack transaction was paid in ${verification.currency}, not naira, so it cannot be recorded. Check it in the Paystack dashboard: the payer may need a refund.` } });
         }
 
         // All schools share one Paystack merchant account, so a transaction reference

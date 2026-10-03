@@ -2,7 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { logAudit } from '../db/queries/auditLog';
 import { recordPayment } from '../db/queries/fees';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
-import { verifyPaystackTransaction, verifyPaystackWebhookSignature } from '../services/paystackService';
+import { verifyPaystackTransaction, verifyPaystackWebhookSignature, isNairaPayment } from '../services/paystackService';
+import { logger } from '../config/logger';
 import { appBaseUrl } from '../config/appUrls';
 
 // This router carries ONLY the two Paystack endpoints that must be reachable
@@ -42,6 +43,11 @@ router.get(
 
       if (verification.status !== 'success') {
         return res.redirect(`${redirectBase}?payment=failed`);
+      }
+      // Naira only: another currency's minor units are not kobo (paystackService.ts, isNairaPayment).
+      if (!isNairaPayment(verification)) {
+        logger.error('paystack_payment_not_naira', { route: 'fees_callback', currency: verification.currency, school_id: schoolId, paystack_reference: reference });
+        return res.redirect(`${redirectBase}?payment=error&reason=wrong_currency`);
       }
 
       const metadata = (verification.metadata ?? {}) as PaystackPaymentMetadata;
@@ -144,6 +150,11 @@ router.post(
       const verification = await verifyPaystackTransaction(data.reference);
       if (!verification || verification.status !== 'success') {
         return res.status(200).json({ success: true, data: { processed: false } });
+      }
+      // Naira only. Acknowledged (200) so Paystack stops retrying; not recorded, and alerted.
+      if (!isNairaPayment(verification)) {
+        logger.error('paystack_payment_not_naira', { route: 'fees_webhook', currency: verification.currency, school_id: req.params.schoolId, paystack_reference: data.reference });
+        return res.status(200).json({ success: true, data: { processed: false, reason: 'not_naira' } });
       }
 
       try {

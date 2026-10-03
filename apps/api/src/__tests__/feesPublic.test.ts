@@ -9,7 +9,12 @@ import * as paymentReceiptNotifier from '../services/paymentReceiptNotifier';
 
 jest.mock('../db/queries/fees');
 jest.mock('../db/queries/auditLog');
-jest.mock('../services/paystackService');
+// Automatic stubs for every Paystack call, except the naira check, which runs for real: a stub would
+// answer undefined, and the routes would refuse every payment as not naira (3 Oct 2026).
+jest.mock('../services/paystackService', () => ({
+  ...jest.createMockFromModule<object>('../services/paystackService'),
+  isNairaPayment: jest.requireActual('../services/paystackService').isNairaPayment,
+}));
 jest.mock('../services/paymentReceiptNotifier');
 jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
 jest.mock('../services/reportCardService', () => ({ signReportCardAsset: jest.fn() }));
@@ -106,6 +111,16 @@ describe('GET /api/schools/:schoolId/payments/paystack/callback', () => {
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toContain('payment=failed');
+    expect(mockFees.recordPayment).not.toHaveBeenCalled();
+  });
+
+  it('redirects with reason=wrong_currency, and records nothing, when the payment was not in naira', async () => {
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ ...SUCCESS_VERIFICATION, currency: 'USD' });
+
+    const res = await request(app).get(`/api/schools/${SCHOOL_ID}/payments/paystack/callback?reference=ref-xyz`);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toContain('payment=error&reason=wrong_currency');
     expect(mockFees.recordPayment).not.toHaveBeenCalled();
   });
 
@@ -224,6 +239,20 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook', () => {
       schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
     }));
     expect(mockNotifier.notifyPaymentReceipt).toHaveBeenCalledWith(SCHOOL_ID, 'pay-1', STUDENT_ID);
+  });
+
+  it('acknowledges a charge.success paid in another currency, and records nothing', async () => {
+    mockPaystack.verifyPaystackWebhookSignature.mockReturnValueOnce(true);
+    mockPaystack.verifyPaystackTransaction.mockResolvedValueOnce({ status: 'success', amountKobo: PAYMENT_AMOUNT_KOBO, currency: 'USD' });
+
+    const res = await request(app)
+      .post(`/api/schools/${SCHOOL_ID}/payments/paystack/webhook`)
+      .set('X-Paystack-Signature', 'good-signature')
+      .send(CHARGE_SUCCESS_EVENT);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ processed: false, reason: 'not_naira' });
+    expect(mockFees.recordPayment).not.toHaveBeenCalled();
   });
 
   it('ignores events whose metadata school_id does not match the URL', async () => {

@@ -596,6 +596,19 @@ Monorepo, npm workspaces:
   because the money is a tenant's; here Chronix is the merchant of record for its own subscription
   revenue, so `initializePaystackTransaction` is called with neither. Copying the ERP's split would
   misroute Chronix's own revenue to whichever subaccount a school happened to have for fee collection.
+- **Naira only, at every Paystack verification** (SECURITY.md Round 31). Five places consume
+  `verifyPaystackTransaction`:
+  - the bursar's record-by-reference in `fees.ts`;
+  - the fee callback and webhook in `feesPublic.ts`;
+  - the platform-billing callback and webhook.
+
+  Each checks `isNairaPayment`, and a new one must too. Its `amountKobo` is kobo only when the
+  currency is NGN. Until 3 Oct 2026 none read the currency. A non-NGN payment is refused, recorded
+  nowhere, and alerted (`payment_not_naira`), because the payer overpaid and needs a refund. The
+  Paystack account is NGN-only today (3 Oct 2026), so this is defence in depth. It becomes live
+  protection if another currency is ever enabled there. A test
+  that auto-mocks `paystackService` stubs the check into refusing everything, so keep it real
+  (`fees.test.ts`).
 - `settlePayment` refuses a verified amount that doesn't match what was snapshotted at checkout
   (`amount_mismatch`, logged and alerted — `config/alerts.ts`'s
   `platform_billing_amount_verification_failed`) rather than trusting Paystack's or the webhook's figure;
@@ -948,7 +961,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 38 suites, 366 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 39 suites, 368 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

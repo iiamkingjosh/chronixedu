@@ -158,6 +158,12 @@ export const ALERTS = {
     events: ['api_base_url_not_configured'],
     fields: [],
   },
+  payment_not_naira: {
+    why: 'A Paystack payment verified in a currency other than naira was refused and not recorded: the money may have arrived and need refunding (check the Paystack dashboard)',
+    level: 'error',
+    events: ['paystack_payment_not_naira', 'platform_billing_currency_mismatch'],
+    fields: ['route', 'currency'],
+  },
   platform_billing_amount_verification_failed: {
     why: "A school's Paystack payment for its own Chronix subscription verified at a different amount than it was charged for at checkout — settlement was refused rather than trusted",
     level: 'error',
