@@ -10,10 +10,10 @@
     "lint": "next lint --max-warnings=4"
   },
   "dependencies": {
-    "@sentry/nextjs": "^10.58.0",
-    "@supabase/supabase-js": "^2.25.0",
     "@ducanh2912/next-pwa": "^10.2.9",
     "@hookform/resolvers": "^5.4.0",
+    "@sentry/nextjs": "^10.58.0",
+    "@supabase/supabase-js": "^2.25.0",
     "dexie": "^4.4.3",
     "next": "^14.2.35",
     "react": "18.3.1",
@@ -24,6 +24,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@sentry/browser": "10.58.0",
     "@types/node": "^20.14.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",

@@ -1,8 +1,45 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 33 — 2026-10-03  
-**Scope:** The API sent passwords, login tokens and request data to Sentry  
-**Round 33 total findings:** 2 (0 Critical · 2 High · 0 Medium · 0 Low) — H-01 remediated; H-02 open (password rotation)
+**Latest audit:** Round 34 — 2026-10-03  
+**Scope:** The web app's Sentry: query strings in addresses, and replay where a page holds a credential  
+**Round 34 total findings:** 1 (0 Critical · 0 High · 1 Medium · 0 Low) — remediated
+
+---
+
+## Round 34 — 2026-10-03
+
+### M-01 — The web app's Sentry sent API addresses with their query strings, and replay ran where a page holds a credential ✅ Remediated
+
+**Files:** `apps/web/lib/sentryScrub.ts` (new), `apps/web/instrumentation-client.ts`, `apps/web/sentry.server.config.ts`, `apps/web/sentry.edge.config.ts`, `apps/web/components/NoReplay.tsx` (new), the sign-in and platform-admin layouts.
+
+**Found** by the reviewer's request, on 2FA commit 2, to run the plant-and-search test against the web's Sentry as well as the API's (Round 33). It also settles the item Round 33 left open.
+
+**Measured** with the browser SDK this app ships (`@sentry/browser` 10.58.0, inside `@sentry/nextjs`), under Node, against a fake ingest on 127.0.0.1:
+- A real `fetch` to `/api/schools/x/students?search=…` became a breadcrumb carrying the full address. Breadcrumbs go out with every error and trace, so a search term (a student's name) reached Sentry.
+
+**Reasoned, not measured** (rrweb cannot run without a DOM):
+- **The reset token.** Session replay records the page's full address when it starts. The password-reset page arrives with `#access_token=…`, and the page clears it only in a `useEffect`, after Sentry has started. Replay samples 10% of sessions.
+- **The 2FA QR code.** The reviewer's case for commit 2: it is drawn into the page, and replay's text and input masking does not cover a drawn image.
+
+**What Sentry holds** (counts only, 3 Oct 2026):
+- `chronixedu-web` has no error events in 90 days.
+- It holds page-load traces (`/login`, `/super-admin/dashboard` and others), whose fetch spans carried full addresses.
+- Replays cannot be counted through the API used here. **[MOSES]**: in Sentry → Replays, delete any replay of `/reset-password`.
+
+**Fix:**
+- **Addresses lose their query string and fragment** (`scrubEvent`, `scrubBreadcrumb`), in every error, trace, span and breadcrumb. Client-address attributes go too. The same rules run in the browser, the Node server and the edge runtime.
+- **Session replay never starts** on the sign-in pages (`/login`, `/forgot-password`, `/reset-password`) or anywhere under `/super-admin` (`replayAllowed`). It is decided when the page load begins. `NoReplay`, mounted by both layouts, stops it when one of those pages is reached by client-side navigation. It stays off until the next full load.
+- `@sentry/browser` is now a declared dev dependency of the web app, at the exact version `@sentry/nextjs` already installs, so the test runs the SDK the app ships. The security gate's report is unchanged.
+
+**Tests:** `apps/web/lib/__tests__/sentryScrub.test.ts` (5).
+- **The real-SDK test:**
+  - **The planted values:** a search term in a real fetch, a reset token in a navigation and a page address, a page query string, and a header.
+  - **The search:** everything the ingest received.
+  - **The control:** the events, the fetch breadcrumb and the paths all arrive.
+  - **Against no-op rules:** it fails at the first planted value.
+- **The rules, directly:** paths, the replay decision (with allowed paths as the control), and the trace and span attributes.
+
+**Not measured, and stated as such:** replay in a real browser. The protection does not depend on masking: replay is not running on those pages.
 
 ---
 

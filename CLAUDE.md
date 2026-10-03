@@ -331,6 +331,13 @@ Monorepo, npm workspaces:
   token. Body capture is off, and `scrubRequest` cuts every event and trace before it is sent.
   `sentryScrub.test.ts` plants a secret in each place a request carries one and searches everything
   Sentry receives. A new Sentry integration or option must keep that test green.
+  **The web's Sentry sends paths only, and replay never runs where a credential is on the page**
+  (`apps/web/lib/sentryScrub.ts`, Round 34). Browser, server and edge configs all scrub query strings
+  and fragments: a fetch breadcrumb carried a search term. Replay is not started on `/login`,
+  `/forgot-password`, `/reset-password` or under `/super-admin` (`replayAllowed`), and `NoReplay`
+  stops it on client-side arrival. A page that shows a credential (the 2FA QR code) must sit under
+  one of those prefixes. Never rely on masking: a drawn image is not text. The web test runs the real
+  browser SDK against a local ingest.
   `Sentry.setUser` takes the user **id** and nothing else (it sent emails until 1 Oct 2026,
   SECURITY.md Round 21). Replay keeps `maskAllText`, `maskAllInputs` and `blockAllMedia`
   stated explicitly in `instrumentation-client.ts` (named `sentry.client.config.ts` until 1 Oct 2026). Never put a name, email, phone number or

@@ -9,6 +9,7 @@ import { useEffect, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { ToastProvider } from '@/components/Toast';
 import CommandPalette from '@/components/CommandPalette';
+import NoReplay from '@/components/NoReplay';
 // The platform pages live in lib/navigation.ts (SUPER_ADMIN_NAV_GROUPS), not here: the sidebar
 // and the Ctrl+K palette read the same list, so neither can offer a page the other lacks.
 import { getNavGroupsForRole, type NavItem } from '@/lib/navigation';
@@ -76,6 +77,8 @@ export default function SuperAdminLayout({ children }: { children: React.ReactNo
 
   return (
     <ToastProvider>
+      {/* No session replay anywhere in the platform-admin area (SECURITY.md Round 34). */}
+      <NoReplay />
       <div className="min-h-screen bg-gray-50 flex">
         {/* Desktop sidebar */}
         <aside className="hidden md:flex md:w-60 md:shrink-0 bg-gradient-to-b from-[#003366] to-[#002244] flex-col">
