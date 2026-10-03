@@ -392,6 +392,12 @@ Monorepo, npm workspaces:
     white 600px card; then the Chronix banner and an HTML "Reach out to us" button to support.
   - **Which emails get it:** only those that speak for Chronix (decided 2 Oct 2026). An email a school
     sends its parents (fee reminders, receipts, notifications) carries no Chronix advertising.
+    - **Four use it today:** the principal's onboarding welcome (`onboardingWelcomeEmail.ts`); the staff
+      and parent welcome (`welcomeEmailHtml`); the platform announcement; and the Settings test email
+      (the last two in `chronixVoiceEmails.ts`).
+    - **Everything else stays plain text:** fee reminders, receipts, parent notifications, school
+      announcements, payout alerts, the admin reset link, and the platform-admin emails.
+    - **A new email needs the same decision.**
   - **The banner:** `apps/web/public/email/banner.png`, served by the web app. Never Supabase Storage,
     which is going private. It is pinned by SHA-256 in `emailLayout.test.ts`. On 2 Oct the version
     carrying a "Set up your school" button was saved under the approved name, and only its size gave it
@@ -919,7 +925,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 36 suites, 354 passed + 2 skipped (2 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 37 suites, 360 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

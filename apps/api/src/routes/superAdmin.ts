@@ -2,7 +2,6 @@ import { Router, Request, Response, NextFunction } from 'express';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
-import sanitizeHtml from 'sanitize-html';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
 import { appBaseUrl, resetPasswordRedirect } from '../config/appUrls';
@@ -26,6 +25,7 @@ import '../services/feeReminderService';
 import '../services/subscriptionService';
 import { onboardingWelcomeEmail } from '../services/onboardingWelcomeEmail';
 import { platformAdminWelcomeBody, PLATFORM_ADMIN_WELCOME_SUBJECT } from '../services/welcomeEmail';
+import { platformAnnouncementEmail } from '../services/chronixVoiceEmails';
 import { SYSTEM_ACTOR_ID, isSystemActor } from '../config/systemActor';
 
 const router = Router();
@@ -2312,10 +2312,14 @@ router.post(
       );
 
       const subject = `[Chronix Edu] [${String(announcement.type).toUpperCase()}] — ${announcement.title}`;
-      const safeBody = sanitizeHtml(announcement.body, { allowedTags: [], allowedAttributes: {} });
+      // On the shared layout (2 Oct 2026): Chronix speaking to its schools, so it carries the banner.
+      const mail = platformAnnouncementEmail({ title: announcement.title, body: announcement.body, appUrl: appBaseUrl() });
+      // Counted from SendGrid's answers, not from the recipient list: the screen used to say "sent to N
+      // principals" whatever SendGrid did, and even with email switched off.
+      let emailsSent = 0;
       for (const recipient of recipientsResult.rows) {
         if (isEmailConfigured()) {
-          await sendEmail(recipient.email, subject, safeBody);
+          if (await sendEmail(recipient.email, subject, mail.text, mail.html) === 'sent') emailsSent += 1;
         } else {
           logger.warn('platform_announcement_email_not_sent', { announcement_id: announcement.id, reason: 'email is not configured on this server' });
         }
@@ -2328,14 +2332,14 @@ router.post(
         [
           req.user!.user_id,
           'ANNOUNCEMENT_PUBLISHED',
-          JSON.stringify({ announcement_id: req.params.id, target_plans: announcement.target_plans, recipients_count: recipientsCount }),
+          JSON.stringify({ announcement_id: req.params.id, target_plans: announcement.target_plans, recipients_count: recipientsCount, emails_sent: emailsSent }),
           clientIp(req),
         ]
       );
 
       return res.json({
         success: true,
-        data: { announcement_id: req.params.id, published_at: publishedAt, recipients_count: recipientsCount },
+        data: { announcement_id: req.params.id, published_at: publishedAt, recipients_count: recipientsCount, emails_sent: emailsSent },
       });
     } catch (err) {
       return next(err);

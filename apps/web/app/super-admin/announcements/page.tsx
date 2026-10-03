@@ -236,7 +236,14 @@ export default function SuperAdminAnnouncementsPage() {
     setBusyId(announcement.id);
     try {
       const res = await publishAnnouncement(announcement.id);
-      show(`Announcement sent to ${res.recipients_count} principals`, 'success');
+      // Says what SendGrid accepted, not who it was addressed to (2 Oct 2026).
+      if (res.recipients_count === 0) {
+        show('Announcement published. No principal is on its plans, so no email was sent.', 'success');
+      } else if (res.emails_sent === res.recipients_count) {
+        show(`Announcement published and emailed to ${res.recipients_count} principal${res.recipients_count === 1 ? '' : 's'}.`, 'success');
+      } else {
+        show(`Announcement published, but only ${res.emails_sent} of ${res.recipients_count} emails were sent. The rest were queued for retry or email is not configured.`, 'error');
+      }
       load();
     } catch (err: unknown) {
       show(err instanceof Error ? err.message : 'Failed to publish announcement', 'error');

@@ -1,5 +1,16 @@
 # Chronix Edu — Changelog
 
+## More Chronix emails carry the banner, and say truthfully whether they went (2026-10-02)
+
+### For schools
+- The welcome email for new staff and parents, and the test email from Settings → Notifications, now come in the Chronix Edu design: the banner and a "Reach out to us" button. Their words are unchanged.
+- The test email now tells you when it was not sent, and why. It used to say "Test email sent" even when the email service refused it.
+
+### For Chronix administrators
+- Platform announcements reach principals in the Chronix Edu design, with paragraphs and line breaks kept.
+- Publishing an announcement now says how many emails were actually sent. It used to say "sent to N principals", counting who it was addressed to, even when email was off.
+- An announcement containing "&" no longer shows "&amp;" in the plain-text version of the email.
+
 ## The welcome email carries the Chronix Edu banner (2026-10-02)
 
 ### For schools

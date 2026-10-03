@@ -32,6 +32,8 @@ import { newSchoolAcademicConfig, slugify, validateGradeBands } from '../service
 import { cache, schoolCacheKey } from '../services/cacheService';
 import { supabase, supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from '../services/emailService';
+import { appBaseUrl } from '../config/appUrls';
+import { testEmail, TEST_EMAIL_SUBJECT } from '../services/chronixVoiceEmails';
 import { generateReportCardPreview } from '../services/reportCardService';
 import { listBanks, resolveBankAccount, createPaystackSubaccount, PaystackServiceError } from '../services/paystackService';
 import { sendTermiiSms } from '../services/termiiService';
@@ -763,11 +765,18 @@ router.post(
         return res.status(400).json({ success: false, error: { code: 'EMAIL_NOT_CONFIGURED', message: 'SendGrid is not configured (SENDGRID_API_KEY missing).' } });
       }
 
-      await sendEmail(
-        email,
-        'Chronix Edu — Test Email',
-        'This is a test email from Chronix Edu confirming your SendGrid configuration is working correctly.'
-      );
+      // On the shared layout (2 Oct 2026), so the test shows the real design. And it says what SendGrid
+      // did: it used to answer "Test email sent" whatever happened, which defeats a test.
+      const mail = testEmail(appBaseUrl());
+      const outcome = await sendEmail(email, TEST_EMAIL_SUBJECT, mail.text, mail.html);
+      if (outcome !== 'sent') {
+        const why = outcome === 'queued'
+          ? 'SendGrid did not accept it. It has been queued and will be retried, so it may still arrive.'
+          : outcome === 'lost'
+            ? 'SendGrid did not accept it, and it could not be queued for a retry.'
+            : 'Email is not configured on this server.';
+        return res.status(502).json({ success: false, error: { code: 'TEST_EMAIL_NOT_SENT', message: `The test email to ${email} was not sent. ${why}` } });
+      }
 
       return res.json({ success: true, data: { message: `Test email sent to ${email}` } });
     } catch (err) {

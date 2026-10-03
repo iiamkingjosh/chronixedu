@@ -565,7 +565,10 @@ export interface UpdateAnnouncementInput {
 export interface PublishAnnouncementResponse {
   announcement_id: string;
   published_at: string;
+  /** Principals the announcement was addressed to. */
   recipients_count: number;
+  /** How many of those emails SendGrid accepted. Fewer than recipients_count means some did not go. */
+  emails_sent: number;
 }
 
 export async function getAnnouncements(status?: AnnouncementStatusFilter): Promise<Announcement[]> {

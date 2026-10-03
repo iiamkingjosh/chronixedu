@@ -19,6 +19,7 @@ import ExcelJS from 'exceljs';
 import { randomUUID } from 'crypto';
 import { buildApp, seed, tokens, IDS as I, pool } from './helpers';
 import { logger } from '../config/logger';
+import { appBaseUrl } from '../config/appUrls';
 
 const issuedPasswords = new Map<string, string>();
 // The Auth identities that exist (id -> address), as the welcome path's sign-in check sees them.
@@ -350,5 +351,41 @@ describe('staff bulk import: the addresses are shown, then confirmed', () => {
     const ok = await commit({ rows: valid, mailed_addresses_confirmed: true });
     expect(ok.status).toBe(200);
     expect(await userCount(email)).toBe(1);
+  });
+});
+
+describe('the welcome speaks for Chronix, so it comes on the shared layout (2 Oct 2026)', () => {
+  it('sends an HTML part with the banner and the same no-credential content as the text', async () => {
+    const email = `ngozi-${randomUUID()}@example.test`;
+    const res = await request(app).post(`/api/schools/${A}/students`).set('Authorization', tokens.principalA())
+      .send({ first_name: 'Chidi', last_name: 'Eze', parents: [parent(email, email)] });
+    expect(res.status).toBe(201);
+    expect(res.body.data.welcome_email).toBe('sent');
+
+    const calls = (emailService.sendEmail as jest.Mock).mock.calls;
+    expect(calls).toHaveLength(1);
+    const [to, , text, html] = calls[0] as [string, string, string, string];
+    expect(to).toBe(email);
+    expect(typeof html).toBe('string');
+
+    // The layout: its own page, the banner from the web app, and "Reach out to us".
+    const app$ = appBaseUrl();
+    expect(html).toMatch(/^<!doctype html>/);
+    expect(html).toContain(`src="${app$}/email/banner.png"`);
+    expect(html).toContain('>Reach out to us</a>');
+
+    // The same words as the text, and still no credential in either part.
+    for (const line of [`Your login email is ${email}.`, `Enter ${email}`, 'If you did not expect this email']) {
+      expect(text).toContain(line);
+      expect(html).toContain(line);
+    }
+    // The HTML is checked as a reader sees it, tags removed ("password:</p>" is not a password). Its
+    // links are checked on their own, just below.
+    const visible = html.replace(/<[^>]+>/g, '\n');
+    expectNoCredentialIn([{ to, subject: '', body: text }, { to, subject: '', body: visible }]);
+    expect(html).not.toMatch(/token=|access_token|type=recovery/i);
+    // Its only links are the app's own pages, the banner's link to the app, and support.
+    const hrefs = new Set([...html.matchAll(/href="([^"]+)"/g)].map(m => m[1]));
+    expect(hrefs).toEqual(new Set([`${app$}/forgot-password`, `${app$}/login`, app$, 'mailto:support@chronixtechnology.com']));
   });
 });

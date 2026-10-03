@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../supabaseClient';
 import { sendEmail, isEmailConfigured } from './emailService';
 import { logger } from '../config/logger';
 import { appBaseUrl } from '../config/appUrls';
+import { renderEmail, escapeHtml, BRAND_NAVY } from './emailLayout';
 
 export async function getSchoolName(schoolId: string): Promise<string> {
   const r = await pool.query<{ name: string }>('SELECT name FROM schools WHERE id = $1', [schoolId]);
@@ -33,11 +34,15 @@ export interface WelcomeEmailOptions {
  * This does not protect against a mistyped address (whoever reads the mail can use Forgot password);
  * that is the job of the double entry (single parent) and the address check before a bulk commit.
  */
-export function welcomeEmailBody(opts: WelcomeEmailOptions): string {
-  const { role, name, email, schoolName, appUrl, extraLine, introVerb = 'registered' } = opts;
-  const intro = introVerb === 'registered'
+function introSentence({ role, schoolName, introVerb = 'registered' }: WelcomeEmailOptions): string {
+  return introVerb === 'registered'
     ? `You have been registered on Chronix Edu as a ${role} for ${schoolName}.`
     : `You have been added as a ${role} on Chronix Edu for ${schoolName}.`;
+}
+
+export function welcomeEmailBody(opts: WelcomeEmailOptions): string {
+  const { name, email, appUrl, extraLine } = opts;
+  const intro = introSentence(opts);
   return [
     `Hello ${name},`,
     '',
@@ -57,6 +62,34 @@ export function welcomeEmailBody(opts: WelcomeEmailOptions): string {
     '',
     '— Chronix Edu',
   ].join('\n');
+}
+
+/**
+ * The same welcome as HTML, on the shared layout (emailLayout.ts, 2 Oct 2026). It speaks for Chronix,
+ * so it carries the banner. Same words and the same rule as the text: no password, and no link but the
+ * app's own Forgot password and login pages, each shown as its own address. Everything a school typed
+ * (names, the school's name, the extra line) is escaped.
+ */
+export function welcomeEmailHtml(opts: WelcomeEmailOptions, title: string): string {
+  const { name, email, appUrl, extraLine } = opts;
+  const e = escapeHtml;
+  const link = (url: string) => `<a href="${e(url)}" style="color:${BRAND_NAVY}">${e(url)}</a>`;
+  const bodyHtml = [
+    `<p>Hello ${e(name)},</p>`,
+    `<p>${e(introSentence(opts))}</p>`,
+    `<p>Your account is ready. Your login email is ${e(email)}.</p>`,
+    `<p>To set your password:</p>`,
+    `<ol>`,
+    `<li>Go to ${link(`${appUrl}/forgot-password`)}</li>`,
+    `<li>Enter ${e(email)}</li>`,
+    `<li>Open the link we send to this address and choose your password.</li>`,
+    `</ol>`,
+    `<p>Then log in at ${link(`${appUrl}/login`)}.</p>`,
+    ...(extraLine ? [`<p>${e(extraLine)}</p>`] : []),
+    `<p>If you did not expect this email, please contact your school administrator.</p>`,
+    `<p>— Chronix Edu</p>`,
+  ].join('\n');
+  return renderEmail({ title, bodyHtml, appUrl });
 }
 
 /**
@@ -173,11 +206,10 @@ export async function sendWelcomeEmails(
       else { unverified += 1; verifyError = checks[n].error ?? verifyError; }
       return false;
     });
-    const results = await Promise.all(batch.map(r => sendEmail(
-      r.email,
-      subject,
-      welcomeEmailBody({ role: r.role, name: r.name, email: r.email, schoolName, appUrl, ...opts }),
-    ).catch(err => {
+    const results = await Promise.all(batch.map(r => {
+      const content: WelcomeEmailOptions = { role: r.role, name: r.name, email: r.email, schoolName, appUrl, ...opts };
+      return sendEmail(r.email, subject, welcomeEmailBody(content), welcomeEmailHtml(content, subject));
+    }).map(p => p.catch(err => {
       // sendEmail does not throw today; if it ever does, this email did not go and the report says so.
       logger.error('welcome_email_failed', { school_id: schoolId, stage: 'send', error: err instanceof Error ? err.message : String(err) });
       return 'lost' as const;
