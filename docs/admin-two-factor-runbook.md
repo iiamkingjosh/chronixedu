@@ -5,8 +5,10 @@ Two-factor sign-in for platform admins (`super_admin`) is being built in steps, 
 1. Recovery and storage (migration 055). Built.
 2. Enrolment: the security page, the QR code, and recovery codes shown once (migration 056). Built.
 3. The sign-in step: a code after the password, before any token is issued.
-4. Enforcement: a platform admin without the second factor can reach only enrolment. It will sign
-   out every platform-admin session that has not passed the second factor, including the one in use.
+4. Enforcement, for admins who have enrolled. Enrolling is optional (decided 3 Oct 2026) for existing
+   admins, required for any platform admin created from now on, and shown on the platform
+   dashboard. For an enrolled admin, every session that has not passed the second factor will be
+   signed out, including the one in use.
 5. Moving to a new phone while the old one still works. Until then, the only way is break-glass.
 
 Commits 1 and 2 exist: an admin can switch it on at **Administration → Two-factor Sign-in**

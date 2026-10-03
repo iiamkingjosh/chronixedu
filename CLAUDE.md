@@ -296,7 +296,7 @@ Monorepo, npm workspaces:
   1. recovery and storage (migration 055);
   2. enrolment (migration 056, `routes/twoFactor.ts`, `/super-admin/security`);
   3. the sign-in step;
-  4. enforcement, only after Moses has enrolled and proven a recovery code;
+  4. enforcement, for admins who have enrolled (enrolling is optional, below);
   5. moving to a new phone while the old one works. Until then the only way is break-glass, which
      is acceptable for one admin and not for three.
 
@@ -356,9 +356,18 @@ Monorepo, npm workspaces:
 - **Every new platform audit row goes through `logPlatformAudit`** (`db/queries/platformAudit.ts`,
   `ipAddress` required). The 20 direct INSERTs that predate it are left alone, and no new one is
   added (`docs/AUDIT-2026-09.md`).
-- **Commit 4 will end every live platform-admin token** that lacks the second-factor claim,
-  including the one in use at that moment. That is deliberate; its commit message must say so, so
-  the sign-out is not read as a fault.
+- **Enrolling is optional** (Moses, 3 Oct 2026). Do not reopen this as a bug. It has three
+  consequences, each part of the decision:
+  1. **Enforcement applies only to admins who have enrolled.** For an enrolled admin, a token
+     without the second-factor claim is refused, including a live one at the moment commit 4 deploys.
+     That sign-out is deliberate and its commit must say so. An admin who has not enrolled passes.
+     The ratchet test proves both directions, because "refuses everything" and "refuses nothing" each
+     pass a one-sided test.
+  2. **Required for every platform admin created from now on**, so the choice stays Moses's for his
+     own account and is not inherited by accounts he adds. State it at creation, never infer it from a
+     date (doctrine 8).
+  3. **The state is shown on the platform dashboard** ("Two-factor: off"), not only on the security
+     page. Off-and-seen is a choice; off-and-invisible is doctrine 8 again.
 - **No token before the second factor.** After the password, an enrolled admin gets an opaque, hashed,
   single-use, five-minute challenge, never a JWT. A wrong code counts against the per-email lockout
   and `rl:login`, which today matches only `POST /login`, so the verify route must be added to it.

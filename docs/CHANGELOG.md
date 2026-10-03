@@ -16,8 +16,8 @@
   download.
 - Switching it on signs out every other session on your account. The one you are using carries on.
 - New recovery codes can be made at any time with a current code; they replace the old set.
-- It is not yet asked for at sign-in. That comes next, and it becomes required for platform admins
-  after that.
+- It is not yet asked for at sign-in. That comes next. Setting it up is a choice for existing
+  platform admins; it will be required for any platform admin added from now on.
 - There is no switch to turn it off. If the phone is lost, a recovery code gets you in. If those are
   lost too, the platform owner resets it from the database (docs/admin-two-factor-runbook.md).
 
