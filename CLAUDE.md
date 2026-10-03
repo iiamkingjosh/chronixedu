@@ -663,6 +663,11 @@ Monorepo, npm workspaces:
     `receipts/<school>/<payment>.pdf` and a transcript `transcripts/<school>/<student>.pdf`, and no
     column points back (`DERIVED_FILES`). The owner is read from the path and looked up, so
     `unreferenced` means that nothing owns the file.
+  - **Never trim the export to make a download smaller** (decided 3 Oct 2026). It is the DPA §11 /
+    Terms §22 artefact. Leaving results, fees or report cards out would need a `NOT_EXPORTED` reason
+    that is false. Someone who wants less downloads one CSV: the page leads with the .zip, then
+    lists the single spreadsheets with students, accounts and the audit log first
+    (`lib/exportOrder.ts`; `exportOrderKeys.test.ts` checks those keys exist in the API).
 - **Deletion:** `apps/api/scripts/delete-school-data.js` and `docs/data-deletion-runbook.md`. Same
   ratchet: every table is in `STEPS` or `NOT_DELETED` (`schoolDeletion.db.test.ts`). A new upload
   path goes in `config/storagePrefixes.json`, shared with the export. A completed run leaves **zero rows** for the school in every

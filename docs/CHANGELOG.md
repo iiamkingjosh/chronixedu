@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## Data Export: the spreadsheets most often wanted come first (2026-10-03)
+
+### For schools
+- Settings → Data Export still leads with the complete .zip, and now says it is the only complete copy and the file to give when the school's data is asked for.
+- Below it, under "One spreadsheet at a time", Students, the staff, parent and student accounts, and the Audit log come first, so one of them can be downloaded without the whole archive. Nothing was removed from the export.
+
 ## Audit records carry the address, and the export can be checked (2026-10-03)
 
 ### For schools
