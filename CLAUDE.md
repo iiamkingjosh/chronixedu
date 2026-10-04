@@ -99,7 +99,11 @@ Monorepo, npm workspaces:
    otherwise; it is now stated at creation (migration 049). And the trial gate signed its changes
    with `role = 'super_admin' LIMIT 1`: "which admin did this" answered by whichever row Postgres
    returned first, a test fixture on Chronix High School's 8 Sep suspension. It now signs with a
-   fixed system account (migration 053). The check is mechanical: ask
+   fixed system account (migration 053). And `verifyToken` read a missing `users` row as an active
+   account with no password change due, so tokens for admins that did not exist passed every check:
+   two DB suites relied on it (found by 2FA commit 4, 4 Oct 2026). The two-factor exemption is read
+   only from `two_factor_required === false`, so a missing row is required; the other checks still
+   read absence as yes (`docs/AUDIT-2026-09.md`). The check is mechanical: ask
    whether a field answers *what* or *whether*, and record the second separately when you
    need it.
 9. **Advisory output is indistinguishable from no output once you have decided to push.**
@@ -299,7 +303,9 @@ Monorepo, npm workspaces:
   4. enforcement (migration 058, `middleware/auth.ts`): for admins who have enrolled, and for every
      admin created since (enrolling is optional for the rest, below);
   5. moving to a new phone while the old one works. Until then the only way is break-glass, which
-     is acceptable for one admin and not for three.
+     is acceptable for one admin and not for three. Commit 5 also gives an admin an audited way to make
+     two-factor required for their own account. Moses's row is `false` from 058's backfill, and is set
+     to `true` through that route, never by SQL (reviewer, 4 Oct 2026).
 
   `docs/admin-two-factor-runbook.md` covers the key and break-glass.
 - **TOTP, written in-house** (`services/totp.ts`, over Node's crypto, tested against the RFC 4226 and
