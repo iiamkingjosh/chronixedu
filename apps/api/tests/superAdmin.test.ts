@@ -48,8 +48,8 @@ describe('superAdmin — platform school management', () => {
 
   beforeAll(async () => {
     const userResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
-       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Super', 'Admin', 'subject', FALSE)
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password, two_factor_required)
+       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Super', 'Admin', 'subject', FALSE, false)
        RETURNING id`,
       [`superadmin-${randomUUID()}@test.com`]
     );
@@ -881,8 +881,8 @@ describe('superAdmin — platform school management', () => {
 
     beforeAll(async () => {
       const result = await pool.query<{ id: string }>(
-        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-         VALUES ($1, $2, 'test-hash', 'super_admin', 'Fake', 'SuperAdmin', true, 'subject', false)
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+         VALUES ($1, $2, 'test-hash', 'super_admin', 'Fake', 'SuperAdmin', true, 'subject', false, false)
          RETURNING id`,
         [SCHOOL_ID, `fake-superadmin-${randomUUID()}@test.com`]
       );
@@ -1118,8 +1118,8 @@ describe('superAdmin — platform school management', () => {
     async function createTargetAdmin(label: string): Promise<{ id: string; email: string }> {
       const email = `${label}-${randomUUID()}@test.com`;
       const result = await pool.query<{ id: string }>(
-        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-         VALUES (NULL, $1, 'test-hash', 'super_admin', 'Target', 'Admin', true, 'subject', false)
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+         VALUES (NULL, $1, 'test-hash', 'super_admin', 'Target', 'Admin', true, 'subject', false, false)
          RETURNING id`,
         [email]
       );
@@ -1135,8 +1135,8 @@ describe('superAdmin — platform school management', () => {
     beforeAll(async () => {
       process.env.ROOT_ADMIN_EMAIL = ROOT_ADMIN_EMAIL;
       const rootRow = await pool.query<{ id: string; email: string }>(
-        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-         VALUES (NULL, $1, 'test-hash', 'super_admin', 'Root', 'Admin', true, 'subject', false)
+        `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+         VALUES (NULL, $1, 'test-hash', 'super_admin', 'Root', 'Admin', true, 'subject', false, false)
          RETURNING id, email`,
         [ROOT_ADMIN_EMAIL]
       );

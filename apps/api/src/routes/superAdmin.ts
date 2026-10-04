@@ -2532,8 +2532,12 @@ router.get(
       // The system account (migration 053) is listed, marked is_system, because the platform audit
       // screen names it as the actor on the trial gate's changes and someone will look for it here.
       // The screen offers it no actions, and the four routes below refuse it whatever the screen does.
+      // Two-factor state for each admin, so "off" is seen here as well as on the dashboard (decided
+      // 3 Oct 2026): off-and-seen is a choice, off-and-invisible is not.
       const result = await pool.query(
-        `SELECT id, email, first_name, last_name, created_at, last_login_at, is_active, (id = $1) AS is_system
+        `SELECT id, email, first_name, last_name, created_at, last_login_at, is_active, (id = $1) AS is_system,
+                two_factor_required,
+                EXISTS (SELECT 1 FROM user_totp t WHERE t.user_id = users.id AND t.activated_at IS NOT NULL) AS two_factor_on
          FROM users
          WHERE role = 'super_admin'
            AND email NOT LIKE 'deleted-admin-%@deleted.chronixedu.local'
@@ -2604,9 +2608,10 @@ router.post(
 
       const userId = authData.user.id;
 
+      // Required to enrol in two-factor before reaching anything but its setup (migration 058).
       await pool.query(
-        `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
-         VALUES ($1, NULL, $2, '', 'super_admin', $3, $4)`,
+        `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, two_factor_required)
+         VALUES ($1, NULL, $2, '', 'super_admin', $3, $4, true)`,
         [userId, email, first_name, last_name]
       );
 

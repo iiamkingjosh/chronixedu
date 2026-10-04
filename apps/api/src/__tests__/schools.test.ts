@@ -10,7 +10,9 @@ import { supabaseAdmin } from '../supabaseClient';
 
 jest.mock('../db/client', () => ({
   __esModule: true,
-  default: { query: jest.fn().mockResolvedValue({ rows: [{ is_active: true }] }), end: jest.fn() },
+  // two_factor_required: false, a platform admin who existed before migration 058; verifyToken
+  // treats an admin row that does not say so as required, and refuses the super_admin tokens here.
+  default: { query: jest.fn().mockResolvedValue({ rows: [{ is_active: true, two_factor_required: false }] }), end: jest.fn() },
 }));
 jest.mock('../db/queries/schools');
 jest.mock('../db/queries/auditLog');

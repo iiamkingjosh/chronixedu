@@ -27,6 +27,26 @@ declare module 'express-serve-static-core' {
   }
 }
 
+/**
+ * The only routes a platform admin who must enrol in two-factor, and has not yet, can reach
+ * (migration 058). Everything else behind verifyToken answers 403 TWO_FACTOR_SETUP_REQUIRED.
+ * Full paths, matched exactly: a trailing slash, a different case or a HEAD request is refused,
+ * which fails closed. twoFactorSetupRoutes.test.ts walks every route behind verifyToken and fails if
+ * this admits any other route, or names a route that does not exist.
+ */
+export const TWO_FACTOR_SETUP_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
+  { method: 'GET', path: '/api/super-admin/two-factor/status' },
+  { method: 'POST', path: '/api/super-admin/two-factor/enrolment' },
+  { method: 'POST', path: '/api/super-admin/two-factor/enrolment/confirm' },
+];
+
+export function isTwoFactorSetupRoute(method: string, fullPath: string): boolean {
+  return TWO_FACTOR_SETUP_ROUTES.some(r => r.method === method && r.path === fullPath);
+}
+
+/** The second factors a token can record (routes/auth.ts /login/verify, routes/twoFactor.ts). */
+const SECOND_FACTORS: readonly unknown[] = ['totp', 'recovery_code'];
+
 function tagSentry(user: AuthUser) {
   Sentry.setTag('school_id', user.school_id ?? 'none');
   Sentry.setTag('user_role', user.role ?? 'anonymous');
@@ -102,6 +122,9 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
     const cacheKey = `user_active:${payload.user_id}`;
     let isActive = true;
     let sessionsValidAfter: Date | null = null;
+    // Admin tokens only: whether two-factor is on, and whether this admin must switch it on.
+    let twoFactorOn = false;
+    let twoFactorExempt = false;
     let cached: string | null | undefined = null;
     if (redis && !adminToken) {
       const r = redis;
@@ -110,9 +133,20 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
     if (cached !== null && cached !== undefined) {
       isActive = cached === '1';
     } else {
-      const result = await pool.query('SELECT is_active, sessions_valid_after FROM users WHERE id = $1', [payload.user_id]);
+      const result = await pool.query(
+        adminToken
+          ? `SELECT is_active, sessions_valid_after, two_factor_required,
+                    EXISTS (SELECT 1 FROM user_totp t WHERE t.user_id = users.id AND t.activated_at IS NOT NULL) AS two_factor_on
+               FROM users WHERE id = $1`
+          : 'SELECT is_active, sessions_valid_after FROM users WHERE id = $1',
+        [payload.user_id]);
       isActive = result.rows[0]?.is_active !== false;
       sessionsValidAfter = result.rows[0]?.sessions_valid_after ?? null;
+      twoFactorOn = result.rows[0]?.two_factor_on === true;
+      // Exempt only when the row says so (false: an admin who existed before migration 058, whose
+      // choice it stays). The CHECK makes NULL impossible for a super_admin; a missing row is treated
+      // as required, so an unknown answer fails closed.
+      twoFactorExempt = result.rows[0]?.two_factor_required === false;
       if (redis) {
         const r = redis;
         const value = isActive ? '1' : '0';
@@ -129,6 +163,17 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
     if (adminToken && sessionsValidAfter && typeof issuedAt === 'number'
         && issuedAt < Math.floor(new Date(sessionsValidAfter).getTime() / 1000)) {
       return res.status(401).json({ success: false, error: { code: 'SESSION_ENDED', message: 'This session has ended. Please sign in again.' } });
+    }
+    // Two-factor (commit 4). An admin who has it on needs a token that records the second factor:
+    // a token from the password alone (issued before it was switched on, or by anything that skipped
+    // the code step) is refused everywhere. An admin who must switch it on, and has not, reaches only
+    // the setup routes. The messages here are not what a person reads: the web app sends a 401 to
+    // the sign-in page and a 403 to the setup page, each of which says why.
+    if (adminToken && twoFactorOn && !SECOND_FACTORS.includes(payload.second_factor)) {
+      return res.status(401).json({ success: false, error: { code: 'SECOND_FACTOR_REQUIRED', message: 'Sign in again with your authenticator code.' } });
+    }
+    if (adminToken && !twoFactorOn && !twoFactorExempt && !isTwoFactorSetupRoute(req.method, req.baseUrl + req.path)) {
+      return res.status(403).json({ success: false, error: { code: 'TWO_FACTOR_SETUP_REQUIRED', message: 'Set up two-factor sign-in before continuing.' } });
     }
   } catch (err) {
     logger.error('auth_suspension_check_failed', { error: err instanceof Error ? err.message : String(err) });

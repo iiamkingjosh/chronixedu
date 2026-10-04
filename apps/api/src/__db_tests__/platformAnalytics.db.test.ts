@@ -41,7 +41,14 @@ const superToken = () =>
     process.env.JWT_SECRET!
   );
 
-beforeEach(seed);
+beforeEach(async () => {
+  await seed();
+  // The token's admin must exist: verifyToken treats an admin row that does not exempt them from
+  // two-factor (here, a missing one) as required (migration 058), so a ghost admin is refused.
+  await pool.query(
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, two_factor_required)
+     VALUES ($1, NULL, 'root@test', 'x', 'super_admin', 'Root', 'Admin', false)`, [SUPER]);
+});
 afterAll(async () => { await pool.end(); await owner.end(); });
 
 /** School B becomes a fixture tenant; School A stays a real customer. */

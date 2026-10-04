@@ -33,8 +33,8 @@ beforeEach(async () => {
   await seed();
   // The route's audit row and the job's system-admin lookup both need a super_admin.
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-     VALUES ($1, NULL, 'sa2@test', 'x', 'super_admin', 'Super', 'Admin', true, 'subject', false)`,
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+     VALUES ($1, NULL, 'sa2@test', 'x', 'super_admin', 'Super', 'Admin', true, 'subject', false, false)`,
     [SA]
   );
   await pool.query(`INSERT INTO platform_pricing_config (price_per_student_kobo) VALUES (80000) ON CONFLICT (id) DO NOTHING`);

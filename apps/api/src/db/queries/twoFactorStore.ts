@@ -178,6 +178,19 @@ export async function unusedRecoveryCodeCount(userId: string, db: Db = pool): Pr
   return rows[0].n;
 }
 
+/**
+ * Whether this platform admin must switch two-factor on (migration 058): true for an admin created
+ * since, false for one who existed before (the choice stays theirs). NULL never reaches here for a
+ * super_admin, because the CHECK refuses it.
+ */
+export async function isTwoFactorRequired(userId: string, db: Db = pool): Promise<boolean> {
+  const { rows } = await db.query<{ two_factor_required: boolean | null }>(
+    `SELECT two_factor_required FROM users WHERE id = $1`,
+    [userId]
+  );
+  return rows[0]?.two_factor_required !== false;
+}
+
 /** Whether the admin has switched two-factor on (an active row, not a pending enrolment). */
 export async function isTwoFactorActive(userId: string, db: Db = pool): Promise<boolean> {
   const { rowCount } = await db.query(

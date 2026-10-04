@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { getDefaultDashboardPath } from '@/lib/auth';
+import { loginNoticeFor } from '@/lib/refusalRedirect';
 import TwoFactorSignIn from '@/components/TwoFactorSignIn';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
@@ -60,12 +61,8 @@ export default function LoginPage() {
   const [challenge, setChallenge] = useState<string | null>(null);
 
   useEffect(() => {
-    const reason = new URLSearchParams(window.location.search).get('reason');
-    if (reason === 'idle') {
-      setSessionNotice('You were logged out after 10 minutes of inactivity. Please sign in again.');
-    } else if (reason === 'expired') {
-      setSessionNotice('Your session expired. Please sign in again.');
-    }
+    // The reason a session ended arrives in the address (lib/refusalRedirect.ts), not in a 401 body.
+    setSessionNotice(loginNoticeFor(new URLSearchParams(window.location.search).get('reason')));
   }, []);
 
   const {

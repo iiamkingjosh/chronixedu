@@ -198,6 +198,11 @@ describe('class-summary — the numbers a principal is approving', () => {
 
 describe('class-summary — super_admin', () => {
   it('allows a super_admin into any school', async () => {
+    // The admin must exist: a token for a missing admin row is treated as needing two-factor setup
+    // (migration 058) and refused.
+    await pool.query(
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, must_change_password, two_factor_required)
+       VALUES ('c0000000-0000-4000-8000-000000000001', NULL, 'root@test', 'x', 'super_admin', 'Root', 'Admin', false, false)`);
     const superToken = token('c0000000-0000-4000-8000-000000000001', 'super_admin', I.schoolB);
     const res = await request(app).get(url()).set('Authorization', superToken);
     expect(res.status).toBe(200);

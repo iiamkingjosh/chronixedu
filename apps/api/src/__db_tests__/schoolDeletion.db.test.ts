@@ -28,8 +28,8 @@ let client: Client;
 beforeEach(async () => {
   await seed();
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password)
-     VALUES ($1, NULL, 'operator@chronix.test', 'x', 'super_admin', 'Op', 'Erator', true, false)`, [OPERATOR]);
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password, two_factor_required)
+     VALUES ($1, NULL, 'operator@chronix.test', 'x', 'super_admin', 'Op', 'Erator', true, false, false)`, [OPERATOR]);
   client = new Client({ connectionString: process.env.TEST_DATABASE_URL });
   await client.connect();
 });
@@ -131,7 +131,7 @@ describe('migration 048: one door, and only one', () => {
     await auditBothSchools();
     await expect(client.query(PURGE, [I.schoolA, null])).rejects.toThrow(/both required/);
     await expect(client.query(PURGE, [I.schoolA, I.principalB])).rejects.toThrow(/not an active Chronix super admin/);
-    await pool.query(`UPDATE users SET role = 'super_admin' WHERE id = $1`, [I.mathTeacher]); // a super admin who belongs to A
+    await pool.query(`UPDATE users SET role = 'super_admin', two_factor_required = false WHERE id = $1`, [I.mathTeacher]); // a super admin who belongs to A
     await expect(client.query(PURGE, [I.schoolA, I.mathTeacher])).rejects.toThrow(/outside this school/);
     expect((await pool.query(`SELECT count(*)::int n FROM audit_logs WHERE school_id = $1`, [I.schoolA])).rows[0].n).toBe(3);
   });

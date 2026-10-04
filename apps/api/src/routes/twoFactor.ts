@@ -12,7 +12,7 @@ import { terminateActiveSupportSessions } from '../services/supportSessions';
 import { logPlatformAudit } from '../db/queries/platformAudit';
 import {
   savePendingTotpSecret, readTotpSecret, readTotpState, isLocked, activateTotp, acceptTotpStep,
-  recordTotpFailure, replaceRecoveryCodes, unusedRecoveryCodeCount, TOTP_LOCK_MINUTES,
+  recordTotpFailure, replaceRecoveryCodes, unusedRecoveryCodeCount, isTwoFactorRequired, TOTP_LOCK_MINUTES,
 } from '../db/queries/twoFactorStore';
 
 /**
@@ -39,11 +39,15 @@ function refuse(res: Response, status: number, code: string, message: string) {
 const passwordSchema = z.object({ password: z.string().min(1, 'Enter your password') });
 const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app') });
 
-/** A fresh token for the session that just enrolled: enrolment ended every session issued before it. */
+/**
+ * A fresh token for the session that just enrolled: enrolment ended every session issued before it.
+ * It records the second factor, because the admin has just typed a code from the authenticator, and
+ * verifyToken refuses an enrolled admin's token without one (commit 4).
+ */
 function freshToken(req: Request): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET is not set');
-  const claims = { ...(req.user as unknown as Record<string, unknown>) };
+  const claims: Record<string, unknown> = { ...(req.user as unknown as Record<string, unknown>), second_factor: 'totp' };
   delete claims.iat;
   delete claims.exp;
   return jwt.sign(claims, secret, { expiresIn: '1h' });
@@ -56,6 +60,8 @@ router.get('/status', ...guard, async (req: Request, res: Response, next: NextFu
     return res.json({
       success: true,
       data: {
+        // Whether this admin must switch it on before reaching anything else (migration 058).
+        required: await isTwoFactorRequired(req.user!.user_id),
         enabled: !!state?.activatedAt,
         enabled_at: state?.activatedAt ?? null,
         locked_until: isLocked(state) ? state!.lockedUntil : null,

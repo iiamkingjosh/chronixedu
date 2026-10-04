@@ -42,8 +42,8 @@ beforeEach(async () => {
   sendEmail.mockReset().mockImplementation(async () => 'sent');
   (emailService.isEmailConfigured as jest.Mock).mockImplementation(() => true);
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-     VALUES ($1, NULL, 'sa-voice@test', 'x', 'super_admin', 'Super', 'Admin', true, 'subject', false)`, [SA]);
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+     VALUES ($1, NULL, 'sa-voice@test', 'x', 'super_admin', 'Super', 'Admin', true, 'subject', false, false)`, [SA]);
   await pool.query(`INSERT INTO platform_pricing_config (price_per_student_kobo) VALUES (80000) ON CONFLICT (id) DO NOTHING`);
 });
 afterAll(async () => { await pool.end(); });

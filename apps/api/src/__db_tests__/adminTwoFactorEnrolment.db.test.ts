@@ -42,8 +42,8 @@ function adminToken(userId: string, email: string, ageSeconds = 60): string {
 
 async function addAdmin(id: string, email: string): Promise<void> {
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password)
-     VALUES ($1, NULL, $2, '', 'super_admin', 'Platform', 'Admin', true, false)`,
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password, two_factor_required)
+     VALUES ($1, NULL, $2, '', 'super_admin', 'Platform', 'Admin', true, false, false)`,
     [id, email]
   );
 }

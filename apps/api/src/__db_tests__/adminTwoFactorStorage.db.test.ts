@@ -16,8 +16,8 @@ const ADMIN2 = 'c0a10000-0000-4000-8000-000000000002';
 
 async function addAdmin(id: string, email: string): Promise<void> {
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password)
-     VALUES ($1, NULL, $2, '', 'super_admin', 'Platform', 'Admin', true, false)`,
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password, two_factor_required)
+     VALUES ($1, NULL, $2, '', 'super_admin', 'Platform', 'Admin', true, false, false)`,
     [id, email]
   );
 }

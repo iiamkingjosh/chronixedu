@@ -104,8 +104,8 @@ export default async function globalSetup(): Promise<void> {
     //    without. The migration creates it, but the DB suite's seed TRUNCATEs users, and CI and the
     //    Definition of done both run this suite straight after that one, against the same database.
     await client.query(
-      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password)
-       VALUES ($1, NULL, $2, '', 'super_admin', $3, $4, false, false)
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password, two_factor_required)
+       VALUES ($1, NULL, $2, '', 'super_admin', $3, $4, false, false, false)
        ON CONFLICT (id) DO NOTHING`,
       [SYSTEM_ACTOR.id, SYSTEM_ACTOR.email, SYSTEM_ACTOR.firstName, SYSTEM_ACTOR.lastName]
     );
@@ -193,8 +193,8 @@ export default async function globalSetup(): Promise<void> {
 
     // 9. A platform super_admin — system jobs (trial expiry) attribute audit rows to one.
     await client.query(
-      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-       VALUES ('eeeeeeee-0000-4000-8000-000000000001', NULL, 'system.admin@chronixedu-test.com', 'test-hash', 'super_admin', 'System', 'Admin', true, 'subject', false)
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+       VALUES ('eeeeeeee-0000-4000-8000-000000000001', NULL, 'system.admin@chronixedu-test.com', 'test-hash', 'super_admin', 'System', 'Admin', true, 'subject', false, false)
        ON CONFLICT DO NOTHING`
     );
   } finally {

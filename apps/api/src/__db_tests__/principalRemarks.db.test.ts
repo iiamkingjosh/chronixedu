@@ -36,8 +36,8 @@ beforeEach(async () => {
   // The PUT writes an audit row, and audit_logs.user_id is a FK to users — so the
   // acting super_admin needs a real row or the write 500s.
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
-     VALUES ($1, NULL, 'root@test', 'x', 'super_admin', 'Root', 'Admin')
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, two_factor_required)
+     VALUES ($1, NULL, 'root@test', 'x', 'super_admin', 'Root', 'Admin', false)
      ON CONFLICT (id) DO NOTHING`,
     [SUPER]
   );

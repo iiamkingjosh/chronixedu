@@ -37,8 +37,8 @@ describe('School Suspension', () => {
 
   beforeAll(async () => {
     const saResult = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
-       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Suspension', 'Admin', 'subject', FALSE)
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password, two_factor_required)
+       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Suspension', 'Admin', 'subject', FALSE, false)
        RETURNING id`,
       [`suspension-admin-${randomUUID()}@test.com`]
     );

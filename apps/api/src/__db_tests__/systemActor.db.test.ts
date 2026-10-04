@@ -48,11 +48,11 @@ const OTHER = 'c0000000-0000-4000-8000-0000000000ac';
 const auth = () => 'Bearer ' + jwt.sign({ user_id: ROOT, school_id: null, role: 'super_admin', email: ROOT_EMAIL }, process.env.JWT_SECRET!);
 
 const addAdmin = (id: string, email: string, active: boolean) => pool.query(
-  `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-   VALUES ($1, NULL, $2, 'x', 'super_admin', 'Some', 'Admin', $3, 'subject', false)`, [id, email, active]);
+  `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+   VALUES ($1, NULL, $2, 'x', 'super_admin', 'Some', 'Admin', $3, 'subject', false, false)`, [id, email, active]);
 const addSystemActor = () => pool.query(
-  `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password)
-   VALUES ($1, NULL, $2, '', 'super_admin', $3, $4, false, false)`,
+  `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password, two_factor_required)
+   VALUES ($1, NULL, $2, '', 'super_admin', $3, $4, false, false, false)`,
   [SYSTEM_ACTOR.id, SYSTEM_ACTOR.email, SYSTEM_ACTOR.firstName, SYSTEM_ACTOR.lastName]);
 const systemRow = async () => (await pool.query(
   `SELECT email, first_name, last_name, is_active, role FROM users WHERE id = $1`, [SYSTEM_ACTOR_ID])).rows[0];

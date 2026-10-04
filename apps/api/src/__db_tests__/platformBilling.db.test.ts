@@ -33,8 +33,8 @@ beforeEach(async () => {
   await seed();
   // platform_audit_logs.platform_admin_id references users, so the super_admin must exist.
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-     VALUES ($1, NULL, 'sa@test', 'x', 'super_admin', 'Super', 'Admin', true, 'subject', false)`,
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+     VALUES ($1, NULL, 'sa@test', 'x', 'super_admin', 'Super', 'Admin', true, 'subject', false, false)`,
     [SA]
   );
 });

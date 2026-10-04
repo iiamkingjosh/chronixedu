@@ -19,6 +19,8 @@ import { apiFetch } from '@/lib/api';
  */
 
 interface Status {
+  /** This admin must switch it on before reaching anything else (migration 058). */
+  required: boolean;
   enabled: boolean;
   enabled_at: string | null;
   locked_until: string | null;
@@ -157,6 +159,13 @@ export default function SecurityPage() {
       </p>
 
       {error && <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      {/* Every other platform page sends a required, unenrolled admin here (lib/refusalRedirect.ts). */}
+      {!codes && status?.required && !status.enabled && (
+        <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+          Your account needs two-factor sign-in before you can use the rest of the platform. Set it up below.
+        </div>
+      )}
 
       {codes && <RecoveryCodes codes={codes} onDone={doneWithCodes} />}
 

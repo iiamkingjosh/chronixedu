@@ -30,8 +30,8 @@ beforeEach(async () => {
   cache.del(schoolCacheKey(I.schoolA, 'data'));
   cache.del(schoolCacheKey(I.schoolB, 'data'));
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-     VALUES ($1, NULL, 'sa3@test', 'x', 'super_admin', 'Super', 'Admin', true, 'subject', false)`, [SA]);
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+     VALUES ($1, NULL, 'sa3@test', 'x', 'super_admin', 'Super', 'Admin', true, 'subject', false, false)`, [SA]);
   await pool.query(`INSERT INTO platform_pricing_config (price_per_student_kobo) VALUES (80000) ON CONFLICT (id) DO NOTHING`);
 });
 afterAll(async () => { await pool.end(); });

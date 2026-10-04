@@ -19,6 +19,23 @@ interface PlatformAdmin {
   is_active: boolean;
   /** The account automated changes are signed with (migration 053). Listed so its name is explicable; never managed. */
   is_system: boolean;
+  /** Must switch two-factor on before reaching anything else (migration 058): every admin created since. */
+  two_factor_required: boolean;
+  two_factor_on: boolean;
+}
+
+function TwoFactorBadge({ admin }: { admin: PlatformAdmin }) {
+  if (admin.is_system) return <span className="text-xs text-gray-400">—</span>;
+  if (admin.two_factor_on) {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-green-50 text-green-700 border border-green-200">On</span>;
+  }
+  if (admin.two_factor_required) {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200"
+        title="Must set it up at first sign-in before reaching anything else.">Required, not set up</span>
+    );
+  }
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-gray-50 text-gray-600 border border-gray-200">Off</span>;
 }
 
 // No password: the new admin sets their own with Forgot password, and the address is their only key,
@@ -342,6 +359,7 @@ export default function PlatformAdminsPage() {
               <th className="px-5 py-3">Created</th>
               <th className="px-5 py-3">Last Login</th>
               <th className="px-5 py-3">Status</th>
+              <th className="px-5 py-3">Two-factor</th>
               <th className="px-5 py-3">Actions</th>
             </tr>
           </thead>
@@ -349,13 +367,13 @@ export default function PlatformAdminsPage() {
             {loading ? (
               Array.from({ length: 2 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 7 }).map((_, j) => (
                     <td key={j} className="px-5 py-3"><div className="h-4 bg-gray-200 rounded animate-pulse w-24" /></td>
                   ))}
                 </tr>
               ))
             ) : admins.length === 0 ? (
-              <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400">No platform admins found.</td></tr>
+              <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400">No platform admins found.</td></tr>
             ) : (
               admins.map(admin => {
                 const isSelf = admin.id === user?.user_id;
@@ -382,6 +400,7 @@ export default function PlatformAdminsPage() {
                         <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 text-red-700 border border-red-200">Suspended</span>
                       )}
                     </td>
+                    <td className="px-5 py-3"><TwoFactorBadge admin={admin} /></td>
                     <td className="px-5 py-3 whitespace-nowrap">
                       {isSelf || admin.is_system ? (
                         <span className="text-xs text-gray-400">—</span>

@@ -37,9 +37,10 @@ async function main() {
   }
 
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title, teacher_mode, phone, is_active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-    [data.user.id, null, SUPER_ADMIN_EMAIL, '', 'super_admin', 'Moses', 'Joshua', null, 'subject', null, true]
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title, teacher_mode, phone, is_active, two_factor_required)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    // two_factor_required: a platform admin created from now on must enrol (migration 058).
+    [data.user.id, null, SUPER_ADMIN_EMAIL, '', 'super_admin', 'Moses', 'Joshua', null, 'subject', null, true, true]
   );
 
   console.log('Super admin seeded successfully — moses@chronixtech.com');

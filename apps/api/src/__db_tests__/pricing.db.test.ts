@@ -32,8 +32,8 @@ beforeEach(async () => {
   await seed();
   for (const [id, email] of [[ROOT, ROOT_EMAIL], [OTHER, OTHER_EMAIL]]) {
     await pool.query(
-      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-       VALUES ($1, NULL, $2, 'x', 'super_admin', 'Some', 'Admin', true, 'subject', false)`, [id, email]);
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+       VALUES ($1, NULL, $2, 'x', 'super_admin', 'Some', 'Admin', true, 'subject', false, false)`, [id, email]);
   }
 });
 afterAll(async () => { await pool.end(); });

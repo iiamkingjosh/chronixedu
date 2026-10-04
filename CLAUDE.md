@@ -296,7 +296,8 @@ Monorepo, npm workspaces:
   1. recovery and storage (migration 055);
   2. enrolment (migration 056, `routes/twoFactor.ts`, `/super-admin/security`);
   3. the sign-in step (migration 057, `POST /login/verify`);
-  4. enforcement, for admins who have enrolled (enrolling is optional, below);
+  4. enforcement (migration 058, `middleware/auth.ts`): for admins who have enrolled, and for every
+     admin created since (enrolling is optional for the rest, below);
   5. moving to a new phone while the old one works. Until then the only way is break-glass, which
      is acceptable for one admin and not for three.
 
@@ -393,6 +394,36 @@ Monorepo, npm workspaces:
     anything but `sent` alerts (`recovery_code_notice_not_sent`).
   - **The challenge lives only in the sign-in page's memory,** so a refresh returns to the password.
     The screen says so.
+- **Enforcement (commit 4, migration 058, 4 Oct 2026).** All of it is in `verifyToken`, on a platform
+  admin's own token, read from the live row on every request.
+  - **An enrolled admin's token must record the second factor** (`second_factor`: `totp` or
+    `recovery_code`). `/login/verify` sets it, and so does the token enrolment hands back. Anything
+    else gets 401 `SECOND_FACTOR_REQUIRED` on every route, the 2FA routes included. A live token
+    without it was signed out at deploy, on purpose (consequence 1 above).
+  - **Whether an admin must enrol is a column, stated at creation:** `users.two_factor_required`.
+    - `true` for every admin created since 058. All four creation paths say so: `POST
+      /super-admin/admins`, `/auth/create-user`, the dev seed route and `seedSuperAdmin.ts`.
+    - `false` for those who existed before (the backfill).
+    - `NULL` for everyone else.
+    - A CHECK refuses a super_admin without it, on INSERT and on UPDATE. It is a CHECK and not a
+      trigger because `DISABLE TRIGGER ALL` is not blocked (doctrine 6). Every fixture states it.
+  - **Required and not yet enrolled reaches only `TWO_FACTOR_SETUP_ROUTES`:** status, enrolment and
+    confirm. Every other route behind `verifyToken` answers 403 `TWO_FACTOR_SETUP_REQUIRED`.
+    - Full paths, matched exactly, so a near miss (a trailing slash, HEAD, another case) is refused.
+    - An admin row that does not say `false` is treated as required, so a missing row fails closed.
+    - So a test that signs a platform admin's token must create that admin's row first, with
+      `two_factor_required` stated (and `must_change_password = false` for `/api/schools` routes). A
+      token for an admin with no row used to pass; two DB suites relied on that and were fixed.
+    - `twoFactorSetupRoutes.test.ts` walks every router `index.ts` mounts. It fails if the matcher
+      admits any other route, if an entry names no route, if another route could answer an
+      allowlisted address, or if a platform route skips `verifyToken`. Add a setup route to that list
+      and nowhere else.
+  - **The reason reaches the person through the address, never the body.** `apiFetch` leaves a 401
+    before anyone reads it. So a 401 goes to `/login?reason=second-factor`, and a 403
+    `TWO_FACTOR_SETUP_REQUIRED` goes to the setup page, never from the setup page itself, which would
+    loop (`lib/refusalRedirect.ts`). Each page says why.
+  - **Visible:** the platform dashboard shows the signed-in admin's own state ("Two-factor sign-in:
+    off. Set it up"), and the Admins list shows on, off or "required, not set up" for each admin.
 
 ## Conventions
 
@@ -1132,7 +1163,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 43 suites, 415 passed + 2 skipped (3 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 44 suites, 432 passed + 2 skipped (4 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

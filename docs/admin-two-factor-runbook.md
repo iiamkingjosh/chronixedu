@@ -5,15 +5,32 @@ Two-factor sign-in for platform admins (`super_admin`) is being built in steps, 
 1. Recovery and storage (migration 055). Built.
 2. Enrolment: the security page, the QR code, and recovery codes shown once (migration 056). Built.
 3. The sign-in step: a code after the password, before any token is issued (migration 057). Built.
-4. Enforcement, for admins who have enrolled. Enrolling is optional (decided 3 Oct 2026) for existing
-   admins, required for any platform admin created from now on, and shown on the platform
-   dashboard. For an enrolled admin, every session that has not passed the second factor will be
-   signed out, including the one in use.
+4. Enforcement (migration 058). Built. Enrolling is optional (decided 3 Oct 2026) for the admins who
+   existed before it, required for every platform admin created since, and shown on the platform
+   dashboard and the Admins list. For an enrolled admin, a session that has not passed the second
+   factor is signed out.
 5. Moving to a new phone while the old one still works. Until then, the only way is break-glass.
 
-Commits 1 and 2 exist: an admin can switch it on at **Administration → Two-factor Sign-in**
-(`/super-admin/security`). Until commit 4 is live, nobody is required to use it, and it is not asked
-for at sign-in until commit 3.
+Commits 1 to 4 exist. An admin switches it on at **Administration → Two-factor Sign-in**
+(`/super-admin/security`).
+
+## Who must use it
+
+- **An admin added since 4 Oct 2026 must set it up before using anything else.** After their first
+  sign-in, every platform page sends them to Two-factor Sign-in, which says it is required. Once it is
+  on, the rest opens at once, without signing in again.
+- **The admins who existed before 4 Oct 2026 may choose.** The dashboard shows "Two-factor sign-in:
+  off" until they switch it on, so the choice stays visible.
+- **The Admins list shows each admin's state:** On, Off, or "Required, not set up".
+
+Whether an admin must set it up is recorded when the account is made. Nothing in the product changes
+it afterwards.
+
+## Signed out with "Two-factor sign-in is on for your account"
+
+That message on the sign-in page means the session in use had not passed the second factor. It
+appears once, when enforcement goes live, for a session started before it. Sign in again with your
+password and a code.
 
 ## Switching it on
 

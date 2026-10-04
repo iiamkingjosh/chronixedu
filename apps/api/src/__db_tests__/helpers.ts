@@ -170,8 +170,8 @@ export async function seed(): Promise<void> {
     const I = IDS;
     // Migration 053's system account, which the TRUNCATE above just removed. The trial gate refuses
     // to run without it. Same values as the migration (systemActor.test.ts checks the migration).
-    await q(`INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password)
-             VALUES ($1, NULL, $2, '', 'super_admin', $3, $4, false, false)`,
+    await q(`INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password, two_factor_required)
+             VALUES ($1, NULL, $2, '', 'super_admin', $3, $4, false, false, false)`,
       [SYSTEM_ACTOR.id, SYSTEM_ACTOR.email, SYSTEM_ACTOR.firstName, SYSTEM_ACTOR.lastName]);
     // Migration 039: a school is born dormant and is activated once it has an active
     // principal. The fixture follows the same path production does — inserting an active

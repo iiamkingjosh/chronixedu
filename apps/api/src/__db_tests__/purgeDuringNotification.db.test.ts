@@ -30,8 +30,8 @@ const OPERATOR = 'a1a1a1a1-0000-4000-8000-000000000001';
 beforeEach(async () => {
   await seed();
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password)
-     VALUES ($1, NULL, 'operator@chronix.test', 'x', 'super_admin', 'Op', 'Erator', true, false)`, [OPERATOR]);
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, must_change_password, two_factor_required)
+     VALUES ($1, NULL, 'operator@chronix.test', 'x', 'super_admin', 'Op', 'Erator', true, false, false)`, [OPERATOR]);
 });
 afterAll(async () => { await pool.end(); });
 

@@ -54,8 +54,8 @@ beforeEach(async () => {
   (emailService.sendEmail as jest.Mock).mockImplementation(async () => 'sent');
   (emailService.isEmailConfigured as jest.Mock).mockImplementation(() => true);
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
-     VALUES ($1, NULL, $2, 'x', 'super_admin', 'Root', 'Admin')`, [ROOT, ROOT_EMAIL]);
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, two_factor_required)
+     VALUES ($1, NULL, $2, 'x', 'super_admin', 'Root', 'Admin', false)`, [ROOT, ROOT_EMAIL]);
 });
 afterAll(async () => { await pool.end(); });
 

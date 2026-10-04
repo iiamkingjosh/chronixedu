@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers';
+import { apiFetch } from '@/lib/api';
 import {
   getSuperAdminOverview,
   getCronStatus,
@@ -59,6 +61,31 @@ function CronStatusBadge({ cron }: { cron: CronStatusEntry }) {
     <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-50 text-red-700 border border-red-200">
       Error
     </span>
+  );
+}
+
+/**
+ * The signed-in admin's own two-factor state, on the dashboard as well as the security page
+ * (decided 3 Oct 2026): off-and-seen is a choice, off-and-invisible is not. Nothing is shown until
+ * the answer arrives, so an unknown is never displayed as "off".
+ */
+function TwoFactorLine() {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    apiFetch<{ data: { enabled: boolean } }>('/api/super-admin/two-factor/status')
+      .then((res) => setEnabled(res.data.enabled))
+      .catch(() => setFailed(true));
+  }, []);
+  if (failed) return <p className="mt-2 text-sm text-gray-500">Two-factor sign-in: could not be checked.</p>;
+  if (enabled === null) return null;
+  return enabled ? (
+    <p className="mt-2 text-sm text-green-700">Two-factor sign-in: on</p>
+  ) : (
+    <p className="mt-2 text-sm text-amber-700">
+      Two-factor sign-in: off.{' '}
+      <Link href="/super-admin/security" className="font-medium underline hover:text-amber-800">Set it up</Link>
+    </p>
   );
 }
 
@@ -130,6 +157,7 @@ export default function SuperAdminDashboardPage() {
           {user ? getGreeting(user.first_name ?? 'Admin', user.last_name ?? '') : 'Platform Dashboard'}
         </h1>
         <p className="mt-1 text-sm text-gray-500">Platform Admin · Chronix Edu</p>
+        <TwoFactorLine />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

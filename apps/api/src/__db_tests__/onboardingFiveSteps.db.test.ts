@@ -51,8 +51,8 @@ const auth = () => 'Bearer ' + jwt.sign({ user_id: SUPER, school_id: null, role:
 beforeEach(async () => {
   await seed();
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
-     VALUES ($1, NULL, 'wizard@test', 'x', 'super_admin', 'Wiz', 'Ard')`, [SUPER]);
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, two_factor_required)
+     VALUES ($1, NULL, 'wizard@test', 'x', 'super_admin', 'Wiz', 'Ard', false)`, [SUPER]);
 });
 afterAll(async () => { await pool.end(); });
 

@@ -182,8 +182,8 @@ async function checkAfter(c, ddl) {
   // Targeted by id: audit_logs is append-only, so fixtures from earlier runs of this probe
   // cannot be removed, and a probe matching "any unprocessed row for the school" counted 2
   // on the second run. It must hit exactly the row it created.
-  await c.query(`INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active)
-                 VALUES ($1, NULL, 'c4a-probe-admin@test', '', 'super_admin', 'C4A', 'Admin', true) ON CONFLICT (id) DO NOTHING`, [ADMIN]);
+  await c.query(`INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, two_factor_required)
+                 VALUES ($1, NULL, 'c4a-probe-admin@test', '', 'super_admin', 'C4A', 'Admin', true, false) ON CONFLICT (id) DO NOTHING`, [ADMIN]);
   await c.query(`INSERT INTO user_totp (user_id, secret_ciphertext, activated_at) VALUES ($1, decode('01aa', 'hex'), now())
                  ON CONFLICT (user_id) DO UPDATE SET activated_at = now(), last_used_step = NULL, failed_attempts = 0, locked_until = NULL`, [ADMIN]);
   await c.query(`INSERT INTO user_recovery_codes (user_id, code_hash) VALUES ($1, $2)

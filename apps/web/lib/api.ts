@@ -1,4 +1,5 @@
 import { ApiError, describeApiError } from './apiError';
+import { errorCode, loginReasonFor, setupRedirectFor } from './refusalRedirect';
 export { ApiError } from './apiError';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
@@ -58,14 +59,22 @@ export function redirectToLogin() {
 }
 
 /** Clears the stored session and sends the user back to login. Called whenever
- *  the API rejects a request with 401 — expired, invalid, or tampered token. */
-function handleUnauthorized() {
+ *  the API rejects a request with 401 — expired, invalid, or tampered token. The reason
+ *  travels in the address, because nobody reads the 401's body (lib/refusalRedirect.ts). */
+function handleUnauthorized(code?: string) {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('chronixedu_token');
   localStorage.removeItem('chronixedu_user');
   if (!window.location.pathname.startsWith('/login')) {
-    window.location.href = '/login?reason=expired';
+    window.location.href = `/login?reason=${loginReasonFor(code)}`;
   }
+}
+
+/** A platform admin who must set up two-factor first is sent to the page that does it. */
+function handleForbidden(status: number, json: unknown) {
+  if (typeof window === 'undefined') return;
+  const to = setupRedirectFor(status, errorCode(json), window.location.pathname);
+  if (to) window.location.href = to;
 }
 
 export async function apiFetch<T = unknown>(
@@ -83,11 +92,10 @@ export async function apiFetch<T = unknown>(
       ...(init.headers ?? {}),
     },
   });
-  if (res.status === 401) {
-    if (deferAuthRedirect) throw new SessionExpiredError();
-    handleUnauthorized();
-  }
+  if (res.status === 401 && deferAuthRedirect) throw new SessionExpiredError();
   const json = await readJson(res);
+  if (res.status === 401) handleUnauthorized(errorCode(json));
+  if (res.status === 403) handleForbidden(res.status, json);
   if (!res.ok) {
     throw apiError(res.status, json, `Request failed (${res.status})`);
   }
@@ -104,8 +112,9 @@ export async function apiUpload<T = unknown>(
     body: formData,
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...getSupportSessionHeader() },
   });
-  if (res.status === 401) handleUnauthorized();
   const json = await readJson(res);
+  if (res.status === 401) handleUnauthorized(errorCode(json));
+  if (res.status === 403) handleForbidden(res.status, json);
   if (!res.ok) {
     throw apiError(res.status, json, `Upload failed (${res.status})`);
   }
@@ -126,9 +135,10 @@ export async function apiFetchBlob(
       ...(options.headers ?? {}),
     },
   });
-  if (res.status === 401) handleUnauthorized();
   if (!res.ok) {
-    const json = await res.json().catch(() => null);
+    const json = await readJson(res);
+    if (res.status === 401) handleUnauthorized(errorCode(json));
+    if (res.status === 403) handleForbidden(res.status, json);
     throw apiError(res.status, json, `Request failed (${res.status})`);
   }
   return res.blob();

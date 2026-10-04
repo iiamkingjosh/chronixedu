@@ -33,8 +33,8 @@ describe('Onboarding Wizard', () => {
 
   beforeAll(async () => {
     const result = await pool.query<{ id: string }>(
-      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password)
-       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Onboarding', 'Admin', 'subject', FALSE)
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, teacher_mode, must_change_password, two_factor_required)
+       VALUES (NULL, $1, 'test-hash', 'super_admin', 'Onboarding', 'Admin', 'subject', FALSE, false)
        RETURNING id`,
       [`onboarding-admin-${randomUUID()}@test.com`]
     );

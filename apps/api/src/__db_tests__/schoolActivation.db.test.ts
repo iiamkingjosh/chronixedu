@@ -51,8 +51,8 @@ beforeEach(async () => {
   // platform_audit_logs.platform_admin_id is a FK to users, and the completion route
   // writes one, so the acting super_admin needs a real row.
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
-     VALUES ($1, NULL, 'root@test', 'x', 'super_admin', 'Root', 'Admin')
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, two_factor_required)
+     VALUES ($1, NULL, 'root@test', 'x', 'super_admin', 'Root', 'Admin', false)
      ON CONFLICT (id) DO NOTHING`,
     [SUPER]
   );

@@ -34,8 +34,8 @@ beforeEach(async () => {
   await seed();
   // ONBOARDING_STARTED writes platform_audit_logs, whose platform_admin_id references users.
   await pool.query(
-    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name)
-     VALUES ($1, NULL, 'creator@test', 'x', 'super_admin', 'Cre', 'Ator')`, [SUPER]);
+    `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, two_factor_required)
+     VALUES ($1, NULL, 'creator@test', 'x', 'super_admin', 'Cre', 'Ator', false)`, [SUPER]);
 });
 afterAll(async () => { await pool.end(); });
 

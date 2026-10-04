@@ -1,5 +1,18 @@
 # Chronix Edu — Changelog
 
+## Two-factor sign-in: required for new platform admins, and enforced for those who use it (2026-10-04)
+
+### For Chronix staff
+- A platform admin added from today must set up two-factor sign-in before using anything else. After
+  their first sign-in, every page sends them to Two-factor Sign-in, which says it is required. Once it
+  is on, the rest opens straight away.
+- If you already had an account, setting it up stays your choice. The dashboard now shows "Two-factor
+  sign-in: on" or "off", with a link to set it up.
+- The Admins list has a new Two-factor column: On, Off, or "Required, not set up".
+- If two-factor is on for your account, a session that did not pass the code is signed out, and the
+  sign-in page says why. This happens once, when the change goes live, to sessions started before it.
+- Nothing changes for school accounts.
+
 ## Two-factor sign-in: platform admins who switched it on are asked for a code (2026-10-03)
 
 ### For Chronix staff

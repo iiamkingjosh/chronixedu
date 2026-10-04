@@ -41,8 +41,9 @@ jest.mock('pg', () => ({
     // drive — /create-user and /seed-test-user moved from the login Client to the pool
     // (the login connection now serves POST /login only).
     query: (sql: string, params?: unknown[]) =>
-      /SELECT (is_active(, sessions_valid_after)?|must_change_password) FROM users/.test(sql)
-        ? Promise.resolve({ rows: [{ is_active: true, must_change_password: false }] })
+      /^\s*SELECT (is_active|must_change_password)\b[\s\S]*\bFROM users\b/.test(sql)
+        // two_factor_required: false, an admin who existed before migration 058 (verifyToken fails closed).
+        ? Promise.resolve({ rows: [{ is_active: true, must_change_password: false, two_factor_required: false }] })
         : mockQuery(sql, params),
     connect: jest.fn(),
     end: jest.fn(),

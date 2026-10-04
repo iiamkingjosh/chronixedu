@@ -126,12 +126,14 @@ router.post('/create-user', verifyToken, requireRole('super_admin'), async (req,
 
     const userId = data?.user?.id ?? null;
 
-    // insert into local users table
+    // insert into local users table. A platform admin made from now on must enrol in two-factor
+    // (migration 058); everyone else carries NULL, because it does not apply to them.
     const hashed = bcrypt.hashSync(password, 12);
     await pool.query(
-      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title, teacher_mode)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [userId, effectiveSchoolId, email, hashed, role, first_name || '', last_name || '', title || null, teacher_mode || 'subject']
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title, teacher_mode, two_factor_required)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [userId, effectiveSchoolId, email, hashed, role, first_name || '', last_name || '', title || null, teacher_mode || 'subject',
+        role === 'super_admin' ? true : null]
     );
 
     return res.json({ success: true, data: { user_id: userId } });
@@ -462,11 +464,12 @@ if (process.env.NODE_ENV !== 'production' && process.env.SEED_SECRET) {
         userId = authData.user.id;
       }
 
-      // Upsert the local users row — safe to run whether the row exists or not
+      // Upsert the local users row — safe to run whether the row exists or not. A new platform admin
+      // must enrol in two-factor (migration 058); an existing one keeps what was decided for it.
       const hashed = bcrypt.hashSync(password, 12);
       await pool.query(
-        `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, title, two_factor_required)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (id) DO UPDATE
            SET email         = EXCLUDED.email,
                password_hash = EXCLUDED.password_hash,
@@ -474,8 +477,11 @@ if (process.env.NODE_ENV !== 'production' && process.env.SEED_SECRET) {
                first_name    = EXCLUDED.first_name,
                last_name     = EXCLUDED.last_name,
                title         = EXCLUDED.title,
-               school_id     = COALESCE(users.school_id, EXCLUDED.school_id)`,
-        [userId, school_id || null, email, hashed, role, first_name, last_name, title || null]
+               school_id     = COALESCE(users.school_id, EXCLUDED.school_id),
+               two_factor_required = CASE WHEN EXCLUDED.role = 'super_admin'
+                                          THEN COALESCE(users.two_factor_required, true) END`,
+        [userId, school_id || null, email, hashed, role, first_name, last_name, title || null,
+          role === 'super_admin' ? true : null]
       );
 
       return res.json({ success: true, data: { user_id: userId, reused_auth: !!existingAuthUser } });

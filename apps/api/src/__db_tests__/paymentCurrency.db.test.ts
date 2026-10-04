@@ -70,8 +70,8 @@ describe('a school paying Chronix online', () => {
   async function pendingPayment(reference: string): Promise<string> {
     const admin = '7e570000-0000-4000-8000-0000000000c1';
     await pool.query(
-      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password)
-       VALUES ($1, NULL, $2, 'x', 'super_admin', 'Pay', 'Admin', true, 'subject', false) ON CONFLICT (id) DO NOTHING`, [admin, `${admin}@test`]);
+      `INSERT INTO users (id, school_id, email, password_hash, role, first_name, last_name, is_active, teacher_mode, must_change_password, two_factor_required)
+       VALUES ($1, NULL, $2, 'x', 'super_admin', 'Pay', 'Admin', true, 'subject', false, false) ON CONFLICT (id) DO NOTHING`, [admin, `${admin}@test`]);
     const sub = await pool.query<{ id: string }>(
       `INSERT INTO platform_subscriptions (school_id, plan, subscription_status) VALUES ($1, 'trial', 'trial')
        ON CONFLICT DO NOTHING RETURNING id`, [I.schoolA]);
