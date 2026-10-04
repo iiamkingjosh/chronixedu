@@ -9,9 +9,10 @@ Two-factor sign-in for platform admins (`super_admin`) is being built in steps, 
    existed before it, required for every platform admin created since, and shown on the platform
    dashboard and the Admins list. For an enrolled admin, a session that has not passed the second
    factor is signed out.
-5. Moving to a new phone while the old one still works. Until then, the only way is break-glass.
+5. Moving to a new phone while the old one still works (migration 059), and the setting that makes
+   two-factor required for your own account. Built.
 
-Commits 1 to 4 exist. An admin switches it on at **Administration → Two-factor Sign-in**
+Commits 1 to 5 exist. An admin switches it on at **Administration → Two-factor Sign-in**
 (`/super-admin/security`).
 
 ## Who must use it
@@ -21,10 +22,12 @@ Commits 1 to 4 exist. An admin switches it on at **Administration → Two-factor
   on, the rest opens at once, without signing in again.
 - **The admins who existed before 4 Oct 2026 may choose.** The dashboard shows "Two-factor sign-in:
   off" until they switch it on, so the choice stays visible.
-- **The Admins list shows each admin's state:** On, Off, or "Required, not set up".
+- **The Admins list shows each admin's state:** "On", "On, required", "Off", or "Required, not set
+  up".
 
-Whether an admin must set it up is recorded when the account is made. Nothing in the product changes
-it afterwards.
+Whether an admin must set it up is recorded when the account is made. Afterwards an admin can make it
+required for their own account, and only the root admin can make it optional again. Each change is
+recorded with the value it replaced.
 
 ## Signed out with "Two-factor sign-in is on for your account"
 
@@ -55,6 +58,30 @@ There is no switch to turn it off. New recovery codes can be made with a current
 Wrong codes count against the sign-in lockout. After ten in a row, across sign-ins, two-factor locks
 for 15 minutes and Chronix is alerted. A correct password followed by wrong codes means the password
 is known, so change it.
+
+## Moving to a new phone
+
+For when your current phone still works. If it is lost, sign in with a recovery code instead.
+
+1. On Two-factor Sign-in, under "Moving to a new phone", enter your password and a code from your
+   CURRENT phone.
+2. Scan the new QR code with the authenticator app on your NEW phone. Your current phone keeps working
+   until you finish. If you stop here, nothing has changed.
+3. Within 15 minutes, enter a code from the NEW phone. It switches over:
+   - the old phone's codes stop working;
+   - every other session on your account is signed out;
+   - your recovery codes stay the same.
+
+## Making it required for your account
+
+Under "Optional for your account", choose "Make it required". Before anything changes, the page says
+what it means:
+- **With two-factor on,** nothing changes day to day. If it is ever reset (break-glass), you will have
+  to set it up again before using anything else.
+- **Without two-factor on,** you are confined to the Two-factor Sign-in page until you set it up.
+
+Only the root admin can make it optional again. Every change is recorded with the value it replaced,
+and the Admins list shows it.
 
 ## The encryption key: `TOTP_ENCRYPTION_KEY`
 

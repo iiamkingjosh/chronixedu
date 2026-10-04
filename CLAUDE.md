@@ -302,10 +302,9 @@ Monorepo, npm workspaces:
   3. the sign-in step (migration 057, `POST /login/verify`);
   4. enforcement (migration 058, `middleware/auth.ts`): for admins who have enrolled, and for every
      admin created since (enrolling is optional for the rest, below);
-  5. moving to a new phone while the old one works. Until then the only way is break-glass, which
-     is acceptable for one admin and not for three. Commit 5 also gives an admin an audited way to make
-     two-factor required for their own account. Moses's row is `false` from 058's backfill, and is set
-     to `true` through that route, never by SQL (reviewer, 4 Oct 2026).
+  5. moving to a new phone while the old one works (migration 059), and the requirement setting
+     (`PUT /two-factor/required`). Moses's row is `false` from 058's backfill, and is set to `true`
+     through that route, never by SQL (reviewer, 4 Oct 2026).
 
   `docs/admin-two-factor-runbook.md` covers the key and break-glass.
 - **TOTP, written in-house** (`services/totp.ts`, over Node's crypto, tested against the RFC 4226 and
@@ -430,6 +429,37 @@ Monorepo, npm workspaces:
     loop (`lib/refusalRedirect.ts`). Each page says why.
   - **Visible:** the platform dashboard shows the signed-in admin's own state ("Two-factor sign-in:
     off. Set it up"), and the Admins list shows on, off or "required, not set up" for each admin.
+- **Moving to a new phone (commit 5, migration 059, 4 Oct 2026).** For a phone that still works; a
+  lost phone is still a recovery code, then break-glass.
+  - **Start** (`POST /two-factor/device-move`): the password and a current code from the OLD phone.
+    The new secret waits beside the working one in `user_totp.pending_secret_ciphertext`, encrypted
+    the same way, and is returned once, in a `no-store` POST body. The old phone keeps working, and
+    walking away changes nothing. The move waits `DEVICE_MOVE_MINUTES` (15).
+  - **Confirm** (`/device-move/confirm`): a code from the NEW phone. One transaction:
+    - switches to exactly the bytes whose code was checked, so a move started again in another tab
+      cannot put an unconfirmed secret in place;
+    - clears the failure count;
+    - ends every other session, and the admin's support sessions;
+    - writes `TWO_FACTOR_DEVICE_MOVED`.
+
+    The recovery codes are kept (decided 4 Oct 2026). This session carries on with a fresh token.
+  - **Wrong codes count as anywhere else.** Every route here that takes a code shares
+    `refuseWrongCode`.
+  - **The database enforces the shape:** a pending secret only beside an active factor, and both
+    columns or neither. The login role cannot read the pending column, because its grants are column
+    by column.
+- **The requirement setting** (`PUT /two-factor/required`, commit 5).
+  - **On:** any platform admin may make two-factor required for their own account.
+  - **Off: only the root admin.** Every admin added since commit 4 is required so that the choice is
+    Moses's, not each added admin's. Letting them switch it off would undo that.
+  - **Every change is audited** (`TWO_FACTOR_REQUIREMENT_SET`) with the previous value, read under the
+    same row lock as the write. A save that changes nothing writes nothing.
+  - **It is not a setup route,** so a required admin who has not set up cannot reach it, and cannot
+    switch the requirement off first.
+  - **An admin without two-factor who makes it required is confined at once.** The page names that
+    consequence before the change is sent (decided 4 Oct 2026).
+  - **Visible:** the Admins list says "On, required", and the dashboard ", required for your
+    account".
 
 ## Conventions
 
@@ -1169,7 +1199,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 44 suites, 432 passed + 2 skipped (4 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 45 suites, 451 passed + 2 skipped (4 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
 (cd apps/web && npx next build)

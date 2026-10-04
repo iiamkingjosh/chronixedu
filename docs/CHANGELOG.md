@@ -1,5 +1,19 @@
 # Chronix Edu — Changelog
 
+## Two-factor sign-in: moving to a new phone, and making it required for your account (2026-10-04)
+
+### For Chronix staff
+- **Moving to a new phone** is now on the Two-factor Sign-in page, for a phone that still works:
+  - enter your password and a code from your current phone;
+  - scan the new QR code with your new phone;
+  - enter a code from the new phone.
+
+  Your current phone works until the last step, and your recovery codes stay the same. Finishing signs
+  out your other sessions.
+- **You can make two-factor required for your own account.** The page says what that means before
+  anything changes. Only the root admin can make it optional again, and every change is recorded.
+- **The Admins list** now shows "On, required" for an admin who has two-factor on and required.
+
 ## Two-factor sign-in: required for new platform admins, and enforced for those who use it (2026-10-04)
 
 ### For Chronix staff

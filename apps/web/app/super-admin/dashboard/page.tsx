@@ -70,17 +70,17 @@ function CronStatusBadge({ cron }: { cron: CronStatusEntry }) {
  * the answer arrives, so an unknown is never displayed as "off".
  */
 function TwoFactorLine() {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [state, setState] = useState<{ enabled: boolean; required: boolean } | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    apiFetch<{ data: { enabled: boolean } }>('/api/super-admin/two-factor/status')
-      .then((res) => setEnabled(res.data.enabled))
+    apiFetch<{ data: { enabled: boolean; required: boolean } }>('/api/super-admin/two-factor/status')
+      .then((res) => setState({ enabled: res.data.enabled, required: res.data.required }))
       .catch(() => setFailed(true));
   }, []);
   if (failed) return <p className="mt-2 text-sm text-gray-500">Two-factor sign-in: could not be checked.</p>;
-  if (enabled === null) return null;
-  return enabled ? (
-    <p className="mt-2 text-sm text-green-700">Two-factor sign-in: on</p>
+  if (state === null) return null;
+  return state.enabled ? (
+    <p className="mt-2 text-sm text-green-700">Two-factor sign-in: on{state.required ? ', required for your account' : ''}</p>
   ) : (
     <p className="mt-2 text-sm text-amber-700">
       Two-factor sign-in: off.{' '}

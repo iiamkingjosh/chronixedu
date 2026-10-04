@@ -122,6 +122,96 @@ export async function activateTotp(userId: string, step: number, codes: string[]
   });
 }
 
+/** How long a started phone move waits for a code from the new phone (migration 059). */
+export const DEVICE_MOVE_MINUTES = 15;
+
+/**
+ * Starts moving an ACTIVE factor to a new phone: the new secret waits beside the working one, which
+ * stays in use until completeDeviceMove. Starting again replaces an earlier pending secret. False when
+ * the factor is not active.
+ */
+export async function savePendingDeviceMove(userId: string, secret: Buffer): Promise<boolean> {
+  const { rowCount } = await pool.query(
+    `UPDATE user_totp SET pending_secret_ciphertext = $2, pending_created_at = now()
+      WHERE user_id = $1 AND activated_at IS NOT NULL`,
+    [userId, encryptTotpSecret(secret, userId)]
+  );
+  return rowCount === 1;
+}
+
+/**
+ * The new phone's secret, if a move was started within DEVICE_MOVE_MINUTES, with the stored bytes it
+ * came from: completeDeviceMove switches to exactly those bytes, so a move started again in another tab
+ * between the check and the switch cannot put an unconfirmed secret in place.
+ */
+export async function readPendingDeviceMove(userId: string): Promise<{ secret: Buffer; ciphertext: Buffer } | null> {
+  const { rows } = await pool.query<{ pending_secret_ciphertext: Buffer }>(
+    `SELECT pending_secret_ciphertext FROM user_totp
+      WHERE user_id = $1 AND activated_at IS NOT NULL AND pending_secret_ciphertext IS NOT NULL
+        AND pending_created_at > now() - make_interval(mins => $2)`,
+    [userId, DEVICE_MOVE_MINUTES]
+  );
+  if (!rows[0]) return null;
+  const ciphertext = rows[0].pending_secret_ciphertext;
+  return { secret: decryptTotpSecret(ciphertext, userId), ciphertext };
+}
+
+/**
+ * Finishes a phone move, in one transaction with its audit row (doctrine 10):
+ *  - the confirmed pending secret becomes the active one, with the confirming code's step as the last
+ *    one used (replay), and the failure count and any lock cleared;
+ *  - the recovery codes are kept: they did not travel with the phone (decided 4 Oct 2026);
+ *  - every other session the admin had is ended, as at enrolment (users.sessions_valid_after).
+ * False when the pending secret is gone, has expired, or is no longer the one that was checked.
+ */
+export async function completeDeviceMove(userId: string, checkedCiphertext: Buffer, step: number, audit: PlatformAuditEntry): Promise<boolean> {
+  return inTransaction(async (c) => {
+    const { rowCount } = await c.query(
+      `UPDATE user_totp
+          SET secret_ciphertext = pending_secret_ciphertext,
+              pending_secret_ciphertext = NULL, pending_created_at = NULL,
+              last_used_step = $3, failed_attempts = 0, locked_until = NULL
+        WHERE user_id = $1 AND activated_at IS NOT NULL
+          AND pending_secret_ciphertext = $2
+          AND pending_created_at > now() - make_interval(mins => $4)`,
+      [userId, checkedCiphertext, step, DEVICE_MOVE_MINUTES]
+    );
+    if (rowCount !== 1) return false;
+    await c.query(`UPDATE users SET sessions_valid_after = now() WHERE id = $1`, [userId]);
+    await logPlatformAudit(audit, c);
+    return true;
+  });
+}
+
+/**
+ * Sets whether this platform admin must have two-factor (migration 058). The previous value is read
+ * under the same row lock as the write and goes into the audit row, in one transaction (doctrine 10),
+ * so turning it off is never quiet. No audit row when nothing changes. Null when the user is not a
+ * platform admin.
+ */
+export async function setTwoFactorRequired(
+  userId: string, required: boolean, ipAddress: string | null
+): Promise<{ previous: boolean; changed: boolean } | null> {
+  return inTransaction(async (c) => {
+    const { rows } = await c.query<{ two_factor_required: boolean }>(
+      `SELECT two_factor_required FROM users WHERE id = $1 AND role = 'super_admin' FOR UPDATE`,
+      [userId]
+    );
+    if (!rows[0]) return null;
+    const previous = rows[0].two_factor_required;
+    if (previous === required) return { previous, changed: false };
+    await c.query(`UPDATE users SET two_factor_required = $2 WHERE id = $1`, [userId, required]);
+    await logPlatformAudit({
+      adminId: userId,
+      actionType: 'TWO_FACTOR_REQUIREMENT_SET',
+      targetUserId: userId,
+      metadata: { previous, required },
+      ipAddress,
+    }, c);
+    return { previous, changed: true };
+  });
+}
+
 /**
  * Accepts a code's time step for an ACTIVE factor and resets the failure count. Refuses a step at or
  * before the last one used (a replayed code) and refuses while locked; the WHERE makes both hold

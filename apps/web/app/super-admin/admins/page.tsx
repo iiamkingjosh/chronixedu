@@ -27,7 +27,12 @@ interface PlatformAdmin {
 function TwoFactorBadge({ admin }: { admin: PlatformAdmin }) {
   if (admin.is_system) return <span className="text-xs text-gray-400">—</span>;
   if (admin.two_factor_on) {
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-green-50 text-green-700 border border-green-200">On</span>;
+    // "Required" shows beside "On" too, so making it optional again is visible here (4 Oct 2026).
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-green-50 text-green-700 border border-green-200">
+        {admin.two_factor_required ? 'On, required' : 'On'}
+      </span>
+    );
   }
   if (admin.two_factor_required) {
     return (

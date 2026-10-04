@@ -9,7 +9,8 @@ import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
 
 /**
- * Two-factor sign-in for platform admins (2FA commit 2 of 4, 3 Oct 2026).
+ * Two-factor sign-in for platform admins: setting it up (2FA commit 2, 3 Oct 2026), and moving to a
+ * new phone and the requirement setting (commit 5, 4 Oct 2026).
  *
  * This page shows a credential: the authenticator secret, as a QR code and as text, and the recovery
  * codes. It sits under /super-admin, where Sentry session replay never runs (lib/sentryScrub.ts,
@@ -25,14 +26,19 @@ interface Status {
   enabled_at: string | null;
   locked_until: string | null;
   unused_recovery_codes: number;
+  /** Only the root admin may make two-factor optional again. */
+  may_make_optional: boolean;
 }
 
 const BASE = '/api/super-admin/two-factor';
 
 const passwordSchema = z.object({ password: z.string().min(1, 'Enter your password') });
-const codeSchema = z.object({ code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app') });
+const sixDigits = z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app');
+const codeSchema = z.object({ code: sixDigits });
+const moveSchema = z.object({ password: z.string().min(1, 'Enter your password'), code: sixDigits });
 type PasswordForm = z.infer<typeof passwordSchema>;
 type CodeForm = z.infer<typeof codeSchema>;
+type MoveForm = z.infer<typeof moveSchema>;
 
 function groupKey(secret: string): string {
   return secret.match(/.{1,4}/g)?.join(' ') ?? secret;
@@ -88,12 +94,173 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
   );
 }
 
+/**
+ * Moving to a new phone while the old one works. The password and a code from the current phone
+ * first; then the new phone's QR code, held in this component's memory only; then a code from the new
+ * phone switches over. Walking away at any point changes nothing.
+ */
+function DeviceMove({ onMoved }: { onMoved: (token: string) => void }) {
+  const [pending, setPending] = useState<{ uri: string; secret: string } | null>(null);
+  const [error, setError] = useState('');
+  const startForm = useForm<MoveForm>({ resolver: zodResolver(moveSchema) });
+  const confirmForm = useForm<CodeForm>({ resolver: zodResolver(codeSchema) });
+
+  async function start(values: MoveForm) {
+    setError('');
+    try {
+      const res = await apiFetch<{ data: { otpauth_uri: string; secret: string } }>(`${BASE}/device-move`, { method: 'POST', body: JSON.stringify(values) });
+      startForm.reset();
+      setPending({ uri: res.data.otpauth_uri, secret: res.data.secret });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not start moving to a new phone');
+    }
+  }
+
+  async function confirm(values: CodeForm) {
+    setError('');
+    try {
+      const res = await apiFetch<{ data: { access_token: string } }>(`${BASE}/device-move/confirm`, { method: 'POST', body: JSON.stringify(values) });
+      confirmForm.reset();
+      setPending(null);
+      onMoved(res.data.access_token);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not switch to the new phone');
+    }
+  }
+
+  return (
+    <div className="card px-5 py-5">
+      <h2 className="text-base font-semibold text-gray-900">Moving to a new phone</h2>
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      {!pending ? (
+        <form onSubmit={startForm.handleSubmit(start)} noValidate>
+          <p className="mt-1 text-sm text-gray-600">
+            For when your current phone still works. Confirm your password and enter a code from your current phone.
+            It keeps working until you finish. A lost phone is different: sign in with a recovery code.
+          </p>
+          <input {...startForm.register('password')} type="password" autoComplete="current-password" placeholder="Password"
+            className="mt-3 w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm" />
+          {startForm.formState.errors.password && <p className="mt-1 text-xs text-red-600">{startForm.formState.errors.password.message}</p>}
+          <input {...startForm.register('code')} inputMode="numeric" autoComplete="one-time-code" placeholder="Code from current phone"
+            className="mt-2 block w-56 rounded-md border border-gray-300 px-3 py-2 text-sm tracking-widest" />
+          {startForm.formState.errors.code && <p className="mt-1 text-xs text-red-600">{startForm.formState.errors.code.message}</p>}
+          <div className="mt-3">
+            <button type="submit" disabled={startForm.formState.isSubmitting} className="rounded-md bg-[#003366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#002244] disabled:opacity-50">
+              {startForm.formState.isSubmitting ? 'Checking…' : 'Continue'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <form onSubmit={confirmForm.handleSubmit(confirm)} noValidate>
+          <p className="mt-1 text-sm text-gray-600">Scan this with the authenticator app on your new phone. It waits 15 minutes.</p>
+          <div data-sentry-block className="mt-4 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+            <div className="rounded-md border border-gray-200 bg-white p-3">
+              <QRCodeSVG value={pending.uri} size={176} />
+            </div>
+            <div className="text-sm text-gray-600">
+              <p>Cannot scan it? Enter this key in the app instead:</p>
+              <p className="mt-2 font-mono text-sm text-gray-900 break-all">{groupKey(pending.secret)}</p>
+            </div>
+          </div>
+          <p className="mt-5 text-sm text-gray-600">Then enter the 6-digit code the NEW phone shows.</p>
+          <input {...confirmForm.register('code')} inputMode="numeric" autoComplete="one-time-code" placeholder="123456"
+            className="mt-2 w-40 rounded-md border border-gray-300 px-3 py-2 text-sm tracking-widest" />
+          {confirmForm.formState.errors.code && <p className="mt-1 text-xs text-red-600">{confirmForm.formState.errors.code.message}</p>}
+          <p className="mt-3 text-xs text-gray-500">Switching signs out every other session on this account. Your recovery codes stay the same.</p>
+          <div className="mt-3 flex gap-2">
+            <button type="submit" disabled={confirmForm.formState.isSubmitting} className="rounded-md bg-[#003366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#002244] disabled:opacity-50">
+              {confirmForm.formState.isSubmitting ? 'Checking…' : 'Switch to the new phone'}
+            </button>
+            <button type="button" onClick={() => { setPending(null); setError(''); }} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Whether two-factor is required for this account. The consequence is shown before the change is
+ * sent (decided 4 Oct 2026): an admin without two-factor who makes it required is confined to this
+ * page at once.
+ */
+function Requirement({ status, onChanged }: { status: Status; onChanged: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const target = !status.required;
+
+  if (status.required && !status.may_make_optional) {
+    return (
+      <div className="card px-5 py-5">
+        <h2 className="text-base font-semibold text-gray-900">Required for your account</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Two-factor sign-in is required for your account. If it is ever reset, you will set it up again before using anything else.
+        </p>
+      </div>
+    );
+  }
+
+  const consequence = target
+    ? (status.enabled
+        ? 'Nothing changes while two-factor is on. If it is ever reset, you will have to set it up again before using anything else.'
+        : 'You will be confined to this page until you set two-factor up. Every other page will send you back here.')
+      + (status.may_make_optional ? '' : ' Only the root admin can make it optional again.')
+    : 'If two-factor is ever reset, you could then use the platform with your password alone.';
+
+  async function save() {
+    setSaving(true);
+    setError('');
+    try {
+      await apiFetch(`${BASE}/required`, { method: 'PUT', body: JSON.stringify({ required: target }) });
+      setConfirming(false);
+      onChanged();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not change the setting');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card px-5 py-5">
+      <h2 className="text-base font-semibold text-gray-900">{status.required ? 'Required for your account' : 'Optional for your account'}</h2>
+      <p className="mt-1 text-sm text-gray-600">
+        {status.required
+          ? 'Two-factor sign-in is required for your account.'
+          : 'Two-factor sign-in is your choice on this account. Making it required means it must always be on.'}
+      </p>
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+      {!confirming ? (
+        <button type="button" onClick={() => setConfirming(true)} className="mt-3 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:border-[#003366] hover:text-[#003366]">
+          {target ? 'Make it required' : 'Make it optional'}
+        </button>
+      ) : (
+        <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-900">{consequence} The change is recorded.</p>
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={save} disabled={saving} className="rounded-md bg-[#003366] px-3 py-1.5 text-sm font-medium text-white hover:bg-[#002244] disabled:opacity-50">
+              {saving ? 'Saving…' : target ? 'Yes, make it required' : 'Yes, make it optional'}
+            </button>
+            <button type="button" onClick={() => setConfirming(false)} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SecurityPage() {
   const { user, setAuth } = useAuth();
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState('');
   const [enrolment, setEnrolment] = useState<{ uri: string; secret: string } | null>(null);
   const [codes, setCodes] = useState<string[] | null>(null);
+  const [moved, setMoved] = useState(false);
 
   const passwordForm = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) });
   const confirmForm = useForm<CodeForm>({ resolver: zodResolver(codeSchema) });
@@ -151,6 +318,13 @@ export default function SecurityPage() {
     void load();
   }
 
+  function deviceMoved(token: string) {
+    // Moving ended every session this account had; this one continues on the new token.
+    if (user) setAuth(user, token);
+    setMoved(true);
+    void load();
+  }
+
   return (
     <div className="p-8 max-w-2xl">
       <h1 className="text-2xl font-semibold text-gray-900 font-heading">Two-factor sign-in</h1>
@@ -187,6 +361,13 @@ export default function SecurityPage() {
               If those are lost too, the platform owner can reset it from the database.
             </p>
           </div>
+          {moved && (
+            <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+              Your new phone is set up. Every other session was signed out. Your recovery codes are unchanged.
+            </div>
+          )}
+          <DeviceMove onMoved={deviceMoved} />
+          <Requirement status={status} onChanged={() => void load()} />
           <form onSubmit={regenerateForm.handleSubmit(regenerate)} className="card px-5 py-5" noValidate>
             <h2 className="text-base font-semibold text-gray-900">New recovery codes</h2>
             <p className="mt-1 text-sm text-gray-600">Replaces all your current codes. Enter a code from your authenticator app.</p>
@@ -218,6 +399,12 @@ export default function SecurityPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {!codes && status && !status.enabled && !enrolment && (
+        <div className="mt-6">
+          <Requirement status={status} onChanged={() => void load()} />
+        </div>
       )}
 
       {!codes && enrolment && (
