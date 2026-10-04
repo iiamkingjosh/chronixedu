@@ -158,5 +158,27 @@ jobs:
       - name: DB regression + tenant isolation suite
         run: npm run test:db
 
-      - name: Integration suite (local DB)
+      # The integration suite's Auth-dependent tests (bulk imports, onboarding's principal step)
+      # need a real Supabase Auth. Supabase's local stack gives one, at the address SUPABASE_URL
+      # already names, with its own fixed local keys. Only the database, Auth and the gateway run.
+      # REQUIRE_TEST_AUTH makes the suite FAIL if Auth is unusable, rather than skip: "7 skipped"
+      # on every run reported nothing and guarded nothing (doctrine 9; decided 4 Oct 2026).
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Start Supabase Auth (local stack)
+        run: |
+          mkdir -p "$RUNNER_TEMP/supabase-auth" && cd "$RUNNER_TEMP/supabase-auth"
+          supabase init --force
+          supabase start -x realtime,storage-api,imgproxy,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+          eval "$(supabase status -o env)"
+          test "$API_URL" = "$SUPABASE_URL"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
+          echo "SUPABASE_PUBLISHABLE_KEY=$ANON_KEY" >> "$GITHUB_ENV"
+
+      - name: Integration suite (local DB, local Supabase Auth)
         run: npm run test:integration:local -- --forceExit
+        env:
+          REQUIRE_TEST_AUTH: '1'

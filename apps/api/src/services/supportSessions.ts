@@ -1,5 +1,6 @@
 import pool from '../db/client';
 import { redis } from '../middleware/rateLimit';
+import { SUPPORT_TOKEN_REVOKED_SECONDS } from '../config/supportSession';
 
 /**
  * Ends every support (impersonation) session a platform admin has open, and blacklists each one's
@@ -22,7 +23,7 @@ export async function terminateActiveSupportSessions(adminId: string): Promise<v
     for (const { id } of activeSessions.rows) {
       const storedToken = await redis.get(`support_session_token:${id}`);
       if (storedToken) {
-        await redis.set(`blacklisted_token:${storedToken}`, '1', 'EX', 30 * 60);
+        await redis.set(`blacklisted_token:${storedToken}`, '1', 'EX', SUPPORT_TOKEN_REVOKED_SECONDS);
         await redis.del(`support_session_token:${id}`);
       }
     }

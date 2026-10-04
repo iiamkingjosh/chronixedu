@@ -211,12 +211,14 @@ describe('an admin who must switch two-factor on, and has not, reaches only the 
     expect((await get(`${SETUP}/status`, before)).body.data).toMatchObject({ required: false, enabled: false });
   });
 
-  it('an admin token whose row says nothing fails closed: treated as required, not as exempt', async () => {
-    // No users row at all, so no stated exemption. The CHECK makes NULL impossible for a real row.
+  it('an admin token whose row is gone is refused outright, never treated as exempt', async () => {
+    // No users row at all, so no stated exemption. Commit 4 confined such a token to the setup routes;
+    // since fix (b) (4 Oct 2026) a missing row refuses every token, the setup routes included.
     const ghost = adminToken('c0a40000-0000-4000-8000-0000000000ff', 'ghost@chronix.test');
-    const res = await get('/api/super-admin/admins', ghost);
-    expect(res.status).toBe(403);
-    expect(res.body.error.code).toBe('TWO_FACTOR_SETUP_REQUIRED');
+    for (const path of ['/api/super-admin/admins', `${SETUP}/status`]) {
+      const res = await get(path, ghost);
+      expect({ path, status: res.status, code: res.body.error?.code }).toEqual({ path, status: 401, code: 'ACCOUNT_NOT_FOUND' });
+    }
   });
 
   it('control: school users are not touched', async () => {

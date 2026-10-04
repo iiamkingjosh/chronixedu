@@ -16,10 +16,17 @@
  * kept a school alive there was only its foreign keys, which the full-run test covers.
  */
 import { Client } from 'pg';
-import { seed, IDS as I, pool } from './helpers';
+import express from 'express';
+import request from 'supertest';
+import { seed, IDS as I, pool, tokens } from './helpers';
+import { verifyToken, requirePasswordChanged } from '../middleware/auth';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { planSchoolDeletion, executeSchoolDeletion, resolveOperator, STEPS, NOT_DELETED, deleteAuthAccounts, describeAuthAccounts } = require('../../scripts/delete-school-data.js');
+/* eslint-disable @typescript-eslint/no-var-requires */
+const {
+  planSchoolDeletion, executeSchoolDeletion, resolveOperator, STEPS, NOT_DELETED, deleteAuthAccounts, describeAuthAccounts,
+  deletionWaitSeconds, schoolsExcept, assertOnlySchoolLeft, deleteSchools,
+} = require('../../scripts/delete-school-data.js');
+/* eslint-enable @typescript-eslint/no-var-requires */
 
 const OPERATOR = 'a1a1a1a1-0000-4000-8000-000000000001';
 const PURGE = `SELECT chronixedu_purge.purge_school_audit_logs($1, $2) AS n`;
@@ -45,6 +52,11 @@ async function footprint(schoolId: string): Promise<Record<string, number>> {
   return out;
 }
 const sum = (f: Record<string, number>) => Object.values(f).reduce((a, b) => a + b, 0);
+
+/** A school must be suspended before executeSchoolDeletion will touch it (fix (a2), 4 Oct 2026). */
+const suspend = (schoolId: string) => pool.query(`UPDATE schools SET is_active = false WHERE id = $1`, [schoolId]);
+const isActive = async (schoolId: string) =>
+  (await pool.query(`SELECT is_active FROM schools WHERE id = $1`, [schoolId])).rows[0]?.is_active as boolean | undefined;
 
 /** Audit rows for both schools, a queued notification, a platform audit row, and contacts. */
 async function auditBothSchools() {
@@ -261,6 +273,7 @@ describe('the real run, on a disposable school', () => {
     expect(before.platform_audit_logs).toBe(1);
     expect(before.email_queue).toBe(1);
 
+    await suspend(I.schoolA);
     await executeSchoolDeletion(client, I.schoolA, OPERATOR);
 
     const after = await footprint(I.schoolA);
@@ -271,6 +284,7 @@ describe('the real run, on a disposable school', () => {
 
   it('the record of the purge survives the deletion it records', async () => {
     await auditBothSchools();
+    await suspend(I.schoolA);
     await executeSchoolDeletion(client, I.schoolA, OPERATOR);
     const { rows } = await pool.query(
       `SELECT platform_admin_id, target_school_id, metadata FROM platform_audit_logs WHERE action_type = 'SCHOOL_AUDIT_PURGED'`);
@@ -284,6 +298,7 @@ describe('the real run, on a disposable school', () => {
     expect(schoolB.audit_logs).toBe(2); // B has audit rows to lose
     expect(schoolB.platform_audit_logs).toBe(1);
     expect(sum(schoolB)).toBeGreaterThan(5);
+    await suspend(I.schoolA);
     await executeSchoolDeletion(client, I.schoolA, OPERATOR);
     expect(await footprint(I.schoolB)).toEqual(schoolB);
   });
@@ -291,6 +306,7 @@ describe('the real run, on a disposable school', () => {
   it('rolls back everything if any row would remain', async () => {
     await auditBothSchools();
     // An operator who is not a super admin makes the purge refuse after every child table was emptied.
+    await suspend(I.schoolA);
     await expect(executeSchoolDeletion(client, I.schoolA, I.principalB)).rejects.toThrow(/not an active Chronix super admin/);
     expect((await footprint(I.schoolA)).students).toBe(3);
   });
@@ -302,6 +318,7 @@ describe('the real run, on a disposable school', () => {
 
   it('a rerun finds nothing and says so', async () => {
     await auditBothSchools();
+    await suspend(I.schoolA);
     await executeSchoolDeletion(client, I.schoolA, OPERATOR);
     const again = await planSchoolDeletion(client, I.schoolA);
     expect(again.school).toBeNull();
@@ -325,5 +342,106 @@ describe('the real run, on a disposable school', () => {
       await c.query('COMMIT');
     } finally { c.release(); }
     expect((await pool.query(`SELECT 1 FROM assessment_configs WHERE id = $1`, [cfg])).rowCount).toBe(0);
+  });
+});
+
+describe('suspend, wait, re-check (fix (a2), 4 Oct 2026)', () => {
+  const logged: string[] = [];
+  const log = (line: string) => { logged.push(line); };
+  beforeEach(() => { logged.length = 0; });
+
+  it('refuses to delete an active school, and deletes nothing', async () => {
+    expect(await isActive(I.schoolA)).toBe(true);
+    const before = await footprint(I.schoolA);
+    await expect(executeSchoolDeletion(client, I.schoolA, OPERATOR)).rejects.toThrow(/is active, so nothing was deleted/);
+    expect(await footprint(I.schoolA)).toEqual(before);
+    // The control: the same call on the suspended school deletes it.
+    await suspend(I.schoolA);
+    await executeSchoolDeletion(client, I.schoolA, OPERATOR);
+    expect(await isActive(I.schoolA)).toBeUndefined();
+  });
+
+  it('suspends, waits the longest cache time from the shared file, then deletes', async () => {
+    const waits: number[] = [];
+    let activeDuringWait: boolean | undefined;
+    const school = (await planSchoolDeletion(client, I.schoolA)).school;
+    const result = await deleteSchools(client, [school], {
+      operatorId: OPERATOR, log,
+      sleep: async (ms: number) => { waits.push(ms); activeDuringWait = await isActive(I.schoolA); },
+    });
+    expect(waits).toEqual([deletionWaitSeconds() * 1000]);
+    expect(activeDuringWait).toBe(false); // suspended before the wait began
+    expect(result.suspended).toEqual([I.schoolA]);
+    expect(await isActive(I.schoolA)).toBeUndefined();
+    expect(logged.join('\n')).toContain(I.schoolA);
+  });
+
+  it('a school reactivated during the wait is not deleted', async () => {
+    const school = (await planSchoolDeletion(client, I.schoolA)).school;
+    const before = await footprint(I.schoolA);
+    await expect(deleteSchools(client, [school], {
+      operatorId: OPERATOR, log,
+      sleep: async () => { await pool.query(`UPDATE schools SET is_active = true WHERE id = $1`, [I.schoolA]); },
+    })).rejects.toThrow(/is active, so nothing was deleted/);
+    expect(await footprint(I.schoolA)).toEqual(before);
+  });
+
+  it('a run that stops after suspending prints every school it left suspended', async () => {
+    const a = (await planSchoolDeletion(client, I.schoolA)).school;
+    const b = (await planSchoolDeletion(client, I.schoolB)).school;
+    await expect(deleteSchools(client, [a, b], {
+      operatorId: OPERATOR, log, sleep: async () => {},
+      beforeDatabase: async (id: string) => { if (id === I.schoolB) throw new Error('Storage refused (simulated)'); },
+    })).rejects.toThrow(/simulated/);
+    expect(await isActive(I.schoolA)).toBeUndefined(); // A was deleted before the stop
+    expect(await isActive(I.schoolB)).toBe(false);     // B was suspended and left
+    const out = logged.join('\n');
+    expect(out).toMatch(/STOPPED after deleting 1 of 2/);
+    expect(out.slice(out.indexOf('still suspended'))).toContain(I.schoolB);
+    expect(out.indexOf('still suspended')).toBeGreaterThan(-1);
+  });
+
+  it('every school but one: the kept school is found by id, survives, and is checked by id, not by count', async () => {
+    const { keep, targets } = await schoolsExcept(client, I.schoolA);
+    expect(keep.id).toBe(I.schoolA);
+    expect(targets.map((t: { id: string }) => t.id)).toEqual([I.schoolB]);
+    await deleteSchools(client, targets, { operatorId: OPERATOR, log, sleep: async () => {} });
+    await expect(assertOnlySchoolLeft(client, I.schoolA)).resolves.toBeUndefined();
+    expect(await isActive(I.schoolA)).toBe(true); // never suspended
+    // One school left is also what deleting the wrong ones leaves; the check is by id.
+    await expect(assertOnlySchoolLeft(client, I.schoolB)).rejects.toThrow(/Expected exactly one school left/);
+  });
+
+  it('a kept id that does not exist is refused before anything is suspended', async () => {
+    await expect(schoolsExcept(client, 'b0b0b0b0-0000-4000-8000-000000000000')).rejects.toThrow(/no school .* to keep/);
+    expect(await isActive(I.schoolA)).toBe(true);
+    expect(await isActive(I.schoolB)).toBe(true);
+  });
+});
+
+describe("after the deletion, the school's users are refused (fix (b), 4 Oct 2026)", () => {
+  // The account checks alone, as every authenticated route runs them.
+  const probe = express().get('/probe', verifyToken, requirePasswordChanged, (_req, res) => { res.json({ ok: true }); });
+  it('a token for a user whose row is gone gets ACCOUNT_NOT_FOUND, where it used to read as active', async () => {
+    const token = tokens.principalA();
+    expect((await request(probe).get('/probe').set('Authorization', token)).status).toBe(200); // the control
+    await suspend(I.schoolA);
+    await executeSchoolDeletion(client, I.schoolA, OPERATOR);
+    const res = await request(probe).get('/probe').set('Authorization', token);
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('ACCOUNT_NOT_FOUND');
+  });
+
+  it('the password-change check refuses a missing row on its own, where it used to read "no change needed"', async () => {
+    // Reached directly, with the caller already identified, as it is after a cached "active" in Redis.
+    const asUser = (id: string) => express().get('/probe', (req, _res, next) => {
+      req.user = { user_id: id, role: 'principal', school_id: I.schoolA };
+      next();
+    }, requirePasswordChanged, (_req, res) => { res.json({ ok: true }); });
+    await pool.query(`UPDATE users SET must_change_password = false WHERE id = $1`, [I.principalA]);
+    expect((await request(asUser(I.principalA)).get('/probe')).status).toBe(200); // the control
+    const res = await request(asUser('d0d0d0d0-0000-4000-8000-000000000000')).get('/probe');
+    expect(res.status).toBe(401);
+    expect(res.body.error.code).toBe('ACCOUNT_NOT_FOUND');
   });
 });

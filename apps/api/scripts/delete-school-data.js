@@ -8,6 +8,13 @@
  *   node apps/api/scripts/delete-school-data.js --school <uuid>                  # dry run: prints the plan
  *   node apps/api/scripts/delete-school-data.js --school <uuid> --execute --confirm <school-slug> \
  *        --operator <super-admin email> --with-supabase
+ *   node apps/api/scripts/delete-school-data.js --all-except <uuid>              # every school but one
+ *   node apps/api/scripts/delete-school-data.js --all-except <uuid> --execute --confirm <kept-school-slug> \
+ *        --confirm-count <number to delete> --operator <super-admin email> --with-supabase
+ *   --all-except <uuid>  delete every school except this one. The list is built from the database at
+ *                        run time, never typed out. At the end, exactly one school must remain, and it
+ *                        must be this one, checked by id: a count of 1 is also what deleting the wrong
+ *                        schools would leave.
  *   --allow-host <host>  required for a non-local database (must equal the DATABASE_URL host)
  *   --operator <email>   the Chronix super admin running it; named on the purge record
  *                        (platform_audit_logs SCHOOL_AUDIT_PURGED). Required with --execute.
@@ -34,6 +41,16 @@
  * Tables without a school_id are reached through the school's students, users, terms, sessions,
  * assignments or assessment configs. email_queue has no link to a school at all and is matched
  * on the school's users' email addresses.
+ *
+ * Suspend, wait, re-check (4 Oct 2026, docs/AUDIT-2026-09.md fix (a2)). The API caches a school's
+ * row in its own memory, and whether an account is active in Redis. This script can clear neither:
+ * it is a separate process, and it is given no Redis access on purpose. So --execute suspends every
+ * school it will delete, waits out the longest cache time in src/config/cacheTimes.json, and only
+ * then deletes. By then every cached copy says suspended, and the API refuses the school's users.
+ * Each school's transaction locks its row and refuses unless it is still suspended, so a school
+ * reactivated during the wait is never deleted. One wait covers every school in a run: once all are
+ * suspended, nothing can cache one as active again. If a run stops after suspending, it prints every
+ * school it suspended, so the state is recoverable rather than found later.
  */
 const { Client } = require('pg');
 
@@ -243,6 +260,78 @@ async function deleteAuthAccounts(admin, ids, { attempts = 3, waitMs = 1000 } = 
   return failures;
 }
 
+/** The cache times the API answers from without the database; the wait below outlasts all of them. */
+const CACHE_TIMES = require('../src/config/cacheTimes.json');
+
+/** Added to the longest cache time, so the wait ends after the last cached copy expires, not with it. */
+const WAIT_MARGIN_SECONDS = 15;
+
+/** How long to wait between suspending and deleting: the longest cache time, plus the margin. */
+function deletionWaitSeconds() {
+  const times = Object.entries(CACHE_TIMES).filter(([k]) => k.endsWith('_seconds')).map(([, v]) => v);
+  return Math.max(...times) + WAIT_MARGIN_SECONDS;
+}
+
+/** Suspends every listed school that is still active, and returns the ids this call changed. */
+async function suspendSchools(client, ids) {
+  const { rows } = await client.query(
+    `UPDATE schools SET is_active = false WHERE id = ANY($1::uuid[]) AND is_active RETURNING id`, [ids]);
+  return rows.map(r => r.id);
+}
+
+/** Every school except the one to keep, oldest first. Refuses, changing nothing, if that one is missing. */
+async function schoolsExcept(client, keepId) {
+  const keep = (await client.query(`SELECT id, slug, name FROM schools WHERE id = $1`, [keepId])).rows[0];
+  if (!keep) throw new Error(`Nothing was changed. There is no school ${keepId} to keep.`);
+  const targets = (await client.query(
+    `SELECT id, slug, name FROM schools WHERE id <> $1 ORDER BY created_at, id`, [keepId])).rows;
+  return { keep, targets };
+}
+
+/** After an --all-except run: exactly one school left, and it is the one kept, by id. */
+async function assertOnlySchoolLeft(client, keepId) {
+  const ids = (await client.query(`SELECT id FROM schools ORDER BY id`)).rows.map(r => r.id);
+  if (ids.length !== 1 || ids[0] !== keepId) {
+    throw new Error(`Expected exactly one school left, ${keepId}; found ${ids.length}: ${ids.join(', ') || 'none'}.`);
+  }
+}
+
+/**
+ * Suspends the schools, waits, then deletes them one at a time, each in its own transaction.
+ *  - `beforeDatabase(id)` runs before each school's transaction (the Supabase step).
+ *  - `sleep(ms)` is injected so tests do not wait five minutes; the length comes from
+ *    deletionWaitSeconds(), never from the caller.
+ * On any failure after suspending, it prints which schools were deleted and every school this run
+ * suspended that is still there, then rethrows.
+ */
+async function deleteSchools(client, schools, { operatorId, beforeDatabase = async () => {}, sleep, log = console.log }) {
+  const ids = schools.map(s => s.id);
+  const suspended = await suspendSchools(client, ids);
+  log(`Suspended ${suspended.length} school(s) (the other ${ids.length - suspended.length} were already suspended):`);
+  for (const id of suspended) log(`  ${id}`);
+  const waitSeconds = deletionWaitSeconds();
+  log(`Waiting ${waitSeconds} s for every cached copy to expire (the longest cache time in src/config/cacheTimes.json, plus ${WAIT_MARGIN_SECONDS} s)…`);
+  await sleep(waitSeconds * 1000);
+
+  const deleted = [];
+  try {
+    for (const s of schools) {
+      await beforeDatabase(s.id);
+      await executeSchoolDeletion(client, s.id, operatorId);
+      deleted.push(s.id);
+      log(`Deleted ${s.slug} (${s.id}): 0 rows left in every table, checked inside its transaction. ${deleted.length} of ${schools.length}.`);
+    }
+  } catch (err) {
+    const left = (await client.query(
+      `SELECT id FROM schools WHERE id = ANY($1::uuid[]) AND NOT is_active ORDER BY id`, [suspended])).rows.map(r => r.id);
+    log(`STOPPED after deleting ${deleted.length} of ${schools.length}.`);
+    log(`These ${left.length} school(s) were suspended by this run and are still suspended. Rerun to finish, or reactivate any you meant to keep:`);
+    for (const id of left) log(`  ${id}`);
+    throw err;
+  }
+  return { suspended, deleted, waitSeconds };
+}
+
 /** The super admin who runs the deletion, by email. The purge function checks the same rule. */
 async function resolveOperator(client, email) {
   const { rows } = await client.query(
@@ -253,13 +342,20 @@ async function resolveOperator(client, email) {
 
 /**
  * Delete every row the plan lists, in one transaction, and prove it: the transaction recounts
- * every table before it commits, and rolls back unless every count is zero.
+ * every table before it commits, and rolls back unless every count is zero. It first locks the
+ * school's row and refuses unless the school is suspended, so a school reactivated after
+ * deleteSchools suspended it is never deleted.
  */
 async function executeSchoolDeletion(client, schoolId, operatorId) {
   const plan = await planSchoolDeletion(client, schoolId);
   if (!plan.school) throw new Error(`No school with id ${schoolId}`);
   await client.query('BEGIN');
   try {
+    const locked = (await client.query(`SELECT is_active FROM schools WHERE id = $1 FOR UPDATE`, [schoolId])).rows[0];
+    if (!locked) throw new Error(`No school with id ${schoolId}`);
+    if (locked.is_active) {
+      throw new Error(`School ${schoolId} is active, so nothing was deleted. It must be suspended, and stay suspended for ${deletionWaitSeconds()} s, before it is deleted: rerun.`);
+    }
     const deleted = {};
     for (const s of STEPS) {
       if (s.purge) {
@@ -295,16 +391,62 @@ function printContacts(plan) {
   for (const p of plan.phones) console.log(`    ${p}`);
 }
 
+/** Prints one school's plan: the rows it would delete, its logins and its stored files. */
+function printPlan(plan) {
+  const files = plan.storageObjects;
+  console.log(`School: ${plan.school.name} (${plan.school.slug}, ${plan.school.id})`);
+  for (const s of plan.steps) if (s.rows) console.log(`  delete ${String(s.rows).padStart(7)}  ${s.table}`);
+  console.log(`  ${describeAuthAccounts(plan)}`);
+  console.log(`  Supabase Storage files: ${files === null ? 'not checked — this database has no storage schema' : files.length}`);
+}
+
+/**
+ * The Supabase step for one school, run just before its database transaction. Supabase goes FIRST:
+ * the Auth ids come from the users rows the transaction is about to delete, so once it commits a
+ * second run can no longer find them. An account missed here would be an orphan holding an email
+ * address that nothing points to. Deleting them first, and stopping if any fails, keeps the run
+ * repeatable.
+ */
+async function supabaseStep(client, admin, schoolId) {
+  const plan = await planSchoolDeletion(client, schoolId);
+  const files = plan.storageObjects;
+  if (!admin) {
+    if (plan.authUserIds.length || (files && files.length)) {
+      console.log(`  --skip-supabase: NOT deleted for ${schoolId}, and after this run the database no longer lists them. Keep this list:`);
+      for (const id of plan.authUserIds) console.log(`    auth ${id}`);
+      for (const f of files || []) console.log(`    file ${f.bucket}/${f.name}`);
+    }
+    return;
+  }
+  const failures = await deleteAuthAccounts(admin, plan.authUserIds);
+  for (const f of failures) console.error(`  auth ${f.id}: ${f.message} (after 3 attempts)`);
+  if (failures.length) throw new Error(`${failures.length} Auth account(s) could not be deleted; the database was NOT touched for ${schoolId}. Fix and rerun — it is safe to repeat.`);
+
+  // Through the Storage API — deleting storage.objects rows directly would leave the files.
+  for (const bucket of [...new Set((files || []).map(f => f.bucket))]) {
+    const names = files.filter(f => f.bucket === bucket).map(f => f.name);
+    for (let i = 0; i < names.length; i += 100) {
+      const { error } = await admin.storage.from(bucket).remove(names.slice(i, i + 100));
+      if (error) throw new Error(`Storage ${bucket}: ${error.message}; the database was NOT touched for ${schoolId}. Rerun — it is safe to repeat.`);
+    }
+  }
+  const left = await listStorageObjects(client, schoolId);
+  if (left && left.length) throw new Error(`${left.length} stored file(s) still present after removal; the database was NOT touched for ${schoolId}.`);
+}
+
 async function main() {
   require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
   const schoolId = arg('--school');
+  const keepId = arg('--all-except');
   const execute = process.argv.includes('--execute');
   const confirm = arg('--confirm');
+  const confirmCount = arg('--confirm-count');
   const operatorEmail = arg('--operator');
   const allowHost = arg('--allow-host');
   const withSupabase = process.argv.includes('--with-supabase');
   const skipSupabase = process.argv.includes('--skip-supabase');
-  if (!schoolId || !UUID.test(schoolId)) throw new Error('--school <uuid> is required');
+  if (!!schoolId === !!keepId) throw new Error('Give exactly one of --school <uuid> or --all-except <uuid>.');
+  if (!UUID.test(schoolId || keepId)) throw new Error(`${schoolId ? '--school' : '--all-except'} needs a school id (a uuid).`);
 
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set');
@@ -316,17 +458,32 @@ async function main() {
   const client = new Client({ connectionString: url });
   await client.connect();
   try {
-    const plan = await planSchoolDeletion(client, schoolId);
-    if (!plan.school) {
-      if (plan.total === 0) {
-        console.log(`Nothing to delete: there is no school ${schoolId}, and no row in any table refers to it.`);
-        return;
+    let targets;
+    if (schoolId) {
+      const plan = await planSchoolDeletion(client, schoolId);
+      if (!plan.school) {
+        if (plan.total === 0) {
+          console.log(`Nothing to delete: there is no school ${schoolId}, and no row in any table refers to it.`);
+          return;
+        }
+        for (const s of plan.steps) if (s.rows) console.log(`  ${String(s.rows).padStart(7)}  ${s.table}`);
+        throw new Error(`There is no school ${schoolId}, but the rows above still refer to it. This script will not act without the school row; investigate by hand.`);
       }
-      for (const s of plan.steps) if (s.rows) console.log(`  ${String(s.rows).padStart(7)}  ${s.table}`);
-      throw new Error(`There is no school ${schoolId}, but the rows above still refer to it. This script will not act without the school row; investigate by hand.`);
-    }
-    if (execute && confirm !== plan.school.slug) {
-      throw new Error(`Nothing was changed. --execute also needs --confirm ${plan.school.slug} (the school's slug), so the school being deleted is named twice.`);
+      if (execute && confirm !== plan.school.slug) {
+        throw new Error(`Nothing was changed. --execute also needs --confirm ${plan.school.slug} (the school's slug), so the school being deleted is named twice.`);
+      }
+      targets = [plan.school];
+    } else {
+      const { keep, targets: rest } = await schoolsExcept(client, keepId);
+      console.log(`Keeping: ${keep.name} (${keep.slug}, ${keep.id})`);
+      console.log(`Deleting every other school: ${rest.length}`);
+      if (execute && confirm !== keep.slug) {
+        throw new Error(`Nothing was changed. --execute also needs --confirm ${keep.slug} (the slug of the school being KEPT), so it is named twice.`);
+      }
+      if (execute && confirmCount !== String(rest.length)) {
+        throw new Error(`Nothing was changed. --execute also needs --confirm-count ${rest.length}, the number of schools this run deletes, as the dry run printed it.`);
+      }
+      targets = rest;
     }
     if (execute && !operatorEmail) {
       throw new Error('Nothing was changed. --execute needs --operator <email>: the Chronix super admin running it, named on the purge record.');
@@ -339,48 +496,33 @@ async function main() {
     }
     const operatorId = execute ? await resolveOperator(client, operatorEmail) : null;
 
-    const files = plan.storageObjects;
-    console.log(`School: ${plan.school.name} (${plan.school.slug}) — database ${host}`);
-    console.log(execute ? 'EXECUTING:' : 'DRY RUN — nothing will be changed:');
-    for (const s of plan.steps) if (s.rows) console.log(`  delete ${String(s.rows).padStart(7)}  ${s.table}`);
-    console.log(describeAuthAccounts(plan));
-    console.log(`Supabase Storage files: ${files === null ? 'not checked — this database has no storage schema' : files.length}`);
-    printContacts(plan);
+    console.log(`Database ${host}. ${execute ? 'EXECUTING:' : 'DRY RUN — nothing will be changed:'}`);
+    const contacts = { emails: new Set(), phones: new Set() };
+    for (const t of targets) {
+      const plan = await planSchoolDeletion(client, t.id);
+      printPlan(plan);
+      for (const e of plan.emails) contacts.emails.add(e);
+      for (const p of plan.phones) contacts.phones.add(p);
+    }
+    printContacts({ emails: [...contacts.emails].sort(), phones: [...contacts.phones].sort() });
+    console.log(`Before deleting, --execute suspends ${targets.length === 1 ? 'the school' : `all ${targets.length} schools`} and waits ${deletionWaitSeconds()} s.`);
     if (!execute) return;
 
-    // Supabase goes FIRST. The Auth ids come from the users rows this run is about to
-    // delete, so once the transaction commits a second run can no longer find them — an
-    // account missed here would be an orphan holding an email address that nothing points
-    // to. Deleting them first, and stopping if any fails, keeps the run repeatable.
+    let admin = null;
     if (withSupabase) {
       const { createClient } = require('@supabase/supabase-js');
-      const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-      const failures = await deleteAuthAccounts(admin, plan.authUserIds);
-      for (const f of failures) console.error(`  auth ${f.id}: ${f.message} (after 3 attempts)`);
-      if (failures.length) throw new Error(`${failures.length} Auth account(s) could not be deleted; the database was NOT touched. Fix and rerun — it is safe to repeat.`);
-      console.log(`Auth accounts deleted (or already gone): ${plan.authUserIds.length}`);
-
-      // Through the Storage API — deleting storage.objects rows directly would leave the files.
-      for (const bucket of [...new Set((files || []).map(f => f.bucket))]) {
-        const names = files.filter(f => f.bucket === bucket).map(f => f.name);
-        for (let i = 0; i < names.length; i += 100) {
-          const { error } = await admin.storage.from(bucket).remove(names.slice(i, i + 100));
-          if (error) throw new Error(`Storage ${bucket}: ${error.message}; the database was NOT touched. Rerun — it is safe to repeat.`);
-        }
-      }
-      const left = await listStorageObjects(client, schoolId);
-      if (left && left.length) throw new Error(`${left.length} stored file(s) still present after removal; the database was NOT touched.`);
-      console.log(`Stored files deleted: ${files === null ? 'n/a' : files.length}`);
-    } else {
-      console.log(plan.authUserIds.length || (files && files.length)
-        ? '--skip-supabase: NOT deleted, and after this run the database no longer lists them. Keep this list:'
-        : '--skip-supabase: no Auth accounts and no stored files to leave behind.');
-      for (const id of plan.authUserIds) console.log(`  auth ${id}`);
-      for (const f of files || []) console.log(`  file ${f.bucket}/${f.name}`);
+      admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     }
-
-    await executeSchoolDeletion(client, schoolId, operatorId);
-    console.log('Committed. Checked inside the same transaction: 0 rows for this school in every table.');
+    await deleteSchools(client, targets, {
+      operatorId,
+      beforeDatabase: (id) => supabaseStep(client, admin, id),
+      sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+    });
+    if (keepId) {
+      await assertOnlySchoolLeft(client, keepId);
+      console.log(`Checked: exactly one school is left, and it is ${keepId}.`);
+    }
+    console.log('Done. Each school was checked inside its own transaction: 0 rows in every table.');
   } finally {
     await client.end();
   }
@@ -390,4 +532,8 @@ if (require.main === module) {
   main().catch(err => { console.error(err.message); process.exit(1); });
 }
 
-module.exports = { STEPS, NOT_DELETED, planSchoolDeletion, executeSchoolDeletion, resolveOperator, storagePrefixes, deleteAuthAccounts, describeAuthAccounts };
+module.exports = {
+  STEPS, NOT_DELETED, planSchoolDeletion, executeSchoolDeletion, resolveOperator, storagePrefixes, deleteAuthAccounts,
+  describeAuthAccounts, deletionWaitSeconds, WAIT_MARGIN_SECONDS, suspendSchools, schoolsExcept, assertOnlySchoolLeft,
+  deleteSchools,
+};

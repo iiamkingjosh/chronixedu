@@ -4,6 +4,7 @@ import * as Sentry from '@sentry/node';
 import { redis, bestEffort } from './rateLimit';
 import pool from '../db/client';
 import { logger } from '../config/logger';
+import { USER_ACTIVE_CACHE_SECONDS, MUST_CHANGE_PASSWORD_CACHE_SECONDS } from '../config/cacheTimes';
 
 export interface AuthUser {
   user_id: string;
@@ -140,17 +141,24 @@ export async function verifyToken(req: Request, res: Response, next: NextFunctio
                FROM users WHERE id = $1`
           : 'SELECT is_active, sessions_valid_after FROM users WHERE id = $1',
         [payload.user_id]);
-      isActive = result.rows[0]?.is_active !== false;
-      sessionsValidAfter = result.rows[0]?.sessions_valid_after ?? null;
-      twoFactorOn = result.rows[0]?.two_factor_on === true;
+      // A token for an account whose row is gone is refused, for every role (4 Oct 2026,
+      // docs/AUDIT-2026-09.md fix (b)). It used to read as active: is_active !== false is true of a
+      // missing row. Nothing is cached for it, so the refusal repeats on every request. A "1" cached
+      // while the row still existed can answer for up to USER_ACTIVE_CACHE_SECONDS after it goes;
+      // deleting a school suspends it and waits that out first (scripts/delete-school-data.js).
+      if (!result.rows[0]) {
+        return res.status(401).json({ success: false, error: { code: 'ACCOUNT_NOT_FOUND', message: 'This account no longer exists.' } });
+      }
+      isActive = result.rows[0].is_active !== false;
+      sessionsValidAfter = result.rows[0].sessions_valid_after ?? null;
+      twoFactorOn = result.rows[0].two_factor_on === true;
       // Exempt only when the row says so (false: an admin who existed before migration 058, whose
-      // choice it stays). The CHECK makes NULL impossible for a super_admin; a missing row is treated
-      // as required, so an unknown answer fails closed.
-      twoFactorExempt = result.rows[0]?.two_factor_required === false;
+      // choice it stays). The CHECK makes NULL impossible for a super_admin.
+      twoFactorExempt = result.rows[0].two_factor_required === false;
       if (redis) {
         const r = redis;
         const value = isActive ? '1' : '0';
-        await bestEffort('user_active_cache_unavailable', () => r.set(cacheKey, value, 'EX', 300));
+        await bestEffort('user_active_cache_unavailable', () => r.set(cacheKey, value, 'EX', USER_ACTIVE_CACHE_SECONDS));
       }
     }
 
@@ -218,11 +226,15 @@ export async function requirePasswordChanged(req: Request, res: Response, next: 
       mustChange = cached === '1';
     } else {
       const result = await pool.query('SELECT must_change_password FROM users WHERE id = $1', [userId]);
-      mustChange = result.rows[0]?.must_change_password === true;
+      // A missing row is refused here too (fix (b)); it used to read as "no change needed".
+      if (!result.rows[0]) {
+        return res.status(401).json({ success: false, error: { code: 'ACCOUNT_NOT_FOUND', message: 'This account no longer exists.' } });
+      }
+      mustChange = result.rows[0].must_change_password === true;
       if (redis) {
         const r = redis;
         const value = mustChange ? '1' : '0';
-        await bestEffort('must_change_password_cache_unavailable', () => r.set(cacheKey, value, 'EX', 300));
+        await bestEffort('must_change_password_cache_unavailable', () => r.set(cacheKey, value, 'EX', MUST_CHANGE_PASSWORD_CACHE_SECONDS));
       }
     }
 

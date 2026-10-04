@@ -32,8 +32,10 @@ schoolApp.use('/api/schools', detectSupportSession);
 schoolApp.use('/api/schools', teacherDashboardRouter);
 schoolApp.use(errorHandler);
 
-// Steps that create Supabase Auth users need a real Supabase project.
-const itLiveAuth = /\.supabase\.co/.test(process.env.SUPABASE_URL ?? '') ? it : it.skip;
+// Steps that create Supabase Auth users need a usable Supabase Auth: the same probe as every other
+// Auth-dependent test (jest.globalSetup.ts), which CI satisfies with Supabase's local stack. It used
+// to demand a hosted *.supabase.co address, which no test run may use, so these never ran anywhere.
+const itLiveAuth = process.env.TEST_AUTH_UNAVAILABLE ? it.skip : it;
 
 function makeToken(userId: string, role: string, schoolId: string | null, email: string) {
   return jwt.sign({ user_id: userId, role, school_id: schoolId, email }, process.env.JWT_SECRET!, { expiresIn: '1h' });
@@ -89,7 +91,11 @@ describe('superAdmin — platform school management', () => {
   // ── Auth guard ──────────────────────────────────────────────────────────────
 
   it('GET /schools — principal token → 403', async () => {
-    const token = makeToken(randomUUID(), 'principal', SCHOOL_ID, 'principal@test.com');
+    // A real principal (this file's fixture school's), so the refusal is the role, not a missing
+    // account: a token for an account with no row is refused earlier, with 401 (4 Oct 2026, fix (b)).
+    const principal = (await pool.query<{ id: string; email: string }>(
+      `SELECT id, email FROM users WHERE school_id = $1 AND role = 'principal'`, [testSchoolId])).rows[0];
+    const token = makeToken(principal.id, 'principal', testSchoolId, principal.email);
     const res = await request(app).get('/api/super-admin/schools').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
   });

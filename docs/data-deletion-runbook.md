@@ -36,9 +36,13 @@ deleting transaction.
    ```
    Whether anything else is "retention required by applicable law" is **[MOSES]**, for the adviser.
    School-fee payments made by parents are the *school's* records, which it has exported.
-2. **If the school is still active, suspend it** (Super-admin → Suspend) so nothing writes while you
-   delete. A write that lands mid-run is not dangerous: the final in-transaction check sees the new
-   row and rolls the whole run back, and you rerun. Suspending just avoids the rerun.
+2. **Suspending is done by the script** (since 4 Oct 2026). `--execute` suspends the school, then waits
+   about 5 minutes before deleting, because the API keeps a cached copy of the school and of each
+   account's state for up to that long. Until those copies expire, the school's users could keep using
+   a session they already had. The wait is the longest time in `apps/api/src/config/cacheTimes.json`
+   plus 15 seconds, and the dry run prints it. Each school's deletion locks its row and refuses unless
+   it is still suspended, so do not reactivate it during the wait. You may still suspend it yourself
+   first (Super-admin → Suspend); the script then leaves it as it is and waits all the same.
 3. **Dry run** (changes nothing), from a machine with the production env:
    ```bash
    DATABASE_URL=<production pooler url> \
@@ -62,10 +66,28 @@ deleting transaction.
    "Supabase Auth accounts" in the plan counts real logins (users with an `auth.users` row), not
    users rows. Only those are deleted. A brief network error on one is retried twice before it
    stops the run (since 2 Oct 2026; before that, every users row was "an account").
-   Order: Supabase Auth accounts and Storage files first, stopping if any fails; then **one
-   database transaction**, children before parents, ending with `audit_logs` (through
+   Order: suspend, wait, then per school: Supabase Auth accounts and Storage files first, stopping
+   if any fails; then **one database transaction** that locks the school's row, refuses unless it is
+   still suspended, and deletes children before parents, ending with `audit_logs` (through
    `chronixedu_purge.purge_school_audit_logs`), `platform_audit_logs`, `users`, `schools`. Before
    committing it recounts every table and rolls back unless all are zero.
+
+   **If a run stops partway,** it prints `STOPPED after deleting N of M` and lists every school it
+   suspended that is still suspended. Rerun to finish (it is safe to repeat), or reactivate any of
+   them you meant to keep.
+
+   **Every school but one** (clearing test schools, for example):
+   ```bash
+   # Dry run: lists the school kept and every school to delete, with their counts.
+   DATABASE_URL=… node apps/api/scripts/delete-school-data.js --all-except <kept-school-uuid> --allow-host <db host>
+   # Execute: name the kept school's slug, and the number to delete as the dry run printed it.
+   DATABASE_URL=… SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
+   node apps/api/scripts/delete-school-data.js --all-except <kept-school-uuid> --allow-host <db host> \
+     --execute --confirm <kept-school-slug> --confirm-count <number> --operator <your email> --with-supabase
+   ```
+   The list is built from the database at run time, never typed out. One wait covers every school.
+   At the end it checks that exactly one school is left, and that it is the kept one, by id. A count
+   of one alone would also be what deleting the wrong schools leaves.
 5. **Sub-processors.** Work through the table below. Two need the addresses from step 3:
    - **SendGrid**: remove each email address from Suppressions (bounces, blocks, spam reports,
      unsubscribes), in the dashboard or `DELETE /v3/suppression/{type}/{email}`. Suppressions never

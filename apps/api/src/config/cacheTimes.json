@@ -1,0 +1,6 @@
+{
+  "_about": "How long each cache that decides whether a request is let in may answer without asking the database, in seconds. Read by the API (src/config/cacheTimes.ts) and by the deletion script (scripts/delete-school-data.js), which suspends a school and waits out the longest of these before deleting it, so the wait cannot drift from the caches. Any key ending _seconds counts toward that wait. cacheTimes.test.ts fails on a typed-in expiry for these caches anywhere in src.",
+  "school_seconds": 300,
+  "user_active_seconds": 300,
+  "must_change_password_seconds": 300
+}

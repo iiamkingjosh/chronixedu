@@ -47,7 +47,13 @@ it('the worker completes without throwing when the row it is working on is purge
   await owner.connect();
   let purged = false;
   (sendEmail as jest.Mock).mockImplementation(async () => {
-    if (!purged) { purged = true; await executeSchoolDeletion(owner, I.schoolA, OPERATOR); }
+    // Suspended first, as the deletion requires (fix (a2)); here, not before the worker starts, so the
+    // worker reads school A's queue exactly as it would have.
+    if (!purged) {
+      purged = true;
+      await owner.query(`UPDATE schools SET is_active = false WHERE id = $1`, [I.schoolA]);
+      await executeSchoolDeletion(owner, I.schoolA, OPERATOR);
+    }
   });
   try {
     await expect(processNotificationQueue()).resolves.toBeUndefined();

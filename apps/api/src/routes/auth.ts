@@ -27,6 +27,7 @@ import {
   CHALLENGE_TTL_SECONDS, CHALLENGE_MAX_ATTEMPTS,
 } from '../db/queries/loginChallenges';
 import { logPlatformAudit } from '../db/queries/platformAudit';
+import { MUST_CHANGE_PASSWORD_CACHE_SECONDS } from '../config/cacheTimes';
 
 const router = express.Router();
 
@@ -704,7 +705,7 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
     // unblocks this user on their very next request, rather than waiting out the
     // 5-minute cache TTL.
     if (redis) {
-      await redis.set(`must_change_password:${local.id}`, '0', 'EX', 300);
+      await redis.set(`must_change_password:${local.id}`, '0', 'EX', MUST_CHANGE_PASSWORD_CACHE_SECONDS);
     }
 
     if (local.school_id) {
@@ -778,7 +779,7 @@ router.post('/change-password', verifyToken, async (req: Request, res: Response,
     // unblocks this user on their very next request, rather than waiting out the
     // 5-minute cache TTL.
     if (redis) {
-      await redis.set(`must_change_password:${userId}`, '0', 'EX', 300);
+      await redis.set(`must_change_password:${userId}`, '0', 'EX', MUST_CHANGE_PASSWORD_CACHE_SECONDS);
     }
 
     if (req.user!.school_id) {

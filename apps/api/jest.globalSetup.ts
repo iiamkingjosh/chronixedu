@@ -90,9 +90,19 @@ export default async function globalSetup(): Promise<void> {
   // collection time. Always written, empty when Auth works, so a value left over from a
   // previous shell cannot skip tests that could run.
   process.env.TEST_AUTH_UNAVAILABLE = await probeAuth();
+  // CI starts Supabase's local stack (database, Auth, gateway) and sets REQUIRE_TEST_AUTH, so there
+  // the Auth-dependent tests must run: a stack that failed to start fails the run instead of turning
+  // back into "7 skipped" that nobody reads (doctrine 9; decided 4 Oct 2026). Locally it is unset, and
+  // the tests skip with the reason below, because a local run does not start a Supabase stack: the
+  // ERP project's stack in the same Docker VM is what starves local runs (CLAUDE.md).
+  if (process.env.TEST_AUTH_UNAVAILABLE && process.env.REQUIRE_TEST_AUTH === '1') {
+    throw new Error(`REQUIRE_TEST_AUTH is set, but Supabase Auth is unusable: ${process.env.TEST_AUTH_UNAVAILABLE}`);
+  }
   if (process.env.TEST_AUTH_UNAVAILABLE) {
     console.warn(`
 [globalSetup] Supabase Auth unusable — Auth-dependent tests will be SKIPPED: ${process.env.TEST_AUTH_UNAVAILABLE}
+They run in CI, against Supabase's local stack. To run them here, start one at SUPABASE_URL with its
+service-role key (\`supabase start -x realtime,storage-api,imgproxy,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor\`).
 `);
   }
 

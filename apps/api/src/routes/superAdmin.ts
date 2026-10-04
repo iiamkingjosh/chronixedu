@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import jwt, { SignOptions } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { verifyToken, requireRole } from '../middleware/auth';
@@ -14,6 +14,8 @@ import { getPlatformRevenue } from '../db/queries/platformRevenue';
 import { planEnum } from '../services/planFeatures';
 import { csvCell } from '../services/csv';
 import { cache, schoolCacheKey } from '../services/cacheService';
+import { USER_ACTIVE_CACHE_SECONDS } from '../config/cacheTimes';
+import { SUPPORT_SESSION_SECONDS, SUPPORT_TOKEN_STORE_SECONDS, SUPPORT_TOKEN_REVOKED_SECONDS } from '../config/supportSession';
 import { newSchoolAcademicConfig } from '../services/schoolService';
 import { getCronStatus } from '../services/cronTracker';
 import { getRecentErrorCount } from '../services/platformAnalyticsService';
@@ -418,10 +420,6 @@ router.post(
       );
       const sessionId = sessionResult.rows[0].id;
 
-      const expiresIn = process.env.SUPPORT_SESSION_MAX_DURATION_HOURS
-        ? `${process.env.SUPPORT_SESSION_MAX_DURATION_HOURS}h`
-        : '30m';
-
       const jwtSecret = process.env.JWT_SECRET;
       if (!jwtSecret) throw new Error('JWT_SECRET is not set');
 
@@ -446,15 +444,14 @@ router.post(
           impersonated_title: target.title,
         },
         jwtSecret,
-        { expiresIn: expiresIn as SignOptions['expiresIn'] }
+        // One number of seconds, read once (config/supportSession.ts), drives the token's life, the
+        // store below and the revocation list, so none of them can forget the token while it works.
+        { expiresIn: SUPPORT_SESSION_SECONDS }
       );
 
       // Store scoped token in Redis so it can be revoked when the session ends.
-      const tokenTtlSeconds = process.env.SUPPORT_SESSION_MAX_DURATION_HOURS
-        ? parseInt(process.env.SUPPORT_SESSION_MAX_DURATION_HOURS, 10) * 3600
-        : 30 * 60;
       if (redis) {
-        await redis.set(`support_session_token:${sessionId}`, scopedToken, 'EX', tokenTtlSeconds + 60);
+        await redis.set(`support_session_token:${sessionId}`, scopedToken, 'EX', SUPPORT_TOKEN_STORE_SECONDS);
       }
 
       await pool.query(
@@ -498,7 +495,7 @@ router.patch(
       if (redis) {
         const storedToken = await redis.get(`support_session_token:${session.id}`);
         if (storedToken) {
-          await redis.set(`blacklisted_token:${storedToken}`, '1', 'EX', 30 * 60);
+          await redis.set(`blacklisted_token:${storedToken}`, '1', 'EX', SUPPORT_TOKEN_REVOKED_SECONDS);
           await redis.del(`support_session_token:${session.id}`);
         }
       }
@@ -2733,7 +2730,7 @@ router.patch(
       // Immediately update the is_active cache so verifyToken blocks the admin on
       // the next request instead of trusting the up-to-5-minute-stale cached value.
       if (redis) {
-        await redis.set(`user_active:${req.params.id}`, '0', 'EX', 300);
+        await redis.set(`user_active:${req.params.id}`, '0', 'EX', USER_ACTIVE_CACHE_SECONDS);
       }
       // End any impersonation session this admin currently has open and blacklist
       // its scoped token so it can't outlive the suspension.
@@ -2865,7 +2862,7 @@ router.delete(
       // Immediately update the is_active cache so verifyToken blocks the admin on
       // the next request instead of trusting the up-to-5-minute-stale cached value.
       if (redis) {
-        await redis.set(`user_active:${req.params.id}`, '0', 'EX', 300);
+        await redis.set(`user_active:${req.params.id}`, '0', 'EX', USER_ACTIVE_CACHE_SECONDS);
       }
       // End any impersonation session this admin currently has open and blacklist
       // its scoped token so it can't outlive the deletion.

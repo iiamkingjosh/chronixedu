@@ -1,8 +1,50 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 35 — 2026-10-03  
-**Scope:** Supabase sessions left by every sign-in, and what may reset a password  
-**Round 35 total findings:** 1 (0 Critical · 1 High · 0 Medium · 0 Low) — remediated and verified in production
+**Latest audit:** Round 36 — 2026-10-04  
+**Scope:** What a token for a deleted account can still reach, and how long a revoked support token stays revoked  
+**Round 36 total findings:** 2 (0 Critical · 0 High · 0 Medium · 2 Low) — remediated, not yet deployed
+
+---
+
+## Round 36 — 2026-10-04
+
+### L-01 — A deleted school's users kept working sessions for up to 5 minutes ✅ Remediated
+
+**Files:** `apps/api/scripts/delete-school-data.js`, `apps/api/src/middleware/auth.ts`, `apps/api/src/config/cacheTimes.json` and `cacheTimes.ts` (new), `apps/api/src/services/cacheService.ts`, the seven Redis writers of `user_active` and `must_change_password`.
+
+**Found** while recording 2FA commit 4's fail-closed rule for a missing account row (`docs/AUDIT-2026-09.md`). The reviewer traced the path that reaches it: deleting a school.
+
+**The mechanism.**
+- **Two caches answer without the database.** `requireActiveSchool` serves a school from an in-process cache for 5 minutes, and `verifyToken` trusts a `user_active` "1" in Redis for 5 minutes.
+- **The deletion cleared neither.** `delete-school-data.js` is a separate process, and has no Redis access.
+- **A missing row read as yes.** `is_active !== false` and `must_change_password === true` both answered the permissive way for a row that was gone.
+- **So,** for up to 5 minutes after a school was deleted without first being suspended, its users' live tokens passed the whole `/api/schools` chain. The school's rows were gone and every `school_id` table has a foreign key to `schools`, so as far as measured nothing could be read or written; it was still access that should have ended. It is the path a real customer's offboarding takes.
+
+**Fix.**
+- **The script suspends, waits, re-checks.**
+  - **Suspends** every school it will delete.
+  - **Waits** the longest time in the shared `config/cacheTimes.json` plus 15 s.
+  - **Re-checks** inside each school's transaction, with the row locked, refusing unless the school is still suspended.
+  - It holds at any replica count, and whatever suspended the school.
+- **A token whose account row is gone is refused** (401 `ACCOUNT_NOT_FOUND`), for every role.
+- **The cache times live in one file,** read by the API and the script. `cacheTimes.test.ts` fails on a typed-in expiry. Before, the same 300 was typed seven times, and two reviews each miscounted the copies.
+
+**Accepted:** a `user_active` "1" cached while the row existed can still answer for up to its cache time after the row goes. The suspend-and-wait makes that harmless for a deleted school.
+
+### L-02 — A revoked support token's revocation could expire before the token ✅ Remediated (latent: never live)
+
+**Files:** `apps/api/src/config/supportSession.ts` (new), `apps/api/src/config/env.ts`, `apps/api/src/routes/superAdmin.ts`, `apps/api/src/services/supportSessions.ts`.
+
+**Raised by the reviewer.** `SUPPORT_SESSION_MAX_DURATION_HOURS` was read three ways:
+- the token's life read it as text;
+- the token store, which ending a session reads to find the token, used `parseInt`;
+- the revocation list ignored it and always kept an entry for 30 minutes.
+
+**What it would have done.** At `2`, a revoked token's entry expired 90 minutes before the token. At `0.5`, the store kept the token for 60 s of its 30 minutes, so ending a session revoked nothing.
+
+**Why it was latent.** The variable is not set in production (checked 4 Oct 2026), so all three were 30 minutes. The revocation list is also the second check: `detectSupportSession` refuses a session whose `ended_at` is set, from the database, and `verifyToken` makes the session header mandatory. The reviewer's first reading, that a revoked token would be accepted again, was withdrawn once that gate was traced.
+
+**Fix.** The setting is read once, in seconds, and all three come from that number; the store and the list outlive the token. A value that cannot be honoured stops the API at boot. `supportSession.test.ts` covers a whole and a fractional setting.
 
 ---
 

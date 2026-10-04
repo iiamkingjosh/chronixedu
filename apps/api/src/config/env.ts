@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseTotpKey } from '../services/totpSecretBox';
+import { parseSupportSessionHours } from './supportSession';
 
 const envSchema = z.object({
   DATABASE_URL: z
@@ -50,6 +51,10 @@ const envSchema = z.object({
   TOTP_ENCRYPTION_KEY: z
     .string({ message: 'TOTP_ENCRYPTION_KEY is required (32 random bytes, base64)' })
     .refine((v) => parseTotpKey(v) !== null, 'TOTP_ENCRYPTION_KEY must be exactly 32 bytes, base64'),
+  // How long a support session's token lives, in hours (config/supportSession.ts). Optional: unset
+  // means 30 minutes. A value that cannot be honoured stops the API rather than being guessed at.
+  SUPPORT_SESSION_MAX_DURATION_HOURS: z.string().optional()
+    .refine((v) => parseSupportSessionHours(v) !== null, 'SUPPORT_SESSION_MAX_DURATION_HOURS must be a positive number of hours, such as 0.5 or 2'),
 });
 
 export type Env = z.infer<typeof envSchema>;

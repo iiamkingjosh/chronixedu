@@ -289,6 +289,28 @@ Monorepo, npm workspaces:
 - Support sessions (impersonation) require the `x-support-session-id` header and
   a live `support_sessions` row. `ROOT_ADMIN_EMAIL` alone may manage other
   super_admins and wipe school data.
+- **A support token's life is one number** (`config/supportSession.ts`, 4 Oct 2026):
+  `SUPPORT_SESSION_MAX_DURATION_HOURS`, read once, in seconds.
+  - It drives the token's `expiresIn`, the Redis token store and the revocation list, and the store and
+    the list outlive the token. It used to be read three ways: at 0.5 hours, ending a session revoked
+    nothing.
+  - Unset means 30 minutes. A value that cannot be honoured (`2h`, `abc`, `0`) stops the API at boot.
+  - The revocation list is the second check. The first is `detectSupportSession`'s `ended_at`, read from
+    the database on every request.
+- **A token for an account whose `users` row is gone is refused, for every role** (401
+  `ACCOUNT_NOT_FOUND`, `verifyToken` and `requirePasswordChanged`; fix (b), 4 Oct 2026).
+  - **What it fixed:** `is_active !== false` read a missing row as active.
+  - **The tail:** the refusal fires when the row is read. A `user_active` "1" cached in Redis while the
+    row existed can still answer for up to its cache time. Accepted (4 Oct 2026): deleting a school
+    suspends it and waits that out first.
+  - **Not given to the script:** Redis access. It would be one more production credential on a
+    laptop.
+- **The cache times that let a request in live in one file,** `config/cacheTimes.json`: the school row
+  (in-process), and `user_active` and `must_change_password` (Redis).
+  - The API reads it through `config/cacheTimes.ts`, and the deletion script reads it to know how long
+    to wait.
+  - Never type an expiry for these: `cacheTimes.test.ts` fails on a numeric Redis expiry anywhere in
+    `src` outside its listed exceptions.
 - Web stores the token in `localStorage` (`chronixedu_token`). `apiFetch`
   redirects to `/login` on 401 unless called with `deferAuthRedirect: true`,
   which throws `SessionExpiredError` so the caller can save unsaved work first.
@@ -873,6 +895,21 @@ Monorepo, npm workspaces:
   Changing the purge function means acting as `chronixedu_audit_purger` (048 shows how). Never
   widen its grants: functions in `public` default to EXECUTE for PUBLIC, which Supabase serves to
   `anon` over `/rest/v1/rpc`.
+- **Suspend, wait, re-check** (fix (a2), 4 Oct 2026). The API caches a school's row in its own memory
+  and account state in Redis, and the script can clear neither: it is a separate process, and it is
+  given no Redis access on purpose.
+  - **So `--execute`:**
+    - suspends every school it will delete;
+    - waits the longest time in `config/cacheTimes.json` plus 15 s (`deletionWaitSeconds`);
+    - deletes each school in its own transaction, which locks the school's row and refuses unless it is
+      still suspended.
+  - **One wait covers a whole run.** Once every school is suspended, nothing can cache one as active
+    again.
+  - **A run that stops after suspending prints every school it left suspended.**
+  - **`--all-except <id>`** deletes every school but one. The list is built from the database, never
+    typed. The run confirms with the kept school's slug and the number to delete, and ends by asserting
+    that exactly one school is left, checked by id.
+  - **Before (a2),** deleting an active school left its users' live tokens working for up to 5 minutes.
 - **A school created on production sends real mail**, including the principal's welcome email with a
   working set-password link. A trial uses an address that reaches a mailbox Chronix reads, never an
   invented one (`docs/data-deletion-runbook.md`, "Mail during a production trial").
@@ -1199,9 +1236,11 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 45 suites, 451 passed + 2 skipped (4 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 45 suites, 459 passed + 2 skipped (4 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
-npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped (Auth-dependent; the setup says why)
+npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped locally (Auth-dependent; the setup
+                                                # says why). CI runs those 7 against Supabase's local stack and sets
+                                                # REQUIRE_TEST_AUTH, so there an unusable Auth FAILS the run (4 Oct 2026)
 (cd apps/web && npx next build)
 ```
 

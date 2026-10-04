@@ -1,7 +1,8 @@
 import NodeCache from 'node-cache';
+import { SCHOOL_CACHE_SECONDS } from '../config/cacheTimes';
 
 const TTL = {
-  SCHOOL:   5 * 60,  // 5 min  — school identity/settings (changes rarely)
+  SCHOOL:   SCHOOL_CACHE_SECONDS,  // school identity/settings; config/cacheTimes.json, which the deletion script waits out
   ROSTER:   3 * 60,  // 3 min  — classes, subjects, staff lists
   CONTEXT:  60,      // 1 min  — active session/term
   STATS:    5 * 60,  // 5 min  — dashboard stats

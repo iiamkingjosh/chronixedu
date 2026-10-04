@@ -39,6 +39,9 @@ describe('Attendance access control', () => {
 
   let studentUserId: string;
   let unassignedTeacherUserId: string;
+  // A real parent, so the 403 below is the role, not a missing account (a token whose account has no
+  // row is refused earlier, with 401: 4 Oct 2026, fix (b)).
+  let parentUserId: string;
   let unassignedClassId: string;
 
   beforeAll(async () => {
@@ -50,6 +53,11 @@ describe('Attendance access control', () => {
       [SCHOOL_ID, `access-student-${suffix}@chronixedu-test.com`]
     );
     studentUserId = studentUserResult.rows[0].id;
+
+    parentUserId = (await pool.query<{ id: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'parent', 'AccessControl', 'Parent', FALSE) RETURNING id`,
+      [SCHOOL_ID, `access-parent-${suffix}@chronixedu-test.com`])).rows[0].id;
 
     // A second teacher, not assigned to CLASS_ID and not its form teacher.
     const teacherUserResult = await pool.query<{ id: string }>(
@@ -73,7 +81,7 @@ describe('Attendance access control', () => {
 
   afterAll(async () => {
     await pool.query(`DELETE FROM classes WHERE id = $1`, [unassignedClassId]);
-    await pool.query(`DELETE FROM users WHERE id IN ($1, $2) AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [studentUserId, unassignedTeacherUserId]);
+    await pool.query(`DELETE FROM users WHERE id IN ($1, $2, $3) AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [studentUserId, unassignedTeacherUserId, parentUserId]);
     await pool.end();
   }, 20000);
 
@@ -92,7 +100,7 @@ describe('Attendance access control', () => {
     });
 
     it('rejects a parent with 403', async () => {
-      const parentToken = makeToken('parent', SCHOOL_ID, randomUUID());
+      const parentToken = makeToken('parent', SCHOOL_ID, parentUserId);
       const res = await buildRequest().set('Authorization', `Bearer ${parentToken}`);
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);

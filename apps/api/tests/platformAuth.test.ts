@@ -12,6 +12,8 @@ import superAdminRouter from '../src/routes/superAdmin';
 import { errorHandler } from '../src/middleware/errorHandler';
 
 const SCHOOL_ID = 'a8f70089-aef1-4f65-a226-4c68d0380285';
+// The integration fixture's teacher (jest.globalSetup.ts).
+const TEACHER_ID = '37a19d2d-fa5d-45d3-9dc1-5ea1875ef3e0';
 
 const app = express();
 app.use(express.json());
@@ -25,6 +27,9 @@ function makeToken(userId: string, role: string, schoolId: string | null, email:
 describe('Platform Auth Isolation', () => {
   let superAdminUserId: string;
   let superAdminToken: string;
+  // Real accounts, so each refusal below is the role, not a missing account: a token whose account
+  // has no row is refused earlier, with 401 (4 Oct 2026, fix (b)).
+  let principalUserId: string;
 
   beforeAll(async () => {
     const result = await pool.query<{ id: string }>(
@@ -36,11 +41,15 @@ describe('Platform Auth Isolation', () => {
     superAdminUserId = result.rows[0].id;
     const row = await pool.query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [superAdminUserId]);
     superAdminToken = makeToken(superAdminUserId, 'super_admin', null, row.rows[0].email);
+    principalUserId = (await pool.query<{ id: string }>(
+      `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, must_change_password)
+       VALUES ($1, $2, 'test-hash', 'principal', 'Platform', 'Principal', FALSE) RETURNING id`,
+      [SCHOOL_ID, `platformauth-principal-${randomUUID()}@test.com`])).rows[0].id;
   }, 20000);
 
   afterAll(async () => {
     await pool.query(`DELETE FROM platform_audit_logs WHERE platform_admin_id = $1`, [superAdminUserId]);
-    await pool.query(`DELETE FROM users WHERE id = $1 AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [superAdminUserId]);
+    await pool.query(`DELETE FROM users WHERE id IN ($1, $2) AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [superAdminUserId, principalUserId]);
     await pool.end();
   });
 
@@ -53,7 +62,7 @@ describe('Platform Auth Isolation', () => {
   });
 
   it('principal token → GET /api/super-admin/schools → 403', async () => {
-    const token = makeToken(randomUUID(), 'principal', SCHOOL_ID, 'principal@test.com');
+    const token = makeToken(principalUserId, 'principal', SCHOOL_ID, 'principal@test.com');
     const res = await request(app)
       .get('/api/super-admin/schools')
       .set('Authorization', `Bearer ${token}`);
@@ -61,7 +70,7 @@ describe('Platform Auth Isolation', () => {
   });
 
   it('teacher token → GET /api/super-admin/schools → 403', async () => {
-    const token = makeToken(randomUUID(), 'teacher', SCHOOL_ID, 'teacher@test.com');
+    const token = makeToken(TEACHER_ID, 'teacher', SCHOOL_ID, 'teacher@test.com');
     const res = await request(app)
       .get('/api/super-admin/schools')
       .set('Authorization', `Bearer ${token}`);

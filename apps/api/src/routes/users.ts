@@ -27,6 +27,7 @@ import { generateStaffBulkImportResultsFile, type CreatedStaffRecord, type Faile
 import { logger } from '../config/logger';
 import { sendWelcomeEmails, type WelcomeRecipient } from '../services/welcomeEmail';
 import { cache, schoolCacheKey } from '../services/cacheService';
+import { USER_ACTIVE_CACHE_SECONDS } from '../config/cacheTimes';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -300,7 +301,7 @@ router.patch(
 
       // Immediately update the is_active cache so verifyToken blocks the user on the next request
       if (redis) {
-        await redis.set(`user_active:${req.params.userId}`, parsed.data.is_active ? '1' : '0', 'EX', 300);
+        await redis.set(`user_active:${req.params.userId}`, parsed.data.is_active ? '1' : '0', 'EX', USER_ACTIVE_CACHE_SECONDS);
       }
 
       await logAudit({
