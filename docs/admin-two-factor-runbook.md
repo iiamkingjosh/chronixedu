@@ -44,7 +44,7 @@ password and a code.
 3. Enter the 6-digit code. It switches on, every other session on the account is signed out, and ten
    recovery codes appear once. Copy or download them before pressing "I have saved them".
 
-There is no switch to turn it off. New recovery codes can be made with a current code.
+New recovery codes can be made with a current code. It can be turned off (since 4 Oct 2026, below).
 
 ## Signing in with it
 
@@ -71,6 +71,21 @@ For when your current phone still works. If it is lost, sign in with a recovery 
    - the old phone's codes stop working;
    - every other session on your account is signed out;
    - your recovery codes stay the same.
+
+## Turning it off
+
+At the bottom of Two-factor Sign-in, choose "Turn two-factor sign-in off…". The page says what happens
+first. Then enter your password and a code from your authenticator app; if the phone is lost, "Use a
+recovery code instead", and that code is used up. When it is off:
+- signing in needs only your password;
+- the authenticator, any phone move you had started, and all your recovery codes are removed;
+- every other session on your account is signed out;
+- the change is recorded, and the dashboard and the Admins list show "Off".
+
+Switching it back on is the same as the first time: a new QR code and new recovery codes.
+
+If your account is marked "required", it cannot be turned off. The root admin can make their own
+account optional first; for any other admin there is no way back except break-glass, today.
 
 ## Making it required for your account
 

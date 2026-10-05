@@ -14,20 +14,22 @@ import {
   savePendingTotpSecret, readTotpSecret, readTotpState, isLocked, activateTotp, acceptTotpStep,
   recordTotpFailure, replaceRecoveryCodes, unusedRecoveryCodeCount, isTwoFactorRequired, TOTP_LOCK_MINUTES,
   savePendingDeviceMove, readPendingDeviceMove, completeDeviceMove, setTwoFactorRequired, DEVICE_MOVE_MINUTES,
+  consumeRecoveryCode, disableTwoFactor,
 } from '../db/queries/twoFactorStore';
 
 /**
- * Platform-admin two-factor: enrolment (commit 2, 3 Oct 2026), and moving to a new phone and the
- * requirement setting (commit 5, 4 Oct 2026). Mounted at /api/super-admin/two-factor, for platform
- * admins only.
+ * Platform-admin two-factor: enrolment (commit 2, 3 Oct 2026), moving to a new phone and the
+ * requirement setting (commit 5, 4 Oct 2026), and turning it off (4 Oct 2026). Mounted at
+ * /api/super-admin/two-factor, for platform admins only.
  *
  * Nothing here returns the secret or a recovery code except in the body of a POST response marked
  * not to be stored: never in a GET, never in a URL, where it would reach browser history and every
  * log on the way. Nothing here logs either, or puts either in an audit row.
  *
- * Decided, and not built: there is no way to switch two-factor off yourself. The way out of a lost
- * phone is recovery codes, then break-glass (docs/admin-two-factor-runbook.md). If it is ever built:
- * the password and a current code, audited.
+ * Turning it off was decided against on 3 Oct 2026 and reversed deliberately on 4 Oct at Moses's request,
+ * on the conditions that decision set: the password and a current code (or a recovery code), audited.
+ * It is refused while the account is marked required. A lost phone is still recovery codes, then
+ * break-glass (docs/admin-two-factor-runbook.md).
  */
 const router = Router();
 const guard = [verifyToken, requireRole('super_admin')];
@@ -43,6 +45,17 @@ const sixDigits = z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code fro
 const codeSchema = z.object({ code: sixDigits });
 const deviceMoveSchema = z.object({ password: z.string().min(1, 'Enter your password'), code: sixDigits });
 const requirementSchema = z.object({ required: z.boolean({ message: 'Say whether two-factor sign-in is required' }) });
+// Turning it off: the password, and exactly one of a current code or a recovery code.
+const disableSchema = z
+  .object({
+    password: z.string().min(1, 'Enter your password'),
+    code: sixDigits.optional(),
+    recovery_code: z.string().trim().min(16).max(40).optional(),
+  })
+  .refine((d) => (d.code ? 1 : 0) + (d.recovery_code ? 1 : 0) === 1, {
+    message: 'Enter a code from your authenticator app, or one recovery code',
+    path: ['code'],
+  });
 
 /** The root platform admin (ROOT_ADMIN_EMAIL), the only one who may make two-factor optional again. */
 function isRootAdmin(req: Request): boolean {
@@ -67,16 +80,19 @@ async function refuseWrongCode(req: Request, res: Response, userId: string, emai
 }
 
 /**
- * A fresh token for the session that just enrolled: enrolment ended every session issued before it.
- * It records the second factor, because the admin has just typed a code from the authenticator, and
- * verifyToken refuses an enrolled admin's token without one (commit 4).
+ * A fresh token for a session that just ended every other one (enrolment, a phone move, turning it
+ * off). After enrolment or a move it records the second factor, because the admin has just typed a code
+ * from the authenticator and verifyToken refuses an enrolled admin's token without one (commit 4).
+ * After turning it off it records none, because there is no longer a second factor to record.
  */
-function freshToken(req: Request): string {
+function freshToken(req: Request, withSecondFactor = true): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET is not set');
-  const claims: Record<string, unknown> = { ...(req.user as unknown as Record<string, unknown>), second_factor: 'totp' };
+  const claims: Record<string, unknown> = { ...(req.user as unknown as Record<string, unknown>) };
   delete claims.iat;
   delete claims.exp;
+  delete claims.second_factor;
+  if (withSecondFactor) claims.second_factor = 'totp';
   return jwt.sign(claims, secret, { expiresIn: '1h' });
 }
 
@@ -325,6 +341,60 @@ router.put('/required', ...guard, async (req: Request, res: Response, next: Next
     if (!result) return refuse(res, 404, 'NOT_FOUND', 'No platform admin account was found for this session.');
 
     return res.json({ success: true, data: { required: parsed.data.required, previous: result.previous, changed: result.changed } });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// ── POST /disable ────────────────────────────────────────────────────────────
+// Turning two-factor off (4 Oct 2026). Never a session alone: a stolen session must not be able to
+// switch off the second factor it was meant to be stopped by. So the password and a current code (or,
+// with the phone lost, one recovery code, which is spent). Refused while the account is marked
+// required: otherwise "required" would mean nothing, and the root admin makes it optional first, as a
+// separate recorded step. Not a setup route: an admin confined to setup cannot reach it.
+router.post('/disable', ...guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = disableSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+
+    const userId = req.user!.user_id;
+    const email = req.user!.email ?? '';
+    const ip = clientIp(req) ?? 'unknown';
+    const required = () => refuse(res, 409, 'TWO_FACTOR_REQUIRED_FOR_ACCOUNT',
+      'Two-factor sign-in is required for this account, so it cannot be turned off. The root admin must make it optional first.');
+    const state = await readTotpState(userId);
+    if (!state?.activatedAt) return refuse(res, 409, 'TWO_FACTOR_NOT_ON', 'Two-factor sign-in is not on for this account.');
+    if (await isTwoFactorRequired(userId)) return required();
+    if (isLocked(state)) return refuse(res, 423, 'TWO_FACTOR_LOCKED', `Too many wrong codes. Try again in ${TOTP_LOCK_MINUTES} minutes.`);
+
+    if (await isLockedOut(email, ip)) return refuse(res, 429, 'ACCOUNT_LOCKED', 'Too many failed attempts. Try again in 15 minutes.');
+    if (!(await passwordMatches(email, parsed.data.password))) {
+      const { locked } = await recordFailedAttempt(email, ip);
+      if (locked) return refuse(res, 429, 'ACCOUNT_LOCKED', 'Too many failed attempts. Try again in 15 minutes.');
+      return refuse(res, 401, 'INVALID_PASSWORD', 'That password is not right.');
+    }
+
+    // The proof is checked, and a recovery code spent, before the transaction below. In the rare race
+    // where the account is marked required in between, the transaction refuses and the spent recovery
+    // code stays spent: one code lost, and nothing turned off.
+    const method: 'totp' | 'recovery_code' = parsed.data.code ? 'totp' : 'recovery_code';
+    if (parsed.data.code) {
+      const stored = await readTotpSecret(userId);
+      const now = Date.now() / 1000;
+      const step = stored ? matchTotpStep(stored.secret, parsed.data.code, now) : null;
+      const accepted = step !== null && await acceptTotpStep(userId, step);
+      if (!accepted) return refuseWrongCode(req, res, userId, email, ip, 'disable');
+      logger.info('totp_code_accepted', { user_id: userId, step_offset: step! - totpStep(now), route: 'disable' });
+    } else if (!(await consumeRecoveryCode(userId, parsed.data.recovery_code!))) {
+      return refuseWrongCode(req, res, userId, email, ip, 'disable');
+    }
+
+    const outcome = await disableTwoFactor(userId, method, clientIp(req) ?? null);
+    if (outcome === 'required') return required();
+    if (outcome === 'not_on') return refuse(res, 409, 'TWO_FACTOR_NOT_ON', 'Two-factor sign-in is not on for this account.');
+    await terminateActiveSupportSessions(userId);
+
+    return res.set(NO_STORE).json({ success: true, data: { access_token: freshToken(req, false) } });
   } catch (err) {
     return next(err);
   }

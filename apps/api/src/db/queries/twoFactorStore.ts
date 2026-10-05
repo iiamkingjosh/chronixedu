@@ -302,6 +302,44 @@ export async function clearTotpFailures(userId: string, db: Db = pool): Promise<
  * Removes an admin's second factor and recovery codes, for an admin who is being removed. Deleting
  * an active factor is recorded by migration 055's trigger (TWO_FACTOR_REMOVED).
  */
+/**
+ * Turns an admin's own two-factor off (4 Oct 2026; reverses the 3 Oct decision that there would be no
+ * way to do so). The caller has already checked the password and a current code or recovery code.
+ * One transaction, with its audit row (doctrine 10):
+ *  - locks the account's row and refuses while two_factor_required is true, so the requirement cannot
+ *    be set between the route's check and this one;
+ *  - records what was there before it is removed: when it was switched on, how many recovery codes
+ *    were left, and which proof was used;
+ *  - deletes the secret, any phone move waiting to be confirmed, and every recovery code, so nothing
+ *    stale is left to bring back. Migration 055's trigger also records the removal;
+ *  - ends every other session the admin had, as enrolment and a phone move do.
+ * 'required' and 'not_on' change nothing.
+ */
+export async function disableTwoFactor(
+  userId: string, method: 'totp' | 'recovery_code', ipAddress: string | null
+): Promise<'disabled' | 'required' | 'not_on'> {
+  return inTransaction(async (c) => {
+    const user = (await c.query<{ two_factor_required: boolean | null }>(
+      `SELECT two_factor_required FROM users WHERE id = $1 FOR UPDATE`, [userId])).rows[0];
+    if (!user || user.two_factor_required !== false) return 'required';
+    const factor = (await c.query<{ activated_at: Date | null }>(
+      `SELECT activated_at FROM user_totp WHERE user_id = $1 FOR UPDATE`, [userId])).rows[0];
+    if (!factor?.activated_at) return 'not_on';
+    const left = await unusedRecoveryCodeCount(userId, c);
+
+    await removeTwoFactor(userId, c);
+    await c.query(`UPDATE users SET sessions_valid_after = now() WHERE id = $1`, [userId]);
+    await logPlatformAudit({
+      adminId: userId,
+      actionType: 'TWO_FACTOR_DISABLED',
+      targetUserId: userId,
+      metadata: { enabled_at: factor.activated_at, unused_recovery_codes: left, proof: method },
+      ipAddress,
+    }, c);
+    return 'disabled';
+  });
+}
+
 export async function removeTwoFactor(userId: string, client?: PoolClient): Promise<void> {
   const q = client ?? pool;
   await q.query(`DELETE FROM user_recovery_codes WHERE user_id = $1`, [userId]);

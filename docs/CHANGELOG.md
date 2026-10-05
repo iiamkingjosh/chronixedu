@@ -1,5 +1,14 @@
 # Chronix Edu — Changelog
 
+## Two-factor sign-in can be turned off (2026-10-04)
+
+### For Chronix staff
+- At the bottom of Two-factor Sign-in, you can now turn it off. It asks for your password and a code
+  from your authenticator app, or one recovery code if you have lost your phone.
+- Turning it off removes your authenticator and recovery codes and signs out your other sessions.
+  Signing in then needs only your password. You can switch it back on at any time.
+- If your account is marked "required", it cannot be turned off.
+
 ## Two-factor sign-in: moving to a new phone, and making it required for your account (2026-10-04)
 
 ### For Chronix staff

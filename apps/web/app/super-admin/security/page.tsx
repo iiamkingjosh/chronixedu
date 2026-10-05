@@ -36,9 +36,14 @@ const passwordSchema = z.object({ password: z.string().min(1, 'Enter your passwo
 const sixDigits = z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code from your authenticator app');
 const codeSchema = z.object({ code: sixDigits });
 const moveSchema = z.object({ password: z.string().min(1, 'Enter your password'), code: sixDigits });
+const offSchema = z.object({
+  password: z.string().min(1, 'Enter your password'),
+  code: z.string().trim(),
+});
 type PasswordForm = z.infer<typeof passwordSchema>;
 type CodeForm = z.infer<typeof codeSchema>;
 type MoveForm = z.infer<typeof moveSchema>;
+type OffForm = z.infer<typeof offSchema>;
 
 function groupKey(secret: string): string {
   return secret.match(/.{1,4}/g)?.join(' ') ?? secret;
@@ -254,6 +259,93 @@ function Requirement({ status, onChanged }: { status: Status; onChanged: () => v
   );
 }
 
+/**
+ * Turning two-factor off (4 Oct 2026). The consequence is on screen before the form, and nothing is
+ * sent until the form is submitted with the password and a current code, or one recovery code. While
+ * the account is marked required, it says why it cannot be turned off instead.
+ */
+function TurnOff({ status, onDone }: { status: Status; onDone: (token: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [error, setError] = useState('');
+  const form = useForm<OffForm>({ resolver: zodResolver(offSchema) });
+
+  if (status.required) {
+    return (
+      <div className="card px-5 py-5">
+        <h2 className="text-base font-semibold text-gray-900">Turning it off</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Two-factor sign-in is required for your account, so it cannot be turned off here.
+          {status.may_make_optional ? ' Make it optional above first.' : ' Only the root admin can make it optional.'}
+        </p>
+      </div>
+    );
+  }
+
+  async function submit(values: OffForm) {
+    setError('');
+    const code = values.code.trim();
+    if (!useRecovery && !/^\d{6}$/.test(code)) {
+      form.setError('code', { message: 'Enter the 6-digit code from your authenticator app' });
+      return;
+    }
+    if (useRecovery && code.length < 16) {
+      form.setError('code', { message: 'Enter one of your recovery codes' });
+      return;
+    }
+    try {
+      const body = useRecovery ? { password: values.password, recovery_code: code } : { password: values.password, code };
+      const res = await apiFetch<{ data: { access_token: string } }>(`${BASE}/disable`, { method: 'POST', body: JSON.stringify(body) });
+      form.reset();
+      setOpen(false);
+      onDone(res.data.access_token);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Could not turn two-factor sign-in off');
+    }
+  }
+
+  return (
+    <div className="card px-5 py-5">
+      <h2 className="text-base font-semibold text-gray-900">Turning it off</h2>
+      {!open ? (
+        <>
+          <p className="mt-1 text-sm text-gray-600">You can switch it back on at any time, with a new QR code and new recovery codes.</p>
+          <button type="button" onClick={() => setOpen(true)} className="mt-3 rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:border-red-600 hover:text-red-700">
+            Turn two-factor sign-in off…
+          </button>
+        </>
+      ) : (
+        <form onSubmit={form.handleSubmit(submit)} noValidate>
+          <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Signing in will then need only your password. Your recovery codes stop working, and every other
+            session on this account is signed out. The change is recorded.
+          </div>
+          {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+          <input {...form.register('password')} type="password" autoComplete="current-password" placeholder="Password"
+            className="mt-3 w-full max-w-xs rounded-md border border-gray-300 px-3 py-2 text-sm" />
+          {form.formState.errors.password && <p className="mt-1 text-xs text-red-600">{form.formState.errors.password.message}</p>}
+          <input {...form.register('code')} inputMode={useRecovery ? 'text' : 'numeric'} autoComplete="one-time-code"
+            placeholder={useRecovery ? 'Recovery code' : 'Code from your authenticator app'}
+            className="mt-2 block w-64 rounded-md border border-gray-300 px-3 py-2 text-sm tracking-widest" />
+          {form.formState.errors.code && <p className="mt-1 text-xs text-red-600">{form.formState.errors.code.message}</p>}
+          <button type="button" onClick={() => { setUseRecovery(!useRecovery); form.clearErrors('code'); }}
+            className="mt-2 text-xs font-medium text-[#2472B4] hover:underline">
+            {useRecovery ? 'Use a code from your authenticator app instead' : 'Lost your phone? Use a recovery code instead'}
+          </button>
+          <div className="mt-3 flex gap-2">
+            <button type="submit" disabled={form.formState.isSubmitting} className="rounded-md bg-red-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-50">
+              {form.formState.isSubmitting ? 'Checking…' : 'Turn it off'}
+            </button>
+            <button type="button" onClick={() => { setOpen(false); setError(''); form.reset(); }} className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function SecurityPage() {
   const { user, setAuth } = useAuth();
   const [status, setStatus] = useState<Status | null>(null);
@@ -261,6 +353,7 @@ export default function SecurityPage() {
   const [enrolment, setEnrolment] = useState<{ uri: string; secret: string } | null>(null);
   const [codes, setCodes] = useState<string[] | null>(null);
   const [moved, setMoved] = useState(false);
+  const [turnedOff, setTurnedOff] = useState(false);
 
   const passwordForm = useForm<PasswordForm>({ resolver: zodResolver(passwordSchema) });
   const confirmForm = useForm<CodeForm>({ resolver: zodResolver(codeSchema) });
@@ -325,6 +418,14 @@ export default function SecurityPage() {
     void load();
   }
 
+  function switchedOff(token: string) {
+    // Turning it off ended every other session; this one continues on the new token.
+    if (user) setAuth(user, token);
+    setMoved(false);
+    setTurnedOff(true);
+    void load();
+  }
+
   return (
     <div className="p-8 max-w-2xl">
       <h1 className="text-2xl font-semibold text-gray-900 font-heading">Two-factor sign-in</h1>
@@ -338,6 +439,12 @@ export default function SecurityPage() {
       {!codes && status?.required && !status.enabled && (
         <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
           Your account needs two-factor sign-in before you can use the rest of the platform. Set it up below.
+        </div>
+      )}
+
+      {turnedOff && !status?.enabled && (
+        <div className="mb-4 rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
+          Two-factor sign-in is off. Signing in now needs only your password. Every other session was signed out.
         </div>
       )}
 
@@ -357,8 +464,8 @@ export default function SecurityPage() {
               <p className="mt-2 text-sm text-red-700">Locked after too many wrong codes, until {new Date(status.locked_until).toLocaleTimeString('en-NG')}.</p>
             )}
             <p className="mt-3 text-xs text-gray-500">
-              There is no switch to turn this off. If you lose your phone, sign in with a recovery code.
-              If those are lost too, the platform owner can reset it from the database.
+              If you lose your phone, sign in with a recovery code. If those are lost too, the platform
+              owner can reset it from the database. To switch it off, use the last section on this page.
             </p>
           </div>
           {moved && (
@@ -380,6 +487,7 @@ export default function SecurityPage() {
               </button>
             </div>
           </form>
+          <TurnOff status={status} onDone={switchedOff} />
         </div>
       )}
 

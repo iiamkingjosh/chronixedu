@@ -378,9 +378,25 @@ Monorepo, npm workspaces:
     past the factor. Wrong codes count against the database counter and the sign-in lockout.
   - **Removing an admin clears their 2FA** (`removeTwoFactor`). Removal anonymises the row, so
     nothing cascades.
-- **There is no way to switch two-factor off yourself** (decided 3 Oct 2026). The way out of a lost
-  phone is recovery codes, then break-glass. If it is ever built: the password and a current code,
-  audited.
+- **~~There is no way to switch two-factor off yourself~~ (decided 3 Oct 2026; REVERSED 4 Oct 2026, at
+  Moses's request).** The 3 Oct decision said that if it were ever built, it must take the password and a
+  current code, and be audited. It was built on exactly those conditions, plus one:
+  - **The route:** `POST /two-factor/disable` (`disableTwoFactor` in `db/queries/twoFactorStore.ts`).
+  - **Never a session alone:** the password, and exactly one of a current code or a recovery code (which
+    is spent). Wrong codes count as anywhere else (`refuseWrongCode`).
+  - **Refused while the account is marked required** (`TWO_FACTOR_REQUIRED_FOR_ACCOUNT`). Otherwise
+    "required" would mean nothing. The root admin makes it optional first: two steps, both recorded.
+    The transaction re-checks it with the account's row locked.
+  - **It leaves nothing to bring back.** The secret, a waiting phone move and every recovery code are
+    deleted; switching it on again starts from scratch.
+  - **Every other session ends,** support sessions included. This session continues on a token with no
+    second factor recorded.
+  - **Recorded:** `TWO_FACTOR_DISABLED`, with when it was switched on, how many recovery codes were
+    left and which proof was used. Migration 055's trigger adds `TWO_FACTOR_REMOVED`.
+  - **A lost phone is unchanged:** recovery codes, then break-glass.
+  - **Only an account that is not required can use it.** The requirement setting changes only the
+    caller's own account, so an admin marked required has no way back but break-glass. That is an open
+    item in `docs/AUDIT-2026-09.md`.
 - **Every new platform audit row goes through `logPlatformAudit`** (`db/queries/platformAudit.ts`,
   `ipAddress` required). The 20 direct INSERTs that predate it are left alone, and no new one is
   added (`docs/AUDIT-2026-09.md`).
@@ -1236,7 +1252,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 45 suites, 459 passed + 2 skipped (4 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 46 suites, 470 passed + 2 skipped (4 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped locally (Auth-dependent; the setup
                                                 # says why). CI runs those 7 against Supabase's local stack and sets

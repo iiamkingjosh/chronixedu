@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 36 — 2026-10-04  
 **Scope:** What a token for a deleted account can still reach, and how long a revoked support token stays revoked  
-**Round 36 total findings:** 2 (0 Critical · 0 High · 0 Medium · 2 Low) — remediated, not yet deployed
+**Round 36 total findings:** 2 (0 Critical · 0 High · 0 Medium · 2 Low) — remediated, live since 4 Oct 2026, 17:41 UTC (`9a3b2f3`)
 
 ---
 
