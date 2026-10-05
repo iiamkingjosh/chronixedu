@@ -60,6 +60,7 @@ notifications|service_role_bypass|ALL|service_role|Q=true|C=-
 onboarding_sessions|onboarding_sessions_super_admin|ALL|authenticated|Q=((auth.jwt() ->> 'role'::text) = 'super_admin'::text)|C=-
 parent_students|parent_students_tenant_isolation|ALL|public|Q=((parent_id = auth.uid()) AND (EXISTS ( SELECT 1 FROM students s WHERE ((s.id = parent_students.student_id) AND (s.school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)))))|C=((parent_id = auth.uid()) AND (EXISTS ( SELECT 1 FROM students s WHERE ((s.id = parent_students.student_id) AND (s.school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)))))
 parent_students|service_role_bypass|ALL|service_role|Q=true|C=true
+password_history|service_role_bypass|ALL|service_role|Q=true|C=true
 payments|payments_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)
 payments|service_role_bypass|ALL|service_role|Q=true|C=-
 platform_announcements|platform_announcements_super_admin|ALL|authenticated|Q=((auth.jwt() ->> 'role'::text) = 'super_admin'::text)|C=-

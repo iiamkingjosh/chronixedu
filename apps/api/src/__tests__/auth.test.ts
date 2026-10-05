@@ -413,9 +413,16 @@ describe('POST /api/auth/login — the Supabase session a sign-in creates is rev
   });
 });
 
+/** changeOwnPassword's part these routes rely on, with the database left out: it runs the Supabase
+ *  step and answers as that step did. The reuse rule and the transaction are passwordReuse.db.test.ts's. */
+async function applyTheSupabaseStep(_userId: string, _password: string, apply: () => Promise<{ ok: boolean; error?: string }>) {
+  const step = await apply();
+  return step.ok ? { ok: true } : { ok: false, error: step.error };
+}
+
 describe('POST /api/auth/confirm-reset — only a fresh reset link resets, once (Round 35)', () => {
   /* eslint-disable @typescript-eslint/no-var-requires */
-  const { findUserByEmail, endSessionsBeforeNow } = require('../db/queries/users');
+  const { findUserByEmail, endSessionsBeforeNow, changeOwnPassword } = require('../db/queries/users');
   const { logger } = require('../config/logger');
   /* eslint-enable @typescript-eslint/no-var-requires */
   const reset = (access_token: string) => request(app).post('/api/auth/confirm-reset')
@@ -426,6 +433,7 @@ describe('POST /api/auth/confirm-reset — only a fresh reset link resets, once 
     mockAdminUpdateUserById.mockResolvedValue({ data: {}, error: null });
     mockAdminSignOut.mockResolvedValue({ error: null });
     (findUserByEmail as jest.Mock).mockResolvedValue({ id: 'auth-1', email: 'parent@school.test', school_id: null });
+    (changeOwnPassword as jest.Mock).mockImplementation(applyTheSupabaseStep);
   });
   afterEach(() => jest.restoreAllMocks());
 
@@ -458,7 +466,7 @@ describe('POST /api/auth/confirm-reset — a login with no app account says so, 
   // A valid recovery link for a login with no users row used to answer "invalid or expired" and log
   // nothing, sending the person back for another link that would fail the same way (2 Oct 2026).
   /* eslint-disable @typescript-eslint/no-var-requires */
-  const { findUserByEmail } = require('../db/queries/users');
+  const { findUserByEmail, changeOwnPassword } = require('../db/queries/users');
   const { logger } = require('../config/logger');
   /* eslint-enable @typescript-eslint/no-var-requires */
   const mockFindUser = findUserByEmail as jest.Mock;
@@ -471,6 +479,7 @@ describe('POST /api/auth/confirm-reset — a login with no app account says so, 
     mockGetUserByToken.mockResolvedValue({ data: { user: { id: 'auth-1', email: 'parent@school.test' } }, error: null });
     mockAdminUpdateUserById.mockResolvedValue({ data: {}, error: null });
     mockAdminSignOut.mockResolvedValue({ error: null });
+    (changeOwnPassword as jest.Mock).mockImplementation(applyTheSupabaseStep);
   });
   afterEach(() => jest.restoreAllMocks());
 

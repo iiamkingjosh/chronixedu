@@ -98,6 +98,8 @@ const STEPS = [
   // does not match, so the record of the removal survives the deletion.
   { table: 'user_recovery_codes', where: `user_id IN ${U}` },
   { table: 'user_totp', where: `user_id IN ${U}` },
+  // Replaced passwords kept for the reuse rule (migration 060) go with their user too.
+  { table: 'password_history', where: `user_id IN ${U}` },
   { table: 'email_queue', where: `to_email IN (SELECT email FROM users WHERE school_id = $1)` },
   own('school_analytics_snapshots'),
   { table: 'parent_students', where: `student_id IN ${S} OR parent_id IN ${U}` },

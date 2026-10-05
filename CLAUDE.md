@@ -256,6 +256,28 @@ Monorepo, npm workspaces:
   - **Why:** it used to accept any session's token, so a lingering session was a password reset
     that bypassed sign-in and the second factor.
   - **Unchanged:** it asks for no current password, because a reset is for someone who has lost it.
+- **A person's own password is set in one place: `changeOwnPassword`** (`db/queries/users.ts`), for
+  `POST /change-password` and `POST /confirm-reset` (5 Oct 2026, SECURITY.md Round 37).
+  - **One transaction, the account row locked:** the reuse rule, the history, our bcrypt hash, then
+    Supabase's `updateUserById` before COMMIT, rolled back with it. confirm-reset used two separate
+    steps. Never set a person's own password anywhere else.
+  - **No reuse within 60 days** (Moses, 5 Oct 2026; `PASSWORD_REUSE_DAYS`, counted from when a password
+    was replaced). The current password and every one replaced in the window are refused: 400
+    `PASSWORD_RECENTLY_USED`.
+  - **`password_history` (migration 060) is a credential store.** Only bcrypt hashes of replaced
+    passwords; nothing older than 60 days (pruned on each change, and daily by
+    `password-history-retention`, 03:20 Lagos). RLS with the service-role bypass only, no grant to
+    `anon` or `authenticated`, never exported, deleted with the user and the school. It cannot see a
+    password set in the Supabase dashboard.
+  - **A reset's Supabase sessions are already gone.** Setting a password through the admin API ends
+    every Supabase session of the account, so confirm-reset's global sign-out answers
+    `session_not_found`. That one error is logged as done (`password_reset_sessions_already_ended`);
+    any other failure alerts. It alerted on every reset until 5 Oct 2026 (CHRONIXEDU-API-5).
+    `tests/passwordResetSessions.test.ts` holds the premise against Supabase's local stack in CI.
+  - **Both routes record the change,** a platform admin's in `platform_audit_logs`
+    (`auditOwnPasswordChange`). Neither recorded an admin's before.
+  - **A wrong current password answers 400, never 401:** `apiFetch` treats a 401 as a lapsed sign-in
+    and signs the person out.
 - **`POST /forgot-password` answers the same 200 and body for every well-formed request, before any
   email is attempted** (`sendResetEmail` runs after the response; a failure is logged by user id).
   Never await the send in the handler, or vary the answer on its result: the answer or its timing
@@ -606,6 +628,11 @@ Monorepo, npm workspaces:
   - a bulk import: the preview returns `mailed_addresses`, and the commit refuses without
     `mailed_addresses_confirmed: true` (`MAILED_ADDRESSES_NOT_CONFIRMED`).
 
+  **A parent's password never leaves the server** (5 Oct 2026, Round 37 L-01). Registering a student
+  and adding a parent returned it, and the registrar's screen showed and printed it, until then. The
+  screen and slip say how a parent sets one (the sign-in page, then Forgot password). A student's
+  temporary password is still shown and printed: most students have no email to reset with.
+
   **"Sent" means SendGrid accepted it.** `sendEmail` never throws; it returns
   `'sent' | 'queued' | 'lost' | 'disabled'`. Anything that tells a person an email went reads that
   value, never the absence of an error. `email_queue` keeps the body of every refused email, so
@@ -643,7 +670,7 @@ Monorepo, npm workspaces:
       announcements, payout alerts, the admin reset link, and the platform-admin emails.
     - **A new email needs the same decision.**
   - **The banner:** `apps/web/public/email/banner.png`, served by the web app. Never Supabase Storage,
-    which is going private. It is pinned by SHA-256 in `emailLayout.test.ts`. On 2 Oct the version
+    whose school-assets bucket is private (Round 37). It is pinned by SHA-256 in `emailLayout.test.ts`. On 2 Oct the version
     carrying a "Set up your school" button was saved under the approved name, and only its size gave it
     away; a changed banner now needs a new hash in the same commit.
   - **Deploy the image first.** The web serves the image and the API names it, so an API deploy that
@@ -926,6 +953,21 @@ Monorepo, npm workspaces:
     typed. The run confirms with the kept school's slug and the number to delete, and ends by asserting
     that exactly one school is left, checked by id.
   - **Before (a2),** deleting an active school left its users' live tokens working for up to 5 minutes.
+- **School files live in a private bucket and are recorded by their path** (`services/schoolAssets.ts`,
+  5 Oct 2026, SECURITY.md Round 37).
+  - **What:** `school-assets` holds logos, the school signature and stamp, staff signatures, student
+    photos and assignment files. It was public, so every link ever shown opened its file for anyone.
+  - **A record stores the path, never a URL.** Nothing calls `getPublicUrl`. Migration 061 converted
+    the public links already stored. A new upload stores its path; the column names still end `_url`.
+  - **A screen gets `signAsset`** (15 minutes, made per request, never cached: the 5-minute school
+    cache keeps paths). Today: the school record, `/users/me`, the student profile, assignments.
+  - **A PDF gets `assetDataUri`,** the image inside the page, and every PDF page calls `refuseNetwork`
+    before `setContent`, so the renderer fetches nothing. The identity route took any address for the
+    logo and stamp, and the renderer fetched it from inside Railway's network (M-02).
+  - **`assetStoragePath` decides what a stored value points at:** a path, or a link to this bucket.
+    Anything else is null and never fetched. Image fields are set only by their uploads; `PATCH
+    /identity` refuses them by name (`SET_BY_UPLOAD`).
+  - **The bucket switch** is made in the Supabase dashboard after the code that reads paths is live.
 - **A school created on production sends real mail**, including the principal's welcome email with a
   working set-password link. A trial uses an address that reaches a mailbox Chronix reads, never an
   invented one (`docs/data-deletion-runbook.md`, "Mail during a production trial").
@@ -1252,10 +1294,10 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 46 suites, 470 passed + 2 skipped (4 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 48 suites, 502 passed + 2 skipped (5 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
-npm run test:integration:local -- --forceExit   # 22 suites, 187 passed + 7 skipped locally (Auth-dependent; the setup
-                                                # says why). CI runs those 7 against Supabase's local stack and sets
+npm run test:integration:local -- --forceExit   # 23 suites, 187 passed + 8 skipped locally (Auth-dependent; the setup
+                                                # says why). CI runs those 8 against Supabase's local stack and sets
                                                 # REQUIRE_TEST_AUTH, so there an unusable Auth FAILS the run (4 Oct 2026)
 (cd apps/web && npx next build)
 ```

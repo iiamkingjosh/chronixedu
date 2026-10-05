@@ -51,6 +51,12 @@ const withPWA = require('@ducanh2912/next-pwa').default({
         urlPattern: /\/api\//,
         handler: 'NetworkOnly',
       },
+      // School files (logos, signatures, photos, homework) come from a private bucket through links
+      // that expire. Never kept on the device: a cached copy would outlive its link (5 Oct 2026).
+      {
+        urlPattern: /\.supabase\.co\/storage\//,
+        handler: 'NetworkOnly',
+      },
       // Default app-shell / Next.js asset caching
       {
         urlPattern: /^https?.*/,

@@ -40,7 +40,8 @@ jest.mock('../supabaseClient', () => ({
     storage: {
       from: jest.fn().mockReturnValue({
         upload: jest.fn().mockResolvedValue({ error: null }),
-        getPublicUrl: jest.fn().mockReturnValue({ data: { publicUrl: 'https://example.com/logo.png' } }),
+        // The bucket is private: uploads record a path and answer with a link that expires.
+        createSignedUrl: jest.fn().mockResolvedValue({ data: { signedUrl: 'https://signed.example.com/logo.png' }, error: null }),
       }),
     },
   },

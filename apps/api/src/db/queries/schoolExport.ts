@@ -94,6 +94,7 @@ export const NOT_EXPORTED: Record<string, string> = {
   platform_pricing_config: 'The platform rate; no school data.',
   user_totp: 'A sign-in credential (an encrypted authenticator secret, migration 055), never part of an export: anyone holding it can sign in as that person.',
   user_recovery_codes: 'Sign-in credentials (hashes of one-time recovery codes, migration 055), never part of an export.',
+  password_history: 'Hashes of passwords an account replaced, kept 60 days so one cannot be reused (migration 060): sign-in credentials, never part of an export.',
   login_challenges: 'Minutes-long sign-in challenges for platform admins (migration 057): hashes of one-time values, no school data, and nothing a school would want back.',
   schema_migrations: 'Database bookkeeping.',
   migration_runs: 'Database bookkeeping.',

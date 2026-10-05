@@ -23,6 +23,8 @@ import type {
   SubmissionGridRow,
 } from '../db/queries/assignments';
 import pool from '../db/client';
+import { assetsBucket } from '../config/storagePrefixes';
+import { signAsset } from '../services/schoolAssets';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
@@ -64,49 +66,20 @@ const gradeSchema = z.object({
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function bucketName(): string {
-  return process.env.SUPABASE_STORAGE_BUCKET ?? 'school-assets';
-}
-
-const ASSET_SIGNED_URL_TTL_SECONDS = 15 * 60; // 15 minutes
-
-/**
- * Extracts the bare storage path from either a bare path (returned as-is) or a legacy
- * Supabase public URL, for backward compatibility with any rows persisted before
- * assignment attachments/submissions were served via signed URLs.
- */
-function extractAssetStoragePath(urlOrPath: string): string {
-  const marker = `/storage/v1/object/public/${bucketName()}/`;
-  const idx = urlOrPath.indexOf(marker);
-  if (idx === -1) return urlOrPath;
-  return decodeURIComponent(urlOrPath.slice(idx + marker.length));
-}
-
-/** Uploads a file and returns its storage path (not a URL) — the bucket holds private
- *  submissions/attachments, so a signed URL must be minted at read time instead. */
+/** Uploads a file and returns its storage path (not a URL): the bucket is private, so a link
+ *  that expires is made when it is read (services/schoolAssets.ts). */
 async function uploadFile(storagePath: string, file: Express.Multer.File, contentType: string): Promise<string | null> {
   const { error } = await supabaseAdmin.storage
-    .from(bucketName())
+    .from(assetsBucket())
     .upload(storagePath, file.buffer, { contentType, upsert: true });
   if (error) return null;
   return storagePath;
 }
 
-/** Mints a fresh, short-lived signed URL for an assignment attachment/submission object.
- *  Returns null when there is nothing to sign, or the object cannot be signed. */
-async function signAssetUrl(storagePathOrUrl: string | null): Promise<string | null> {
-  if (!storagePathOrUrl) return null;
-  const storagePath = extractAssetStoragePath(storagePathOrUrl);
-  const { data, error } = await supabaseAdmin.storage
-    .from(bucketName())
-    .createSignedUrl(storagePath, ASSET_SIGNED_URL_TTL_SECONDS);
-  if (error || !data) return null;
-  return data.signedUrl;
-}
 
 /** Signs the attachment_url on any assignment-shaped row, leaving the rest untouched. */
 async function withSignedAttachment<T extends { attachment_url: string | null }>(row: T): Promise<T> {
-  return { ...row, attachment_url: await signAssetUrl(row.attachment_url) };
+  return { ...row, attachment_url: await signAsset(row.attachment_url) };
 }
 
 // ── POST /:schoolId/assignments ────────────────────────────────────────────────
@@ -223,9 +196,9 @@ router.get(
       const data = await listAssignmentsForStudent(schoolId, classId, student.id);
       const signed: StudentAssignmentListRow[] = await Promise.all(
         data.map(async row => {
-          const attachment_url = await signAssetUrl(row.attachment_url);
+          const attachment_url = await signAsset(row.attachment_url);
           if (!row.submission) return { ...row, attachment_url, submission: null };
-          const file_url = (await signAssetUrl(row.submission.file_url)) ?? row.submission.file_url;
+          const file_url = (await signAsset(row.submission.file_url)) ?? row.submission.file_url;
           return { ...row, attachment_url, submission: { ...row.submission, file_url } };
         })
       );
@@ -259,7 +232,7 @@ router.get(
       const signedSubmissions: SubmissionGridRow[] = await Promise.all(
         submissions.map(async row => {
           if (!row.submission) return row;
-          const file_url = (await signAssetUrl(row.submission.file_url)) ?? row.submission.file_url;
+          const file_url = (await signAsset(row.submission.file_url)) ?? row.submission.file_url;
           return { ...row, submission: { ...row.submission, file_url } };
         })
       );
@@ -327,7 +300,7 @@ router.post(
       }
 
       const submission = await upsertSubmission(assignmentId, student.id, uploadedPath);
-      const file_url = (await signAssetUrl(submission.file_url)) ?? submission.file_url;
+      const file_url = (await signAsset(submission.file_url)) ?? submission.file_url;
       return res.json({ success: true, data: { ...submission, file_url } });
     } catch (err) {
       return next(err);
@@ -370,7 +343,7 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'This student has not submitted the assignment yet.' } });
       }
 
-      const file_url = (await signAssetUrl(updated.file_url)) ?? updated.file_url;
+      const file_url = (await signAsset(updated.file_url)) ?? updated.file_url;
       return res.json({ success: true, data: { ...updated, file_url } });
     } catch (err) {
       return next(err);

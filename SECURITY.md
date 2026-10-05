@@ -1,8 +1,82 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 36 — 2026-10-04  
-**Scope:** What a token for a deleted account can still reach, and how long a revoked support token stays revoked  
-**Round 36 total findings:** 2 (0 Critical · 0 High · 0 Medium · 2 Low) — remediated, live since 4 Oct 2026, 17:41 UTC (`9a3b2f3`)
+**Latest audit:** Round 37 — 2026-10-05  
+**Scope:** Who can open a school's files, what the PDF renderer will fetch, where a parent's password goes, and how a person sets their own password  
+**Round 37 total findings:** 6 (0 Critical · 0 High · 2 Medium · 4 Low) — remediated in code, not yet deployed; M-01 ends when the bucket is switched to private after the deploy
+
+---
+
+## Round 37 — 2026-10-05
+
+### M-01 — Student photos, signatures and homework sat in a public bucket ✅ Remediated in code; the bucket switch follows the deploy
+
+**Files:** `apps/api/src/services/schoolAssets.ts` (new), `migrations/061_school_assets_store_paths.sql`, the five image uploads (`routes/schools.ts` logo, signature, stamp; `routes/users.ts` staff signature; `routes/students.ts` photo), `routes/assignments.ts`, the school, `/users/me` and student-profile reads, `apps/web/next.config.js`.
+
+**Found** while surveying files for the data export (2 Oct 2026, WORKING-CHECKLIST X). A demo student's homework answered HTTP 200 to an unauthenticated request for its public link.
+
+**The mechanism.** `school-assets` was a public bucket. Each upload stored a public link (`getPublicUrl`). That link opened the file for anyone who had it, signed in or not, for ever: it could not be withdrawn short of deleting the file. Links travelled in API responses, audit rows and the web pages that showed them. The paths carry UUIDs, so the links could not be guessed; they could be forwarded. `routes/assignments.ts` minted 15-minute signed links for homework, which the public bucket made decorative.
+
+**Fix.**
+- **A record stores the file's path,** never a link. Migration 061 converts the stored public links (production: the pilot's logo and signature) and touches nothing else.
+- **A screen gets a link that expires in 15 minutes,** made on each read and never cached: the school record, `/users/me` and the student profile. The 5-minute school cache keeps the paths.
+- **A PDF gets the image itself** (`assetDataUri`), read with the service role, so report cards, previews, receipts and transcripts work while the bucket is private.
+- **The offline cache keeps no copy** of a bucket file.
+- **The switch.** After the deploy, Moses makes the bucket private in the Supabase dashboard. Until then nothing changes for anyone; after it, every link ever handed out stops working at once (measured 2 Oct: the same form of link on the private bucket answers 400).
+
+**Accepted:** a file someone already downloaded cannot be recalled. Production held 4 files in the bucket, all the pilot's or test data.
+
+### M-02 — The PDF renderer fetched any address in the school's logo or stamp field ✅ Remediated
+
+**Files:** `apps/api/src/services/schoolAssets.ts` (`refuseNetwork`, `assetStoragePath`), `routes/schools.ts` (`PATCH /:schoolId/identity`), `services/reportCardService.ts`, `receiptService.ts`, `transcriptService.ts`.
+
+**Found** while mapping the readers of the bucket for M-01 (5 Oct 2026).
+
+**The mechanism.** `PATCH /:schoolId/identity` accepted `logo_url` and `stamp_url` as any URL (`z.string().url()`). The web never sent them, but the API took them. Report cards, previews, receipts and transcripts wrote the stored value into `<img src>`, and Chromium fetched it from inside Railway's network. So a principal could make the server request an internal address (`*.railway.internal`, for example). Only an image response would show; the request itself still went.
+
+**Fix.**
+- **The route refuses an image field by name** (400 `SET_BY_UPLOAD`): each has its own upload.
+- **A PDF page fetches nothing.** Images arrive inside the page, and `refuseNetwork` aborts every request that is not a `data:` URI. Measured with the installed Puppeteer: a `data:` image renders (also with Handlebars' escaped `=`), and a page asking for an address on a local server it controlled caused 0 requests.
+- **A stored value that is an address is never read:** `assetStoragePath` returns null for anything but a path or a link to this bucket.
+
+### L-01 — The registrar's screens showed, and printed, each new parent's working password ✅ Remediated
+
+**Files:** `apps/api/src/routes/students.ts` (`POST /:schoolId/students`, `POST /:schoolId/students/:studentId/parents`), `apps/web/app/(dashboard)/registrar/students/page.tsx`, `.../[id]/page.tsx`.
+
+**Found** while mapping every path that sets a password (5 Oct 2026).
+
+**The mechanism.** H2 (1 Oct 2026, Round 29) took the password out of the parent's welcome email: a parent sets their own with Forgot password. The two routes that create a parent still returned the random password, and the registrar's screen showed it and printed it on the credentials slip. Staff held a working login to each parent account, which reads a child's results and fees, and anything done with it would be recorded as the parent.
+
+**Fix.** Neither route returns a parent's password. The screen and the slip say how a parent sets one (the sign-in page, then Forgot password); the slip remains the fallback when the welcome email is not sent. The bulk-import sheet already left parents' passwords out. A student's temporary password is still shown, because most students have no email to reset with (H2's scope, unchanged).
+
+### L-02 — A platform admin's password reset or change was recorded nowhere ✅ Remediated
+
+**Files:** `apps/api/src/routes/auth.ts` (`auditOwnPasswordChange`).
+
+`confirm-reset` and `change-password` audited only a user with a school (`if (local.school_id)`), so a platform admin's reset or change left no row in either audit table. Recorded as an open item on 2 Oct 2026; the root admin's reset on 5 Oct was the first one seen. Both now write `platform_audit_logs` for a user without a school (`PASSWORD_RESET_COMPLETE`, `PASSWORD_SELF_CHANGE`, with the address).
+
+### L-03 — A password reset wrote Supabase and our copy in two separate steps, and Redis outside `bestEffort` ✅ Remediated
+
+**Files:** `apps/api/src/routes/auth.ts`, `apps/api/src/db/queries/users.ts` (`changeOwnPassword`).
+
+`confirm-reset` set the Supabase password, then updated `users.password_hash` with no transaction and an ignored result: a failure between them left the two disagreeing. It also wrote the `must_change_password` cache with a bare `redis.set`, so a Redis outage failed a reset that had already changed the password (Round 19). Both routes now set a password through `changeOwnPassword`: one transaction, the account row locked, Supabase called before COMMIT and rolled back with it. The cache write goes through `bestEffort`.
+
+### L-04 — Every correct password reset raised a false alert (CHRONIXEDU-API-5) ✅ Remediated
+
+**Files:** `apps/api/src/routes/auth.ts`, `apps/api/tests/passwordResetSessions.test.ts` (new).
+
+**Found** from the root admin's reset on 5 Oct 2026, the first through the Round 35 path.
+
+**The mechanism.** Setting a password through Supabase's admin API ends every Supabase session of the account, the reset link's own included. The route's own global sign-out then found its session gone (`session_not_found`, "Auth session missing!") and logged `password_reset_sessions_not_revoked`, which alerts. Afterwards the account had 0 sessions and 0 live refresh tokens. The guarantee held; the alarm was false, and would have fired on every reset. An alarm that always fires is ignored.
+
+**Fix.** That one error (`isAuthSessionMissingError`) is logged as done (`password_reset_sessions_already_ended`, info); any other failure still alerts. A CI test against Supabase's local stack holds the premise: two signed-in sessions and the link's own all stop refreshing after a reset. If Supabase ever stops ending them, CI fails instead of the alarm going quiet.
+
+### Info — No password can be reused within 60 days (Moses, 5 Oct 2026)
+
+**Files:** `migrations/060_password_history.sql`, `apps/api/src/services/passwordReuse.ts`, `passwordHistoryRetention.ts`, `db/queries/passwordHistory.ts`, `db/queries/users.ts`.
+
+A new password is refused (400 `PASSWORD_RECENTLY_USED`) when it matches the account's current one or one it replaced in the last 60 days, on both paths a person sets their own. The replaced bcrypt hashes are a credential store of their own: RLS with the service-role bypass only, every grant revoked from `anon` and `authenticated`, never exported, deleted with the user and the school, and nothing older than 60 days kept (deleted on each change and daily at 03:20 Lagos). It cannot see a password set in the Supabase dashboard.
+
+Also: a wrong current password on Change password answered 401, which the web treats as a lapsed sign-in, so the person was signed out and never saw the message. It answers 400.
 
 ---
 

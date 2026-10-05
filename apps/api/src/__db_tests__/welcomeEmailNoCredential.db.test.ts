@@ -108,9 +108,13 @@ describe('registering a student with a parent: the address is typed twice', () =
     const mails = sent();
     expect(mails.map(m => m.to)).toEqual([email]);
     expectNoCredentialIn(mails);
-    // The screen still shows the temporary password (scope: the registrar's screens are unchanged);
-    // the email does not carry it.
-    expect(mails[0].body).not.toContain(res.body.data.new_parents[0].temp_password);
+    // The parent's password is in neither the email nor the response: they set their own with Forgot
+    // password. The response carried it, for the registrar's screen to show and print, until 5 Oct 2026.
+    const issued = issuedPasswords.get(email);
+    expect(issued).toMatch(/^[0-9a-f]{16}$/);
+    expect(mails[0].body).not.toContain(issued);
+    expect(JSON.stringify(res.body)).not.toContain(issued);
+    expect(res.body.data.new_parents).toEqual([{ user_id: expect.any(String), email }]);
   });
 
   it('refuses when the two entries differ, and creates nothing', async () => {
@@ -146,7 +150,12 @@ describe('adding a parent to a student: the address is typed twice', () => {
     const mails = sent();
     expect(mails.map(m => m.to)).toEqual([email]);
     expectNoCredentialIn(mails);
-    expect(mails[0].body).not.toContain(res.body.data.temp_password);
+    // Nor does the response carry it (it did, for the registrar's screen, until 5 Oct 2026).
+    const issued = issuedPasswords.get(email);
+    expect(issued).toMatch(/^[0-9a-f]{16}$/);
+    expect(mails[0].body).not.toContain(issued);
+    expect(JSON.stringify(res.body)).not.toContain(issued);
+    expect(res.body.data).not.toHaveProperty('temp_password');
   });
 
   it('refuses to tell an account with no Auth login to use Forgot password, and raises the alert', async () => {

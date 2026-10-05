@@ -10,6 +10,7 @@ import type { ClassResult } from './resultEngine';
 import { getBrowser, ordinal, gradeCss, buildSubjectPositions, REPORT_CARDS_BUCKET } from './reportCardService';
 import { lookupGrade } from './resultEngine';
 import type { GradeBand } from './resultEngine';
+import { assetDataUri, refuseNetwork } from './schoolAssets';
 
 // ── Template compilation (lazy, once) ─────────────────────────────────────────
 
@@ -144,18 +145,25 @@ export async function generateTranscript(studentId: string, schoolId: string): P
     });
   }
 
+  // The images go inside the page, read from the private bucket; the renderer fetches nothing.
+  const [logoImage, stampImage, photoImage] = await Promise.all([
+    assetDataUri(identityConfig.logo_url),
+    assetDataUri(identityConfig.stamp_url),
+    assetDataUri(profile.photo_url),
+  ]);
+
   const templateData = {
     school: {
       name:     school.name,
-      logoUrl:  identityConfig.logo_url   ?? null,
-      stampUrl: identityConfig.stamp_url  ?? null,
+      logoUrl:  logoImage,
+      stampUrl: stampImage,
       motto:    identityConfig.motto      ?? null,
       address:  identityConfig.address    ?? null,
     },
     student: {
       fullName:    `${profile.first_name} ${profile.last_name}`,
       admissionNo: profile.admission_no,
-      photoUrl:    profile.photo_url,
+      photoUrl:    photoImage,
       dob:         profile.dob,
       gender:      profile.gender,
     },
@@ -170,6 +178,7 @@ export async function generateTranscript(studentId: string, schoolId: string): P
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
+    await refuseNetwork(page);
     await page.setContent(html, { waitUntil: 'load', timeout: 15_000 });
     const pdfBuffer = await page.pdf({
       format:          'a4',

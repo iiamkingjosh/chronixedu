@@ -39,6 +39,8 @@ jest.mock('../supabaseClient', () => {
     upload: jest.fn().mockResolvedValue({ error: null }),
     getPublicUrl: jest.fn().mockReturnValue({ data: { publicUrl: 'https://example.com/report-card.pdf' } }),
     createSignedUrl: jest.fn().mockResolvedValue({ data: { signedUrl: 'https://signed.example.com/report-card.pdf' }, error: null }),
+    // Images are read from the private assets bucket and embedded (services/schoolAssets.ts).
+    download: jest.fn(),
   };
   return {
     supabaseAdmin: { storage: { from: jest.fn(() => storageApi) } },
@@ -56,6 +58,9 @@ function mockStorageApi(): { upload: jest.Mock; getPublicUrl: jest.Mock; createS
 
 jest.mock('puppeteer', () => {
   const page = {
+    // refuseNetwork (services/schoolAssets.ts): the page is set to fetch nothing before its content.
+    setRequestInterception: jest.fn().mockResolvedValue(undefined),
+    on: jest.fn(),
     setContent: jest.fn().mockResolvedValue(undefined),
     pdf: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4 fake')),
     close: jest.fn().mockResolvedValue(undefined),
@@ -311,16 +316,34 @@ describe('generateReportCard', () => {
       id: 'teacher-1',
       full_name: 'Mr. John Bello',
       title: 'Mr.',
-      signature_url: 'https://example.com/teacher-sig.png',
+      signature_url: 'schools/school-1/signatures/teacher-1.png',
     });
+    // The signature is read from the bucket and embedded, so the renderer fetches nothing.
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    (mockStorageApi() as unknown as { download: jest.Mock }).download.mockImplementation(async (path: string) =>
+      path === 'schools/school-1/signatures/teacher-1.png'
+        ? { data: { arrayBuffer: async () => png.buffer.slice(png.byteOffset, png.byteOffset + png.byteLength) }, error: null }
+        : { data: null, error: { message: 'Object not found' } });
 
     await generateReportCard('student-1', 'term-1', 'school-1', CLASS_RESULT, new Map());
 
     const html = mockPuppeteer.__mockPage.setContent.mock.calls[0][0] as string;
     expect(html).toContain('<div class="section-title">Form Teacher\'s Remark</div>');
     expect(html).toContain('A pleasure to teach.');
-    expect(html).toContain('https://example.com/teacher-sig.png');
+    // Handlebars writes the base64 padding '=' as &#x3D; inside the attribute; the browser reads it back.
+    expect(html).toContain(`data:image/png;base64,${png.toString('base64').replace(/=+$/, '')}`);
     expect(html).toContain("Class Teacher's Signature");
+    expect((mockPuppeteer.__mockPage as unknown as { setRequestInterception: jest.Mock }).setRequestInterception).toHaveBeenCalledWith(true);
+  });
+
+  it('an address in a stored image field is never fetched or rendered', async () => {
+    mockFetchFormTeacher.mockResolvedValue({
+      id: 'teacher-1', full_name: 'Mr. John Bello', title: 'Mr.', signature_url: 'http://redis.railway.internal:6379/x.png',
+    });
+    await generateReportCard('student-1', 'term-1', 'school-1', CLASS_RESULT, new Map());
+    const html = mockPuppeteer.__mockPage.setContent.mock.calls[0][0] as string;
+    expect(html).not.toContain('railway.internal');
+    expect((mockStorageApi() as unknown as { download: jest.Mock }).download).not.toHaveBeenCalled();
   });
 
   it('omits the form teacher remark and signature image when neither is set', async () => {

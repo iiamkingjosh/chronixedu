@@ -1,5 +1,23 @@
 # Chronix Edu — Changelog
 
+## Passwords cannot be reused, school images are private, and parents' passwords are no longer shown (2026-10-05)
+
+### For everyone
+- **A new password cannot be one you used in the last 2 months,** including your current one. This
+  applies on Change password and on Forgot password. If you try one, the page says so and you can
+  choose another; a reset link still works for another try.
+- **On Change password, a wrong current password now shows "Current password is incorrect".** It used
+  to sign you out instead.
+
+### For schools
+- **Logos, signatures, the school stamp, student photos and homework files are now private.** A link
+  to one works for 15 minutes and only inside Chronix Edu; links shared before today stop working.
+  Report cards, receipts and transcripts show the images as before.
+- **The registrar's screens no longer show a new parent's password,** and the printed credentials slip
+  no longer carries one. A parent sets their own password: on the sign-in page, they choose Forgot
+  password and enter their email, as the welcome email explains. The student's temporary password is
+  still shown and printed.
+
 ## Two-factor sign-in can be turned off (2026-10-04)
 
 ### For Chronix staff

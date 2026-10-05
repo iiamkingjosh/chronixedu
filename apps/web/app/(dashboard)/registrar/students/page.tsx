@@ -47,10 +47,13 @@ interface ClassRow {
   stream: string | null;
 }
 
+/** A parent account just created. It carries no password: a parent sets their own with Forgot password,
+ *  as the welcome email explains (item H2, 1 Oct 2026; the screen stopped showing one on 5 Oct 2026). */
 interface NewParentRow {
   email: string;
-  temp_password: string;
 }
+
+const PARENT_PASSWORD_HOW = 'Set by the parent: on the sign-in page, choose Forgot password and enter this email.';
 
 type WelcomeEmailOutcome = 'sent' | 'partly_sent' | 'not_sent' | 'none';
 
@@ -91,7 +94,7 @@ function printCredentialsSlip({
   const w = window.open('', '_blank', 'width=640,height=720');
   if (!w) return;
   const parentRows = parents
-    .map(p => `<tr><td>Parent / Guardian</td><td style="font-family:monospace">${escapeHtml(p.email)}</td><td style="font-family:monospace">${escapeHtml(p.temp_password)}</td></tr>`)
+    .map(p => `<tr><td>Parent / Guardian</td><td style="font-family:monospace">${escapeHtml(p.email)}</td><td>${escapeHtml(PARENT_PASSWORD_HOW)}</td></tr>`)
     .join('');
   w.document.write(`<!DOCTYPE html>
 <html><head><title>Credentials — ${escapeHtml(studentName)}</title>
@@ -112,7 +115,7 @@ function printCredentialsSlip({
 <p class="sub">Confidential · Hand this slip to the student's parent or guardian only</p>
 <hr/>
 <table>
-  <thead><tr><th>Account</th><th>Email</th><th>Temporary Password</th></tr></thead>
+  <thead><tr><th>Account</th><th>Email</th><th>Password</th></tr></thead>
   <tbody>
     <tr>
       <td><strong>${escapeHtml(studentName)}</strong><br/><span style="font-size:11px;color:#666">Student · Adm. ${escapeHtml(admissionNo)}</span></td>
@@ -122,7 +125,7 @@ function printCredentialsSlip({
     ${parentRows}
   </tbody>
 </table>
-<div class="note">⚠ These are temporary passwords. Each user must change their password on first login. Student credentials are managed by the school and should not be shared.</div>
+<div class="note">⚠ The student's password is temporary and must be changed on first sign-in. Student credentials are managed by the school and should not be shared. A parent's password is never printed: each parent sets their own.</div>
 </body></html>`);
   w.document.close();
   w.focus();
@@ -627,21 +630,22 @@ export default function StudentRegistrationPage() {
               <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">Parent / Guardian accounts</p>
               <ul className="text-sm text-green-700 font-mono space-y-0.5">
                 {credentials.new_parents.map(p => (
-                  <li key={p.email}>{p.email} / {p.temp_password}</li>
+                  <li key={p.email}>{p.email}</li>
                 ))}
               </ul>
+              <p className="text-xs text-green-700">{PARENT_PASSWORD_HOW}</p>
               {credentials.welcome_email === 'sent' && (
                 <p className="text-xs text-green-700">Welcome email sent.</p>
               )}
               {(credentials.welcome_email === 'not_sent' || credentials.welcome_email === 'partly_sent') && (
                 <p className="text-xs font-semibold text-amber-700">
-                  Welcome email not sent to {credentials.welcome_email_not_sent.join(', ')}. Give them the credentials slip.
+                  Welcome email not sent to {credentials.welcome_email_not_sent.join(', ')}. Give them the slip: it says how to set a password.
                 </p>
               )}
             </div>
           )}
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-green-200">
-            <p className="text-xs text-green-600">Temporary passwords are shown only once. Print the credentials slip and hand it to the parent/guardian.</p>
+            <p className="text-xs text-green-600">The student&apos;s temporary password is shown only once. Print the credentials slip and hand it to the parent/guardian.</p>
             <button
               type="button"
               onClick={() => printCredentialsSlip({

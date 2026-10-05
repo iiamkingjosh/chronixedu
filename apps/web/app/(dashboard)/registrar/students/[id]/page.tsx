@@ -69,7 +69,6 @@ interface AddParentResult {
   first_name: string;
   last_name: string;
   is_new_account: boolean;
-  temp_password: string | null;
   /** Whether the welcome email (no password in it; it explains Forgot password) went. */
   welcome_email: 'sent' | 'partly_sent' | 'not_sent' | 'none';
 }
@@ -588,19 +587,19 @@ export default function StudentProfilePage() {
               {newParentCredentials.is_new_account ? 'New account created' : 'Existing account linked'}
             </p>
             <p className="text-sm text-blue-700 font-medium">{newParentCredentials.first_name} {newParentCredentials.last_name}</p>
-            {newParentCredentials.is_new_account && newParentCredentials.temp_password && (
-              <p className="text-sm text-blue-700 font-mono mt-1">{newParentCredentials.email} / {newParentCredentials.temp_password}</p>
+            {newParentCredentials.is_new_account && (
+              <p className="text-sm text-blue-700 font-mono mt-1">{newParentCredentials.email}</p>
             )}
             <p className="text-xs text-blue-600 mt-1">
               {newParentCredentials.is_new_account
-                ? 'Temporary password shown once — print or note it before dismissing.'
+                ? 'They set their own password: on the sign-in page, choose Forgot password and enter this email.'
                 : 'Linked to their existing account.'}
             </p>
             {newParentCredentials.welcome_email === 'sent' && (
               <p className="text-xs text-green-700 mt-1">Welcome email sent.</p>
             )}
             {newParentCredentials.welcome_email === 'not_sent' && (
-              <p className="text-xs font-semibold text-amber-700 mt-1">Welcome email not sent. Give them the credentials above.</p>
+              <p className="text-xs font-semibold text-amber-700 mt-1">Welcome email not sent. Tell them how to set a password: the sign-in page, then Forgot password, with this email.</p>
             )}
             <button
               type="button"

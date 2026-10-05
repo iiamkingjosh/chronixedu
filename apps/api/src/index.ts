@@ -48,6 +48,7 @@ import { startFeeReminderCron, stopFeeReminderCron } from './services/feeReminde
 import { startSubscriptionCron, stopSubscriptionCron } from './services/subscriptionService';
 import { startPlatformAnalyticsCron, stopPlatformAnalyticsCron } from './services/platformAnalyticsService';
 import { startEmailQueueCron, stopEmailQueueCron } from './services/emailQueueService';
+import { startPasswordHistoryCron, stopPasswordHistoryCron } from './services/passwordHistoryRetention';
 import { isSmsEnabled, smsDisabledReason } from './services/termiiService';
 import { errorHandler } from './middleware/errorHandler';
 import { requestLogger } from './middleware/requestLogger';
@@ -247,6 +248,7 @@ startFeeReminderCron();
 startSubscriptionCron();
 startPlatformAnalyticsCron();
 startEmailQueueCron();
+startPasswordHistoryCron();
 
 process.on('SIGTERM', () => {
   stopNotificationWorker();
@@ -255,5 +257,6 @@ process.on('SIGTERM', () => {
   stopSubscriptionCron();
   stopPlatformAnalyticsCron();
   stopEmailQueueCron();
+  stopPasswordHistoryCron();
   closeReportCardBrowser().finally(() => server.close());
 });

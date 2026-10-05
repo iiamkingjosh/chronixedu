@@ -73,6 +73,11 @@ describe('confirmResetFailure', () => {
       message: 'Your sign-in has no Chronix Edu account. Please contact your school administrator.', report: false });
   });
 
+  it('a password used in the last 2 months shows the API\'s own sentence, and is not reported: the link still works', () => {
+    const sentence = 'You used this password in the last 2 months. Choose a different one.';
+    expect(confirmResetFailure('PASSWORD_RECENTLY_USED', sentence)).toEqual({ message: sentence, report: false });
+  });
+
   it("a password Supabase refuses shows Supabase's reason, not an expired link", () => {
     expect(confirmResetFailure('PASSWORD_UPDATE_FAILED', 'New password should be different from the old password.').message)
       .toBe('Your new password was not accepted: New password should be different from the old password.');

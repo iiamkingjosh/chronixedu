@@ -87,13 +87,15 @@ describe('POST /api/auth/change-password', () => {
     expect(mockUpdateUserById).not.toHaveBeenCalled();
   });
 
-  it('rejects the wrong current password with 401 and never calls Supabase', async () => {
+  // 400, not 401: apiFetch treats a 401 as a lapsed sign-in and signs the person out, so the
+  // message never showed (5 Oct 2026).
+  it('rejects the wrong current password with 400 and never calls Supabase', async () => {
     const res = await request(app)
       .post('/api/auth/change-password')
       .set('Authorization', `Bearer ${userToken}`)
       .send({ current_password: 'totally-wrong', new_password: 'brand-new-Password456' });
 
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(400);
     expect(res.body.error.code).toBe('INVALID_CURRENT_PASSWORD');
     expect(mockUpdateUserById).not.toHaveBeenCalled();
 

@@ -28,6 +28,7 @@ import { logger } from '../config/logger';
 import { sendWelcomeEmails, type WelcomeRecipient } from '../services/welcomeEmail';
 import { cache, schoolCacheKey } from '../services/cacheService';
 import { USER_ACTIVE_CACHE_SECONDS } from '../config/cacheTimes';
+import { signAsset, withSignedAssets } from '../services/schoolAssets';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -127,7 +128,8 @@ router.get(
       if (!me) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found in this school' } });
       }
-      return res.json({ success: true, data: me });
+      // The signature is a path in the private bucket; the screen gets a link that expires.
+      return res.json({ success: true, data: await withSignedAssets(me as unknown as Record<string, unknown>, ['signature_url']) });
     } catch (err) {
       return next(err);
     }
@@ -504,10 +506,9 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
       }
 
-      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(storagePath);
-      const signatureUrl = urlData.publicUrl;
-
-      await updateUserSignature(req.params.userId, req.params.schoolId, signatureUrl);
+      // The record keeps the file's path in the bucket, never a link: the bucket is private
+      // (services/schoolAssets.ts). The answer carries a link that expires, for the screen to show.
+      await updateUserSignature(req.params.userId, req.params.schoolId, storagePath);
 
       await logAudit({
         ipAddress: clientIp(req) ?? null,
@@ -517,10 +518,10 @@ router.post(
         actionType: 'TEACHER_SIGNATURE_UPLOAD',
         entity: 'users',
         entityId: existing.id,
-        newValue: { signature_url: signatureUrl },
+        newValue: { signature_url: storagePath },
       });
 
-      return res.json({ success: true, data: { signature_url: signatureUrl } });
+      return res.json({ success: true, data: { signature_url: await signAsset(storagePath) } });
     } catch (err) {
       return next(err);
     }

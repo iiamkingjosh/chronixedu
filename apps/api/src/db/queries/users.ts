@@ -1,4 +1,7 @@
+import bcrypt from 'bcryptjs';
 import pool from '../client';
+import { readRecentPasswordHashes, retireCurrentPassword } from './passwordHistory';
+import { matchesAnyPassword, PASSWORD_REUSE_DAYS } from '../../services/passwordReuse';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -91,14 +94,6 @@ export async function findUserByEmail(email: string): Promise<UserRow | null> {
   return result.rows[0] ?? null;
 }
 
-export async function updatePasswordHash(email: string, passwordHash: string): Promise<boolean> {
-  const result = await pool.query(
-    `UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE email = $2`,
-    [passwordHash, email]
-  );
-  return (result.rowCount ?? 0) > 0;
-}
-
 export async function getPasswordHashById(userId: string): Promise<string | null> {
   const result = await pool.query<{ password_hash: string }>(
     `SELECT password_hash FROM users WHERE id = $1`,
@@ -109,29 +104,43 @@ export async function getPasswordHashById(userId: string): Promise<string | null
 
 // ── Self-service password change (e.g. changing a temp password on first login) ─
 
-export type ChangePasswordResult = { ok: true } | { ok: false; error: string };
+export type ChangePasswordResult = { ok: true } | { ok: false; error: 'not_found' | 'recently_used' | string };
 
-/** Updates the local row's password_hash and clears must_change_password inside
- *  a transaction, calls applyExternalUpdate() (the matching Supabase Auth
- *  update) before committing, and rolls back if the external call fails — same
- *  pattern as reassignUserEmail, so the two identity stores stay in sync. */
+/** The one way a person's own password is set: POST /change-password and POST /confirm-reset.
+ *  Inside one transaction, with the account's row locked:
+ *   - refuses a password the account has used within PASSWORD_REUSE_DAYS ('recently_used'), the
+ *     current one included, before anything changes;
+ *   - keeps the outgoing hash in password_history and drops rows past the window;
+ *   - writes the new bcrypt hash and clears must_change_password;
+ *   - calls applyExternalUpdate() (the matching Supabase Auth update) before committing, and rolls
+ *     back if it fails, so the two identity stores stay in sync (same pattern as reassignUserEmail).
+ *  confirm-reset used to write Supabase and then this row in two separate steps, so a failure in
+ *  between left them disagreeing. */
 export async function changeOwnPassword(
   userId: string,
-  passwordHash: string,
+  newPassword: string,
   applyExternalUpdate: () => Promise<{ ok: boolean; error?: string }>
 ): Promise<ChangePasswordResult> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const result = await client.query(
-      `UPDATE users SET password_hash = $2, must_change_password = FALSE WHERE id = $1`,
-      [userId, passwordHash]
-    );
-    if ((result.rowCount ?? 0) === 0) {
+    const locked = await client.query(`SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, [userId]);
+    if ((locked.rowCount ?? 0) === 0) {
       await client.query('ROLLBACK');
       return { ok: false, error: 'not_found' };
     }
+
+    if (await matchesAnyPassword(newPassword, await readRecentPasswordHashes(client, userId, PASSWORD_REUSE_DAYS))) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'recently_used' };
+    }
+
+    await retireCurrentPassword(client, userId, PASSWORD_REUSE_DAYS);
+    await client.query(
+      `UPDATE users SET password_hash = $2, must_change_password = FALSE WHERE id = $1`,
+      [userId, await bcrypt.hash(newPassword, 12)]
+    );
 
     const external = await applyExternalUpdate();
     if (!external.ok) {

@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../supabaseClient';
 import { findSchoolById } from '../db/queries/schools';
 import { getBrowser, REPORT_CARDS_BUCKET } from './reportCardService';
 import type { PaymentReceiptRow } from '../db/queries/fees';
+import { assetDataUri, refuseNetwork } from './schoolAssets';
 
 // ── Template compilation (lazy, once) ─────────────────────────────────────────
 
@@ -44,11 +45,17 @@ export async function generateReceipt(schoolId: string, payment: PaymentReceiptR
 
   const identityConfig = (school.identity_config ?? {}) as Record<string, string | null>;
 
+  // The images go inside the page, read from the private bucket; the renderer fetches nothing.
+  const [logoImage, stampImage] = await Promise.all([
+    assetDataUri(identityConfig.logo_url),
+    assetDataUri(identityConfig.stamp_url),
+  ]);
+
   const templateData = {
     school: {
       name: school.name,
-      logoUrl: identityConfig.logo_url ?? null,
-      stampUrl: identityConfig.stamp_url ?? null,
+      logoUrl: logoImage,
+      stampUrl: stampImage,
       motto: identityConfig.motto ?? null,
       address: identityConfig.address ?? null,
     },
@@ -86,6 +93,7 @@ export async function generateReceipt(schoolId: string, payment: PaymentReceiptR
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
+    await refuseNetwork(page);
     await page.setContent(html, { waitUntil: 'load', timeout: 15_000 });
     const pdfBuffer = await page.pdf({
       format: 'a5',

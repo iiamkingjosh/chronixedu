@@ -1,15 +1,15 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import type { User as SupabaseUser } from '@supabase/supabase-js';
+import { isAuthSessionMissingError, type User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase, supabaseAdmin } from '../supabaseClient';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { Client } from 'pg';
 import pool, { resolveSsl } from '../db/client';
 import { verifyToken, requireRole } from '../middleware/auth';
-import { findUserByEmail, updatePasswordHash, getPasswordHashById, changeOwnPassword, endSessionsBeforeNow } from '../db/queries/users';
+import { findUserByEmail, getPasswordHashById, changeOwnPassword, endSessionsBeforeNow } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
-import { redis } from '../middleware/rateLimit';
+import { redis, bestEffort } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
 import { logger } from '../config/logger';
 import { isLockedOut, recordFailedAttempt, clearFailedAttempts } from '../services/loginLockout';
@@ -28,6 +28,7 @@ import {
 } from '../db/queries/loginChallenges';
 import { logPlatformAudit } from '../db/queries/platformAudit';
 import { MUST_CHANGE_PASSWORD_CACHE_SECONDS } from '../config/cacheTimes';
+import { PASSWORD_RECENTLY_USED } from '../services/passwordReuse';
 
 const router = express.Router();
 
@@ -618,6 +619,24 @@ router.post('/reset-landing', (req: Request, res: Response) => {
   return res.status(204).end();
 });
 
+/**
+ * Records a person setting their own password. A school's user goes to audit_logs; anyone without a
+ * school (a platform admin) goes to platform_audit_logs. Until 5 Oct 2026 only the first was written,
+ * so a platform admin's reset or change left no record at all; the root admin's reset that day was
+ * the first one seen.
+ */
+async function auditOwnPasswordChange(
+  user: { id: string; school_id: string | null },
+  actionType: 'PASSWORD_RESET_COMPLETE' | 'PASSWORD_SELF_CHANGE',
+  ipAddress: string | null,
+): Promise<void> {
+  if (user.school_id) {
+    await logAudit({ ipAddress, schoolId: user.school_id, userId: user.id, actionType, entity: 'users', entityId: user.id });
+    return;
+  }
+  await logPlatformAudit({ adminId: user.id, actionType, targetUserId: user.id, ipAddress });
+}
+
 /** Complete password reset using the recovery access_token from the email link. */
 router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -672,19 +691,21 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
       });
     }
 
-    const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(
-      userData.user.id,
-      { password }
-    );
-    if (updateAuthError) {
+    // One transaction (changeOwnPassword): the reuse rule, the history, our hash and Supabase's. A
+    // refusal changes nothing, so the reset link still works for another try within its hour.
+    const changed = await changeOwnPassword(local.id, password, async () => {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(userData.user.id, { password });
+      return { ok: !error, error: error?.message };
+    });
+    if (!changed.ok) {
+      if (changed.error === 'recently_used') {
+        return res.status(400).json({ success: false, error: { ...PASSWORD_RECENTLY_USED } });
+      }
       return res.status(400).json({
         success: false,
-        error: { code: 'PASSWORD_UPDATE_FAILED', message: updateAuthError.message },
+        error: { code: 'PASSWORD_UPDATE_FAILED', message: changed.error },
       });
     }
-
-    const passwordHash = bcrypt.hashSync(password, 12);
-    await updatePasswordHash(email, passwordHash);
 
     // A reset ends what came before it (Round 35):
     //  - every Supabase session of the account, this reset link's included, so the link works once;
@@ -693,7 +714,16 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
     await endSessionsBeforeNow(local.id);
     try {
       const { error: revokeError } = await supabaseAdmin.auth.admin.signOut(access_token, 'global');
-      if (revokeError) throw revokeError;
+      if (revokeError && isAuthSessionMissingError(revokeError)) {
+        // Setting the password through the admin API has already ended every Supabase session of
+        // the account, this link's included, so the sign-out finds its session gone ("Auth session
+        // missing!"). Gone is what this step is for. Alerting it raised CHRONIXEDU-API-5 on a correct
+        // reset (5 Oct 2026); the live-Auth test in tests/passwordResetSessions.test.ts holds the
+        // premise, so a Supabase that stopped doing it would fail CI, not go quiet here.
+        logger.info('password_reset_sessions_already_ended', { user_id: local.id });
+      } else if (revokeError) {
+        throw revokeError;
+      }
     } catch (err) {
       logger.error('password_reset_sessions_not_revoked', {
         user_id: local.id,
@@ -703,21 +733,14 @@ router.post('/confirm-reset', async (req: Request, res: Response, next: NextFunc
 
     // Immediately clear the must-change-password cache so requirePasswordChanged
     // unblocks this user on their very next request, rather than waiting out the
-    // 5-minute cache TTL.
-    if (redis) {
-      await redis.set(`must_change_password:${local.id}`, '0', 'EX', MUST_CHANGE_PASSWORD_CACHE_SECONDS);
+    // 5-minute cache TTL. Best-effort, like every Redis call on a request path (Round 19).
+    const r = redis;
+    if (r) {
+      await bestEffort('must_change_password_cache_unavailable',
+        () => r.set(`must_change_password:${local.id}`, '0', 'EX', MUST_CHANGE_PASSWORD_CACHE_SECONDS));
     }
 
-    if (local.school_id) {
-      await logAudit({
-        ipAddress: clientIp(req) ?? null,
-        schoolId: local.school_id,
-        userId: local.id,
-        actionType: 'PASSWORD_RESET_COMPLETE',
-        entity: 'users',
-        entityId: local.id,
-      });
-    }
+    await auditOwnPasswordChange(local, 'PASSWORD_RESET_COMPLETE', clientIp(req) ?? null);
 
     return res.json({
       success: true,
@@ -754,21 +777,25 @@ router.post('/change-password', verifyToken, async (req: Request, res: Response,
     const { current_password, new_password } = parsed.data;
     const userId = req.user!.user_id;
 
+    // A wrong current password is a mistake in the form, not an expired session. It was a 401, which
+    // apiFetch treats as a lapsed sign-in: the person was signed out and never saw this message.
     const currentHash = await getPasswordHashById(userId);
     if (!currentHash || !bcrypt.compareSync(current_password, currentHash)) {
-      return res.status(401).json({
+      return res.status(400).json({
         success: false,
         error: { code: 'INVALID_CURRENT_PASSWORD', message: 'Current password is incorrect' },
       });
     }
 
-    const newHash = bcrypt.hashSync(new_password, 12);
-    const result = await changeOwnPassword(userId, newHash, async () => {
+    const result = await changeOwnPassword(userId, new_password, async () => {
       const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: new_password });
       return { ok: !error, error: error?.message };
     });
 
     if (!result.ok) {
+      if (result.error === 'recently_used') {
+        return res.status(400).json({ success: false, error: { ...PASSWORD_RECENTLY_USED } });
+      }
       if (result.error === 'not_found') {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
       }
@@ -777,21 +804,14 @@ router.post('/change-password', verifyToken, async (req: Request, res: Response,
 
     // Immediately clear the must-change-password cache so requirePasswordChanged
     // unblocks this user on their very next request, rather than waiting out the
-    // 5-minute cache TTL.
-    if (redis) {
-      await redis.set(`must_change_password:${userId}`, '0', 'EX', MUST_CHANGE_PASSWORD_CACHE_SECONDS);
+    // 5-minute cache TTL. Best-effort, like every Redis call on a request path (Round 19).
+    const r = redis;
+    if (r) {
+      await bestEffort('must_change_password_cache_unavailable',
+        () => r.set(`must_change_password:${userId}`, '0', 'EX', MUST_CHANGE_PASSWORD_CACHE_SECONDS));
     }
 
-    if (req.user!.school_id) {
-      await logAudit({
-        ipAddress: clientIp(req) ?? null,
-        schoolId: req.user!.school_id,
-        userId,
-        actionType: 'PASSWORD_SELF_CHANGE',
-        entity: 'users',
-        entityId: userId,
-      });
-    }
+    await auditOwnPasswordChange({ id: userId, school_id: req.user!.school_id ?? null }, 'PASSWORD_SELF_CHANGE', clientIp(req) ?? null);
 
     return res.json({ success: true, data: { message: 'Password updated.' } });
   } catch (err) {

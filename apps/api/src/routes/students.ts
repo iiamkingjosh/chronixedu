@@ -33,6 +33,7 @@ import pool from '../db/client';
 import { logger } from '../config/logger';
 import { sendWelcomeEmails, type WelcomeRecipient } from '../services/welcomeEmail';
 import { cache, schoolCacheKey } from '../services/cacheService';
+import { signAsset, withSignedAssets } from '../services/schoolAssets';
 
 async function checkParentStudentLink(parentId: string, studentId: string, schoolId: string): Promise<boolean> {
   const result = await pool.query(
@@ -216,7 +217,10 @@ router.post(
           admission_no: result.admission_no,
           temp_password: tempPassword,
           enrollment:   result.enrollment,
-          new_parents:  result.new_parents,
+          // A parent's password never leaves the server: they set their own with Forgot password, as the
+          // welcome email explains (H2). It was returned here, and shown and printed by the registrar's
+          // screen, until 5 Oct 2026. The student's stays: most students have no email to reset with.
+          new_parents:  result.new_parents.map(({ user_id, email }) => ({ user_id, email })),
           welcome_email: welcomeEmails.outcome,
           welcome_email_not_sent: welcomeEmails.not_sent,
         },
@@ -599,7 +603,8 @@ router.get(
       if (!profile) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
       }
-      return res.json({ success: true, data: profile });
+      // The photo is a path in the private bucket; the screen gets a link that expires.
+      return res.json({ success: true, data: await withSignedAssets(profile as unknown as Record<string, unknown>, ['photo_url']) });
     } catch (err) {
       return next(err);
     }
@@ -673,10 +678,11 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
       }
 
-      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(storagePath);
-      await updateStudentPhotoUrl(req.params.studentId, req.params.schoolId, urlData.publicUrl);
+      // The record keeps the file's path in the bucket, never a link: the bucket is private
+      // (services/schoolAssets.ts). The answer carries a link that expires, for the screen to show.
+      await updateStudentPhotoUrl(req.params.studentId, req.params.schoolId, storagePath);
 
-      return res.json({ success: true, data: { photo_url: urlData.publicUrl } });
+      return res.json({ success: true, data: { photo_url: await signAsset(storagePath) } });
     } catch (err) {
       return next(err);
     }
@@ -963,7 +969,6 @@ router.post(
       );
 
       let parentUserId: string;
-      let tempPassword: string | null = null;
       let isNewAccount = false;
 
       if (existingUser.rows.length > 0) {
@@ -975,7 +980,6 @@ router.post(
       } else {
         isNewAccount = true;
         const rawPassword = randomBytes(8).toString('hex');
-        tempPassword = rawPassword;
         const passwordHash = hashSync(rawPassword, 12);
 
         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -1035,7 +1039,7 @@ router.post(
           first_name,
           last_name,
           is_new_account: isNewAccount,
-          temp_password: tempPassword,
+          // No password: the parent sets their own with Forgot password (H2; returned until 5 Oct 2026).
           welcome_email: welcomeEmail,
         },
       });

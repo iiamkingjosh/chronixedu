@@ -42,6 +42,7 @@ import { logger } from '../config/logger';
 import { findSubscriptionGate } from '../db/queries/schools';
 import { exportSummary, exportDatasetCsv } from '../db/queries/schoolExport';
 import { streamSchoolArchive } from '../services/schoolExportArchive';
+import { signAsset, withSignedAssets } from '../services/schoolAssets';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
@@ -61,11 +62,12 @@ const createSchoolSchema = z.object({
   secondary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
 });
 
+/** Identity fields that hold an image: each has its own upload route. */
+const IMAGE_FIELDS = ['logo_url', 'stamp_url', 'signature_url'] as const;
+
 const updateIdentitySchema = z.object({
   name: z.string().min(1).max(255).optional(),
   motto: z.string().max(500).optional(),
-  logo_url: z.string().url().optional(),
-  stamp_url: z.string().url().optional(),
   primary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
   secondary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
   admission_prefix: z.string().trim().min(1).max(10).regex(/^[A-Za-z0-9]+$/, 'Must be alphanumeric').optional(),
@@ -417,7 +419,11 @@ router.get(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'School not found' } });
       }
       res.setHeader('Cache-Control', 'private, max-age=60');
-      return res.json({ success: true, data: school });
+      // The logo, stamp and signature are stored as paths in the private bucket. The answer carries
+      // links that expire, made for each request; the cached row keeps the paths.
+      const identity = (school.identity_config ?? {}) as Record<string, unknown>;
+      const shown = await withSignedAssets(identity, ['logo_url', 'stamp_url', 'signature_url']);
+      return res.json({ success: true, data: { ...school, identity_config: shown } });
     } catch (err) {
       return next(err);
     }
@@ -432,6 +438,17 @@ router.patch(
   requireSchoolAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // The images are set by uploading one, never by sending an address. This route took any address
+      // for the logo and stamp until 5 Oct 2026, and the PDF renderer then fetched it, so a principal
+      // could make the server request an internal address. Refused by name, not silently dropped.
+      const sentImage = IMAGE_FIELDS.find(f => req.body && typeof req.body === 'object' && f in req.body);
+      if (sentImage) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'SET_BY_UPLOAD', message: `${sentImage} is set by uploading an image, not by sending an address.` },
+        });
+      }
+
       const parsed = updateIdentitySchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
@@ -883,10 +900,9 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
       }
 
-      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(storagePath);
-      const logoUrl = urlData.publicUrl;
-
-      await updateIdentityConfig(req.params.schoolId, { logo_url: logoUrl });
+      // The record keeps the file's path in the bucket, never a link: the bucket is private
+      // (services/schoolAssets.ts). The answer carries a link that expires, for the screen to show.
+      await updateIdentityConfig(req.params.schoolId, { logo_url: storagePath });
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
@@ -897,10 +913,10 @@ router.post(
         actionType: 'LOGO_UPLOAD',
         entity: 'school_settings',
         entityId: req.params.schoolId,
-        newValue: { logo_url: logoUrl },
+        newValue: { logo_url: storagePath },
       });
 
-      return res.json({ success: true, data: { logo_url: logoUrl } });
+      return res.json({ success: true, data: { logo_url: await signAsset(storagePath) } });
     } catch (err) {
       return next(err);
     }
@@ -944,10 +960,9 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
       }
 
-      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(storagePath);
-      const signatureUrl = urlData.publicUrl;
-
-      await updateIdentityConfig(req.params.schoolId, { signature_url: signatureUrl });
+      // The record keeps the file's path in the bucket, never a link: the bucket is private
+      // (services/schoolAssets.ts). The answer carries a link that expires, for the screen to show.
+      await updateIdentityConfig(req.params.schoolId, { signature_url: storagePath });
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
@@ -958,10 +973,10 @@ router.post(
         actionType: 'SIGNATURE_UPLOAD',
         entity: 'school_settings',
         entityId: req.params.schoolId,
-        newValue: { signature_url: signatureUrl },
+        newValue: { signature_url: storagePath },
       });
 
-      return res.json({ success: true, data: { signature_url: signatureUrl } });
+      return res.json({ success: true, data: { signature_url: await signAsset(storagePath) } });
     } catch (err) {
       return next(err);
     }
@@ -1005,10 +1020,9 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'UPLOAD_FAILED', message: uploadError.message } });
       }
 
-      const { data: urlData } = supabaseAdmin.storage.from(bucket).getPublicUrl(storagePath);
-      const stampUrl = urlData.publicUrl;
-
-      await updateIdentityConfig(req.params.schoolId, { stamp_url: stampUrl });
+      // The record keeps the file's path in the bucket, never a link: the bucket is private
+      // (services/schoolAssets.ts). The answer carries a link that expires, for the screen to show.
+      await updateIdentityConfig(req.params.schoolId, { stamp_url: storagePath });
       cache.del(schoolCacheKey(req.params.schoolId, 'data'));
 
       await logAudit({
@@ -1019,10 +1033,10 @@ router.post(
         actionType: 'STAMP_UPLOAD',
         entity: 'school_settings',
         entityId: req.params.schoolId,
-        newValue: { stamp_url: stampUrl },
+        newValue: { stamp_url: storagePath },
       });
 
-      return res.json({ success: true, data: { stamp_url: stampUrl } });
+      return res.json({ success: true, data: { stamp_url: await signAsset(storagePath) } });
     } catch (err) {
       return next(err);
     }

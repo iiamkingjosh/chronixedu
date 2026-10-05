@@ -14,6 +14,7 @@ import {
 } from '../db/queries/reportCards';
 import { computeClassResults, lookupGrade } from './resultEngine';
 import type { ClassResult, GradeBand } from './resultEngine';
+import { assetDataUri, refuseNetwork } from './schoolAssets';
 
 // ── Template compilation (lazy, once per template) ────────────────────────────
 
@@ -382,11 +383,20 @@ export async function generateReportCard(
     promotionCutoff
   );
 
+  // The images go inside the page, read from the private bucket; the renderer fetches nothing.
+  const [logoImage, stampImage, photoImage, teacherSignatureImage, principalSignatureImage] = await Promise.all([
+    assetDataUri(identityConfig.logo_url),
+    assetDataUri(identityConfig.stamp_url),
+    assetDataUri(studentData.photo_url),
+    assetDataUri(formTeacher?.signature_url),
+    assetDataUri(identityConfig.signature_url),
+  ]);
+
   const templateData = {
     school: {
       name:          school.name,
-      logoUrl:       identityConfig.logo_url      ?? null,
-      stampUrl:      identityConfig.stamp_url     ?? null,
+      logoUrl:       logoImage,
+      stampUrl:      stampImage,
       motto:         identityConfig.motto         ?? null,
       address:       identityConfig.address       ?? null,
       primaryColour: identityConfig.primary_colour ?? null,
@@ -394,7 +404,7 @@ export async function generateReportCard(
     student: {
       fullName:    `${studentData.first_name} ${studentData.last_name}`,
       admissionNo: studentData.admission_no,
-      photoUrl:    studentData.photo_url,
+      photoUrl:    photoImage,
       className:   studentData.class_name,
     },
     term: {
@@ -416,7 +426,7 @@ export async function generateReportCard(
       totalStudents: classResult.students.length,
     },
     classTeacherComment: classTeacherComment?.comment_text ?? null,
-    formTeacher: formTeacher ? { name: formTeacher.full_name, signatureUrl: formTeacher.signature_url } : null,
+    formTeacher: formTeacher ? { name: formTeacher.full_name, signatureUrl: teacherSignatureImage } : null,
     principalRemark: principalRemark?.remark_text ?? null,
     attendance: {
       daysPresent: '—',
@@ -431,7 +441,7 @@ export async function generateReportCard(
     }),
   };
 
-  applyReportConfig(templateData, reportConfig, identityConfig.signature_url ?? null);
+  applyReportConfig(templateData, reportConfig, principalSignatureImage);
 
   // Render HTML
   const templateName: TemplateName = reportConfig.template === 'modern' ? 'modern' : 'classic';
@@ -441,6 +451,7 @@ export async function generateReportCard(
   const b   = await getBrowser();
   const page = await b.newPage();
   try {
+    await refuseNetwork(page);
     await page.setContent(html, { waitUntil: 'load', timeout: 15_000 });
     const pdfBuffer = await page.pdf({
       format:          'a4',
@@ -526,17 +537,24 @@ export async function generateReportCardPreview(
 
   const identityConfig = (school.identity_config ?? {}) as Record<string, string | null>;
 
+  // The images go inside the page, read from the private bucket; the renderer fetches nothing.
+  const [logoImage, stampImage, signatureImage] = await Promise.all([
+    assetDataUri(identityConfig.logo_url),
+    assetDataUri(identityConfig.stamp_url),
+    assetDataUri(identityConfig.signature_url),
+  ]);
+
   const templateData = dummyTemplateData();
   templateData.school = {
     name:          school.name,
-    logoUrl:       identityConfig.logo_url      ?? null,
-    stampUrl:      identityConfig.stamp_url     ?? null,
+    logoUrl:       logoImage,
+    stampUrl:      stampImage,
     motto:         identityConfig.motto         ?? null,
     address:       identityConfig.address       ?? null,
     primaryColour: identityConfig.primary_colour ?? null,
   };
 
-  applyReportConfig(templateData, reportConfig, identityConfig.signature_url ?? null);
+  applyReportConfig(templateData, reportConfig, signatureImage);
 
   const templateName: TemplateName = reportConfig.template === 'modern' ? 'modern' : 'classic';
   const html = getTemplate(templateName)(templateData);
@@ -544,6 +562,7 @@ export async function generateReportCardPreview(
   const b = await getBrowser();
   const page = await b.newPage();
   try {
+    await refuseNetwork(page);
     await page.setContent(html, { waitUntil: 'load', timeout: 15_000 });
     const pdfBuffer = await page.pdf({
       format:          'a4',
