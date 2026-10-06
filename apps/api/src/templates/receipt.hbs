@@ -160,6 +160,12 @@
         <td>{{payment.reference}}</td>
         <td class="amount-cell">{{payment.amount}}</td>
       </tr>
+      {{#if payment.refunded}}
+      <tr>
+        <td colspan="2">Refunded against this payment</td>
+        <td class="amount-cell">&minus;{{payment.refunded}}</td>
+      </tr>
+      {{/if}}
     </tbody>
   </table>
 

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { REFUND_REASON_OPTIONS, type RefundReason } from '@/lib/refundReasons';
 import {
   Modal,
   ToastBanner,
@@ -35,6 +36,14 @@ interface PaymentRow {
   method: string;
 }
 
+/** A payment as the invoice view returns it, with what has been refunded against it (kobo, as text). */
+interface InvoicePayment extends PaymentRow {
+  payment_date: string;
+  reference: string | null;
+  paystack_reference: string | null;
+  refunded_kobo: string;
+}
+
 function classLabel(cls: ClassOption): string {
   return cls.stream ? `${cls.name} (${cls.stream})` : cls.name;
 }
@@ -53,6 +62,7 @@ export default function InvoicesPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [paymentTarget, setPaymentTarget] = useState<InvoiceListRow | null>(null);
+  const [paymentsTarget, setPaymentsTarget] = useState<InvoiceListRow | null>(null);
 
   useEffect(() => {
     if (!termId && currentTermId) setTermId(currentTermId);
@@ -179,7 +189,7 @@ export default function InvoicesPage() {
                 <td className="px-4 py-3 text-center">
                   <span className={statusBadgeClass(inv.status)}>{STATUS_LABELS[inv.status]}</span>
                 </td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-4 py-3 text-center whitespace-nowrap">
                   <button
                     type="button"
                     onClick={() => setPaymentTarget(inv)}
@@ -187,6 +197,14 @@ export default function InvoicesPage() {
                     className="btn-secondary !px-3 !py-1.5 text-xs disabled:opacity-40"
                   >
                     Record Payment
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentsTarget(inv)}
+                    disabled={inv.amount_paid <= 0}
+                    className="btn-secondary !px-3 !py-1.5 text-xs ml-2 disabled:opacity-40"
+                  >
+                    Payments
                   </button>
                 </td>
               </tr>
@@ -210,7 +228,218 @@ export default function InvoicesPage() {
           onError={(msg) => show(msg, 'error')}
         />
       )}
+
+      {paymentsTarget && (
+        <PaymentsModal
+          schoolId={schoolId!}
+          termId={termId}
+          invoice={paymentsTarget}
+          onClose={() => setPaymentsTarget(null)}
+          onReceipt={downloadReceipt}
+          onRefunded={() => { setRefreshKey((k) => k + 1); show('Refund recorded.'); }}
+          onError={(msg) => show(msg, 'error')}
+        />
+      )}
     </div>
+  );
+}
+
+const METHOD_LABELS: Record<string, string> = { cash: 'Cash', bank_transfer: 'Bank transfer', paystack: 'Online', waiver: 'Waiver' };
+
+/**
+ * An invoice's payments, each with what has been refunded against it. A cash or bank-transfer payment
+ * can be refunded here (bursar only). A Paystack payment is refunded in Paystack by Chronix, and the
+ * refund appears here by itself when Paystack completes it. A refund never edits the payment.
+ */
+function PaymentsModal({
+  schoolId, termId, invoice, onClose, onReceipt, onRefunded, onError,
+}: {
+  schoolId: string;
+  termId: string;
+  invoice: InvoiceListRow;
+  onClose: () => void;
+  onReceipt: (paymentId: string) => void;
+  onRefunded: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [payments, setPayments] = useState<InvoicePayment[] | null>(null);
+  const [reload, setReload] = useState(0);
+  const [refunding, setRefunding] = useState<InvoicePayment | null>(null);
+  // Held in a ref so a new callback from the page does not re-run the fetch: an error shown by the
+  // page re-renders it, and a fetch that kept failing would otherwise loop.
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<{ success: boolean; data: { payments: InvoicePayment[] } }>(
+      `/api/schools/${schoolId}/fee-invoices/student/${invoice.student_id}?term_id=${encodeURIComponent(termId)}`
+    )
+      .then((res) => { if (!cancelled) setPayments(res.data.payments); })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setPayments([]);
+        onErrorRef.current(err instanceof Error ? err.message : 'Failed to load payments');
+      });
+    return () => { cancelled = true; };
+  }, [schoolId, termId, invoice.student_id, reload]);
+
+  const refundedNaira = (p: InvoicePayment) => Number(p.refunded_kobo) / 100;
+
+  return (
+    <Modal title="Payments" onClose={onClose}>
+      <div className="space-y-4">
+        <div className="bg-gray-50 rounded-lg px-3 py-2 text-sm">
+          <p className="font-medium text-gray-900">{invoice.first_name} {invoice.last_name}</p>
+          <p className="text-gray-500">{invoice.admission_no} · {invoice.class_name ?? 'No class'}</p>
+        </div>
+
+        {payments === null && <p className="text-sm text-gray-400">Loading…</p>}
+        {payments && payments.length === 0 && <p className="text-sm text-gray-500">No payments on this invoice.</p>}
+        {payments && payments.length > 0 && (
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs text-gray-500">
+                <th className="py-1">Date</th>
+                <th className="py-1">Method</th>
+                <th className="py-1 text-right">Amount</th>
+                <th className="py-1 text-right">Refunded</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {payments.map((p) => {
+                const refundable = Number(p.amount) - refundedNaira(p);
+                // Any payment that moved money, online ones included: schools refund from their own account.
+                const canRefund = p.method !== 'waiver' && refundable > 0;
+                return (
+                  <tr key={p.id}>
+                    <td className="py-2 text-gray-600">{new Date(p.payment_date).toLocaleDateString('en-GB')}</td>
+                    <td className="py-2 text-gray-600">{METHOD_LABELS[p.method] ?? p.method}</td>
+                    <td className="py-2 text-right text-gray-900">{formatCurrency(Number(p.amount))}</td>
+                    <td className="py-2 text-right text-gray-900">{refundedNaira(p) > 0 ? formatCurrency(refundedNaira(p)) : '—'}</td>
+                    <td className="py-2 text-right whitespace-nowrap">
+                      <button type="button" onClick={() => onReceipt(p.id)} className="text-xs text-blue-600 hover:text-blue-800">Receipt</button>
+                      {canRefund && (
+                        <button type="button" onClick={() => setRefunding(p)} className="text-xs text-blue-600 hover:text-blue-800 ml-3">Refund</button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        {payments && payments.length > 0 && (
+          <p className="text-xs text-gray-500">
+            The school pays a refund back itself, in cash or by bank transfer, online payments included, and records it here.
+          </p>
+        )}
+
+        {refunding && (
+          <RefundForm
+            schoolId={schoolId}
+            payment={refunding}
+            refundable={Number(refunding.amount) - refundedNaira(refunding)}
+            onCancel={() => setRefunding(null)}
+            onDone={() => { setRefunding(null); setReload((r) => r + 1); onRefunded(); }}
+            onError={onError}
+          />
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function RefundForm({
+  schoolId, payment, refundable, onCancel, onDone, onError,
+}: {
+  schoolId: string;
+  payment: InvoicePayment;
+  refundable: number;
+  onCancel: () => void;
+  onDone: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [amount, setAmount] = useState(refundable.toFixed(2));
+  const [method, setMethod] = useState<'cash' | 'bank_transfer'>(payment.method === 'cash' ? 'cash' : 'bank_transfer');
+  const [reason, setReason] = useState<RefundReason | ''>('');
+  const [reference, setReference] = useState('');
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{ amount?: string; reason?: string; note?: string }>({});
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const typed = amount.trim();
+    const errors: { amount?: string; reason?: string; note?: string } = {};
+    if (!/^\d+(\.\d{1,2})?$/.test(typed) || Number(typed) <= 0) {
+      errors.amount = 'Enter an amount in naira with at most 2 decimal places, e.g. 1500.50';
+    }
+    if (!reason) errors.reason = 'Choose a reason for the refund';
+    if (reason === 'other' && !note.trim()) errors.note = 'Say what the reason is';
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+    setSubmitting(true);
+    try {
+      await apiFetch(`/api/schools/${schoolId}/payments/${payment.id}/refunds`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount: typed, method, reason,
+          reference: reference.trim() || undefined,
+          note: note.trim() || undefined,
+        }),
+      });
+      onDone();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Failed to record the refund');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="border-t border-gray-200 pt-4 space-y-3">
+      <p className="text-sm font-medium text-gray-900">Record a refund</p>
+      <p className="text-xs text-gray-500">
+        Money the school has paid back to the payer. The payment stays as it was; the refund is recorded beside it
+        and the invoice balance goes up by the amount. Up to {formatCurrency(refundable)} can be refunded on this
+        payment. An online payment&apos;s convenience fee is never refunded.
+      </p>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Amount refunded (₦)</label>
+        <input type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-field" />
+        {fieldErrors.amount && <p className="text-xs text-red-600 mt-1">{fieldErrors.amount}</p>}
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Paid back by</label>
+        <select value={method} onChange={(e) => setMethod(e.target.value as 'cash' | 'bank_transfer')} className="input-field">
+          <option value="cash">Cash</option>
+          <option value="bank_transfer">Bank transfer</option>
+        </select>
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Reason</label>
+        <select value={reason} onChange={(e) => setReason(e.target.value as RefundReason | '')} className="input-field">
+          <option value="">Choose a reason</option>
+          {REFUND_REASON_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        {fieldErrors.reason && <p className="text-xs text-red-600 mt-1">{fieldErrors.reason}</p>}
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Transfer reference (optional)</label>
+        <input type="text" maxLength={100} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="If you have one" className="input-field" />
+      </div>
+      <div>
+        <label className="block text-xs font-medium text-gray-500 mb-1">Note{reason === 'other' ? '' : ' (optional)'}</label>
+        <input type="text" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. paid twice by mistake" className="input-field" />
+        {fieldErrors.note && <p className="text-xs text-red-600 mt-1">{fieldErrors.note}</p>}
+      </div>
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className="btn-secondary">Cancel</button>
+        <button type="submit" disabled={submitting} className="btn-primary">{submitting ? 'Recording…' : 'Record refund'}</button>
+      </div>
+    </form>
   );
 }
 

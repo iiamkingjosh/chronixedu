@@ -169,7 +169,8 @@ export interface PaymentRow {
 }
 
 export interface InvoiceWithPayments extends FeeInvoiceRow {
-  payments: PaymentRow[];
+  /** Each payment with what has been refunded against it, in kobo (fee_refunds, migration 062). */
+  payments: Array<PaymentRow & { refunded_kobo: string }>;
 }
 
 export interface PaymentInput {
@@ -338,6 +339,8 @@ export async function recordPayment(
 }
 
 export interface PaymentReceiptRow extends PaymentRow {
+  /** Refunded against this payment so far, in kobo (fee_refunds, migration 062). */
+  refunded_kobo: string;
   student_id: string;
   total_amount: number;
   amount_paid: number;
@@ -358,6 +361,7 @@ export async function getPaymentById(schoolId: string, paymentId: string): Promi
     `SELECT
        p.id, p.invoice_id, p.school_id, p.amount, p.payment_date, p.method,
        p.reference, p.paystack_reference, p.recorded_by, p.created_at,
+       coalesce(rf.kobo, 0)::text AS refunded_kobo,
        fi.student_id,
        fi.total_amount, fi.amount_paid, fi.balance, fi.status AS invoice_status,
        u.first_name, u.last_name, s.admission_no,
@@ -365,6 +369,7 @@ export async function getPaymentById(schoolId: string, paymentId: string): Promi
        t.name AS term_name, sess.name AS session_name
      FROM payments p
      JOIN fee_invoices fi ON fi.id = p.invoice_id
+     LEFT JOIN (SELECT payment_id, sum(amount_kobo) AS kobo FROM fee_refunds GROUP BY payment_id) rf ON rf.payment_id = p.id
      JOIN students s ON s.id = fi.student_id
      JOIN users u ON u.id = s.user_id
      JOIN terms t ON t.id = fi.term_id
@@ -391,11 +396,13 @@ export async function getInvoiceByStudent(
   const invoice = invoiceResult.rows[0];
   if (!invoice) return null;
 
-  const paymentsResult = await pool.query<PaymentRow>(
-    `SELECT id, invoice_id, school_id, amount, payment_date, method, reference, paystack_reference, recorded_by, created_at
-     FROM payments
-     WHERE invoice_id = $1
-     ORDER BY payment_date`,
+  const paymentsResult = await pool.query<PaymentRow & { refunded_kobo: string }>(
+    `SELECT p.id, p.invoice_id, p.school_id, p.amount, p.payment_date, p.method, p.reference, p.paystack_reference,
+            p.recorded_by, p.created_at,
+            coalesce((SELECT sum(r.amount_kobo) FROM fee_refunds r WHERE r.payment_id = p.id), 0)::text AS refunded_kobo
+     FROM payments p
+     WHERE p.invoice_id = $1
+     ORDER BY p.payment_date`,
     [invoice.id]
   );
 

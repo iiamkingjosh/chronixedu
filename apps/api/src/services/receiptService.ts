@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../supabaseClient';
 import { findSchoolById } from '../db/queries/schools';
 import { getBrowser, REPORT_CARDS_BUCKET } from './reportCardService';
 import type { PaymentReceiptRow } from '../db/queries/fees';
+import { fromKobo } from './money';
 import { assetDataUri, refuseNetwork } from './schoolAssets';
 
 // ── Template compilation (lazy, once) ─────────────────────────────────────────
@@ -74,6 +75,8 @@ export async function generateReceipt(schoolId: string, payment: PaymentReceiptR
     },
     payment: {
       amount: formatCurrency(payment.amount),
+      // A refund never edits the payment (migration 062): the receipt shows it beside it.
+      refunded: Number(payment.refunded_kobo) > 0 ? formatCurrency(fromKobo(Number(payment.refunded_kobo))) : null,
       method: formatMethod(payment.method),
       reference: payment.reference ?? payment.paystack_reference ?? '—',
     },

@@ -1,5 +1,16 @@
 # Chronix Edu — Changelog
 
+## Refunds are recorded as refunds (2026-10-06)
+
+### For schools
+- **The bursar can record a refund:** Invoices → Payments → Refund. It works for cash, bank-transfer and
+  online payments, because the school pays refunds back itself, in cash or by transfer.
+- **The payment stays on record as it was;** the refund is shown beside it. The invoice balance goes back
+  up by the amount, so a part-refunded invoice shows as partly paid. The receipt shows what was refunded.
+- **The form asks for** the amount, how it was paid back, a reason (paid more than owed, paid twice,
+  student withdrew, paid for the wrong child, or other), and the transfer reference if there is one.
+- A waiver cannot be refunded, and refunds can never add up to more than the payment.
+
 ## Online fee payments are credited only to the payment that was started (2026-10-06)
 
 ### For schools

@@ -35,6 +35,7 @@ import {
 import { toKobo, fromKobo } from '../services/money';
 import { generateReceipt } from '../services/receiptService';
 import { createFeeCheckout, markFeeCheckoutFailed } from '../db/queries/feeCheckouts';
+import { recordRefund, REFUND_REASONS } from '../db/queries/feeRefunds';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
 import { signReportCardAsset } from '../services/reportCardService';
 import {
@@ -543,6 +544,85 @@ function getApiBaseUrl(): string {
   }
   return configured.replace(/\/$/, '');
 }
+
+// ── POST /:schoolId/payments/:paymentId/refunds ──────────────────────────────────
+// A refund the school has made from its own money, recorded by the bursar (bursar only, decided 5 Oct
+// 2026; not the principal, who does not handle money). Allowed for cash, bank-transfer AND online
+// payments: schools refund from their own account, because a refund through Paystack's dashboard is
+// taken from Chronix's main account (6 Oct 2026). A waiver is refused: it moved no money. A refund is a
+// record of its own; the payment is never edited, and the invoice is recomputed (migration 063).
+
+const optionalText = (max: number) => z.string().trim().max(max).optional().transform(v => (v ? v : null));
+
+const manualRefundSchema = z
+  .object({
+    amount: nairaToKobo,
+    method: z.enum(['cash', 'bank_transfer'], { message: 'Say how the money went back: cash or bank transfer' }),
+    reason: z.enum(REFUND_REASONS, { message: 'Choose a reason for the refund' }),
+    // Optional: a parent often has no note of a transfer's reference (Moses, 6 Oct 2026).
+    reference: optionalText(100),
+    note: optionalText(500),
+  })
+  .refine(d => d.reason !== 'other' || !!d.note, { message: 'Say what the reason is when you choose Other', path: ['note'] });
+
+router.post(
+  '/:schoolId/payments/:paymentId/refunds',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('bursar'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = manualRefundSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid refund' },
+        });
+      }
+      const { schoolId, paymentId } = req.params;
+      const { amount: amountKobo, method, reason, reference, note } = parsed.data;
+
+      const outcome = await recordRefund(schoolId, paymentId, {
+        amountKobo, method, reason, reference, note, recordedBy: req.user!.user_id,
+      });
+      if (outcome.outcome === 'not_found') {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Payment not found' } });
+      }
+      if (outcome.outcome === 'waiver') {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'WAIVER_NOT_REFUNDABLE', message: 'A waiver moved no money, so there is nothing to refund.' },
+        });
+      }
+      if (outcome.outcome === 'exceeds_payment') {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'REFUND_EXCEEDS_PAYMENT',
+            message: `At most ₦${Number(fromKobo(outcome.refundableKobo)).toLocaleString('en-NG', { minimumFractionDigits: 2 })} of this payment can still be refunded.`,
+          },
+        });
+      }
+
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'REFUND_RECORDED',
+        entity: 'fee_refunds',
+        entityId: outcome.refund.id,
+        newValue: {
+          payment_id: paymentId, amount_kobo: amountKobo, method, reason, reference, note, invoice_status: outcome.invoice.status,
+        },
+      });
+
+      return res.status(201).json({ success: true, data: { refund: outcome.refund, invoice: outcome.invoice } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 
 // ── POST /:schoolId/payments/paystack/initiate ───────────────────────────────────
 

@@ -900,6 +900,29 @@ Monorepo, npm workspaces:
   `platform_billing_amount_verification_failed`) rather than trusting Paystack's or the webhook's figure;
   the callback redirects with `?payment=error&reason=amount_mismatch` so the school sees it too.
 
+## Fee refunds, chargebacks and Paystack (6 Oct 2026)
+
+- **A school refunds from its own money, and the bursar records it** (migration 063,
+  `db/queries/feeRefunds.ts`, `POST /:schoolId/payments/:paymentId/refunds`). Decided 5-6 Oct 2026.
+  - **A refund is a record of its own.** The payment is never edited. The invoice is recomputed from
+    payments minus refunds under the invoice lock a payment takes, so "paid" becomes "partly paid", and
+    two refunds at once cannot exceed the payment.
+  - **Bursar only** (not the principal). Cash, bank-transfer and online payments alike; a waiver is
+    refused, because it moved no money.
+  - **The form takes:** the amount; how it went back (cash or bank transfer); a reason (`REFUND_REASONS`:
+    overpaid, paid twice, withdrew, wrong child, other, which needs a note); an optional reference (a
+    parent often has none); an optional note. `refundReasons.test.ts` keeps the web's list
+    (`lib/refundReasons.ts`) equal to the API's.
+  - **Never through Paystack's dashboard.** Paystack takes a refund from the main account's pending payout
+    or balance, which is Chronix's: the school's share has already been paid out. Its charge is never
+    refunded either. `docs/paystack-runbook.md` has the detail and the sources.
+- **Chargebacks are Chronix's risk.** A lost or unanswered one is taken from the main account's payouts,
+  and must be answered within 16 business hours. The Paystack Disputes Email is the alert for now; the
+  runbook says how to answer one and record it.
+- **Parked for the second school** (branch `parked/paystack-account-webhook`, never pushed): one webhook
+  address for the whole account, automatic recording of Paystack refunds and chargebacks, dispute alerts.
+  It predates migration 062 and must be rebased onto it, keeping the record-based crediting.
+
 ## A school's data: export and deletion (DPA §11, Terms §22)
 
 - **The legal pages are accepted text** (`legal_terms_accepted_at`). Never edit them to match the
