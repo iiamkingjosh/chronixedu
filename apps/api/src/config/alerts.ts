@@ -195,6 +195,12 @@ export const ALERTS = {
     events: ['password_check_session_not_revoked', 'password_reset_sessions_not_revoked'],
     fields: ['user_id', 'error'],
   },
+  fee_payment_not_credited: {
+    why: "A parent's online fee payment succeeded at Paystack and was NOT credited to any invoice: no payment record started it (paystack_fee_payment_unmatched), or Paystack verified a different amount than the record asked for (paystack_fee_amount_mismatch). The money was taken; check it in the Paystack dashboard, and have the bursar record it by its reference once confirmed (migration 062)",
+    level: 'error',
+    events: ['paystack_fee_payment_unmatched', 'paystack_fee_amount_mismatch'],
+    fields: ['route', 'school_id', 'expected_kobo', 'verified_kobo'],
+  },
 } as const satisfies Record<string, AlertSpec>;
 
 export type AlertName = keyof typeof ALERTS;

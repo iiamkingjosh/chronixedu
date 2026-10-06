@@ -864,9 +864,13 @@ Monorepo, npm workspaces:
   of checkout — the billed amount is rate × enrolment *then*, never re-derived, and there is no
   proration or late fee: a payment settles for exactly that amount or not at all, and `next_billing_date`
   simply advances to whatever `next_term_start` is by the time it's read, same as any other read.
-- **The trust model, and why it diverges from `routes/feesPublic.ts`.** Fee payments resolve identity
-  from Paystack's `metadata` cross-checked against the URL's `:schoolId` — fine when a parent is paying
-  into a school's own account. Here the money is Chronix's own revenue, not a tenant's, so identity is
+- **The trust model, the same for fee payments since 6 Oct 2026.** A school fee paid online is credited
+  only through the record its start wrote before Paystack was called (`fee_checkouts`, migration 062,
+  `db/queries/feeCheckouts.ts`): that record's school and invoice, at exactly its amount, in naira.
+  Paystack's metadata and the `:schoolId` in the return page's or webhook's address are never used; the
+  return page took the school from its own address until then (SECURITY.md Round 38). A payment with
+  no record is not credited and alerts (`fee_payment_not_credited`); the bursar records it by reference.
+  Because payments are matched by reference, one webhook address serves every school. Here the money is Chronix's own revenue, not a tenant's, so identity is
   resolved ONLY from the local `reference`-keyed row this server wrote before calling Paystack
   (`findPendingPaymentForSchool`/`settlePayment` in `db/queries/platformBilling.ts`) — never from the
   webhook or callback's `metadata`, not even cross-checked. `platformBillingFullStack.test.ts` proves

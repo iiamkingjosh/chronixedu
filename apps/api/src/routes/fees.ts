@@ -34,6 +34,7 @@ import {
 // which auto-mocked these pure helpers to undefined and turned a balance into NaN.
 import { toKobo, fromKobo } from '../services/money';
 import { generateReceipt } from '../services/receiptService';
+import { createFeeCheckout, markFeeCheckoutFailed } from '../db/queries/feeCheckouts';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
 import { signReportCardAsset } from '../services/reportCardService';
 import {
@@ -619,7 +620,13 @@ router.post(
         return res.status(503).json({ success: false, error: { code: 'PAYOUT_NOT_CONFIGURED', message: "Online payment isn't set up yet for this school — please contact the school office." } });
       }
 
+      // The record this payment will be credited through, written BEFORE Paystack is called
+      // (migration 062): its school, invoice and amount. The return page and the webhook credit the
+      // payment only through it; the metadata below is for Paystack's dashboard, never for crediting.
       const reference = crypto.randomUUID();
+      await createFeeCheckout({
+        reference, schoolId, invoiceId: invoice_id, feeKobo: payAmountKobo, convenienceFeeKobo: 0, initiatedBy: req.user!.user_id,
+      });
       const initialization = await initializePaystackTransaction({
         email: req.user!.email!,
         amountKobo: payAmountKobo,
@@ -631,6 +638,7 @@ router.post(
       });
 
       if (!initialization) {
+        await markFeeCheckoutFailed(reference, 'paystack_init_failed');
         return res.status(502).json({ success: false, error: { code: 'PAYSTACK_INIT_FAILED', message: 'Unable to initialize the Paystack transaction' } });
       }
 

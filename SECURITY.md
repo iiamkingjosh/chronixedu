@@ -1,14 +1,37 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 37 — 2026-10-05  
-**Scope:** Who can open a school's files, what the PDF renderer will fetch, where a parent's password goes, and how a person sets their own password  
-**Round 37 total findings:** 6 (0 Critical · 0 High · 2 Medium · 4 Low) — remediated in code, not yet deployed; M-01 ends when the bucket is switched to private after the deploy
+**Latest audit:** Round 38 — 2026-10-06  
+**Scope:** Where an online fee payment is credited  
+**Round 38 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+
+---
+
+## Round 38 — 2026-10-06
+
+### L-01 — An online fee payment was credited to whatever school and invoice its metadata named ✅ Remediated
+
+**Files:** `migrations/062_fee_checkouts.sql`, `apps/api/src/db/queries/feeCheckouts.ts` (new), `apps/api/src/routes/fees.ts` (`POST /:schoolId/payments/paystack/initiate`), `apps/api/src/routes/feesPublic.ts` (the return page and the webhook).
+
+**Raised by the reviewer** (6 Oct 2026) while reviewing the account-wide webhook, which is parked for the second school (branch `parked/paystack-account-webhook`). The weakness was already live, without it.
+
+**The mechanism.** Nothing was written on our side before Paystack was called. The return page and the webhook took the invoice from the metadata on Paystack's record of the transaction. The return page cross-checked it against a school id in its own address, which whoever calls it chooses; the webhook against the one school in the address set in Paystack's dashboard. So a transaction created on the same Paystack account another way (Paystack's own pay widget with the account's public key, or a payment page) could name any invoice and be credited to it, while the money went wherever that transaction sent it: to Chronix's own balance rather than the school's.
+
+**Why Low.** It needs a transaction created outside the app on Chronix's own Paystack account. The app never publishes the public key (the web makes no client-side Paystack call). And nothing is stolen: the payer pays real money. The harm is an invoice shown as paid for money the school never receives.
+
+**Fix.** The pattern Chronix's own subscription payments already use (migration 052):
+- **Starting a payment writes its record first:** the reference Paystack will report, the school, the invoice, the amount and who started it.
+- **The return page and the webhook credit only through that record:** its school and invoice, and only when Paystack verifies exactly its amount, in naira. Paystack's metadata and the school in either address are not used.
+- **A payment no record started is not credited.** It raises `fee_payment_not_credited`, and the bursar records it by its reference once checked. The same alert covers a verified amount other than the record's.
+- **Credited once,** whichever delivery arrives first: payments' UNIQUE Paystack reference holds two simultaneous deliveries (tested).
+- Because a payment is matched by its reference, the pilot's own webhook address now credits every school's payments correctly; Chronix's subscription payments arriving there are settled by their reference too. Any other Paystack event is logged by name, not dropped silently.
+
+**Tests:** `feeCheckouts.db.test.ts` (12), including the reviewer's mirror of `platformBillingFullStack.test.ts`: metadata naming another school and invoice is credited to the record's.
 
 ---
 
 ## Round 37 — 2026-10-05
 
-### M-01 — Student photos, signatures and homework sat in a public bucket ✅ Remediated in code; the bucket switch follows the deploy
+### M-01 — Student photos, signatures and homework sat in a public bucket ✅ Remediated (live 6 Oct 2026; the bucket is private)
 
 **Files:** `apps/api/src/services/schoolAssets.ts` (new), `migrations/061_school_assets_store_paths.sql`, the five image uploads (`routes/schools.ts` logo, signature, stamp; `routes/users.ts` staff signature; `routes/students.ts` photo), `routes/assignments.ts`, the school, `/users/me` and student-profile reads, `apps/web/next.config.js`.
 
@@ -21,7 +44,7 @@
 - **A screen gets a link that expires in 15 minutes,** made on each read and never cached: the school record, `/users/me` and the student profile. The 5-minute school cache keeps the paths.
 - **A PDF gets the image itself** (`assetDataUri`), read with the service role, so report cards, previews, receipts and transcripts work while the bucket is private.
 - **The offline cache keeps no copy** of a bucket file.
-- **The switch.** After the deploy, Moses makes the bucket private in the Supabase dashboard. Until then nothing changes for anyone; after it, every link ever handed out stops working at once (measured 2 Oct: the same form of link on the private bucket answers 400).
+- **The switch.** Moses made the bucket private in the Supabase dashboard on 6 Oct, before the deploy rather than after it, so the pilot's logo and signature did not load until the code went live at 06:36 UTC. Every link ever handed out stopped working at once: both of the pilot's old public links answered 400 after the deploy, and the stored values were paths matching their files.
 
 **Accepted:** a file someone already downloaded cannot be recalled. Production held 4 files in the bucket, all the pilot's or test data.
 

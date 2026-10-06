@@ -72,6 +72,7 @@ export const EXPORT_DATASETS: ExportDataset[] = [
   { key: 'fee_structures', label: 'Fee structures', tables: ['fee_structures'], sql: `SELECT * FROM fee_structures WHERE school_id = $1` },
   { key: 'fee_invoices', label: 'Fee invoices', tables: ['fee_invoices'], sql: `SELECT * FROM fee_invoices WHERE school_id = $1` },
   { key: 'payments', label: 'Fee payments', tables: ['payments'], sql: `SELECT * FROM payments WHERE school_id = $1` },
+  { key: 'fee_checkouts', label: 'Online payment attempts', tables: ['fee_checkouts'], sql: `SELECT * FROM fee_checkouts WHERE school_id = $1` },
   { key: 'settings', label: 'School settings', tables: ['school_settings'], sql: `SELECT * FROM school_settings WHERE school_id = $1` },
   { key: 'audit_log', label: 'Audit log', tables: ['audit_logs'], sql: `SELECT * FROM audit_logs WHERE school_id = $1 ORDER BY created_at` },
 ];

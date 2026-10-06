@@ -44,6 +44,8 @@ class_teacher_comments|service_role_bypass|ALL|service_role|Q=true|C=-
 classes|classes_tenant_isolation|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)
 classes|service_role_bypass|ALL|service_role|Q=true|C=true
 email_queue|service_role_bypass|ALL|service_role|Q=true|C=-
+fee_checkouts|fee_checkouts_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)
+fee_checkouts|service_role_bypass|ALL|service_role|Q=true|C=true
 fee_invoices|fee_invoices_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)
 fee_invoices|service_role_bypass|ALL|service_role|Q=true|C=-
 fee_structures|fee_structures_tenant|ALL|public|Q=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)|C=(school_id = ((auth.jwt() ->> 'school_id'::text))::uuid)

@@ -7,10 +7,10 @@ import { requireActiveSchool } from '../middleware/requireActiveSchool';
 import feesRouter from '../routes/fees';
 import feesPublicRouter from '../routes/feesPublic';
 import { errorHandler } from '../middleware/errorHandler';
-import * as feesQueries from '../db/queries/fees';
 import * as auditLog from '../db/queries/auditLog';
 import * as paystackService from '../services/paystackService';
 import * as paymentReceiptNotifier from '../services/paymentReceiptNotifier';
+import * as feeCheckouts from '../db/queries/feeCheckouts';
 
 // Regression test for the bug where `app.use('/api/schools', verifyToken)` was
 // registered before the Paystack webhook/callback routes were mounted, so every
@@ -24,6 +24,8 @@ jest.mock('../db/client', () => ({
   default: { query: jest.fn().mockResolvedValue({ rows: [] }), end: jest.fn() },
 }));
 jest.mock('../db/queries/fees');
+jest.mock('../db/queries/feeCheckouts');
+jest.mock('../db/queries/platformBilling');
 jest.mock('../db/queries/auditLog');
 jest.mock('../services/paymentReceiptNotifier');
 jest.mock('../services/receiptService', () => ({ generateReceipt: jest.fn() }));
@@ -35,10 +37,10 @@ jest.mock('../services/paystackService', () => ({
   verifyPaystackTransaction: jest.fn(),
 }));
 
-const mockFees = feesQueries as jest.Mocked<typeof feesQueries>;
 const mockAudit = auditLog as jest.Mocked<typeof auditLog>;
 const mockPaystack = paystackService as jest.Mocked<typeof paystackService>;
 const mockNotifier = paymentReceiptNotifier as jest.Mocked<typeof paymentReceiptNotifier>;
+const mockCheckouts = feeCheckouts as jest.Mocked<typeof feeCheckouts>;
 
 process.env.JWT_SECRET = 'test-secret';
 process.env.PAYSTACK_SECRET_KEY = 'sk_test_webhook_secret';
@@ -106,7 +108,10 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook (full middleware
       status: 'success', amountKobo: PAYMENT_AMOUNT_KOBO, currency: 'NGN', reference: 'ref-xyz',
       metadata: CHARGE_SUCCESS_EVENT.data.metadata,
     });
-    mockFees.recordPayment.mockResolvedValueOnce(PAYMENT_RESULT as never);
+    // Where it is credited is decided by the payment's record (migration 062; feeCheckouts.db.test.ts).
+    mockCheckouts.settleFeeCheckout.mockResolvedValueOnce({
+      outcome: 'credited', payment: PAYMENT_RESULT.payment, invoice: PAYMENT_RESULT.invoice, schoolId: SCHOOL_ID, recordedBy: 'user-uuid-001',
+    } as never);
 
     const app = buildFullStackApp();
     const rawBody = JSON.stringify(CHARGE_SUCCESS_EVENT);
@@ -119,13 +124,9 @@ describe('POST /api/schools/:schoolId/payments/paystack/webhook (full middleware
 
     expect(res.status).toBe(200);
     expect(res.body.data.processed).toBe(true);
-    expect(mockFees.recordPayment).toHaveBeenCalledWith(SCHOOL_ID, INVOICE_ID, expect.objectContaining({
-      // Kobo end to end: Paystack reports kobo, the webhook passes it through, and
-      // recordPayment takes kobo. Nothing divides by 100 and multiplies back.
-      amountKobo: PAYMENT_AMOUNT_KOBO,
-      method: 'paystack',
-      paystack_reference: 'ref-xyz',
-    }));
+    // Kobo end to end: Paystack reports kobo, the webhook passes it through, and settlement
+    // takes kobo. Nothing divides by 100 and multiplies back.
+    expect(mockCheckouts.settleFeeCheckout).toHaveBeenCalledWith('ref-xyz', PAYMENT_AMOUNT_KOBO, 'NGN');
     expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
       schoolId: SCHOOL_ID, actionType: 'PAYMENT_RECORDED', entity: 'payments', entityId: 'pay-1',
     }));

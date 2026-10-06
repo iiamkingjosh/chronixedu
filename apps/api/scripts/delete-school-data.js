@@ -69,6 +69,7 @@ const own = (table) => ({ table, where: `school_id = $1` });
  */
 const STEPS = [
   { table: 'assignment_submissions', where: `assignment_id IN (SELECT id FROM assignments WHERE school_id = $1) OR student_id IN ${S}` },
+  own('fee_checkouts'), // migration 062; references payments and fee_invoices, so it goes first
   own('payments'),
   own('fee_invoices'),
   own('fee_structures'),

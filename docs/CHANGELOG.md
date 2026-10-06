@@ -1,5 +1,15 @@
 # Chronix Edu — Changelog
 
+## Online fee payments are credited only to the payment that was started (2026-10-06)
+
+### For schools
+- **An online fee payment is credited to exactly the invoice the parent chose to pay, for exactly the
+  amount they started.** A payment that Chronix Edu did not start, or that arrives for a different
+  amount, is not credited automatically: Chronix is alerted, and the bursar can record it by its
+  Paystack reference once it has been checked.
+- **Every school's online payments are recorded as soon as Paystack confirms them,** whether or not the
+  parent's browser comes back to Chronix Edu.
+
 ## Passwords cannot be reused, school images are private, and parents' passwords are no longer shown (2026-10-05)
 
 ### For everyone
