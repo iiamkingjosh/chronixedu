@@ -78,6 +78,14 @@ A new password is refused (400 `PASSWORD_RECENTLY_USED`) when it matches the acc
 
 Also: a wrong current password on Change password answered 401, which the web treats as a lapsed sign-in, so the person was signed out and never saw the message. It answers 400.
 
+### Info — A critical `proxy-addr` advisory stopped CI; it could not reach the API (6 Oct 2026)
+
+**Files:** `package-lock.json` (`proxy-addr` 2.0.7 → 2.0.8, `5593b95`).
+
+GHSA-jqcg-44mw-7w3h (critical, CVSS 9.1: IP spoofing through an IPv4-mapped IPv6 trust subnet) reached npm's audit data overnight, so the security gate failed CI run 37421462048 before any test ran, and Railway skipped both deploys. The fix is the patched release Express already accepts, a lockfile-only change; there was nothing to allowlist.
+
+It could not have touched the API, by design rather than luck. `proxy-addr` decides `req.ip` under Express's `trust proxy`, and since Round 18 the API reads the client's address from `X-Real-IP` through `clientIp(req)`, never `req.ip`: the rate limits, the sign-in lockout and both audit tables' `ip_address`. That decision was taken because Railway's headers made `req.ip` a proxy's address; it kept this advisory out of reach as well. (`trust proxy` is also a hop count, 1, not the subnet form the advisory concerns.) Keep `clientIp` the only reader: a new `req.ip` reader is a regression on both counts.
+
 ---
 
 ## Round 36 — 2026-10-04
