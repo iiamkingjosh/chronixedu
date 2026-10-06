@@ -21,6 +21,19 @@ const refundBy = (paymentId: string, body: object, t = bursar()) =>
 const refunds = async () => (await pool.query(`SELECT * FROM fee_refunds ORDER BY created_at`)).rows;
 const invoice = async () => (await pool.query(`SELECT amount_paid, balance, status FROM fee_invoices WHERE id = $1`, [invoiceId])).rows[0];
 
+/** Resolves once `n` other sessions are waiting on a row lock: a condition read from Postgres, not a sleep. */
+async function waitForLockWaiters(n: number): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const { rows } = await pool.query<{ waiting: number }>(
+      `SELECT count(*)::int AS waiting FROM pg_stat_activity
+        WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`);
+    if (rows[0].waiting >= n) return;
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  throw new Error(`fewer than ${n} sessions ever waited on the lock`);
+}
+
 async function pay(method: 'cash' | 'bank_transfer' | 'paystack' | 'waiver', kobo: number, ref?: string) {
   const r = await recordPayment(A, invoiceId, {
     amountKobo: kobo, method, reference: null, paystack_reference: method === 'paystack' ? (ref ?? `ref-${kobo}`) : null, recorded_by: BURSAR,
@@ -98,10 +111,24 @@ describe('what is refused', () => {
 
   it('two refunds of the whole payment at the same moment: one is recorded, the other refused', async () => {
     const p = await pay('cash', 1_000_000);
-    const both = await Promise.all([
-      refundBy(p.id, { amount: '10000', method: 'cash', reason: 'paid_twice' }),
-      refundBy(p.id, { amount: '10000', method: 'cash', reason: 'paid_twice' }),
-    ]);
+    // Made to overlap, not hoped to (doctrine 15): sent one after the other, the two never met, and this
+    // test passed with the invoice lock removed. A third connection holds the invoice row until both
+    // refunds are waiting on a lock, so each has started before either can finish.
+    const holder = await pool.connect();
+    let both: request.Response[];
+    try {
+      await holder.query('BEGIN');
+      await holder.query(`SELECT 1 FROM fee_invoices WHERE id = $1 FOR UPDATE`, [invoiceId]);
+      const sent = Promise.all([
+        refundBy(p.id, { amount: '10000', method: 'cash', reason: 'paid_twice' }),
+        refundBy(p.id, { amount: '10000', method: 'cash', reason: 'paid_twice' }),
+      ]);
+      await waitForLockWaiters(2);
+      await holder.query('COMMIT');
+      both = await sent;
+    } finally {
+      holder.release();
+    }
     expect(both.map(r => r.status).sort()).toEqual([201, 400]);
     expect(await refunds()).toHaveLength(1);
     expect(await invoice()).toMatchObject({ amount_paid: '0.00' });
