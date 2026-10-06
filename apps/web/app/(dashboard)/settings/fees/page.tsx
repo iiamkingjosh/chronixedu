@@ -1,7 +1,12 @@
 'use client';
 
 /**
- * Fee settings — currently the part-payment minimum.
+ * Fee settings: the part-payment minimum, and who pays Paystack's charge on an online payment.
+ *
+ * The charge (6 Oct 2026): unchosen, the school pays it, as before. "Parents pay it" adds a convenience
+ * fee to what a parent pays online, so the school receives its whole fee. Neither option is preselected
+ * until the school chooses (doctrine 8), and the example figure comes from the API, which computes it the
+ * way the payment does.
  *
  * Parents can pay part of a term's fees online. The school pays the Paystack transaction
  * fee on each attempt (`bearer: 'subaccount'`), so an unbounded floor costs the school
@@ -19,9 +24,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
 
+type ConvenienceFeePayer = 'school' | 'parent';
+
 interface FeeConfig {
   min_part_payment: string;
   is_default: boolean;
+  /** null: the school has not chosen, and pays. */
+  convenience_fee_payer: ConvenienceFeePayer | null;
+  convenience_fee_example: { school_fee: string; convenience_fee: string; total: string };
 }
 
 function formatCurrency(amount: number | string): string {
@@ -37,12 +47,16 @@ export default function FeeSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [saved, setSaved] = useState(false);
+  const [payer, setPayer] = useState<ConvenienceFeePayer | null>(null);
+  const [savingPayer, setSavingPayer] = useState(false);
+  const [payerError, setPayerError] = useState('');
+  const [payerSaved, setPayerSaved] = useState(false);
 
   const load = useCallback(() => {
     if (!schoolId) return;
     setLoading(true);
     apiFetch<{ success: boolean; data: FeeConfig }>(`/api/schools/${schoolId}/fee-config`)
-      .then(({ data }) => { setConfig(data); setValue(data.min_part_payment); })
+      .then(({ data }) => { setConfig(data); setValue(data.min_part_payment); setPayer(data.convenience_fee_payer); })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Failed to load fee settings'))
       .finally(() => setLoading(false));
   }, [schoolId]);
@@ -75,6 +89,30 @@ export default function FeeSettingsPage() {
       setError(err instanceof Error ? err.message : 'Failed to save fee settings');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSavePayer(e: React.FormEvent) {
+    e.preventDefault();
+    if (!schoolId) return;
+    if (!payer) {
+      setPayerError('Choose who pays the convenience fee.');
+      return;
+    }
+    setSavingPayer(true);
+    setPayerError('');
+    setPayerSaved(false);
+    try {
+      await apiFetch(`/api/schools/${schoolId}/fee-config`, {
+        method: 'PATCH',
+        body: JSON.stringify({ convenience_fee_payer: payer }),
+      });
+      setPayerSaved(true);
+      load();
+    } catch (err) {
+      setPayerError(err instanceof Error ? err.message : 'Failed to save fee settings');
+    } finally {
+      setSavingPayer(false);
     }
   }
 
@@ -130,10 +168,9 @@ export default function FeeSettingsPage() {
 
         <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3">
           <p className="text-xs text-gray-600">
-            Your school pays the card processing fee on every online payment, so a very low minimum means paying
-            that fee many times over for the same money. A higher minimum reduces the number of payments — but
-            set it too high and a parent who can only pay a little at a time has to come to the school office
-            instead.
+            When your school pays the payment provider&apos;s charge, a very low minimum means paying that charge
+            many times over for the same money. A higher minimum reduces the number of payments — but set it too
+            high and a parent who can only pay a little at a time has to come to the school office instead.
           </p>
         </div>
 
@@ -143,6 +180,80 @@ export default function FeeSettingsPage() {
           className="px-4 py-2 bg-[#003366] text-white text-sm font-medium rounded-lg hover:bg-[#002347] disabled:opacity-60"
         >
           {saving ? 'Saving…' : 'Save'}
+        </button>
+      </form>
+
+      <form onSubmit={handleSavePayer} className="card p-6 space-y-4 mt-6">
+        <div>
+          <h2 className="text-sm font-medium text-gray-900">Convenience fee for online payments</h2>
+          <p className="mt-1 text-xs text-gray-500">
+            Our payment provider, Paystack, charges for every online payment. Choose who pays that charge.
+          </p>
+        </div>
+
+        {payerError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{payerError}</div>
+        )}
+        {payerSaved && (
+          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            Saved. It applies to every online payment started from now on.
+          </div>
+        )}
+
+        <fieldset className="space-y-3">
+          <legend className="sr-only">Who pays the convenience fee</legend>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="convenience-fee-payer"
+              value="school"
+              checked={payer === 'school'}
+              onChange={() => { setPayer('school'); setPayerError(''); setPayerSaved(false); }}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">The school pays it</span>
+              <span className="block text-xs text-gray-500">
+                Parents pay the school fee and nothing more. The charge comes out of what the school receives.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="convenience-fee-payer"
+              value="parent"
+              checked={payer === 'parent'}
+              onChange={() => { setPayer('parent'); setPayerError(''); setPayerSaved(false); }}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium text-gray-900">Parents pay it</span>
+              <span className="block text-xs text-gray-500">
+                A convenience fee is added to what a parent pays online, so the school receives the whole fee.
+                {config && (
+                  <> On a fee of {formatCurrency(config.convenience_fee_example.school_fee)}, the parent pays{' '}
+                  {formatCurrency(config.convenience_fee_example.total)}, including a{' '}
+                  {formatCurrency(config.convenience_fee_example.convenience_fee)} convenience fee.</>
+                )}{' '}
+                Parents see it before they pay, and it is not refundable.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+
+        {config && config.convenience_fee_payer === null && (
+          <p className="text-xs text-amber-700">
+            Not chosen yet. Until your school chooses, the school pays it.
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={savingPayer}
+          className="px-4 py-2 bg-[#003366] text-white text-sm font-medium rounded-lg hover:bg-[#002347] disabled:opacity-60"
+        >
+          {savingPayer ? 'Saving…' : 'Save'}
         </button>
       </form>
     </div>

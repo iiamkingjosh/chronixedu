@@ -1,5 +1,19 @@
 # Chronix Edu — Changelog
 
+## Schools choose who pays the online payment charge (2026-10-06)
+
+### For schools
+- **Settings → Fee Settings → Convenience fee for online payments.** Choose whether the school pays the
+  payment provider's charge on each online payment, or parents pay it as a convenience fee added to what
+  they pay. Until a school chooses, the school pays it, as before, and the page says it has not chosen.
+- **When parents pay it, the school receives the whole fee.** On a ₦50,000 fee the parent pays ₦50,862.95.
+  The invoice is credited ₦50,000.
+- The receipt shows the convenience fee beside the payment. It is never part of a refund.
+
+### For parents
+- **When the school has chosen it, the convenience fee is shown before paying:** the school fee, the
+  convenience fee and the total, with a note that the fee is not refundable. Cancel leaves without paying.
+
 ## Refunds are recorded as refunds (2026-10-06)
 
 ### For schools

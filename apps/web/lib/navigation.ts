@@ -93,7 +93,7 @@ export const SETTINGS_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Fees',
     items: [
-      { label: 'Fee Settings', href: '/settings/fees', description: 'Fee rules, including the minimum part payment.' },
+      { label: 'Fee Settings', href: '/settings/fees', description: 'Fee rules: the minimum part payment, and who pays the convenience fee online.' },
       { label: 'Payout Setup', href: '/settings/payout', description: 'The bank account parents\u2019 fee payments settle to. Chronix never touches this money.' },
       { label: 'Platform Billing', href: '/settings/billing', description: 'What this school pays Chronix for its own subscription, and paying it online.' },
     ],

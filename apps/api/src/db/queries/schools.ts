@@ -312,6 +312,25 @@ export async function resolveMinPartPayment(
   return { kobo: isConfigured ? Number(configured) : DEFAULT_MIN_PART_PAYMENT_KOBO, isConfigured };
 }
 
+export const CONVENIENCE_FEE_PAYERS = ['school', 'parent'] as const;
+export type ConvenienceFeePayer = (typeof CONVENIENCE_FEE_PAYERS)[number];
+
+/**
+ * Who pays Paystack's charge on a parent's online fee payment, as the school chose it (6 Oct 2026), or null
+ * if it has not chosen. Unchosen, the school pays, as every school did before the setting existed. The
+ * null is returned, never folded into 'school' here: a school that picked 'school' has chosen, and one
+ * that has not must be shown that it has not (doctrine 8). A value that is neither is read as unchosen, so
+ * a hand edit can never put a charge on a parent.
+ */
+export async function resolveConvenienceFeePayer(schoolId: string): Promise<ConvenienceFeePayer | null> {
+  const { rows } = await pool.query<{ payer: string | null }>(
+    `SELECT fee_config->>'convenience_fee_payer' AS payer FROM school_settings WHERE school_id = $1`,
+    [schoolId]
+  );
+  const payer = rows[0]?.payer;
+  return payer === 'school' || payer === 'parent' ? payer : null;
+}
+
 export async function getSchoolPayoutConfig(schoolId: string): Promise<PayoutConfig | null> {
   const result = await pool.query<{ payout_config: PayoutConfig }>(
     `SELECT payout_config FROM schools WHERE id = $1`,

@@ -75,8 +75,10 @@ export async function generateReceipt(schoolId: string, payment: PaymentReceiptR
     },
     payment: {
       amount: formatCurrency(payment.amount),
-      // A refund never edits the payment (migration 062): the receipt shows it beside it.
+      // A refund never edits the payment (migration 063): the receipt shows it beside it.
       refunded: Number(payment.refunded_kobo) > 0 ? formatCurrency(fromKobo(Number(payment.refunded_kobo))) : null,
+      // Paid on top by the parent, to Paystack (6 Oct 2026): shown, never added to what the school received.
+      convenienceFee: Number(payment.convenience_fee_kobo) > 0 ? formatCurrency(fromKobo(Number(payment.convenience_fee_kobo))) : null,
       method: formatMethod(payment.method),
       reference: payment.reference ?? payment.paystack_reference ?? '—',
     },

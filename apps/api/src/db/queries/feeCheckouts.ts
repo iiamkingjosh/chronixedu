@@ -35,6 +35,12 @@ export async function createFeeCheckout(input: {
   );
 }
 
+/** The record a payment's start wrote, if Chronix Edu started it. */
+export async function findFeeCheckout(reference: string): Promise<FeeCheckoutRow | null> {
+  const { rows } = await pool.query<FeeCheckoutRow>(`SELECT * FROM fee_checkouts WHERE reference = $1`, [reference]);
+  return rows[0] ?? null;
+}
+
 /** A start that went nowhere (Paystack refused to open the payment), or a payment refused at settlement. */
 export async function markFeeCheckoutFailed(reference: string, reason: string): Promise<void> {
   await pool.query(
@@ -56,9 +62,13 @@ export type FeeSettlement =
  * (status success); this decides where it goes and whether the amount is the one that was started.
  * Idempotent: a payment already credited is a duplicate, whichever delivery (webhook or return page)
  * arrives first, and payments.paystack_reference is UNIQUE behind it.
+ *
+ * `recordedBy` is the bursar when they record it by its reference; otherwise whoever started it.
  */
-export async function settleFeeCheckout(reference: string, verifiedKobo: number, verifiedCurrency: string): Promise<FeeSettlement> {
-  const checkout = (await pool.query<FeeCheckoutRow>(`SELECT * FROM fee_checkouts WHERE reference = $1`, [reference])).rows[0];
+export async function settleFeeCheckout(
+  reference: string, verifiedKobo: number, verifiedCurrency: string, recordedBy?: string
+): Promise<FeeSettlement> {
+  const checkout = await findFeeCheckout(reference);
   if (!checkout) return { outcome: 'no_checkout' };
   if (checkout.status === 'consumed') return { outcome: 'duplicate', schoolId: checkout.school_id };
 
@@ -80,7 +90,7 @@ export async function settleFeeCheckout(reference: string, verifiedKobo: number,
       method: 'paystack',
       reference: null,
       paystack_reference: reference,
-      recorded_by: checkout.initiated_by,
+      recorded_by: recordedBy ?? checkout.initiated_by,
     });
   } catch (err) {
     // Two deliveries of one payment at the same moment: the second hits payments' UNIQUE reference.
@@ -98,5 +108,5 @@ export async function settleFeeCheckout(reference: string, verifiedKobo: number,
     [reference, result.payment.id]
   );
   if (result.duplicate) return { outcome: 'duplicate', schoolId: checkout.school_id };
-  return { outcome: 'credited', payment: result.payment, invoice: result.invoice, schoolId: checkout.school_id, recordedBy: checkout.initiated_by };
+  return { outcome: 'credited', payment: result.payment, invoice: result.invoice, schoolId: checkout.school_id, recordedBy: recordedBy ?? checkout.initiated_by };
 }

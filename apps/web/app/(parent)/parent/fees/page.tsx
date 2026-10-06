@@ -25,6 +25,14 @@ interface InvoiceData {
   min_part_payment: string;
 }
 
+/** A payment just started, as the API wrote its record: naira, 2 dp. */
+interface CheckoutStart {
+  authorization_url: string;
+  school_fee: string;
+  convenience_fee: string;
+  total: string;
+}
+
 const STATUS_LABELS: Record<InvoiceData['status'], string> = {
   unpaid: 'Unpaid',
   partial: 'Partially Paid',
@@ -65,6 +73,9 @@ export default function ParentFeesPage() {
   // lets the part-payment rule be stated before the parent types rather than after.
   const [payMode, setPayMode] = useState<'full' | 'part'>('full');
   const [partAmount, setPartAmount] = useState('');
+  // Set when the school has passed Paystack's charge to parents: the payment waits here, with its
+  // convenience fee shown, until the parent chooses to continue to Paystack.
+  const [checkout, setCheckout] = useState<CheckoutStart | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -85,6 +96,7 @@ export default function ParentFeesPage() {
     setLoading(true);
     setError('');
     setInvoice(null);
+    setCheckout(null);
 
     apiFetch<{ success: boolean; data: { term: { id: string } | null } }>(`/api/schools/${schoolId}/current-context`)
       .then(({ data }) => {
@@ -144,13 +156,19 @@ export default function ParentFeesPage() {
     setPaying(true);
     setPayError('');
     try {
-      const res = await apiFetch<{ success: boolean; data: { authorization_url: string } }>(
+      const res = await apiFetch<{ success: boolean; data: CheckoutStart }>(
         `/api/schools/${schoolId}/payments/paystack/initiate`,
         {
           method: 'POST',
           body: JSON.stringify(amount === undefined ? { invoice_id: invoice.id } : { invoice_id: invoice.id, amount }),
         }
       );
+      // A convenience fee is shown here, before Paystack's page opens, never discovered there.
+      if (Number(res.data.convenience_fee) > 0) {
+        setCheckout(res.data);
+        setPaying(false);
+        return;
+      }
       window.location.href = res.data.authorization_url;
     } catch (err) {
       setPayError(err instanceof Error ? err.message : 'Failed to start payment');
@@ -264,7 +282,46 @@ export default function ParentFeesPage() {
               <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-3">{payError}</div>
             )}
 
-            {Number(invoice.balance) > 0 ? (
+            {checkout ? (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-900">Before you pay</p>
+                <dl className="rounded-lg border border-gray-200 divide-y divide-gray-100 text-sm">
+                  <div className="flex justify-between px-3 py-2">
+                    <dt className="text-gray-600">School fee</dt>
+                    <dd className="text-gray-900">{formatCurrency(checkout.school_fee)}</dd>
+                  </div>
+                  <div className="flex justify-between px-3 py-2">
+                    <dt className="text-gray-600">Convenience fee</dt>
+                    <dd className="text-gray-900">{formatCurrency(checkout.convenience_fee)}</dd>
+                  </div>
+                  <div className="flex justify-between px-3 py-2 font-semibold">
+                    <dt className="text-gray-900">Total</dt>
+                    <dd className="text-gray-900">{formatCurrency(checkout.total)}</dd>
+                  </div>
+                </dl>
+                <p className="text-xs text-gray-500">
+                  The convenience fee is charged by our payment provider for paying online. It is not refundable.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCheckout(null)}
+                    disabled={paying}
+                    className="flex-1 px-3 py-2.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPaying(true); window.location.href = checkout.authorization_url; }}
+                    disabled={paying}
+                    className="flex-1 px-3 py-2.5 bg-[#003366] text-white text-sm font-medium rounded-lg hover:bg-[#002347] disabled:opacity-60"
+                  >
+                    {paying ? 'Redirecting to Paystack…' : `Pay ${formatCurrency(checkout.total)}`}
+                  </button>
+                </div>
+              </div>
+            ) : Number(invoice.balance) > 0 ? (
               <div className="space-y-3">
                 <div className="flex gap-2">
                   <button

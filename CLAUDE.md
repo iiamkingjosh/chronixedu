@@ -919,6 +919,24 @@ Monorepo, npm workspaces:
 - **Chargebacks are Chronix's risk.** A lost or unanswered one is taken from the main account's payouts,
   and must be answered within 16 business hours. The Paystack Disputes Email is the alert for now; the
   runbook says how to answer one and record it.
+- **The convenience fee: who pays Paystack's charge is the school's choice** (6 Oct 2026). Built before
+  Paystack answered Chronix's questions, to be corrected when it does (Moses).
+  - **The setting:** `fee_config.convenience_fee_payer`, `'school'` or `'parent'`, on Settings → Fee Settings.
+    Unset means the school pays, as every school did before, and the page says it is not chosen; neither
+    option is preselected (doctrine 8). A stored value that is neither reads as unset, so a hand edit can
+    never charge a parent. Each save is audited with the prior value.
+  - **Parents pay:** the payment start grosses the fee up so the school still receives all of it
+    (`services/paystackPricing.ts`, the one place Paystack's pricing lives), asks Paystack for the total,
+    and returns both parts. The parent sees school fee, convenience fee and total before Paystack's page
+    opens. The record (`fee_checkouts.convenience_fee_kobo`) states the fee, nought included.
+  - **The invoice is credited the school fee only, by every path:** the webhook, the return page and the
+    bursar's record-by-reference, which goes through the record when one exists. A refund is capped at
+    the payment, so the convenience fee is never refunded. The receipt shows it beside the payment, read
+    from the record; `payments` has no column for it.
+  - **Assumed until Paystack answers:** standard local pricing (1.5% + ₦100, the ₦100 waived under ₦2,500,
+    capped at ₦2,000), charged on the total, a fraction of a kobo rounded up. A foreign card costs more and
+    is not covered. Whether a surcharge is allowed at all (the CBN's no-surcharge guideline) is one of the
+    questions; `docs/paystack-runbook.md` lists them.
 - **Parked for the second school** (branch `parked/paystack-account-webhook`, never pushed): one webhook
   address for the whole account, automatic recording of Paystack refunds and chargebacks, dispute alerts.
   It predates migration 062 and must be rebased onto it, keeping the record-based crediting.

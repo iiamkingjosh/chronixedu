@@ -14,6 +14,7 @@ import * as reportCardService from '../services/reportCardService';
 import * as rosterQueries from '../db/queries/roster';
 import * as feeReminderService from '../services/feeReminderService';
 import * as schoolQueries from '../db/queries/schools';
+import * as feeCheckoutQueries from '../db/queries/feeCheckouts';
 
 jest.mock('../db/client', () => ({
   __esModule: true,
@@ -37,6 +38,9 @@ jest.mock('../services/reportCardService', () => ({ signReportCardAsset: jest.fn
 jest.mock('../services/paymentReceiptNotifier');
 jest.mock('../services/feeReminderService');
 jest.mock('../db/queries/schools');
+// The payment records (migration 062) are tested against the database in feeCheckouts.db.test.ts and
+// convenienceFee.db.test.ts. Unmocked here, they would read the stubbed client's one row as a record.
+jest.mock('../db/queries/feeCheckouts');
 
 const mockFees = feesQueries as jest.Mocked<typeof feesQueries>;
 const mockAudit = auditLog as jest.Mocked<typeof auditLog>;
@@ -49,6 +53,7 @@ const mockNotifier = paymentReceiptNotifier as jest.Mocked<typeof paymentReceipt
 const mockRoster = rosterQueries as jest.Mocked<typeof rosterQueries>;
 const mockFeeReminder = feeReminderService as jest.Mocked<typeof feeReminderService>;
 const mockSchools = schoolQueries as jest.Mocked<typeof schoolQueries>;
+const mockCheckouts = feeCheckoutQueries as jest.Mocked<typeof feeCheckoutQueries>;
 
 const ACTIVE_PAYOUT_CONFIG = { settlement_status: 'active' as const, paystack_subaccount_code: 'ACCT_test123' };
 
@@ -87,6 +92,10 @@ beforeEach(() => {
   // routes destructure its result — an unmocked call yields undefined and a 500. Default
   // it here so each test opts into a specific minimum only when that is what it is about.
   mockSchools.resolveMinPartPayment.mockResolvedValue({ kobo: 100_000, isConfigured: false });
+  // Unchosen: the school pays Paystack's charge, as every school did before 6 Oct 2026.
+  mockSchools.resolveConvenienceFeePayer.mockResolvedValue(null);
+  // No record started these payments: the bursar's path checks Paystack's metadata, as before 062.
+  mockCheckouts.findFeeCheckout.mockResolvedValue(null);
 });
 
 // ── POST /:schoolId/fee-structures ──────────────────────────────────────────────
@@ -702,7 +711,7 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
       .send({ invoice_id: INVOICE_ID });
 
     expect(res.status).toBe(200);
-    expect(res.body.data).toEqual(PAYSTACK_INIT_RESULT);
+    expect(res.body.data).toEqual({ ...PAYSTACK_INIT_RESULT, school_fee: '10000.00', convenience_fee: '0.00', total: '10000.00' });
     expect(mockPaystack.initializePaystackTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'test@test.com',

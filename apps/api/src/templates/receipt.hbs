@@ -160,6 +160,12 @@
         <td>{{payment.reference}}</td>
         <td class="amount-cell">{{payment.amount}}</td>
       </tr>
+      {{#if payment.convenienceFee}}
+      <tr>
+        <td colspan="2">Also paid: convenience fee to the payment provider (not part of the school fees; not refundable)</td>
+        <td class="amount-cell">{{payment.convenienceFee}}</td>
+      </tr>
+      {{/if}}
       {{#if payment.refunded}}
       <tr>
         <td colspan="2">Refunded against this payment</td>

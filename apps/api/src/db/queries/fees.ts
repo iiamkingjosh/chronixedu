@@ -169,7 +169,7 @@ export interface PaymentRow {
 }
 
 export interface InvoiceWithPayments extends FeeInvoiceRow {
-  /** Each payment with what has been refunded against it, in kobo (fee_refunds, migration 062). */
+  /** Each payment with what has been refunded against it, in kobo (fee_refunds, migration 063). */
   payments: Array<PaymentRow & { refunded_kobo: string }>;
 }
 
@@ -339,8 +339,11 @@ export async function recordPayment(
 }
 
 export interface PaymentReceiptRow extends PaymentRow {
-  /** Refunded against this payment so far, in kobo (fee_refunds, migration 062). */
+  /** Refunded against this payment so far, in kobo (fee_refunds, migration 063). */
   refunded_kobo: string;
+  /** The convenience fee the parent paid on top, in kobo, from the payment's record (migration 062):
+   *  never credited to the invoice, never refundable. Nought for any payment no record started. */
+  convenience_fee_kobo: string;
   student_id: string;
   total_amount: number;
   amount_paid: number;
@@ -362,6 +365,7 @@ export async function getPaymentById(schoolId: string, paymentId: string): Promi
        p.id, p.invoice_id, p.school_id, p.amount, p.payment_date, p.method,
        p.reference, p.paystack_reference, p.recorded_by, p.created_at,
        coalesce(rf.kobo, 0)::text AS refunded_kobo,
+       coalesce(fc.convenience_fee_kobo, 0)::text AS convenience_fee_kobo,
        fi.student_id,
        fi.total_amount, fi.amount_paid, fi.balance, fi.status AS invoice_status,
        u.first_name, u.last_name, s.admission_no,
@@ -370,6 +374,7 @@ export async function getPaymentById(schoolId: string, paymentId: string): Promi
      FROM payments p
      JOIN fee_invoices fi ON fi.id = p.invoice_id
      LEFT JOIN (SELECT payment_id, sum(amount_kobo) AS kobo FROM fee_refunds GROUP BY payment_id) rf ON rf.payment_id = p.id
+     LEFT JOIN fee_checkouts fc ON fc.reference = p.paystack_reference AND fc.payment_id = p.id
      JOIN students s ON s.id = fi.student_id
      JOIN users u ON u.id = s.user_id
      JOIN terms t ON t.id = fi.term_id

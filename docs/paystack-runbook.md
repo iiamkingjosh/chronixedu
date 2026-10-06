@@ -21,7 +21,10 @@ details again, and the settings below are made again in the new account.
   16-hour deadline (below).
 - **The Paystack Merchant app**, signed in, for dispute reminders.
 - **Education pricing**: apply at http://bit.ly/paystackforschools (0.7% capped at ₦1,500 for local
-  cards; ₦300 flat for other methods, instead of 1.5% + ₦100).
+  cards; ₦300 flat for other methods, instead of 1.5% + ₦100). If it is granted, the convenience fee's
+  arithmetic must change the same day (below).
+- **Leave "pass transaction charges to customers" off.** Chronix Edu adds the convenience fee itself, school
+  by school. Paystack's setting would add a charge a second time, for every school at once.
 
 ## Refunds: the school pays them back itself
 
@@ -38,13 +41,31 @@ Why not refund through Paystack's dashboard:
 - **Paystack's charge is never refunded**, whoever makes the refund.
 
 What the school loses on a refund: only Paystack's charge on the original payment, when the school paid it
-(today's setting). That is 1.5% of the payment, plus ₦100 on payments of ₦2,500 or more, never more than
+(the default, until a school chooses). That is 1.5% of the payment, plus ₦100 on payments of ₦2,500 or more, never more than
 ₦2,000: about ₦1.50 on ₦100, ₦850 on ₦50,000. It is Paystack's, not an error in Chronix Edu's arithmetic.
 When the parent paid it as a convenience fee instead, the school refunds the school fee only and loses
 nothing; the parent was told before paying that the fee is not refundable.
 
 **Instead of a refund, for an overpayment:** the school can keep it as a credit towards next term. Nothing
 is lost to charges. (Carrying a credit forward automatically is not built yet.)
+
+## Convenience fee: when parents pay Paystack's charge
+
+Each school chooses on Settings → Fee Settings. Unchosen, the school pays, as before. When parents pay,
+Chronix Edu adds a convenience fee so that, after Paystack's charge, the school receives the whole fee: on
+₦50,000 the parent pays ₦50,862.95. The parent sees the fee before Paystack's page opens, the invoice is
+credited the school fee only, and the receipt shows the convenience fee beside the payment.
+
+**Built on assumptions, to be corrected when Paystack answers** (decided 6 Oct 2026). The arithmetic is in
+`apps/api/src/services/paystackPricing.ts`, and nowhere else:
+- Paystack's standard local pricing: 1.5% plus ₦100, the ₦100 waived under ₦2,500, never more than ₦2,000.
+- The charge is worked out on the total the parent pays, and a fraction of a kobo is rounded up, so the
+  school is never short.
+- A foreign card is charged more (3.9% + ₦100): the school then receives a little less than the fee.
+- Education pricing charges cards and other methods differently, and which one a parent uses is not known
+  until they pay. If it is granted, the arithmetic has to be decided again.
+- Whether a surcharge may be passed to parents at all (the CBN's no-surcharge guideline) is one of the
+  questions in the email to Paystack.
 
 ## Chargebacks: a parent's bank takes a payment back
 
@@ -71,5 +92,8 @@ alert.
 
 An online payment is credited only through the record made when the parent started it (migration 062). A
 payment with no such record, or verified at a different amount, raises the `fee_payment_not_credited`
-alert (Sentry, by email). Check it in the Paystack dashboard; if it is a real school fee, the bursar
-records it with its Paystack reference: Invoices → Record Payment → Paystack.
+alert (Sentry, by email). Check it in the Paystack dashboard. Then:
+- **No record** (made outside the app): if it is a real school fee, the bursar records it with its
+  Paystack reference: Invoices → Record Payment → Paystack.
+- **A different amount:** recording it by its reference is refused. If the school received the money, the
+  bursar records what the school received as a bank transfer, with the Paystack reference.

@@ -10,7 +10,7 @@
 
 ### L-01 — An online fee payment was credited to whatever school and invoice its metadata named ✅ Remediated
 
-**Files:** `migrations/062_fee_checkouts.sql`, `apps/api/src/db/queries/feeCheckouts.ts` (new), `apps/api/src/routes/fees.ts` (`POST /:schoolId/payments/paystack/initiate`), `apps/api/src/routes/feesPublic.ts` (the return page and the webhook).
+**Files:** `migrations/062_fee_checkouts.sql`, `apps/api/src/db/queries/feeCheckouts.ts` (new), `apps/api/src/routes/fees.ts` (`POST /:schoolId/payments/paystack/initiate`, and `POST /:schoolId/payments`, the bursar's record-by-reference), `apps/api/src/routes/feesPublic.ts` (the return page and the webhook).
 
 **Raised by the reviewer** (6 Oct 2026) while reviewing the account-wide webhook, which is parked for the second school (branch `parked/paystack-account-webhook`). The weakness was already live, without it.
 
@@ -24,8 +24,9 @@
 - **A payment no record started is not credited.** It raises `fee_payment_not_credited`, and the bursar records it by its reference once checked. The same alert covers a verified amount other than the record's.
 - **Credited once,** whichever delivery arrives first: payments' UNIQUE Paystack reference holds two simultaneous deliveries (tested).
 - Because a payment is matched by its reference, the pilot's own webhook address now credits every school's payments correctly; Chronix's subscription payments arriving there are settled by their reference too. Any other Paystack event is logged by name, not dropped silently.
+- **The bursar's record-by-reference goes through the record too,** when one exists (added the same day, with the convenience fee). It used to cross-check Paystack's metadata for every payment and credit Paystack's verified amount. That amount now includes any convenience fee the parent paid, which the school never receives, so the record's school, invoice and school fee decide, and a verified amount other than the record's is refused and alerted rather than credited. A payment no record started (one made outside the app, or before 062) still takes the metadata check, after the bursar has checked it in Paystack's dashboard.
 
-**Tests:** `feeCheckouts.db.test.ts` (12), including the reviewer's mirror of `platformBillingFullStack.test.ts`: metadata naming another school and invoice is credited to the record's.
+**Tests:** `feeCheckouts.db.test.ts` (12), including the reviewer's mirror of `platformBillingFullStack.test.ts`: metadata naming another school and invoice is credited to the record's. `convenienceFee.db.test.ts` (12) covers the bursar's path: the school fee only, the record's invoice, a different amount refused.
 
 ---
 

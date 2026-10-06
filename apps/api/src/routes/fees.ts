@@ -14,7 +14,7 @@ import { getActiveTerm } from '../db/queries/roster';
 import { parseBulkPaymentImportFile, BulkPaymentImportParseError } from '../services/bulkPaymentImportParser';
 import { runFullPaymentValidation } from '../services/bulkPaymentImportValidation';
 import { generateBulkPaymentImportResultsFile, type CreatedPaymentRecord, type FailedPaymentRecord } from '../services/bulkPaymentImportResults';
-import { getSchoolPayoutConfig, resolveMinPartPayment } from '../db/queries/schools';
+import { getSchoolPayoutConfig, resolveMinPartPayment, resolveConvenienceFeePayer } from '../db/queries/schools';
 import { sendFeeRemindersForSchool } from '../services/feeReminderService';
 import {
   insertFeeStructure,
@@ -34,7 +34,8 @@ import {
 // which auto-mocked these pure helpers to undefined and turned a balance into NaN.
 import { toKobo, fromKobo } from '../services/money';
 import { generateReceipt } from '../services/receiptService';
-import { createFeeCheckout, markFeeCheckoutFailed } from '../db/queries/feeCheckouts';
+import { createFeeCheckout, markFeeCheckoutFailed, findFeeCheckout, settleFeeCheckout } from '../db/queries/feeCheckouts';
+import { totalForSchoolToReceive } from '../services/paystackPricing';
 import { recordRefund, REFUND_REASONS } from '../db/queries/feeRefunds';
 import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
 import { signReportCardAsset } from '../services/reportCardService';
@@ -396,6 +397,7 @@ router.post(
 
       const { invoice_id, method, reference, paystack_reference } = parsed.data;
       let amount = parsed.data.amount;
+      let result: Awaited<ReturnType<typeof recordPayment>> | undefined;
 
       if (method === 'paystack') {
         if (!isPaystackConfigured()) {
@@ -417,21 +419,52 @@ router.post(
           return res.status(400).json({ success: false, error: { code: 'PAYMENT_NOT_NAIRA', message: `This Paystack transaction was paid in ${verification.currency}, not naira, so it cannot be recorded. Check it in the Paystack dashboard: the payer may need a refund.` } });
         }
 
-        // All schools share one Paystack merchant account, so a transaction reference
-        // is resolvable platform-wide — without this check, a reference belonging to
-        // one school's transaction could be recorded against a different school's
-        // invoice. Mirrors the binding check the webhook and callback already perform.
-        const metadata = (verification.metadata ?? {}) as PaystackPaymentMetadata;
-        if (metadata.school_id !== req.params.schoolId || metadata.invoice_id !== invoice_id) {
-          return res.status(400).json({ success: false, error: { code: 'PAYMENT_MISMATCH', message: 'This Paystack transaction does not belong to the specified school/invoice' } });
-        }
+        // A payment a parent started in Chronix Edu is credited through its record (migration 062), here
+        // as on the webhook: the record's school and invoice, and the school fee only. Paystack's verified
+        // amount includes any convenience fee the parent paid on top (6 Oct 2026), which the school never
+        // receives, so it is never credited to the invoice.
+        const started = await findFeeCheckout(paystack_reference!);
+        if (started) {
+          if (started.school_id !== req.params.schoolId || started.invoice_id !== invoice_id) {
+            return res.status(400).json({ success: false, error: { code: 'PAYMENT_MISMATCH', message: 'This Paystack transaction does not belong to the specified school/invoice' } });
+          }
+          const settled = await settleFeeCheckout(paystack_reference!, verification.amountKobo, verification.currency, req.user!.user_id);
+          switch (settled.outcome) {
+            case 'credited':
+              result = { payment: settled.payment, invoice: settled.invoice, duplicate: false };
+              break;
+            case 'duplicate':
+              return res.status(409).json({ success: false, error: { code: 'DUPLICATE_PAYSTACK_REFERENCE', message: 'This Paystack transaction has already been recorded' } });
+            case 'invoice_missing':
+              return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Invoice not found' } });
+            case 'amount_mismatch':
+              logger.error('paystack_fee_amount_mismatch', {
+                route: 'fees_record_payment', school_id: settled.schoolId, expected_kobo: settled.expectedKobo, verified_kobo: settled.verifiedKobo,
+              });
+              // Refused rather than credited at a figure nobody can vouch for. The bursar records what the
+              // school actually received, from Paystack's dashboard, as a bank transfer (runbook).
+              return res.status(400).json({ success: false, error: { code: 'AMOUNT_MISMATCH', message: `Paystack verified ₦${fromKobo(settled.verifiedKobo)} for this payment, but it was started for ₦${fromKobo(settled.expectedKobo)}, so it cannot be recorded by its reference. Check it in the Paystack dashboard. If the school received the money, record the amount it received as a bank transfer, with this reference.` } });
+            default:
+              // no_checkout and not_naira cannot happen here: the record was found and the currency checked.
+              throw new Error(`Unexpected settlement outcome: ${settled.outcome}`);
+          }
+        } else {
+          // Started outside Chronix Edu, or before migration 062. All schools share one Paystack merchant
+          // account, so a transaction reference is resolvable platform-wide — without this check, a
+          // reference belonging to one school's transaction could be recorded against a different
+          // school's invoice.
+          const metadata = (verification.metadata ?? {}) as PaystackPaymentMetadata;
+          if (metadata.school_id !== req.params.schoolId || metadata.invoice_id !== invoice_id) {
+            return res.status(400).json({ success: false, error: { code: 'PAYMENT_MISMATCH', message: 'This Paystack transaction does not belong to the specified school/invoice' } });
+          }
 
-        // Always use Paystack's verified amount — never trust the client-supplied value.
-        // Paystack reports kobo and we keep it as kobo.
-        amount = verification.amountKobo;
+          // Always use Paystack's verified amount — never trust the client-supplied value.
+          // Paystack reports kobo and we keep it as kobo.
+          amount = verification.amountKobo;
+        }
       }
 
-      const result = await recordPayment(req.params.schoolId, invoice_id, {
+      result ??= await recordPayment(req.params.schoolId, invoice_id, {
         amountKobo: amount,
         method,
         reference: reference ?? null,
@@ -700,16 +733,25 @@ router.post(
         return res.status(503).json({ success: false, error: { code: 'PAYOUT_NOT_CONFIGURED', message: "Online payment isn't set up yet for this school — please contact the school office." } });
       }
 
+      // Who pays Paystack's charge, as the school chose it (6 Oct 2026). Unchosen or 'school': the
+      // school, as before, and the parent pays the fee alone. 'parent': a convenience fee is added so
+      // the school still receives its whole fee (services/paystackPricing.ts). Either way the invoice
+      // is credited the fee only, and the record states the convenience fee, nought included.
+      const payer = await resolveConvenienceFeePayer(schoolId);
+      const { totalKobo, convenienceFeeKobo } = payer === 'parent'
+        ? totalForSchoolToReceive(payAmountKobo)
+        : { totalKobo: payAmountKobo, convenienceFeeKobo: 0 };
+
       // The record this payment will be credited through, written BEFORE Paystack is called
       // (migration 062): its school, invoice and amount. The return page and the webhook credit the
       // payment only through it; the metadata below is for Paystack's dashboard, never for crediting.
       const reference = crypto.randomUUID();
       await createFeeCheckout({
-        reference, schoolId, invoiceId: invoice_id, feeKobo: payAmountKobo, convenienceFeeKobo: 0, initiatedBy: req.user!.user_id,
+        reference, schoolId, invoiceId: invoice_id, feeKobo: payAmountKobo, convenienceFeeKobo, initiatedBy: req.user!.user_id,
       });
       const initialization = await initializePaystackTransaction({
         email: req.user!.email!,
-        amountKobo: payAmountKobo,
+        amountKobo: totalKobo,
         reference,
         callbackUrl: `${getApiBaseUrl()}/api/schools/${schoolId}/payments/paystack/callback`,
         metadata: { school_id: schoolId, invoice_id, recorded_by: req.user!.user_id },
@@ -722,7 +764,17 @@ router.post(
         return res.status(502).json({ success: false, error: { code: 'PAYSTACK_INIT_FAILED', message: 'Unable to initialize the Paystack transaction' } });
       }
 
-      return res.json({ success: true, data: initialization });
+      return res.json({
+        success: true,
+        data: {
+          ...initialization,
+          // What the parent is about to pay, from the record just written, so the page can show it
+          // before Paystack's opens.
+          school_fee: fromKobo(payAmountKobo),
+          convenience_fee: fromKobo(convenienceFeeKobo),
+          total: fromKobo(totalKobo),
+        },
+      });
     } catch (err) {
       return next(err);
     }

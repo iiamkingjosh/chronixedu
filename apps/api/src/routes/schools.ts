@@ -22,10 +22,13 @@ import {
   updateSchoolPayoutConfig,
   getSchoolNameAndEmail,
   resolveMinPartPayment,
+  resolveConvenienceFeePayer,
   updateFeeConfig,
+  CONVENIENCE_FEE_PAYERS,
   type PayoutConfig,
 } from '../db/queries/schools';
 import { toKobo, fromKobo } from '../services/money';
+import { totalForSchoolToReceive } from '../services/paystackPricing';
 import { findPrincipalsBySchool } from '../db/queries/users';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
 import { newSchoolAcademicConfig, slugify, validateGradeBands } from '../services/schoolService';
@@ -638,21 +641,30 @@ router.patch(
 );
 
 // ── GET / PATCH /api/schools/:schoolId/fee-config ─────────────────────────────
-// The school's own fee policy. Currently one field: the smallest part payment a parent
-// may make online. The default is Chronix's, and the UI says so — it is a guardrail on
+// The school's own fee policy: the smallest part payment a parent may make online, and who
+// pays Paystack's charge on it (convenience_fee_payer, 6 Oct 2026; unchosen, the school does).
+// The minimum's default is Chronix's, and the UI says so — it is a guardrail on
 // transaction cost (bearer: 'subaccount' means the school pays the Paystack fee), not a
 // claim about any school's policy. A disclosed default is a different object from an
 // invented one; compare promotion_cutoff ?? 40, which asserted a school's pass mark on a
 // report card silently.
 
-const updateFeeConfigSchema = z.object({
-  // Naira, 2 dp, stored as kobo. Matches the payment routes' boundary treatment.
-  min_part_payment: z
-    .string()
-    .trim()
-    .regex(/^\d+(\.\d{1,2})?$/, 'Enter an amount in naira with at most 2 decimal places')
-    .refine(v => Number(v) > 0, 'Minimum part payment must be greater than zero'),
-});
+const updateFeeConfigSchema = z
+  .object({
+    // Naira, 2 dp, stored as kobo. Matches the payment routes' boundary treatment.
+    min_part_payment: z
+      .string()
+      .trim()
+      .regex(/^\d+(\.\d{1,2})?$/, 'Enter an amount in naira with at most 2 decimal places')
+      .refine(v => Number(v) > 0, 'Minimum part payment must be greater than zero')
+      .optional(),
+    convenience_fee_payer: z
+      .enum(CONVENIENCE_FEE_PAYERS, { message: 'Choose who pays the convenience fee: the school or the parent' })
+      .optional(),
+  })
+  .refine(d => d.min_part_payment !== undefined || d.convenience_fee_payer !== undefined, {
+    message: 'Nothing to save: send min_part_payment, convenience_fee_payer, or both',
+  });
 
 router.get(
   '/:schoolId/fee-config',
@@ -668,6 +680,15 @@ router.get(
           // Read from whether a value was stored, NOT from whether it equals the
           // default — a school that chose ₦1,000 has chosen it.
           is_default: !isConfigured,
+          // null until the school chooses; meanwhile the school pays.
+          convenience_fee_payer: await resolveConvenienceFeePayer(req.params.schoolId),
+          // What a parent would pay on ₦50,000, from the arithmetic the payment itself uses, so the
+          // settings page never carries a copy of Paystack's pricing.
+          convenience_fee_example: (() => {
+            const feeKobo = 5_000_000;
+            const { totalKobo, convenienceFeeKobo } = totalForSchoolToReceive(feeKobo);
+            return { school_fee: fromKobo(feeKobo), convenience_fee: fromKobo(convenienceFeeKobo), total: fromKobo(totalKobo) };
+          })(),
         },
       });
     } catch (err) {
@@ -688,11 +709,18 @@ router.patch(
         return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
       }
 
-      const patch = { min_part_payment_kobo: toKobo(parsed.data.min_part_payment) };
+      const patch: Record<string, unknown> = {};
+      if (parsed.data.min_part_payment !== undefined) patch.min_part_payment_kobo = toKobo(parsed.data.min_part_payment);
+      if (parsed.data.convenience_fee_payer !== undefined) patch.convenience_fee_payer = parsed.data.convenience_fee_payer;
       const prior = await updateFeeConfig(req.params.schoolId, patch);
-      await logSettingsChange(req.params.schoolId, req.user!.user_id, 'min_part_payment_kobo', prior, patch, clientIp(req) ?? null);
+      // One audit row per setting, each with its own prior value, read under the lock the write took.
+      for (const field of Object.keys(patch)) {
+        await logSettingsChange(
+          req.params.schoolId, req.user!.user_id, field, { [field]: prior[field] }, { [field]: patch[field] }, clientIp(req) ?? null
+        );
+      }
 
-      return res.json({ success: true, data: { message: 'Fee settings updated', min_part_payment: parsed.data.min_part_payment } });
+      return res.json({ success: true, data: { message: 'Fee settings updated', ...parsed.data } });
     } catch (err) {
       return next(err);
     }

@@ -196,7 +196,7 @@ export const ALERTS = {
     fields: ['user_id', 'error'],
   },
   fee_payment_not_credited: {
-    why: "A parent's online fee payment succeeded at Paystack and was NOT credited to any invoice: no payment record started it (paystack_fee_payment_unmatched), or Paystack verified a different amount than the record asked for (paystack_fee_amount_mismatch). The money was taken; check it in the Paystack dashboard, and have the bursar record it by its reference once confirmed (migration 062)",
+    why: "A parent's online fee payment succeeded at Paystack and was NOT credited to any invoice: no payment record started it (paystack_fee_payment_unmatched), or Paystack verified a different amount than the record asked for (paystack_fee_amount_mismatch). The money was taken; check it in the Paystack dashboard. Once confirmed, the bursar records an unmatched payment by its reference, and a different amount as a bank transfer of what the school received (migration 062; docs/paystack-runbook.md)",
     level: 'error',
     events: ['paystack_fee_payment_unmatched', 'paystack_fee_amount_mismatch'],
     fields: ['route', 'school_id', 'expected_kobo', 'verified_kobo'],
