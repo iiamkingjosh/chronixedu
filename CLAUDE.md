@@ -84,6 +84,11 @@ Monorepo, npm workspaces:
    ask which operation actually produced the rows you are trying to prevent. 038's own
    activation guard failed this test: it covered UPDATE while all 29 offending rows in
    production came from INSERT, so it guarded the path that produced none of them.
+   A third instance, 5 Oct 2026: "a welcome email carries no credential" (H2) was enforced on
+   the email alone. The two routes that create a parent still returned the password, and the
+   registrar's screen showed and printed it (SECURITY.md Round 37 L-01). A rule about a
+   credential is checked against every path that hands one out (email, response, screen,
+   printed slip, export, log), not only the one it was written for.
 8. **Never infer "the user chose this" from "the value equals the default."** Whether a
    value was set and what the value is are two different facts, and the second cannot
    derive the first. Three instances so far, each with a different mechanism: `is_demo`
