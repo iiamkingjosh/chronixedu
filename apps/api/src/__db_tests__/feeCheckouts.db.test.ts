@@ -144,12 +144,16 @@ describe('the webhook credits through the record, never the metadata or the addr
     error.mockRestore();
   });
 
-  it('another currency is not credited', async () => {
+  it('another currency is not credited, and the alert says which currency arrived', async () => {
     await started('ref-4', 1_000_000);
     mockVerify.mockResolvedValue({ status: 'success', amountKobo: 1_000_000, currency: 'USD', reference: 'ref-4' });
+    const error = jest.spyOn(logger, 'error');
     await deliver(charge('ref-4'));
     expect(await payments()).toEqual([]);
     expect(await checkout('ref-4')).toMatchObject({ status: 'failed', failure_reason: 'not_naira' });
+    // payment_not_naira carries the currency (config/alerts.ts): it is what has to be refunded.
+    expect(error).toHaveBeenCalledWith('paystack_payment_not_naira', expect.objectContaining({ route: 'fees_webhook', currency: 'USD' }));
+    error.mockRestore();
   });
 
   it('delivered again, and twice at the same moment, it is credited once', async () => {

@@ -47,7 +47,7 @@ export type FeeSettlement =
   | { outcome: 'credited'; payment: PaymentRow; invoice: FeeInvoiceRow; schoolId: string; recordedBy: string }
   | { outcome: 'duplicate'; schoolId: string }
   | { outcome: 'no_checkout' }
-  | { outcome: 'not_naira'; schoolId: string }
+  | { outcome: 'not_naira'; schoolId: string; currency: string }
   | { outcome: 'amount_mismatch'; schoolId: string; expectedKobo: number; verifiedKobo: number }
   | { outcome: 'invoice_missing'; schoolId: string };
 
@@ -64,7 +64,7 @@ export async function settleFeeCheckout(reference: string, verifiedKobo: number,
 
   if (verifiedCurrency !== PAYMENT_CURRENCY) {
     await markFeeCheckoutFailed(reference, 'not_naira');
-    return { outcome: 'not_naira', schoolId: checkout.school_id };
+    return { outcome: 'not_naira', schoolId: checkout.school_id, currency: verifiedCurrency };
   }
   const expectedKobo = Number(checkout.fee_kobo) + Number(checkout.convenience_fee_kobo);
   if (verifiedKobo !== expectedKobo) {

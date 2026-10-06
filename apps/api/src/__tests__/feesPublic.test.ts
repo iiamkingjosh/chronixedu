@@ -110,7 +110,7 @@ describe('GET /api/schools/:schoolId/payments/paystack/callback', () => {
 
   it.each([
     ['no_checkout', { outcome: 'no_checkout' as const }, 'unknown_payment'],
-    ['not_naira', { outcome: 'not_naira' as const, schoolId: SCHOOL_ID }, 'wrong_currency'],
+    ['not_naira', { outcome: 'not_naira' as const, schoolId: SCHOOL_ID, currency: 'USD' }, 'wrong_currency'],
     ['amount_mismatch', { outcome: 'amount_mismatch' as const, schoolId: SCHOOL_ID, expectedKobo: 1, verifiedKobo: 2 }, 'amount_mismatch'],
     ['invoice_missing', { outcome: 'invoice_missing' as const, schoolId: SCHOOL_ID }, 'invoice_not_found'],
   ])('%s: redirects with its reason and records nothing', async (_name, settled, reason) => {

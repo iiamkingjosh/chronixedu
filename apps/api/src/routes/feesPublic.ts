@@ -28,7 +28,8 @@ function logNotCredited(route: string, reference: string, settled: FeeSettlement
   if (settled.outcome === 'no_checkout') {
     logger.error('paystack_fee_payment_unmatched', { route, paystack_reference: reference });
   } else if (settled.outcome === 'not_naira') {
-    logger.error('paystack_payment_not_naira', { route, school_id: settled.schoolId, paystack_reference: reference });
+    // The currency is what the alert carries (payment_not_naira): it says what has to be refunded.
+    logger.error('paystack_payment_not_naira', { route, currency: settled.currency, school_id: settled.schoolId, paystack_reference: reference });
   } else if (settled.outcome === 'amount_mismatch') {
     logger.error('paystack_fee_amount_mismatch', {
       route, school_id: settled.schoolId, expected_kobo: settled.expectedKobo, verified_kobo: settled.verifiedKobo,

@@ -11,6 +11,7 @@ import { seed, IDS as I, pool } from './helpers';
 import feesPublicRoutes from '../routes/feesPublic';
 import { errorHandler } from '../middleware/errorHandler';
 import { settlePayment } from '../db/queries/platformBilling';
+import { createFeeCheckout } from '../db/queries/feeCheckouts';
 import { logger } from '../config/logger';
 
 jest.mock('../services/paystackService', () => ({
@@ -41,6 +42,10 @@ const invoiceState = async (id: string) => (await pool.query<{ amount_paid: stri
   `SELECT amount_paid, status FROM fee_invoices WHERE id = $1`, [id])).rows[0];
 const paymentsFor = async (id: string) => Number((await pool.query(
   `SELECT COUNT(*)::int AS n FROM payments WHERE invoice_id = $1`, [id])).rows[0].n);
+/** Started the way the app starts a payment: its record first (migration 062), which is what crediting reads. */
+const started = (reference: string, invoiceId: string) => createFeeCheckout({
+  reference, schoolId: I.schoolA, invoiceId, feeKobo: 80000, convenienceFeeKobo: 0, initiatedBy: I.parentA,
+});
 const callback = (reference: string) =>
   request(app).get(`/api/schools/${I.schoolA}/payments/paystack/callback?reference=${reference}`);
 
@@ -48,6 +53,7 @@ describe('a parent paying a fee online', () => {
   it('is recorded when Paystack verifies naira, and refused, unrecorded and alerted when it verifies another currency', async () => {
     // The control: the same 80,000 minor units, in naira, pay the ₦800 invoice.
     const paidInNaira = await invoice(I.s1, '800.00');
+    await started('ref-ngn', paidInNaira);
     verify.mockResolvedValueOnce({ status: 'success', amountKobo: 80000, currency: 'NGN', reference: 'ref-ngn', metadata: { school_id: I.schoolA, invoice_id: paidInNaira } });
     const ok = await callback('ref-ngn');
     expect(ok.headers.location).toMatch(/payment=success$/);
@@ -55,6 +61,7 @@ describe('a parent paying a fee online', () => {
     expect(await invoiceState(paidInNaira)).toEqual({ amount_paid: '800.00', status: 'paid' });
 
     const paidInDollars = await invoice(I.s2, '800.00');
+    await started('ref-usd', paidInDollars);
     verify.mockResolvedValueOnce({ status: 'success', amountKobo: 80000, currency: 'USD', reference: 'ref-usd', metadata: { school_id: I.schoolA, invoice_id: paidInDollars } });
     const error = jest.spyOn(logger, 'error');
     const refused = await callback('ref-usd');

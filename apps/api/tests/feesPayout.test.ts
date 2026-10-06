@@ -106,6 +106,8 @@ describe('Fee payment initiate — payout gate', () => {
   });
 
   afterAll(async () => {
+    // Each payment started here wrote its record (migration 062), which points at the invoice.
+    await pool.query(`DELETE FROM fee_checkouts WHERE school_id = $1`, [schoolId]);
     await pool.query(`DELETE FROM fee_invoices WHERE school_id = $1`, [schoolId]);
     await pool.query(`DELETE FROM parent_students WHERE parent_id = $1`, [parentUserId]);
     await pool.query(`DELETE FROM students WHERE school_id = $1`, [schoolId]);
