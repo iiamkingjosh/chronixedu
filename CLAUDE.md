@@ -915,12 +915,16 @@ Monorepo, npm workspaces:
     (`lib/refundReasons.ts`) equal to the API's.
   - **Never through Paystack's dashboard.** Paystack takes a refund from the main account's pending payout
     or balance, which is Chronix's: the school's share has already been paid out. Its charge is never
-    refunded either. `docs/paystack-runbook.md` has the detail and the sources.
-- **Chargebacks are Chronix's risk.** A lost or unanswered one is taken from the main account's payouts,
-  and must be answered within 16 business hours. The Paystack Disputes Email is the alert for now; the
-  runbook says how to answer one and record it.
+    refunded either. Paystack confirmed in writing on 7 Oct 2026 that the main account bears refunds, not
+    the subaccount. `docs/paystack-runbook.md` has the detail, the sources and the reply.
+- **Chargebacks are Chronix's risk.** A lost or unanswered one is taken from the main account's payouts
+  (confirmed by Paystack, 7 Oct 2026), and must be answered within 16 business hours. Fee money settles
+  straight to the schools, so the main account holds almost nothing and Paystack asks for a top-up: the
+  school agreement must let Chronix recover a lost chargeback (Moses and a lawyer; the legal pages are
+  fixed text). The Paystack Disputes Email is the alert for now; the runbook says how to answer one and
+  record it.
 - **The convenience fee: who pays Paystack's charge is the school's choice** (6 Oct 2026). Built before
-  Paystack answered Chronix's questions, to be corrected when it does (Moses).
+  Paystack answered Chronix's questions; its reply of 7 Oct 2026 confirms it (below).
   - **The setting:** `fee_config.convenience_fee_payer`, `'school'` or `'parent'`, on Settings → Fee Settings.
     Unset means the school pays, as every school did before, and the page says it is not chosen; neither
     option is preselected (doctrine 8). A stored value that is neither reads as unset, so a hand edit can
@@ -933,10 +937,12 @@ Monorepo, npm workspaces:
     bursar's record-by-reference, which goes through the record when one exists. A refund is capped at
     the payment, so the convenience fee is never refunded. The receipt shows it beside the payment, read
     from the record; `payments` has no column for it.
-  - **Assumed until Paystack answers:** standard local pricing (1.5% + ₦100, the ₦100 waived under ₦2,500,
-    capped at ₦2,000), charged on the total, a fraction of a kobo rounded up. A foreign card costs more and
-    is not covered. Whether a surcharge is allowed at all (the CBN's no-surcharge guideline) is one of the
-    questions; `docs/paystack-runbook.md` lists them.
+  - **What Paystack confirmed (7 Oct 2026):** marking up the fee on our own site is allowed, and education
+    pricing is not available to Chronix (only to accredited schools), so standard local pricing stands:
+    1.5% + ₦100, the ₦100 waived under ₦2,500, capped at ₦2,000, charged on the total, a fraction of a
+    kobo rounded up. A foreign card costs more and is not covered. Paystack did not name the CBN's
+    no-surcharge guideline. Its own "pass fees to customers" setting stays off: it would charge twice.
+    `docs/paystack-runbook.md` has the reply and what it left unanswered.
 - **Parked for the second school** (branch `parked/paystack-account-webhook`, never pushed): one webhook
   address for the whole account, automatic recording of Paystack refunds and chargebacks, dispute alerts.
   It predates migration 062 and must be rebased onto it, keeping the record-based crediting.

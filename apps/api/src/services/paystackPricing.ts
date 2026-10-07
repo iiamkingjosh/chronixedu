@@ -3,9 +3,9 @@
  * pass that charge on as a convenience fee (`fee_config.convenience_fee_payer = 'parent'`, 6 Oct 2026).
  *
  * Paystack's standard local pricing, read from its pricing page on 6 Oct 2026: 1.5% plus ₦100, the ₦100
- * waived on a payment under ₦2,500, the whole charge never more than ₦2,000. Built before Paystack has
- * answered Chronix's questions (docs/paystack-runbook.md, "Convenience fee"): if it answers otherwise, or
- * the account moves to education pricing, these numbers change here and nowhere else.
+ * waived on a payment under ₦2,500, the whole charge never more than ₦2,000. Paystack's written reply of
+ * 7 Oct 2026 allows marking the fee up on our own site, and rules out education pricing for Chronix
+ * (docs/paystack-runbook.md). If Paystack's pricing changes, these numbers change here and nowhere else.
  *
  * The charge falls on what the PARENT pays, which includes the convenience fee itself, so the fee is grossed
  * up: the smallest total whose charge still leaves the school its whole fee. A fraction of a kobo in
