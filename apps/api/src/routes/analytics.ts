@@ -1,26 +1,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { findSchoolTerm } from '../db/queries/assessmentConfig';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { requireFeature } from '../middleware/requireFeature';
 import { getActiveTerm } from '../db/queries/roster';
 import { getLatestSnapshot, getPreviousSnapshot, AnalyticsSnapshotRow } from '../db/queries/analytics';
 import { generateSnapshot } from '../services/analyticsService';
 
 const router = Router();
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
-const guard = [verifyToken, requireSchoolAccess, requireRole('principal', 'super_admin'), requireFeature('analytics')];
 
 interface TrendItem {
   current: number | null;
@@ -49,7 +37,9 @@ function buildTrend(latest: AnalyticsSnapshotRow, previous: AnalyticsSnapshotRow
 
 router.get(
   '/:schoolId/analytics/overview',
-  ...guard,
+  verifyToken,
+  requireCapability('school.overview'),
+  requireFeature('analytics'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;

@@ -9,13 +9,14 @@
  * Deliberately mirrors routes/classComments.ts: same shape, same active-term handling,
  * same 422 when no term is active. The difference is who may write — a class comment
  * belongs to the form teacher, this belongs to the principal — and that difference is
- * stated with an explicit requireRole at the call site rather than left to the reader to
- * infer from the file (doctrine 1).
+ * stated at the call site, results.manage against class.comments, from the one table
+ * (config/capabilities.json).
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { getActiveTerm } from '../db/queries/roster';
 import { findStudentById } from '../db/queries/students';
@@ -30,24 +31,12 @@ const remarkSchema = z.object({
   remark_text: z.string().max(1000),
 });
 
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
 // ── GET /:schoolId/principal-remarks/:studentId ────────────────────────────────
 
 router.get(
   '/:schoolId/principal-remarks/:studentId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // principal_remarks carries no school_id and fetchPrincipalRemark is not
@@ -79,8 +68,7 @@ router.get(
 router.put(
   '/:schoolId/principal-remarks/:studentId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = remarkSchema.safeParse(req.body);

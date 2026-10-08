@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { getActiveTerm } from '../db/queries/roster';
 import {
   getTeacherOverview,
@@ -11,19 +12,6 @@ import {
 import pool from '../db/client';
 
 const router = Router();
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
-const guard = [verifyToken, requireSchoolAccess, requireRole('teacher', 'super_admin')];
 
 // Resolve active term or respond 404
 async function resolveActiveTerm(
@@ -45,7 +33,8 @@ async function resolveActiveTerm(
 
 router.get(
   '/:schoolId/dashboard/teacher/overview',
-  ...guard,
+  verifyToken,
+  requireCapability('teacher.workspace'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -66,7 +55,8 @@ router.get(
 
 router.get(
   '/:schoolId/dashboard/teacher/score-entry-status',
-  ...guard,
+  verifyToken,
+  requireCapability('teacher.workspace'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -89,7 +79,8 @@ const myStudentsSchema = z.object({ class_id: z.string().uuid() });
 
 router.get(
   '/:schoolId/dashboard/teacher/my-students',
-  ...guard,
+  verifyToken,
+  requireCapability('teacher.workspace'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -134,7 +125,8 @@ router.get(
 
 router.get(
   '/:schoolId/dashboard/teacher/notifications',
-  ...guard,
+  verifyToken,
+  requireCapability('teacher.workspace'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;

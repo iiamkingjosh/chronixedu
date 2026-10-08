@@ -89,6 +89,11 @@ const ROUTES: Partial<Record<keyof typeof table.capabilities, Route>> = {
   'timetable.manage': { method: 'post', path: `${base}/timetable`, body: {} },
   'students.manage': { method: 'post', path: `${base}/students/${I.s1}/class`, body: {} },
   'students.view': { method: 'get', path: `${base}/students` },
+  'results.enter': { method: 'post', path: `${base}/scores/bulk-entry`, body: {} },
+  'results.manage': { method: 'get', path: `${base}/results/report-cards` },
+  'school.overview': { method: 'get', path: `${base}/dashboard/principal/overview` },
+  'teacher.workspace': { method: 'get', path: `${base}/dashboard/teacher/notifications` },
+  'class.comments': { method: 'put', path: `${base}/class-comments/${I.s1}`, body: {} },
 };
 
 beforeAll(async () => {

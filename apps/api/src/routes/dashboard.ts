@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import NodeCache from 'node-cache';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { getActiveTerm, listClasses } from '../db/queries/roster';
 import { getApprovalDashboard } from '../db/queries/results';
 import { getDashboardStats, getUserName, getTeacherActivity } from '../db/queries/dashboard';
@@ -19,24 +20,12 @@ async function withCache<T>(key: string, fn: () => Promise<T>): Promise<T> {
   return data;
 }
 
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
-const guard = [verifyToken, requireSchoolAccess, requireRole('principal', 'super_admin')];
-
 // ── (1) GET /overview ─────────────────────────────────────────────────────────
 
 router.get(
   '/:schoolId/dashboard/principal/overview',
-  ...guard,
+  verifyToken,
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -93,7 +82,8 @@ router.get(
 
 router.get(
   '/:schoolId/dashboard/principal/result-status',
-  ...guard,
+  verifyToken,
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -115,7 +105,8 @@ router.get(
 
 router.get(
   '/:schoolId/dashboard/principal/students-at-risk',
-  ...guard,
+  verifyToken,
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -137,7 +128,8 @@ router.get(
 
 router.get(
   '/:schoolId/dashboard/principal/teacher-activity',
-  ...guard,
+  verifyToken,
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -159,7 +151,8 @@ router.get(
 
 router.get(
   '/:schoolId/dashboard/principal/class-selector',
-  ...guard,
+  verifyToken,
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;

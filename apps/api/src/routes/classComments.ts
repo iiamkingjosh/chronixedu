@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { getActiveTerm } from '../db/queries/roster';
 import {
   findClassByFormTeacher,
@@ -15,25 +16,13 @@ const commentSchema = z.object({
   comment_text: z.string().max(1000),
 });
 
-// ── Middleware: super_admin or any authenticated member of the school ───────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 // ── GET /:schoolId/class-comments ──────────────────────────────────────────────
 
 router.get(
   '/:schoolId/class-comments',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('class.comments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const term = await getActiveTerm(req.params.schoolId);
@@ -72,7 +61,7 @@ router.get(
 router.put(
   '/:schoolId/class-comments/:studentId',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('class.comments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = commentSchema.safeParse(req.body);

@@ -6,7 +6,8 @@ import { NO_ASSESSMENT_MESSAGE } from '../db/queries/assessmentConfig';
 import { logger } from '../config/logger';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { logAudit } from '../db/queries/auditLog';
 import {
@@ -26,19 +27,6 @@ import { getReportCardsForClass, publishReportCards } from '../db/queries/report
 import pool from '../db/client';
 
 const router = Router();
-
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 // ── Status transition guard ────────────────────────────────────────────────────
 
@@ -97,8 +85,7 @@ const returnSchema = z.object({
 router.post(
   '/:schoolId/results/submit',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('results.enter'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = submitSchema.safeParse(req.body);
@@ -205,8 +192,7 @@ router.post(
 router.get(
   '/:schoolId/results/approval-dashboard',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const termId = req.query.term_id as string | undefined;
@@ -239,17 +225,15 @@ router.get(
 //
 // Deliberately NOT publish-gated. Doctrine 5's gate exists to stop parents and
 // students seeing unapproved marks; a principal reviewing marks BEFORE approving
-// them must see exactly that unapproved state, which is why this route is restricted
-// to principal and super_admin at the call site rather than relying on the file's
-// permissive requireSchoolAccess (doctrine 1). Teachers are excluded on purpose: this
+// them must see exactly that unapproved state, which is why this route is
+// results.manage, the principal's (and the platform admin's). Teachers are excluded on purpose: this
 // spans every subject in the class, while a teacher's own subject remains available
 // through GET /scores/class-sheet.
 
 router.get(
   '/:schoolId/results/class-summary',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = classSummaryQuerySchema.safeParse(req.query);
@@ -290,8 +274,7 @@ router.get(
 router.post(
   '/:schoolId/results/approve',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = classTermSchema.safeParse(req.body);
@@ -390,8 +373,7 @@ router.post(
 router.post(
   '/:schoolId/results/publish',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = classTermSchema.safeParse(req.body);
@@ -521,8 +503,7 @@ router.post(
 router.post(
   '/:schoolId/results/return',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = returnSchema.safeParse(req.body);
@@ -683,8 +664,7 @@ const generateSchema = z.object({
 router.post(
   '/:schoolId/results/generate-report-cards',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = generateSchema.safeParse(req.body);
@@ -744,8 +724,7 @@ router.post(
 router.get(
   '/:schoolId/results/report-card-jobs/:jobId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const job = getJob(req.params.jobId);
@@ -773,8 +752,7 @@ const reportCardsQuerySchema = z.object({
 router.get(
   '/:schoolId/results/report-cards',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('results.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = reportCardsQuerySchema.safeParse(req.query);

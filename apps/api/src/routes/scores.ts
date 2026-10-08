@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { NO_ASSESSMENT_MESSAGE } from '../db/queries/assessmentConfig';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability, holdsCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { logAudit } from '../db/queries/auditLog';
 import { getActiveTerm } from '../db/queries/roster';
@@ -51,26 +52,13 @@ const sheetQuerySchema = z.object({
   term_id:    z.string().uuid(),
 });
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 // ── POST /:schoolId/scores/entry ───────────────────────────────────────────────
 
 router.post(
   '/:schoolId/scores/entry',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('results.enter'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = entrySchema.safeParse(req.body);
@@ -172,8 +160,7 @@ router.post(
 router.get(
   '/:schoolId/scores/class-sheet',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('results.enter'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = sheetQuerySchema.safeParse(req.query);
@@ -217,8 +204,7 @@ router.get(
 router.post(
   '/:schoolId/scores/bulk-entry',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('results.enter'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = bulkEntrySchema.safeParse(req.body);
@@ -308,15 +294,15 @@ router.post(
 router.get(
   '/:schoolId/scores/my-pending',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('results.enter'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Default to authenticated user; admin/principal can query another teacher
       let teacherId = req.user!.user_id;
       if (req.query.teacher_id) {
         const requestedId = String(req.query.teacher_id);
-        const isPrivileged = ['super_admin', 'principal'].includes(req.user!.role ?? '');
-        if (requestedId !== teacherId && !isPrivileged) {
+        // Another teacher's are read by whoever manages results (the principal; decided 8 Oct 2026).
+        if (requestedId !== teacherId && !holdsCapability(req.user, 'results.manage')) {
           return res.status(403).json({
             success: false,
             error: { code: 'FORBIDDEN', message: 'You can only view your own pending assignments' },
