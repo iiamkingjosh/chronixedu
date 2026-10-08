@@ -1,5 +1,17 @@
 # Chronix Edu — Changelog
 
+## A student without a class can be given one; Settings → Users is for staff (2026-10-08)
+
+### For schools
+- **Assign Class.** A student registered without a class now shows "No class this session" on their profile,
+  with an **Assign Class** button for the registrar or principal. Before, a student registered without a
+  class could never be given one: Correct Class only moves a student who already has a class.
+- **Settings → Users creates staff accounts only:** teachers, registrars, bursars and principals. Students
+  are registered under Students → Register Student, and a parent is added at registration or from the
+  student's profile, so each is linked to the right records. A "student" made under Users was only a login,
+  with no student record: it appeared on no list and could be given no class.
+- **Who does what:** a one-page guide to each role, for schools at onboarding (`docs/roles-guide.md`).
+
 ## Schools choose who pays the online payment charge (2026-10-06)
 
 ### For schools

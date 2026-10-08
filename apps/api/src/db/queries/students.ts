@@ -33,6 +33,8 @@ export interface ClassEnrollment {
   class_stream: string | null;
   session_id: string;
   session_name: string;
+  /** Whether this enrolment is in the school's current session: the one a class is assigned or corrected in. */
+  session_is_current: boolean;
   enrolled_at: string;
 }
 
@@ -361,7 +363,7 @@ export async function getStudentProfile(
     ),
     pool.query<ClassEnrollment>(
       `SELECT sc.id, sc.class_id, c.name AS class_name, c.level AS class_level, c.stream AS class_stream,
-              sc.session_id, sess.name AS session_name, sc.enrolled_at
+              sc.session_id, sess.name AS session_name, sess.is_current AS session_is_current, sc.enrolled_at
        FROM student_classes sc
        JOIN classes c ON c.id = sc.class_id
        JOIN academic_sessions sess ON sess.id = sc.session_id
@@ -542,6 +544,73 @@ export async function findEnrollmentForCurrentSession(
     [studentId, schoolId]
   );
   return result.rows[0] ?? null;
+}
+
+export type AssignClassOutcome =
+  | { outcome: 'assigned'; enrollment: StudentClassRow }
+  | { outcome: 'student_not_found' | 'class_not_found' | 'no_current_session' }
+  | { outcome: 'already_enrolled'; classId: string };
+
+/**
+ * Puts a student who has no class this session into one (8 Oct 2026). Registration takes a class only
+ * optionally and says one can be given later, but the only class route was a correction, which needs
+ * an existing enrolment: a student registered without a class could never get one.
+ *
+ * One transaction with the student's row locked, because student_classes has no unique constraint on
+ * (student_id, session_id): two assignments at once would otherwise both see "no class" and enrol the
+ * student twice. The enrolment trigger reprices the school's subscription (migration 045).
+ */
+export async function assignClassForCurrentSession(
+  studentId: string,
+  schoolId: string,
+  classId: string
+): Promise<AssignClassOutcome> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const student = await client.query(
+      `SELECT id FROM students WHERE id = $1 AND school_id = $2 FOR UPDATE`,
+      [studentId, schoolId]
+    );
+    if (student.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { outcome: 'student_not_found' };
+    }
+    const cls = await client.query(`SELECT id FROM classes WHERE id = $1 AND school_id = $2`, [classId, schoolId]);
+    if (cls.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { outcome: 'class_not_found' };
+    }
+    const session = await client.query<{ id: string }>(
+      `SELECT id FROM academic_sessions WHERE school_id = $1 AND is_current = TRUE`,
+      [schoolId]
+    );
+    if (session.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return { outcome: 'no_current_session' };
+    }
+    const existing = await client.query<{ class_id: string }>(
+      `SELECT class_id FROM student_classes WHERE student_id = $1 AND session_id = $2 LIMIT 1`,
+      [studentId, session.rows[0].id]
+    );
+    if (existing.rows.length > 0) {
+      await client.query('ROLLBACK');
+      return { outcome: 'already_enrolled', classId: existing.rows[0].class_id };
+    }
+    const enrollment = await client.query<StudentClassRow>(
+      `INSERT INTO student_classes (student_id, class_id, session_id)
+       VALUES ($1, $2, $3)
+       RETURNING id, student_id, class_id, session_id, enrolled_at`,
+      [studentId, classId, session.rows[0].id]
+    );
+    await client.query('COMMIT');
+    return { outcome: 'assigned', enrollment: enrollment.rows[0] };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => undefined); // silent-ok: the original error is rethrown next
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function updateEnrollmentClass(enrollmentId: string, classId: string): Promise<void> {

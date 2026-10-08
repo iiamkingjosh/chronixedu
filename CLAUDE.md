@@ -35,8 +35,9 @@ Monorepo, npm workspaces:
    (`req.user.school_id === req.params.schoolId`, super_admin excepted) and
    filters every query by `school_id`. Never trust `school_id` in a body/query.
    ⚠️ **`requireSchoolAccess` is defined per route file and they are NOT identical.**
-   Most files define the permissive version above; `routes/users.ts` defines one
-   that admits **only super_admin and principal**. Read the definition in the file
+   Most files define the permissive version above; `routes/users.ts` and `routes/schools.ts` define one
+   that admits **only super_admin and principal** (`schools.ts` adds `requirePayoutAccess` for the bursar's
+   payout routes). Read the definition in the file
    you are working in before concluding a route is or isn't guarded — a Round 10
    audit pass misreported an endpoint as world-readable by assuming the common
    version. When a route's access differs from its file's norm, add an explicit
@@ -634,7 +635,10 @@ Monorepo, npm workspaces:
     `mailed_addresses_confirmed: true` (`MAILED_ADDRESSES_NOT_CONFIRMED`).
 
   **A parent's password never leaves the server** (5 Oct 2026, Round 37 L-01). Registering a student
-  and adding a parent returned it, and the registrar's screen showed and printed it, until then. The
+  and adding a parent returned it, and the registrar's screen showed and printed it, until then. A third
+  path, Settings → Users, made parents and returned their password until 8 Oct 2026 (Round 39 L-01): it now
+  creates staff only (`STAFF_ROLES`, shared with staff bulk import), so a student is always registered under
+  Students and a parent always linked to a child. The
   screen and slip say how a parent sets one (the sign-in page, then Forgot password). A student's
   temporary password is still shown and printed: most students have no email to reset with.
 
@@ -705,6 +709,22 @@ Monorepo, npm workspaces:
   is reachable only through `chronixedu_purge.purge_school_audit_logs`, deletes one whole school,
   and records itself. It exists for `docs/data-deletion-runbook.md`; do not call it from test
   teardown, and never grant anyone membership in `chronixedu_audit_purger`.
+
+## Roles: who does what (8 Oct 2026)
+
+- `docs/roles-guide.md` is the school-facing page: each role's job and where it does it. Keep it true when a
+  role's pages or rights change.
+- **The principal can do the registrar's work** (decided 8 Oct 2026, Moses): a new school has only its
+  principal, and many small schools have no registrar, so a registrar-only rule would leave them unable to
+  add a student.
+- **A student is a `students` row, registered under Students;** a parent is linked to a child. Neither is
+  made under Settings → Users, which creates staff only (Round 39 L-01). A `users` row with role `student`
+  and no `students` row is on no list and can be given no class.
+- **A student with no class this session is given one with `POST /:schoolId/students/:studentId/class`**
+  (Assign Class on the profile; registrar, principal, super_admin; audited `STUDENT_CLASS_ASSIGNED`). The
+  correction route (PATCH) moves a student who already has one, with a reason. The assignment locks the
+  student's row because `student_classes` has no unique constraint on `(student_id, session_id)`, and it
+  reprices the subscription through 045's trigger (`assignClass.db.test.ts`).
 
 ## Primary vs secondary (teaching model)
 

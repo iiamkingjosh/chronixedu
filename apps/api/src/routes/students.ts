@@ -19,6 +19,7 @@ import {
   insertStudentClass,
   findEnrollmentForCurrentSession,
   updateEnrollmentClass,
+  assignClassForCurrentSession,
   findUsersRolesByEmails,
   type CreateAuthAccount,
 } from '../db/queries/students';
@@ -794,6 +795,59 @@ router.get(
       const pdfUrl = row.pdf_url ? await signReportCardAsset(row.pdf_url) : null;
 
       return res.json({ success: true, data: { ...row, pdf_url: pdfUrl } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/students/:studentId/class ─────────────────────────────────
+// Gives a class to a student who has none this session (8 Oct 2026). Registration takes a class only
+// optionally and promised one could be given later, but the only class route below was a correction,
+// which refuses a student with no enrolment, so such a student could never be put in a class. A
+// student who already has one is pointed to the correction, which asks for a reason.
+
+const assignClassSchema = z.object({ class_id: z.string().uuid() });
+
+router.post(
+  '/:schoolId/students/:studentId/class',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal', 'registrar'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = assignClassSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const { schoolId, studentId } = req.params;
+      const result = await assignClassForCurrentSession(studentId, schoolId, parsed.data.class_id);
+
+      switch (result.outcome) {
+        case 'student_not_found':
+          return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
+        case 'class_not_found':
+          return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Class not found in this school' } });
+        case 'no_current_session':
+          return res.status(409).json({ success: false, error: { code: 'NO_CURRENT_SESSION', message: 'This school has no current academic session. Set one under Settings → Academic Structure first.' } });
+        case 'already_enrolled':
+          return res.status(409).json({ success: false, error: { code: 'ALREADY_IN_CLASS', message: 'This student already has a class this session. Use Correct Class to change it.' } });
+        case 'assigned':
+          break;
+      }
+
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId,
+        userId:     req.user!.user_id,
+        actionType: 'STUDENT_CLASS_ASSIGNED',
+        entity:     'student_classes',
+        entityId:   result.enrollment.id,
+        newValue:   { student_id: studentId, class_id: result.enrollment.class_id, session_id: result.enrollment.session_id },
+      });
+
+      return res.status(201).json({ success: true, data: result.enrollment });
     } catch (err) {
       return next(err);
     }

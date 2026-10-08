@@ -20,6 +20,7 @@ interface ClassEnrollment {
   class_stream: string | null;
   session_id: string;
   session_name: string;
+  session_is_current: boolean;
   enrolled_at: string;
 }
 
@@ -315,6 +316,85 @@ function ClassCorrectionModal({ schoolId, studentId, currentClassId, classes, on
   );
 }
 
+const assignClassSchema = z.object({
+  class_id: z.string().min(1, 'Select a class'),
+});
+
+type AssignClassForm = z.infer<typeof assignClassSchema>;
+
+/** For a student with no class this session: gives them one. No reason is asked, because nothing is being
+ *  changed; moving a student who already has a class is Correct Class, which asks for one. */
+function AssignClassModal({ schoolId, studentId, classes, onClose, onAssigned }: {
+  schoolId: string;
+  studentId: string;
+  classes: ClassRow[];
+  onClose: () => void;
+  onAssigned: () => void;
+}) {
+  const [apiError, setApiError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const { register, handleSubmit, formState: { errors } } = useForm<AssignClassForm>({
+    resolver: zodResolver(assignClassSchema),
+    defaultValues: { class_id: '' },
+  });
+
+  async function onSubmit(values: AssignClassForm) {
+    setApiError('');
+    setSubmitting(true);
+    try {
+      await apiFetch(`/api/schools/${schoolId}/students/${studentId}/class`, {
+        method: 'POST',
+        body: JSON.stringify(values),
+      });
+      onAssigned();
+    } catch (err: unknown) {
+      setApiError(err instanceof Error ? err.message : 'Failed to assign the class');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title="Assign Class" onClose={onClose}>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <p className="text-sm text-gray-500">
+          This student has no class this session. Choose one; it is recorded in the audit log.
+        </p>
+        <Field label="Class" error={errors.class_id?.message}>
+          <select {...register('class_id')} className={inputClass} defaultValue="">
+            <option value="">Select a class…</option>
+            {classes.map(c => (
+              <option key={c.id} value={c.id}>{c.name} ({c.level}{c.stream ? ` — ${c.stream}` : ''})</option>
+            ))}
+          </select>
+        </Field>
+
+        {classes.length === 0 && (
+          <p className="text-sm text-amber-700">
+            This school has no classes yet. The principal adds them under Settings → Roster.
+          </p>
+        )}
+
+        {apiError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
+            <p className="text-sm text-red-700">{apiError}</p>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="btn-ghost">
+            Cancel
+          </button>
+          <button type="submit" disabled={submitting} className="btn-primary !px-5">
+            {submitting ? 'Saving…' : 'Assign Class'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function StudentProfilePage() {
@@ -327,6 +407,7 @@ export default function StudentProfilePage() {
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
   const [addParentOpen, setAddParentOpen] = useState(false);
   const [newParentCredentials, setNewParentCredentials] = useState<AddParentResult | null>(null);
   const [savingBio, setSavingBio] = useState(false);
@@ -453,7 +534,9 @@ export default function StudentProfilePage() {
   }
 
   // enrollments are ordered most-recent session first
-  const currentEnrollment = profile.enrollments[0] ?? null;
+  // This session's class, if any. Not simply the latest enrolment: a student enrolled only in an earlier
+  // session has no class now, and Correct Class would refuse them.
+  const currentEnrollment = profile.enrollments.find(e => e.session_is_current) ?? null;
 
   return (
     <div className="max-w-4xl mx-auto p-8">
@@ -472,15 +555,26 @@ export default function StudentProfilePage() {
           <h1 className="font-heading text-xl font-semibold text-gray-900">{profile.first_name} {profile.last_name}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {profile.admission_no} · {profile.email}
-            {currentEnrollment && ` · ${currentEnrollment.class_name} (${currentEnrollment.class_level}${currentEnrollment.class_stream ? ` — ${currentEnrollment.class_stream}` : ''}) · ${currentEnrollment.session_name}`}
+            {currentEnrollment
+              ? ` · ${currentEnrollment.class_name} (${currentEnrollment.class_level}${currentEnrollment.class_stream ? ` — ${currentEnrollment.class_stream}` : ''}) · ${currentEnrollment.session_name}`
+              : ' · No class this session'}
           </p>
         </div>
-        <button
-          onClick={() => setCorrectionOpen(true)}
-          className="btn-primary shrink-0"
-        >
-          Correct Class
-        </button>
+        {currentEnrollment ? (
+          <button
+            onClick={() => setCorrectionOpen(true)}
+            className="btn-primary shrink-0"
+          >
+            Correct Class
+          </button>
+        ) : (
+          <button
+            onClick={() => setAssignOpen(true)}
+            className="btn-primary shrink-0"
+          >
+            Assign Class
+          </button>
+        )}
       </div>
 
       {/* Bio edit form */}
@@ -674,6 +768,20 @@ export default function StudentProfilePage() {
           onUpdated={() => {
             setCorrectionOpen(false);
             show('Class updated');
+            loadProfile();
+          }}
+        />
+      )}
+
+      {assignOpen && (
+        <AssignClassModal
+          schoolId={schoolId}
+          studentId={studentId}
+          classes={classes}
+          onClose={() => setAssignOpen(false)}
+          onAssigned={() => {
+            setAssignOpen(false);
+            show('Class assigned');
             loadProfile();
           }}
         />

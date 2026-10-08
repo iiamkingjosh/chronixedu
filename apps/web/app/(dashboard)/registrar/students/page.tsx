@@ -360,7 +360,7 @@ function RegisterStudentModal({ schoolId, classes, onClose, onRegistered }: {
 
         {step === 2 && (
           <div className="space-y-4">
-            <p className="text-sm text-gray-500">Optionally enroll the student into a class right away. You can also assign a class later.</p>
+            <p className="text-sm text-gray-500">Optionally enroll the student into a class right away. You can also assign one later, from the student&apos;s profile (Assign Class).</p>
             <Field label="Class (optional)" error={errors.class_id?.message}>
               <select {...register('class_id')} className={inputClass} defaultValue="">
                 <option value="">No class — assign later</option>
