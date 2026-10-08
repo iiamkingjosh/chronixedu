@@ -1,6 +1,7 @@
 # One table of who can do what — design
 
-Date: 8 Oct 2026. Status: for Moses's review. Nothing here is built yet.
+Date: 8 Oct 2026. Status: approved (approach A); the later answers are in "Decided after review" below.
+Plan: `docs/superpowers/plans/2026-10-08-roles-permissions.md`.
 
 ## Why
 
@@ -46,6 +47,7 @@ capability, as today (platform support), and is not listed per row.
 | `school.setup` | School Identity (and logo, signature, stamp uploads), Academic Structure (sessions, terms, activation), grading (school-wide and by level), Assessment Config, Report Card Template, Notifications and its test email, Fee Settings, the school record itself | principal |
 | `school.export` | Data Export (every dataset, the archive) | principal |
 | `staff.manage` | Settings → Users: list, create, edit, activate, reset a password; staff bulk import | principal |
+| `staff.email` | Changing a staff member's email address | none: the platform admin only |
 | `roster.classes_subjects` | Create, edit, delete classes and subjects | principal, registrar |
 | `roster.teaching` | Teacher assignments (single, bulk, copy from term, delete); roster bulk import | principal |
 | `timetable.manage` | Create and delete timetable slots | principal |
@@ -59,7 +61,8 @@ capability, as today (platform support), and is not listed per row.
 | `teacher.workspace` | Teacher dashboard, score-entry status, my students, assignments (set, mark) | teacher |
 | `announcements.post` | Post a school-wide announcement | principal |
 | `fees.manage` | Fee structures, invoices, outstanding balances, collection summary, record payments, payment bulk import, fee reminders, refunds, receipts | principal, bursar |
-| `school.payout` | Payout Setup (the school's bank account for online fees) | principal, bursar |
+| `school.payout.view` | Payout Setup, read (the school's bank account for online fees) | principal, bursar |
+| `school.payout.manage` | Payout Setup, saving a new account | principal |
 | `school.billing` | Platform Billing (the school paying Chronix) | principal, bursar |
 | `parent.portal` | A parent's children: results (published only), attendance, report cards, behaviour, fees, paying online, receipts | parent (linked children, as today) |
 | `student.portal` | A student's own dashboard, results (published only), report card, notices, behaviour, assignments (submit) | student (self, as today) |
@@ -92,6 +95,29 @@ names every capability it serves, and any of them admits.
 classes, a parent's linked children, a student's own record, and the tenant check (your own school) stay in
 the route logic that already enforces them. The table decides *whether a role does a job*; the route still
 decides *which records*.
+
+## Decided after review (8 Oct 2026)
+
+The route inventory found 13 routes that fitted no row. Moses accepted the six recommendations, with the reviewer's
+notes:
+
+1. **The principal has everything the bursar has**, fee lines and invoice generation included. It is a rule on the
+   table, tested, so a new fee route cannot default to bursar-only. The same holds for the registrar's jobs.
+2. **A student does not read fee invoices.** Recorded as a removal with its reason, so it is not re-added as a gap.
+3. **A staff member's email is changed by the platform admin only** (`staff.email`). The email is the account's only
+   key and password resets go there; a principal who could change it could take the account.
+4. **The open reads close:** a teacher's assignment list and pending scores (principal, and a teacher their own), the
+   assessment structure (principal).
+5. **The principal does not list every homework assignment.** Recorded as a removal with its reason.
+6. **Fees appear in the principal's sidebar.**
+
+Already decided: Payout Setup is viewed by the bursar and saved by the principal only ("Only view to avoid changes"),
+hence `school.payout.view` and `school.payout.manage`. Open: whether a registrar may set a class's form teacher
+(recommended: no; it is teaching work, principal only).
+
+The reviewer's condition: the decisions land in the one table the API guard and the sidebar both read, with a test
+that walks every mounted route and fails on a route outside the table, and a test that fails when a page is shown to a
+role the routes it calls refuse. The plan's Tasks 1, 2 and 11.
 
 ## How it is enforced
 
