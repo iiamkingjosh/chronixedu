@@ -1,5 +1,6 @@
 /**
- * Refunds recorded by the bursar (migration 063; decided 5-6 Oct 2026). Schools pay refunds back from
+ * Refunds recorded by the bursar, or the principal (migration 063; decided 5-6 Oct 2026; the principal since 8 Oct,
+ * when Moses gave the principal everything the bursar has: feesAccess.db.test.ts). Schools pay refunds back from
  * their own money, by cash or bank transfer, for every payment that moved money, online ones included.
  * A refund is a record of its own; the payment is never edited; the invoice is recomputed. Tested against
  * the real routes and database. Every refusal is shown beside a request that succeeds (doctrine 16).
@@ -86,9 +87,9 @@ describe('recording a refund', () => {
 });
 
 describe('what is refused', () => {
-  it('the principal: refunds are the bursar\'s', async () => {
+  it('a teacher: refunds are the bursar\'s and the principal\'s', async () => {
     const p = await pay('cash', 1_000_000);
-    expect((await refundBy(p.id, { amount: '100', method: 'cash', reason: 'overpaid' }, token(I.principalA, 'principal', A))).status).toBe(403);
+    expect((await refundBy(p.id, { amount: '100', method: 'cash', reason: 'overpaid' }, token(I.mathTeacher, 'teacher', A))).status).toBe(403);
     expect(await refunds()).toEqual([]);
   });
 

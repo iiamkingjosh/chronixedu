@@ -18,7 +18,7 @@ jest.mock('../supabaseClient', () => ({ supabase: {}, supabaseAdmin: {} }));
 /** Files whose routes still use their own guards. Shrinks file by file (Batch 9, tasks 3-9) and ends empty. */
 const NOT_YET_MOVED = new Set([
   'routes/parent', 'routes/student', 'routes/assignments',
-  'routes/messages', 'routes/announcements', 'routes/notifications', 'routes/fees', 'routes/platformBilling',
+  'routes/messages', 'routes/announcements', 'routes/notifications',
 ]);
 
 /** Routes behind the school mount that are not one school's job. Each keeps its own guard. */

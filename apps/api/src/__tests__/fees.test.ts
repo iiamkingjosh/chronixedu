@@ -6,7 +6,6 @@ import { errorHandler } from '../middleware/errorHandler';
 import * as feesQueries from '../db/queries/fees';
 import * as auditLog from '../db/queries/auditLog';
 import * as parentQueries from '../db/queries/parents';
-import * as studentQueries from '../db/queries/students';
 import * as paystackService from '../services/paystackService';
 import * as receiptService from '../services/receiptService';
 import * as paymentReceiptNotifier from '../services/paymentReceiptNotifier';
@@ -51,7 +50,6 @@ jest.mock('../db/queries/feeCheckouts');
 const mockFees = feesQueries as jest.Mocked<typeof feesQueries>;
 const mockAudit = auditLog as jest.Mocked<typeof auditLog>;
 const mockParents = parentQueries as jest.Mocked<typeof parentQueries>;
-const mockStudents = studentQueries as jest.Mocked<typeof studentQueries>;
 const mockPaystack = paystackService as jest.Mocked<typeof paystackService>;
 const mockReceipt = receiptService as jest.Mocked<typeof receiptService>;
 const mockReportCard = reportCardService as jest.Mocked<typeof reportCardService>;
@@ -155,10 +153,10 @@ describe('POST /api/schools/:schoolId/fee-structures', () => {
     expect(mockFees.insertFeeStructure).not.toHaveBeenCalled();
   });
 
-  it('returns 403 for principal', async () => {
+  it('returns 403 for a teacher (the principal may since 8 Oct 2026: feesAccess.db.test.ts)', async () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/fee-structures`)
-      .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`)
+      .set('Authorization', `Bearer ${makeToken('teacher', SCHOOL_ID)}`)
       .send({ term_id: TERM_ID, class_id: null, component_name: 'Tuition', amount: 50000 });
 
     expect(res.status).toBe(403);
@@ -281,10 +279,10 @@ describe('POST /api/schools/:schoolId/fee-invoices/generate', () => {
     expect(res.body.error.code).toBe('NOT_FOUND');
   });
 
-  it('returns 403 for principal', async () => {
+  it('returns 403 for a teacher (the principal may since 8 Oct 2026: feesAccess.db.test.ts)', async () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/fee-invoices/generate`)
-      .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`)
+      .set('Authorization', `Bearer ${makeToken('teacher', SCHOOL_ID)}`)
       .send({ term_id: TERM_ID, class_id: CLASS_ID });
 
     expect(res.status).toBe(403);
@@ -359,20 +357,16 @@ describe('GET /api/schools/:schoolId/fee-invoices/student/:studentId', () => {
     expect(mockFees.getInvoiceByStudent).not.toHaveBeenCalled();
   });
 
-  it('allows a student viewing their own invoice', async () => {
-    mockStudents.findStudentByUserId.mockResolvedValueOnce({ id: STUDENT_ID } as never);
-    mockFees.getInvoiceByStudent.mockResolvedValueOnce(INVOICE as never);
-
+  it('refuses a student, even their own invoice: students have no fees page, parents pay (8 Oct 2026)', async () => {
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/fee-invoices/student/${STUDENT_ID}?term_id=${TERM_ID}`)
       .set('Authorization', `Bearer ${makeToken('student', SCHOOL_ID, 'student-user-1')}`);
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
+    expect(mockFees.getInvoiceByStudent).not.toHaveBeenCalled();
   });
 
   it("forbids a student viewing another student's invoice", async () => {
-    mockStudents.findStudentByUserId.mockResolvedValueOnce({ id: 'some-other-student' } as never);
-
     const res = await request(app)
       .get(`/api/schools/${SCHOOL_ID}/fee-invoices/student/${STUDENT_ID}?term_id=${TERM_ID}`)
       .set('Authorization', `Bearer ${makeToken('student', SCHOOL_ID, 'student-user-1')}`);
@@ -668,10 +662,10 @@ describe('POST /api/schools/:schoolId/payments', () => {
     expect(res.body.error.code).toBe('DUPLICATE_PAYSTACK_REFERENCE');
   });
 
-  it('returns 403 for principal', async () => {
+  it('returns 403 for a teacher (the principal may since 8 Oct 2026: feesAccess.db.test.ts)', async () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments`)
-      .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`)
+      .set('Authorization', `Bearer ${makeToken('teacher', SCHOOL_ID)}`)
       .send({ invoice_id: INVOICE_ID, amount: String(10000), method: 'cash' });
 
     expect(res.status).toBe(403);
@@ -748,19 +742,15 @@ describe('POST /api/schools/:schoolId/payments/paystack/initiate', () => {
     );
   });
 
-  it('allows a student to initiate payment for their own invoice', async () => {
-    mockFees.getInvoiceById.mockResolvedValueOnce(INVOICE_ROW as never);
-    mockStudents.findStudentByUserId.mockResolvedValueOnce({ id: STUDENT_ID } as never);
-    mockPaystack.isPaystackConfigured.mockReturnValueOnce(true);
-    mockSchools.getSchoolPayoutConfig.mockResolvedValueOnce(ACTIVE_PAYOUT_CONFIG);
-    mockPaystack.initializePaystackTransaction.mockResolvedValueOnce(PAYSTACK_INIT_RESULT);
-
+  it('refuses a student, even for their own invoice: parents pay (8 Oct 2026)', async () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/payments/paystack/initiate`)
       .set('Authorization', `Bearer ${makeToken('student', SCHOOL_ID)}`)
       .send({ invoice_id: INVOICE_ID });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(403);
+    expect(mockFees.getInvoiceById).not.toHaveBeenCalled();
+    expect(mockPaystack.initializePaystackTransaction).not.toHaveBeenCalled();
   });
 
   it('returns 503 PAYOUT_NOT_CONFIGURED when the school has no active payout config', async () => {
@@ -997,10 +987,10 @@ describe('POST /api/schools/:schoolId/fee-reminders/run', () => {
     expect(mockFeeReminder.sendFeeRemindersForSchool).not.toHaveBeenCalled();
   });
 
-  it('returns 403 for principal', async () => {
+  it('returns 403 for a teacher (the principal may since 8 Oct 2026: feesAccess.db.test.ts)', async () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/fee-reminders/run`)
-      .set('Authorization', `Bearer ${makeToken('principal', SCHOOL_ID)}`);
+      .set('Authorization', `Bearer ${makeToken('teacher', SCHOOL_ID)}`);
 
     expect(res.status).toBe(403);
     expect(mockFeeReminder.sendFeeRemindersForSchool).not.toHaveBeenCalled();

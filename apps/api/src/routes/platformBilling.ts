@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import { requireRole } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { logger } from '../config/logger';
 import { toKobo, fromKobo } from '../services/money';
 import {
@@ -24,19 +24,6 @@ import { isPaystackConfigured, initializePaystackTransaction } from '../services
  */
 const router = Router();
 
-// CLAUDE.md doctrine 1: requireSchoolAccess is defined per file and they are not
-// identical. This one is the common/permissive shape (super_admin excepted, otherwise
-// the caller's own school only) — the same one routes/fees.ts defines for itself.
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 /**
  * Public base URL of THIS api service, for the Paystack callback_url — duplicated from
@@ -59,8 +46,7 @@ function getApiBaseUrl(): string {
 
 router.get(
   '/:schoolId/platform-billing/status',
-  requireSchoolAccess,
-  requireRole('principal', 'bursar', 'super_admin'),
+  requireCapability('school.billing'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const schoolId = req.params.schoolId;
@@ -102,8 +88,7 @@ router.get(
 
 router.post(
   '/:schoolId/platform-billing/checkout',
-  requireSchoolAccess,
-  requireRole('principal', 'bursar', 'super_admin'),
+  requireCapability('school.billing'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const schoolId = req.params.schoolId;

@@ -978,8 +978,9 @@ Monorepo, npm workspaces:
   - **A refund is a record of its own.** The payment is never edited. The invoice is recomputed from
     payments minus refunds under the invoice lock a payment takes, so "paid" becomes "partly paid", and
     two refunds at once cannot exceed the payment.
-  - **Bursar only** (not the principal). Cash, bank-transfer and online payments alike; a waiver is
-    refused, because it moved no money.
+  - **The bursar or the principal** (the principal since 8 Oct 2026: Moses gave the principal everything the
+    bursar has, so a school with no bursar is never stuck; it was "bursar only" from 6 Oct). Cash,
+    bank-transfer and online payments alike; a waiver is refused, because it moved no money.
   - **The form takes:** the amount; how it went back (cash or bank transfer); a reason (`REFUND_REASONS`:
     overpaid, paid twice, withdrew, wrong child, other, which needs a note); an optional reference (a
     parent often has none); an optional note. `refundReasons.test.ts` keeps the web's list

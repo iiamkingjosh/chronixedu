@@ -129,14 +129,15 @@ describe('POST /:schoolId/payments-bulk-import/preview', () => {
     // that still needs it. A single top-level afterAll closes it once.
   }, 30000);
 
-  it('rejects a principal with 403 (this feature is bursar-gated, not principal-gated)', async () => {
+  it('admits the principal too: the principal has everything the bursar has (Moses, 8 Oct 2026)', async () => {
+    // It was bursar-gated; who is refused is shown in feesAccess.db.test.ts and capabilityMatrix.db.test.ts.
     const buffer = await xlsxBuffer(HEADERS, [[studentAdmissionNo, 10000, 'cash', '', '']]);
     const res = await request(app)
       .post(`/api/schools/${schoolId}/payments-bulk-import/preview`)
       .set('Authorization', `Bearer ${principalToken}`)
       .field('term_id', termId)
       .attach('file', buffer, 'payments.xlsx');
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it('previews a valid row against an existing invoice', async () => {
@@ -305,12 +306,13 @@ describe('POST /:schoolId/payments-bulk-import/commit', () => {
     return res.body.data;
   }
 
-  it('rejects a principal with 403', async () => {
+  it('admits the principal too (8 Oct 2026); an empty commit is refused as a request, not as a role', async () => {
     const res = await request(app)
       .post(`/api/schools/${schoolId}/payments-bulk-import/commit`)
       .set('Authorization', `Bearer ${principalToken}`)
       .send({ term_id: termId, rows: [] });
-    expect(res.status).toBe(403);
+    expect(res.status).not.toBe(403);
+    expect(res.status).toBe(400);
   });
 
   it('records a valid payment end-to-end, including a backdated payment_date', async () => {

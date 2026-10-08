@@ -3,14 +3,15 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
-import { verifyToken, requireRole, AuthUser } from '../middleware/auth';
+import { verifyToken, AuthUser } from '../middleware/auth';
+import { requireCapability, holdsCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { requireFeature } from '../middleware/requireFeature';
 import { logger } from '../config/logger';
 import { logAudit } from '../db/queries/auditLog';
 import pool from '../db/client';
 import { isParentLinkedToStudent } from '../db/queries/parents';
-import { findStudentByUserId, findStudentsByAdmissionNumbers } from '../db/queries/students';
+import { findStudentsByAdmissionNumbers } from '../db/queries/students';
 import { getActiveTerm } from '../db/queries/roster';
 import { parseBulkPaymentImportFile, BulkPaymentImportParseError } from '../services/bulkPaymentImportParser';
 import { runFullPaymentValidation } from '../services/bulkPaymentImportValidation';
@@ -55,40 +56,16 @@ import {
 
 const router = Router();
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
-/** Staff (bursar/principal/super_admin) may access any student's invoice in their school;
- *  parents only their linked children; students only their own record. */
-async function canAccessInvoiceForStudent(user: AuthUser, schoolId: string, studentId: string): Promise<boolean> {
-  if (user.role === 'bursar' || user.role === 'principal' || user.role === 'super_admin') {
-    return true;
-  }
-
-  if (user.role === 'parent') {
-    return isParentLinkedToStudent(user.user_id, studentId);
-  }
-
-  if (user.role === 'student') {
-    const student = await findStudentByUserId(user.user_id, schoolId);
-    return !!student && student.id === studentId;
-  }
-
+/** Whoever manages fees (fees.manage) may access any student's invoice in their school; a parent only their
+ *  linked children. A student reads no invoice since 8 Oct 2026: students have no fees page, and parents pay. */
+async function canAccessInvoiceForStudent(user: AuthUser, studentId: string): Promise<boolean> {
+  if (holdsCapability(user, 'fees.manage')) return true;
+  if (user.role === 'parent') return isParentLinkedToStudent(user.user_id, studentId);
   return false;
 }
 
 async function requireFeeInvoiceAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
-  const allowed = await canAccessInvoiceForStudent(req.user!, req.params.schoolId, req.params.studentId);
+  const allowed = await canAccessInvoiceForStudent(req.user!, req.params.studentId);
   if (allowed) { next(); return; }
   res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
 }
@@ -204,8 +181,7 @@ const paymentSchema = z
 router.post(
   '/:schoolId/fee-structures',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = feeStructureSchema.safeParse(req.body);
@@ -261,8 +237,7 @@ router.post(
 router.patch(
   '/:schoolId/fee-structures/:id',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!z.string().uuid().safeParse(req.params.id).success) {
@@ -310,8 +285,7 @@ router.patch(
 router.delete(
   '/:schoolId/fee-structures/:id',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (!z.string().uuid().safeParse(req.params.id).success) {
@@ -343,8 +317,7 @@ router.delete(
 router.post(
   '/:schoolId/fee-structures/copy-from-term',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = copyFeeLinesSchema.safeParse(req.body);
@@ -380,8 +353,7 @@ router.post(
 router.get(
   '/:schoolId/fee-structures',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'principal', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = listFeeStructuresQuerySchema.safeParse(req.query);
@@ -406,8 +378,7 @@ router.get(
 router.get(
   '/:schoolId/fee-invoices',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'principal', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = listInvoicesQuerySchema.safeParse(req.query);
@@ -432,8 +403,7 @@ router.get(
 router.post(
   '/:schoolId/fee-invoices/generate',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = generateInvoicesSchema.safeParse(req.body);
@@ -478,8 +448,7 @@ router.post(
 router.get(
   '/:schoolId/fee-invoices/outstanding',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'principal', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = reportQuerySchema.safeParse(req.query);
@@ -504,8 +473,7 @@ router.get(
 router.get(
   '/:schoolId/fee-invoices/summary',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'principal', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = reportQuerySchema.safeParse(req.query);
@@ -530,8 +498,7 @@ router.get(
 router.get(
   '/:schoolId/fee-invoices/student/:studentId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'principal', 'super_admin', 'parent', 'student'),
+  requireCapability('fees.manage', 'parent.portal'),
   requireFeeInvoiceAccess,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -571,8 +538,7 @@ router.get(
 router.post(
   '/:schoolId/payments',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = paymentSchema.safeParse(req.body);
@@ -699,8 +665,7 @@ router.post(
 router.get(
   '/:schoolId/payments/:paymentId/receipt',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'principal', 'super_admin', 'parent'),
+  requireCapability('fees.manage', 'parent.portal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, paymentId } = req.params;
@@ -711,7 +676,7 @@ router.get(
       }
 
       if (req.user!.role === 'parent') {
-        const allowed = await canAccessInvoiceForStudent(req.user!, schoolId, payment.student_id);
+        const allowed = await canAccessInvoiceForStudent(req.user!, payment.student_id);
         if (!allowed) {
           return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
         }
@@ -786,8 +751,7 @@ const manualRefundSchema = z
 router.post(
   '/:schoolId/payments/:paymentId/refunds',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = manualRefundSchema.safeParse(req.body);
@@ -847,8 +811,7 @@ router.post(
 router.post(
   '/:schoolId/payments/paystack/initiate',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('parent', 'student'),
+  requireCapability('parent.portal'),
   requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -865,7 +828,7 @@ router.post(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Invoice not found' } });
       }
 
-      const allowed = await canAccessInvoiceForStudent(req.user!, schoolId, invoice.student_id);
+      const allowed = await canAccessInvoiceForStudent(req.user!, invoice.student_id);
       if (!allowed) {
         return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
       }
@@ -976,8 +939,7 @@ router.post(
 router.post(
   '/:schoolId/fee-reminders/run',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const schoolId = req.params.schoolId;
@@ -1062,8 +1024,7 @@ const paymentBulkImportFieldsSchema = z.object({
 router.post(
   '/:schoolId/payments-bulk-import/preview',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   paymentBulkImportUpload.single('file'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1169,8 +1130,7 @@ const paymentBulkImportCommitSchema = z.object({
 router.post(
   '/:schoolId/payments-bulk-import/commit',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('bursar', 'super_admin'),
+  requireCapability('fees.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = paymentBulkImportCommitSchema.safeParse(req.body);
