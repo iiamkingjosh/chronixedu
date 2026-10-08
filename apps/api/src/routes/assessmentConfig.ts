@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { logSettingsChange, logAudit } from '../db/queries/auditLog';
 import pool from '../db/client';
@@ -58,18 +59,6 @@ const resolveQuerySchema = z.object({
   term_id:    z.string().uuid(),
 });
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 function sumWeights(components: z.infer<typeof componentSchema>[]): number {
   return components.reduce((acc, c) => acc + c.weight_percent, 0);
@@ -80,8 +69,7 @@ function sumWeights(components: z.infer<typeof componentSchema>[]): number {
 router.post(
   '/:schoolId/assessment-config',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = createSchema.safeParse(req.body);
@@ -147,8 +135,7 @@ router.post(
 router.post(
   '/:schoolId/assessment-config/copy-from-term',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = copySchema.safeParse(req.body);
@@ -216,7 +203,7 @@ router.post(
 router.get(
   '/:schoolId/assessment-config',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const configs = await listAssessmentConfigs(req.params.schoolId);
@@ -232,7 +219,7 @@ router.get(
 router.get(
   '/:schoolId/assessment-config/resolve',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = resolveQuerySchema.safeParse(req.query);
@@ -265,8 +252,7 @@ router.get(
 router.patch(
   '/:schoolId/assessment-config/:configId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = patchSchema.safeParse(req.body);
@@ -331,8 +317,7 @@ router.patch(
 router.delete(
   '/:schoolId/assessment-config/:configId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, configId } = req.params;

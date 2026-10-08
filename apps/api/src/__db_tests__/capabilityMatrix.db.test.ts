@@ -11,11 +11,52 @@
  * capabilityRoutes.test.ts checks that every route names its capability; this checks that naming it does what the
  * table says. A capability joins ROUTES when the file that serves it moves to the table (Batch 9, tasks 3-9).
  */
+import express from 'express';
 import request from 'supertest';
-import { buildApp, seed, token, tokens, IDS as I, pool } from './helpers';
+import { seed, token, tokens, IDS as I, pool } from './helpers';
 import table from '../config/capabilities.json';
+import { detectSupportSession } from '../middleware/detectSupportSession';
+import { verifyToken, requirePasswordChanged } from '../middleware/auth';
+import { requireActiveSchool } from '../middleware/requireActiveSchool';
+import { requireWritableSubscription } from '../middleware/requireWritableSubscription';
+import { errorHandler } from '../middleware/errorHandler';
+import schoolsRoutes from '../routes/schools';
+import sessionsRoutes from '../routes/sessions';
+import rosterRoutes from '../routes/roster';
+import usersRoutes from '../routes/users';
+import assessmentConfigRoutes from '../routes/assessmentConfig';
+import studentsRoutes from '../routes/students';
+import scoresRoutes from '../routes/scores';
+import resultsRoutes from '../routes/results';
+import dashboardRoutes from '../routes/dashboard';
+import teacherDashboardRoutes from '../routes/teacherDashboard';
+import attendanceRoutes from '../routes/attendance';
+import parentRoutes from '../routes/parent';
+import studentRoutes from '../routes/student';
+import assignmentsRoutes from '../routes/assignments';
+import behaviourRoutes from '../routes/behaviour';
+import messagesRoutes from '../routes/messages';
+import announcementsRoutes from '../routes/announcements';
+import notificationsRoutes from '../routes/notifications';
+import feesRoutes from '../routes/fees';
+import platformBillingRoutes from '../routes/platformBilling';
+import analyticsRoutes from '../routes/analytics';
+import timetableRoutes from '../routes/timetable';
+import classCommentsRoutes from '../routes/classComments';
+import principalRemarksRoutes from '../routes/principalRemarks';
+import noticesRoutes from '../routes/notices';
 
-const app = buildApp();
+// Every school router, in index.ts's order, behind index.ts's chain.
+const app = express();
+app.use(express.json());
+app.use('/api/schools', detectSupportSession, verifyToken, requirePasswordChanged, requireActiveSchool, requireWritableSubscription);
+for (const r of [schoolsRoutes, sessionsRoutes, rosterRoutes, usersRoutes, assessmentConfigRoutes, studentsRoutes, scoresRoutes,
+  resultsRoutes, dashboardRoutes, teacherDashboardRoutes, attendanceRoutes, parentRoutes, studentRoutes, assignmentsRoutes,
+  behaviourRoutes, messagesRoutes, announcementsRoutes, notificationsRoutes, feesRoutes, platformBillingRoutes, analyticsRoutes,
+  timetableRoutes, classCommentsRoutes, principalRemarksRoutes, noticesRoutes]) {
+  app.use('/api/schools', r);
+}
+app.use(errorHandler);
 const REGISTRAR = '30000000-0000-4000-8000-000000000071';
 const BURSAR = '30000000-0000-4000-8000-000000000072';
 const ADMIN = 'c0000000-0000-4000-8000-000000000071';
@@ -43,6 +84,9 @@ const ROUTES: Partial<Record<keyof typeof table.capabilities, Route>> = {
   'staff.email': { method: 'patch', path: `${base}/users/${I.mathTeacher}/email`, body: {} },
   'school.payout.view': { method: 'get', path: `${base}/settings/payout` },
   'school.payout.manage': { method: 'put', path: `${base}/settings/payout`, body: {} },
+  'roster.classes_subjects': { method: 'patch', path: `${base}/classes/${I.jss2a}`, body: {} },
+  'roster.teaching': { method: 'post', path: `${base}/teacher-assignments`, body: {} },
+  'timetable.manage': { method: 'post', path: `${base}/timetable`, body: {} },
 };
 
 beforeAll(async () => {

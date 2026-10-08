@@ -2,7 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability, holdsCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import {
   findClassByName, insertClass, updateClass, listClasses,
@@ -106,26 +107,22 @@ const copyAssignmentsSchema = z.object({
   to_term_id:   z.string().uuid(),
 });
 
-// ── Middleware: super_admin or any authenticated member of the school ───────────
 
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
+// ── The form teacher is the principal's to set ─────────────────────────────────
+// A form teacher takes the class's attendance and writes its comments, so setting the field grants rights, and
+// granting rights is the principal's (roster.teaching; Moses, 8 Oct 2026). The registrar manages classes, never
+// this field: a registrar's edit that leaves it out keeps the existing form teacher.
+const FORM_TEACHER_REFUSAL = {
+  success: false,
+  error: { code: 'FORM_TEACHER_PRINCIPAL_ONLY', message: 'Only the principal sets a class\'s form teacher.' },
+} as const;
 
 // ── POST /:schoolId/classes ────────────────────────────────────────────────────
 
 router.post(
   '/:schoolId/classes',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.classes_subjects'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = classSchema.safeParse(req.body);
@@ -134,6 +131,9 @@ router.post(
       }
 
       const { name, level, stream, form_teacher_id } = parsed.data;
+      if (form_teacher_id && !holdsCapability(req.user, 'roster.teaching')) {
+        return res.status(403).json(FORM_TEACHER_REFUSAL);
+      }
 
       const formTeacherError = await validateFormTeacher(req.params.schoolId, form_teacher_id);
       if (formTeacherError) {
@@ -177,7 +177,7 @@ router.post(
 router.get(
   '/:schoolId/classes',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const key = `roster:${req.params.schoolId}:classes`;
@@ -195,8 +195,7 @@ router.get(
 router.patch(
   '/:schoolId/classes/:classId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.classes_subjects'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = classSchema.safeParse(req.body);
@@ -209,9 +208,15 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Class not found' } });
       }
 
-      const { name, level, stream, form_teacher_id } = parsed.data;
+      const { name, level, stream } = parsed.data;
+      // Left out, the form teacher stays as it is (it used to be cleared); sent, it is set, which only the
+      // principal may do when it changes.
+      const formTeacherId = 'form_teacher_id' in parsed.data ? parsed.data.form_teacher_id ?? null : existing.form_teacher_id;
+      if (formTeacherId !== existing.form_teacher_id && !holdsCapability(req.user, 'roster.teaching')) {
+        return res.status(403).json(FORM_TEACHER_REFUSAL);
+      }
 
-      const formTeacherError = await validateFormTeacher(req.params.schoolId, form_teacher_id);
+      const formTeacherError = await validateFormTeacher(req.params.schoolId, formTeacherId);
       if (formTeacherError) {
         return res.status(400).json({ success: false, error: { code: 'INVALID_FORM_TEACHER', message: formTeacherError } });
       }
@@ -230,7 +235,7 @@ router.patch(
       }
 
       const cls = await updateClass(req.params.classId, req.params.schoolId, {
-        name, level, stream: stream ?? null, form_teacher_id: form_teacher_id ?? null,
+        name, level, stream: stream ?? null, form_teacher_id: formTeacherId,
       });
       cache.del(`roster:${req.params.schoolId}:classes`);
       await logAudit({
@@ -261,8 +266,7 @@ router.patch(
 router.delete(
   '/:schoolId/classes/:classId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.classes_subjects'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const cls = await findClassById(req.params.classId, req.params.schoolId);
@@ -306,8 +310,7 @@ router.delete(
 router.post(
   '/:schoolId/subjects',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.classes_subjects'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = subjectSchema.safeParse(req.body);
@@ -350,7 +353,7 @@ router.post(
 router.get(
   '/:schoolId/subjects',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const key = `roster:${req.params.schoolId}:subjects`;
@@ -368,8 +371,7 @@ router.get(
 router.patch(
   '/:schoolId/subjects/:subjectId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.classes_subjects'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = subjectSchema.safeParse(req.body);
@@ -418,8 +420,7 @@ router.patch(
 router.delete(
   '/:schoolId/subjects/:subjectId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.classes_subjects'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const subject = await findSubjectById(req.params.subjectId, req.params.schoolId);
@@ -463,8 +464,7 @@ router.delete(
 router.post(
   '/:schoolId/teacher-assignments',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.teaching'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = assignmentSchema.safeParse(req.body);
@@ -521,9 +521,13 @@ router.post(
 router.get(
   '/:schoolId/teachers/:teacherId/assignments',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('roster.teaching', 'teacher.workspace'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
+      // A teacher reads their own; anyone's is the principal's (decided 8 Oct 2026: it was open to every member).
+      if (!holdsCapability(req.user, 'roster.teaching') && req.user!.user_id !== req.params.teacherId) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You can only read your own teaching assignments' } });
+      }
       const key = `roster:${req.params.schoolId}:assignments:${req.params.teacherId}`;
       const result = await cache.wrap(key, cache.TTL.ROSTER, async () => {
         const term = await getActiveTerm(req.params.schoolId);
@@ -546,8 +550,7 @@ router.get(
 router.post(
   '/:schoolId/teacher-assignments/bulk',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.teaching'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = bulkAssignmentSchema.safeParse(req.body);
@@ -625,8 +628,7 @@ router.post(
 router.post(
   '/:schoolId/teacher-assignments/copy-from-term',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.teaching'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = copyAssignmentsSchema.safeParse(req.body);
@@ -680,8 +682,7 @@ router.post(
 router.delete(
   '/:schoolId/teacher-assignments/:id',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.teaching'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const assignment = await findAssignmentById(req.params.id, req.params.schoolId);
@@ -730,8 +731,7 @@ const rosterBulkImportUpload = multer({ storage: multer.memoryStorage(), limits:
 router.post(
   '/:schoolId/roster-bulk-import/preview',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.teaching'),
   rosterBulkImportUpload.single('file'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -854,8 +854,7 @@ const rosterBulkImportCommitSchema = z.object({
 router.post(
   '/:schoolId/roster-bulk-import/commit',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('roster.teaching'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = rosterBulkImportCommitSchema.safeParse(req.body);
