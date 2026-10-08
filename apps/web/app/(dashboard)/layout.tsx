@@ -7,7 +7,8 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
-import { getNavGroupsForRole, visibleNavGroups, settingsAccessForRole, settingsGroupsForRole, type NavItem } from '@/lib/navigation';
+import { getNavGroupsForRole, visibleNavGroups, hasWholeSettings, settingsGroupsForRole, mayOpenPage, type NavItem } from '@/lib/navigation';
+import { getDefaultDashboardPath } from '@/lib/auth';
 import NotificationBell from '@/components/NotificationBell';
 import CommandPalette from '@/components/CommandPalette';
 import SyncIndicator from '@/components/SyncIndicator';
@@ -52,13 +53,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const [navOpen, setNavOpen] = useState(false);
-  const navGroups = useMemo(() => user ? getNavGroupsForRole(user.role) : [], [user?.role]);
+  const role = user?.role;
+  const navGroups = useMemo(() => role ? getNavGroupsForRole(role) : [], [role]);
+  // One page guard, from the same table as the sidebar (lib/navigation.ts mayOpenPage): a typed address the role
+  // may not open goes back to its dashboard. Only the registrar's pages had a guard until 8 Oct 2026; elsewhere a
+  // role got the page and a row of refusals from the API.
+  const mayOpen = !role || mayOpenPage(role, pathname);
 
   useEffect(() => {
     if (!loading && !user) {
       router.replace('/login');
     }
   }, [loading, user, router]);
+
+  useEffect(() => {
+    if (!loading && role && !mayOpen) {
+      router.replace(getDefaultDashboardPath(role));
+    }
+  }, [loading, role, mayOpen, router]);
 
   useEffect(() => {
     setNavOpen(false);
@@ -72,17 +84,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  if (!user) {
+  if (!user || !mayOpen) {
     return null;
   }
 
-  // One rule for Settings, shared with the Ctrl+K palette (lib/navigation.ts). Every plan includes
-  // payouts and analytics since Basic was removed (30 Sep 2026); the API still refuses them for
-  // a read-only school, and the notice below says why.
-  const settingsAccess = settingsAccessForRole(user.role);
-  const showSettings = settingsAccess === 'all';
-  const showPayoutSettings = settingsAccess !== 'none';
-  const payoutSettingsItems = settingsGroupsForRole(user.role).flatMap((g) => g.items);
+  // One rule for Settings, shared with the Ctrl+K palette (lib/navigation.ts), from the one table: the principal
+  // has the whole area behind one entry; a role with only some settings pages has them listed (the bursar's Payout
+  // Setup and Platform Billing, the registrar's Roster). The API still refuses them for a read-only school, and the
+  // notice below says why.
+  const showSettings = hasWholeSettings(user.role);
+  const someSettings = showSettings ? [] : settingsGroupsForRole(user.role).flatMap((g) => g.items);
   const visibleGroups = visibleNavGroups(navGroups, []);
 
   function handleLogout() {
@@ -112,14 +123,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         )}
 
-        {showPayoutSettings && !showSettings && (
+        {someSettings.length > 0 && (
           <div>
             <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
               Settings
             </p>
-            {/* Both pages the 'payout' level opens, as the palette offers them: Platform Billing was
-                missing here until 8 Oct 2026. Payout Setup is view-only for a bursar. */}
-            {payoutSettingsItems.map((item) => (
+            {/* The settings pages this role holds, as the palette offers them. Payout Setup is view-only for a
+                bursar. */}
+            {someSettings.map((item) => (
               <NavLink key={item.href} item={{ label: item.label, href: item.href }} pathname={pathname} onNavigate={onNavigate} />
             ))}
           </div>

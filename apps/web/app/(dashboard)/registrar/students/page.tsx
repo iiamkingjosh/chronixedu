@@ -6,6 +6,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
+import { roleHolds } from '@/lib/capabilities';
 import { apiFetch } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -473,7 +474,10 @@ export default function StudentRegistrationPage() {
   // — otherwise every registrar would get a 403 on page load. Same page, two shapes;
   // forking into /principal/students would duplicate registration and import for
   // nothing.
-  const canSeeAcademics = user?.role === 'principal' || user?.role === 'super_admin';
+  const canSeeAcademics = roleHolds(user?.role, 'results.manage');
+  // The bursar reads the list to find a child to invoice (spec decision 3); registering and importing are
+  // students.manage.
+  const canManage = roleHolds(user?.role, 'students.manage');
   const [termId, setTermId] = useState<string | null>(null);
   const [termName, setTermName] = useState<string | null>(null);
   // Shown to everyone who opens this page: the registrar could not see which session and term the
@@ -594,7 +598,8 @@ export default function StudentRegistrationPage() {
       )}
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
-        <h1 className="text-xl font-semibold text-gray-900">Student Registration</h1>
+        <h1 className="text-xl font-semibold text-gray-900">{canManage ? 'Student Registration' : 'Students'}</h1>
+        {canManage && (
         <div className="flex gap-2 self-start sm:self-auto">
           <Link
             href="/registrar/students/import"
@@ -612,8 +617,9 @@ export default function StudentRegistrationPage() {
             Register Student
           </button>
         </div>
+        )}
       </div>
-      <p className="text-sm text-gray-500 mb-1">Search existing students or register a new student into the school.</p>
+      <p className="text-sm text-gray-500 mb-1">{canManage ? 'Search existing students or register a new student into the school.' : 'Search the school\u2019s students.'}</p>
       {calendar && (
         calendar.session
           ? <p className="text-sm text-gray-600 mb-6">Current session: <span className="font-medium">{calendar.session}</span>{calendar.term ? <> · term: <span className="font-medium">{calendar.term}</span></> : ' · no current term'}. Classes given here are for this session.</p>

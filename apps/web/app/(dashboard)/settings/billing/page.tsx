@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers';
-import { canAccessPlatformBilling, getDefaultDashboardPath } from '@/lib/auth';
+import { getDefaultDashboardPath } from '@/lib/auth';
+import { roleHolds } from '@/lib/capabilities';
 import { apiFetch } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -77,7 +78,7 @@ function useToast() {
 export default function PlatformBillingPage() {
   const { user, loading: authLoading, schoolId } = useAuth();
   const router = useRouter();
-  const allowed = !!user && canAccessPlatformBilling(user.role);
+  const allowed = roleHolds(user?.role, 'school.billing');
   const { toast, show } = useToast();
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<BillingStatus | null>(null);
@@ -87,7 +88,7 @@ export default function PlatformBillingPage() {
   // Client-side role guard (defence in depth — the API is the real boundary, same
   // requireRole('principal', 'bursar', 'super_admin') as routes/platformBilling.ts).
   useEffect(() => {
-    if (!authLoading && user && !canAccessPlatformBilling(user.role)) {
+    if (!authLoading && user && !roleHolds(user.role, 'school.billing')) {
       router.replace(getDefaultDashboardPath(user.role));
     }
   }, [authLoading, user, router]);

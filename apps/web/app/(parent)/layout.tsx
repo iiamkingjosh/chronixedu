@@ -10,6 +10,7 @@ import { useAuth } from '@/app/providers';
 import { ParentProvider, useParentContext } from '@/lib/parentContext';
 import { PARENT_NAV, type NavItem } from '@/lib/navigation';
 import { getDefaultDashboardPath } from '@/lib/auth';
+import { roleHolds } from '@/lib/capabilities';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
 
@@ -199,8 +200,9 @@ export default function ParentLayout({ children }: { children: React.ReactNode }
     // AUDIT Round 10 L-03: the layout only checked that someone was signed in, so a
     // teacher or student landing on /parent/* got a rendered parent shell whose data
     // calls then 403'd. The API was never at risk — this is about not showing a
-    // signed-in user a section that isn't theirs.
-    if (user.role !== 'parent' && user.role !== 'super_admin') {
+    // signed-in user a section that isn't theirs. From the one table since 8 Oct 2026: the parent's screens are the
+    // parent's (a platform admin sees them through a support session, as the parent).
+    if (!roleHolds(user.role, 'parent.portal')) {
       router.replace(getDefaultDashboardPath(user.role));
     }
   }, [loading, user, router]);

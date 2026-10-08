@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { paletteEntriesForRole, filterPalette } from '../commandPalette';
 import {
-  getMainNavForRole, getNavGroupsForRole, settingsAccessForRole,
+  getMainNavForRole, getNavGroupsForRole, settingsGroupsForRole,
   SETTINGS_NAV, SUPER_ADMIN_NAV, SUPER_ADMIN_NAV_GROUPS,
   PRINCIPAL_NAV, TEACHER_NAV, REGISTRAR_NAV, BURSAR_NAV,
 } from '../navigation';
@@ -10,16 +10,15 @@ import {
 /**
  * The property that matters: for each role, the palette offers EXACTLY the pages that role can
  * open — no more (a page the guard refuses is a 403 the palette caused) and no fewer. The
- * expected set is built independently from getMainNavForRole and the settings access rules the
- * sidebar uses, then compared by equality. "Non-empty" would pass on a palette that renders
+ * expected set is built independently from getMainNavForRole and the settings pages the sidebar
+ * shows (settingsGroupsForRole, from the one table), then compared by equality. "Non-empty" would pass on a palette that renders
  * nothing useful, so it is not the assertion.
  */
 const ROLES = ['super_admin', 'principal', 'teacher', 'registrar', 'bursar', 'parent', 'student'];
 
 function expectedHrefs(role: string): string[] {
   const own = getMainNavForRole(role).map((i) => i.href);
-  const access = settingsAccessForRole(role);
-  const settings = access === 'all' ? SETTINGS_NAV.map((i) => i.href) : access === 'payout' ? ['/settings/payout', '/settings/billing'] : [];
+  const settings = settingsGroupsForRole(role).flatMap((g) => g.items).map((i) => i.href);
   return [...own, ...settings].sort();
 }
 
@@ -36,6 +35,8 @@ describe('the palette offers exactly the pages each role can open', () => {
     expect(expectedHrefs('bursar')).toContain('/settings/payout');
     expect(expectedHrefs('bursar')).toContain('/settings/billing');
     expect(expectedHrefs('bursar')).not.toContain('/settings/users');
+    expect(expectedHrefs('registrar')).toContain('/settings/roster');
+    expect(expectedHrefs('principal')).toEqual(expect.arrayContaining(SETTINGS_NAV.map((i) => i.href)));
   });
 });
 

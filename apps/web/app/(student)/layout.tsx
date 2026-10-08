@@ -9,6 +9,7 @@ import { useEffect, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { STUDENT_NAV, type NavItem } from '@/lib/navigation';
 import { getDefaultDashboardPath } from '@/lib/auth';
+import { roleHolds } from '@/lib/capabilities';
 import NotificationBell from '@/components/NotificationBell';
 import SyncIndicator from '@/components/SyncIndicator';
 
@@ -175,8 +176,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       return;
     }
     // AUDIT Round 10 L-03: see the parent layout — this only checked for a signed-in
-    // user, so any role landing on /student/* got a student shell with failing calls.
-    if (user.role !== 'student' && user.role !== 'super_admin') {
+    // user, so any role landing on /student/* got a student shell with failing calls. From the one table since
+    // 8 Oct 2026 (a platform admin sees a student's screens through a support session, as the student).
+    if (!roleHolds(user.role, 'student.portal')) {
       router.replace(getDefaultDashboardPath(user.role));
     }
   }, [loading, user, router]);

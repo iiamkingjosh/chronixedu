@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
+import { roleHolds } from '@/lib/capabilities';
 import PrincipalRemarkCard from './PrincipalRemarkCard';
 import { apiFetch, apiUpload } from '@/lib/api';
 
@@ -402,6 +403,8 @@ const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
 
 export default function StudentProfilePage() {
   const { schoolId, user } = useAuth();
+  // The bursar reads a profile (spec decision 3); changing one is students.manage.
+  const canManage = roleHolds(user?.role, 'students.manage');
   const params = useParams<{ id: string }>();
   const studentId = params.id;
   const { toast, show } = useToast();
@@ -583,6 +586,7 @@ export default function StudentProfilePage() {
             ) : (
               <div className="w-20 h-20 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-xs text-gray-400">No photo</div>
             )}
+            {canManage && (
             <label className="mt-1 block text-xs font-medium text-[#2472B4] hover:underline cursor-pointer">
               {uploadingPhoto ? 'Uploading…' : profile.photo_url ? 'Change photo' : 'Add photo'}
               <input
@@ -593,6 +597,7 @@ export default function StudentProfilePage() {
                 onChange={e => { handlePhotoChosen(e.target.files?.[0]); e.target.value = ''; }}
               />
             </label>
+            )}
           </div>
         <div>
           <h1 className="font-heading text-xl font-semibold text-gray-900">{profile.first_name} {profile.last_name}</h1>
@@ -602,11 +607,11 @@ export default function StudentProfilePage() {
               ? ` · ${currentEnrollment.class_name} (${currentEnrollment.class_level}${currentEnrollment.class_stream ? ` — ${currentEnrollment.class_stream}` : ''}) · ${currentEnrollment.session_name}`
               : ' · No class this session'}
           </p>
-          <p className="text-xs text-gray-400 mt-1">Photo: JPEG, PNG or WebP, up to 2 MB.</p>
+          {canManage && <p className="text-xs text-gray-400 mt-1">Photo: JPEG, PNG or WebP, up to 2 MB.</p>}
           {photoError && <p className="text-xs text-red-600 mt-1">{photoError}</p>}
         </div>
         </div>
-        {currentEnrollment ? (
+        {canManage && (currentEnrollment ? (
           <button
             onClick={() => setCorrectionOpen(true)}
             className="btn-primary shrink-0"
@@ -620,13 +625,15 @@ export default function StudentProfilePage() {
           >
             Assign Class
           </button>
-        )}
+        ))}
       </div>
 
       {/* Bio edit form */}
       <div className="card p-6 mb-6">
         <h2 className="font-heading text-sm font-semibold text-gray-900 mb-4">Student Details</h2>
-        <form onSubmit={handleSubmit(onSaveBio)} className="space-y-4">
+        {/* Read-only for a role that does not manage students (the bursar). */}
+        <form onSubmit={handleSubmit(onSaveBio)}>
+          <fieldset disabled={!canManage} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="First name" error={errors.first_name?.message}>
               <input {...register('first_name')} className={inputClass} />
@@ -666,11 +673,14 @@ export default function StudentProfilePage() {
               <input {...register('emergency_contact_phone')} className={inputClass} />
             </Field>
           </div>
+          {canManage && (
           <div className="flex justify-end">
             <button type="submit" disabled={savingBio} className="btn-primary">
               {savingBio ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
+          )}
+          </fieldset>
         </form>
       </div>
 
@@ -709,6 +719,7 @@ export default function StudentProfilePage() {
       <div className="card p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-heading text-sm font-semibold text-gray-900">Parents / Guardians</h2>
+          {canManage && (
           <button
             type="button"
             onClick={() => { setNewParentCredentials(null); setAddParentOpen(true); }}
@@ -719,6 +730,7 @@ export default function StudentProfilePage() {
             </svg>
             Add Parent / Guardian
           </button>
+          )}
         </div>
 
         {newParentCredentials && (
@@ -776,7 +788,7 @@ export default function StudentProfilePage() {
       {/* Principal's remark — role-gated for the same reason the students list gates its
           academic columns: this page is shared with the registrar, and the API refuses
           them, so a box that 403s on save is worse than no box. */}
-      {(user?.role === 'principal' || user?.role === 'super_admin') && profile && schoolId && (
+      {roleHolds(user?.role, 'results.manage') && profile && schoolId && (
         <PrincipalRemarkCard
           schoolId={schoolId}
           studentId={studentId}
@@ -785,6 +797,7 @@ export default function StudentProfilePage() {
       )}
 
       {/* Transcript */}
+      {canManage && (
       <div className="card p-6 mb-6">
         <h2 className="font-heading text-sm font-semibold text-gray-900 mb-4">Transcript</h2>
         <p className="text-sm text-gray-500 mb-4">Generate a PDF transcript covering all of this student&apos;s sessions and results.</p>
@@ -803,6 +816,7 @@ export default function StudentProfilePage() {
           )}
         </div>
       </div>
+      )}
 
       {correctionOpen && (
         <ClassCorrectionModal

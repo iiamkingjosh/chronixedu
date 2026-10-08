@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { roleHolds, type Capability } from '@/lib/capabilities';
 import { currentAndPreviousTerm, type SessionLike, type TermPair, type TermLike } from '@/lib/termOrder';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -51,10 +52,12 @@ interface TeacherOption {
 
 type Tab = 'classes' | 'subjects' | 'assignments';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'classes',     label: 'Classes' },
-  { id: 'subjects',    label: 'Subjects' },
-  { id: 'assignments', label: 'Teacher Assignments' },
+// Each tab is a job in the one table: the registrar manages classes and subjects (roster.classes_subjects),
+// and who teaches what is the principal's (roster.teaching; Moses, 8 Oct 2026).
+const TABS: { id: Tab; label: string; capability: Capability }[] = [
+  { id: 'classes',     label: 'Classes',             capability: 'roster.classes_subjects' },
+  { id: 'subjects',    label: 'Subjects',            capability: 'roster.classes_subjects' },
+  { id: 'assignments', label: 'Teacher Assignments', capability: 'roster.teaching' },
 ];
 
 function teacherName(t: TeacherOption): string {
@@ -158,10 +161,12 @@ const classFormSchema = z.object({
 
 type ClassForm = z.infer<typeof classFormSchema>;
 
-function ClassFormModal({ schoolId, cls, teachers, onClose, onSaved }: {
+function ClassFormModal({ schoolId, cls, teachers, canSetFormTeacher, onClose, onSaved }: {
   schoolId: string;
   cls: ClassRow | null;
   teachers: TeacherOption[];
+  /** The form teacher grants rights (attendance, class comments), so setting it is the principal's (8 Oct 2026). */
+  canSetFormTeacher: boolean;
   onClose: () => void;
   onSaved: (cls: ClassRow, isNew: boolean) => void;
 }) {
@@ -177,7 +182,8 @@ function ClassFormModal({ schoolId, cls, teachers, onClose, onSaved }: {
       name: values.name,
       level: values.level,
       ...(values.stream ? { stream: values.stream } : {}),
-      form_teacher_id: values.form_teacher_id || null,
+      // Left out for a registrar, which keeps the existing form teacher.
+      ...(canSetFormTeacher ? { form_teacher_id: values.form_teacher_id || null } : {}),
     };
     try {
       const res = cls
@@ -201,12 +207,16 @@ function ClassFormModal({ schoolId, cls, teachers, onClose, onSaved }: {
         <Field label="Stream (optional)" error={errors.stream?.message}>
           <input {...register('stream')} className={inputClass} placeholder="Science, Arts…" />
         </Field>
-        <Field label="Form Teacher (optional)" error={errors.form_teacher_id?.message}>
-          <select {...register('form_teacher_id')} className={inputClass} defaultValue={cls?.form_teacher_id ?? ''}>
-            <option value="">— None —</option>
-            {teachers.map(t => <option key={t.id} value={t.id}>{teacherName(t)}</option>)}
-          </select>
-        </Field>
+        {canSetFormTeacher ? (
+          <Field label="Form Teacher (optional)" error={errors.form_teacher_id?.message}>
+            <select {...register('form_teacher_id')} className={inputClass} defaultValue={cls?.form_teacher_id ?? ''}>
+              <option value="">— None —</option>
+              {teachers.map(t => <option key={t.id} value={t.id}>{teacherName(t)}</option>)}
+            </select>
+          </Field>
+        ) : (
+          <p className="text-xs text-gray-500">The principal sets a class&apos;s form teacher.</p>
+        )}
 
         {apiError && (
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
@@ -225,7 +235,7 @@ function ClassFormModal({ schoolId, cls, teachers, onClose, onSaved }: {
   );
 }
 
-function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
+function ClassesTab({ schoolId, show, canSetFormTeacher }: { schoolId: string; show: ToastFn; canSetFormTeacher: boolean }) {
   const [loading, setLoading] = useState(true);
   const [classes, setClasses] = useState<ClassRow[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
@@ -235,13 +245,17 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
 
   const load = useCallback(() => {
     setLoading(true);
+    // The staff list is the principal's (staff.manage); a registrar's Classes tab does without it, and without the
+    // form teacher it names.
     Promise.all([
       apiFetch<{ success: boolean; data: ClassRow[] }>(`/api/schools/${schoolId}/classes`),
-      apiFetch<{ success: boolean; data: { users: TeacherOption[]; total: number } }>(`/api/schools/${schoolId}/users?role=teacher&limit=100`),
+      canSetFormTeacher
+        ? apiFetch<{ success: boolean; data: { users: TeacherOption[]; total: number } }>(`/api/schools/${schoolId}/users?role=teacher&limit=100`)
+        : Promise.resolve(null),
     ])
       .then(([classesRes, teachersRes]) => {
         setClasses(classesRes.data);
-        setTeachers(teachersRes.data.users);
+        setTeachers(teachersRes?.data.users ?? []);
       })
       .catch(() => show('Failed to load classes', 'error'))
       .finally(() => setLoading(false));
@@ -299,7 +313,7 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
                 <th className="text-left px-5 py-2.5 font-medium">Name</th>
                 <th className="text-left px-5 py-2.5 font-medium">Level</th>
                 <th className="text-left px-5 py-2.5 font-medium">Stream</th>
-                <th className="text-left px-5 py-2.5 font-medium">Form Teacher</th>
+                {canSetFormTeacher && <th className="text-left px-5 py-2.5 font-medium">Form Teacher</th>}
                 <th className="text-right px-5 py-2.5 font-medium">Actions</th>
               </tr>
             </thead>
@@ -309,12 +323,14 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
                   <td className="px-5 py-3 text-gray-900 font-medium">{cls.name}</td>
                   <td className="px-5 py-3 text-gray-600">{cls.level}</td>
                   <td className="px-5 py-3 text-gray-600">{cls.stream ?? '—'}</td>
+                  {canSetFormTeacher && (
                   <td className="px-5 py-3 text-gray-600">
                     {(() => {
                       const t = teachers.find(t => t.id === cls.form_teacher_id);
                       return t ? teacherName(t) : '—';
                     })()}
                   </td>
+                  )}
                   <td className="px-5 py-3 text-right space-x-3">
                     <button onClick={() => setFormTarget({ cls })} className="text-sm font-medium text-slate-700 hover:text-slate-900">Edit</button>
                     <button onClick={() => setDeleteTarget(cls)} className="text-sm font-medium text-red-600 hover:text-red-800">Delete</button>
@@ -328,7 +344,7 @@ function ClassesTab({ schoolId, show }: { schoolId: string; show: ToastFn }) {
       )}
 
       {formTarget && (
-        <ClassFormModal schoolId={schoolId} cls={formTarget.cls} teachers={teachers} onClose={() => setFormTarget(null)} onSaved={handleSaved} />
+        <ClassFormModal schoolId={schoolId} cls={formTarget.cls} teachers={teachers} canSetFormTeacher={canSetFormTeacher} onClose={() => setFormTarget(null)} onSaved={handleSaved} />
       )}
 
       {deleteTarget && (
@@ -878,9 +894,11 @@ function AssignmentsTab({ schoolId, show }: { schoolId: string; show: ToastFn })
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function RosterPage() {
-  const { schoolId } = useAuth();
+  const { schoolId, user } = useAuth();
   const { toast, show } = useToast();
   const [tab, setTab] = useState<Tab>('classes');
+  const tabs = TABS.filter(t => roleHolds(user?.role, t.capability));
+  const teaching = roleHolds(user?.role, 'roster.teaching');
 
   if (!schoolId) {
     return <div className="max-w-5xl mx-auto p-8"><p className="text-sm text-gray-500">Loading roster…</p></div>;
@@ -899,19 +917,21 @@ export default function RosterPage() {
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-1">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Roster Management</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage classes, subjects, and teacher-to-class-and-subject assignments.</p>
+          <p className="text-sm text-gray-500 mt-1">{teaching ? 'Manage classes, subjects, and teacher-to-class-and-subject assignments.' : 'Manage classes and subjects. The principal sets who teaches what, and form teachers.'}</p>
         </div>
+        {teaching && (
         <Link
           href="/settings/roster/import"
           className="shrink-0 px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50"
         >
           Bulk Import
         </Link>
+        )}
       </div>
       <div className="mb-6" />
 
       <div className="flex items-center gap-1 border-b border-gray-200 mb-6">
-        {TABS.map(t => (
+        {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -924,9 +944,9 @@ export default function RosterPage() {
         ))}
       </div>
 
-      {tab === 'classes' && <ClassesTab schoolId={schoolId} show={show} />}
+      {tab === 'classes' && <ClassesTab schoolId={schoolId} show={show} canSetFormTeacher={teaching} />}
       {tab === 'subjects' && <SubjectsTab schoolId={schoolId} show={show} />}
-      {tab === 'assignments' && <AssignmentsTab schoolId={schoolId} show={show} />}
+      {tab === 'assignments' && teaching && <AssignmentsTab schoolId={schoolId} show={show} />}
     </div>
   );
 }

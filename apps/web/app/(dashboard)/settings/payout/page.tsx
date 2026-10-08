@@ -6,7 +6,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
-import { canAccessPayoutSettings, isAdminRole, getDefaultDashboardPath } from '@/lib/auth';
+import { getDefaultDashboardPath } from '@/lib/auth';
+import { roleHolds } from '@/lib/capabilities';
 import { apiFetch } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -47,8 +48,9 @@ function useToast() {
 export default function PayoutSettingsPage() {
   const { user, loading: authLoading, schoolId } = useAuth();
   const router = useRouter();
-  const allowed = !!user && canAccessPayoutSettings(user.role);
-  const canEdit = !!user && isAdminRole(user.role);
+  // The bursar views; only the principal saves ("Only view to avoid changes", Moses, 8 Oct 2026).
+  const allowed = roleHolds(user?.role, 'school.payout.view');
+  const canEdit = roleHolds(user?.role, 'school.payout.manage');
   const { toast, show } = useToast();
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<PayoutStatus | null>(null);
@@ -70,7 +72,7 @@ export default function PayoutSettingsPage() {
   // Client-side role guard (defence in depth — the API is the real boundary).
   // Redirect away rather than rendering a page that only fires 403s.
   useEffect(() => {
-    if (!authLoading && user && !canAccessPayoutSettings(user.role)) {
+    if (!authLoading && user && !roleHolds(user.role, 'school.payout.view')) {
       router.replace(getDefaultDashboardPath(user.role));
     }
   }, [authLoading, user, router]);
