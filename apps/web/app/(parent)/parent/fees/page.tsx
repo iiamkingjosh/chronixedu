@@ -12,7 +12,11 @@ interface PaymentRow {
   amount: number;
   payment_date: string;
   method: string;
+  /** What the school has refunded against this payment, in kobo (migration 063). */
+  refunded_kobo?: string;
 }
+
+const PARENT_METHOD_LABELS: Record<string, string> = { cash: 'cash', bank_transfer: 'bank transfer', paystack: 'online', waiver: 'waiver' };
 
 interface InvoiceData {
   id: string;
@@ -413,8 +417,12 @@ export default function ParentFeesPage() {
                     <div>
                       <p className="text-gray-900 font-medium">{formatCurrency(p.amount)}</p>
                       <p className="text-xs text-gray-500">
-                        {new Date(p.payment_date).toLocaleDateString()} · {p.method.replace('_', ' ')}
+                        {new Date(p.payment_date).toLocaleDateString()} · {PARENT_METHOD_LABELS[p.method] ?? p.method.replace('_', ' ')}
                       </p>
+                      {/* A refund was recorded by the school and never shown to the parent (audit, 8 Oct 2026). */}
+                      {Number(p.refunded_kobo ?? 0) > 0 && (
+                        <p className="text-xs text-amber-700">{formatCurrency((Number(p.refunded_kobo) / 100).toFixed(2))} refunded by the school</p>
+                      )}
                     </div>
                     <button
                       type="button"

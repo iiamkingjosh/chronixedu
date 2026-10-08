@@ -12,6 +12,7 @@ import {
   getPaymentById,
   deriveStatus,
   OverpaymentError,
+  DuplicateFeeLineError,
 } from '../db/queries/fees';
 
 jest.mock('../db/client', () => ({
@@ -29,49 +30,47 @@ function makeMockClient() {
 }
 
 describe('insertFeeStructure', () => {
-  it('inserts a fee structure row and returns it', async () => {
-    const row = {
-      id: 'fs-1',
-      school_id: 'school-1',
-      class_id: 'class-1',
-      term_id: 'term-1',
-      component_name: 'Tuition',
-      amount: '50000.00',
-      is_mandatory: true,
-      created_at: '2026-01-01T00:00:00.000Z',
-    };
-    mockQuery.mockResolvedValueOnce({ rows: [row] });
+  const row = {
+    id: 'fs-1', school_id: 'school-1', class_id: 'class-1', term_id: 'term-1',
+    component_name: 'Tuition', amount: '50000.00', is_mandatory: true, created_at: '2026-01-01T00:00:00.000Z',
+  };
+
+  it('inserts the line, its amount as exact naira text from kobo, inside a transaction that checks for a duplicate', async () => {
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+    client.query
+      .mockResolvedValueOnce({ rows: [] })          // BEGIN
+      .mockResolvedValueOnce({ rows: [{}] })        // lock the term
+      .mockResolvedValueOnce({ rows: [] })          // no duplicate
+      .mockResolvedValueOnce({ rows: [row] })       // INSERT
+      .mockResolvedValueOnce({ rows: [] });         // COMMIT
 
     const result = await insertFeeStructure('school-1', {
-      class_id: 'class-1',
-      term_id: 'term-1',
-      component_name: 'Tuition',
-      amount: 50000,
-      is_mandatory: true,
+      class_id: 'class-1', term_id: 'term-1', component_name: 'Tuition', amount_kobo: 5000050, is_mandatory: true,
     });
 
     expect(result).toEqual(row);
-    expect(mockQuery).toHaveBeenCalledWith(
+    expect(client.query).toHaveBeenNthCalledWith(4,
       expect.stringContaining('INSERT INTO fee_structures'),
-      ['school-1', 'class-1', 'term-1', 'Tuition', 50000, true]
-    );
+      ['school-1', 'class-1', 'term-1', 'Tuition', '50000.50', true]);
+    expect(client.query).toHaveBeenLastCalledWith('COMMIT');
+    expect(client.release).toHaveBeenCalled();
   });
 
-  it('inserts with class_id null for school-wide fees', async () => {
-    mockQuery.mockResolvedValueOnce({ rows: [{ id: 'fs-2' }] });
+  it('refuses a duplicate line and rolls back', async () => {
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+    client.query
+      .mockResolvedValueOnce({ rows: [] })          // BEGIN
+      .mockResolvedValueOnce({ rows: [{}] })        // lock the term
+      .mockResolvedValueOnce({ rows: [{ '?column?': 1 }] }) // duplicate found
+      .mockResolvedValueOnce({ rows: [] });         // ROLLBACK
 
-    await insertFeeStructure('school-1', {
-      class_id: null,
-      term_id: 'term-1',
-      component_name: 'Sports Levy',
-      amount: 1500,
-      is_mandatory: false,
-    });
-
-    expect(mockQuery).toHaveBeenCalledWith(
-      expect.any(String),
-      ['school-1', null, 'term-1', 'Sports Levy', 1500, false]
-    );
+    await expect(insertFeeStructure('school-1', {
+      class_id: null, term_id: 'term-1', component_name: 'Sports Levy', amount_kobo: 150000, is_mandatory: false,
+    })).rejects.toBeInstanceOf(DuplicateFeeLineError);
+    expect(client.query).toHaveBeenLastCalledWith('ROLLBACK');
+    expect(client.release).toHaveBeenCalled();
   });
 });
 
@@ -107,7 +106,7 @@ describe('generateInvoices', () => {
     client.query
       .mockResolvedValueOnce({ rows: [] }) // BEGIN
       .mockResolvedValueOnce({ rows: [{ session_id: 'session-1' }] }) // term lookup
-      .mockResolvedValueOnce({ rows: [{ total: '15000.00' }] }) // sum fee_structures
+      .mockResolvedValueOnce({ rows: [{ total: '15000.00', lines: 2 }] }) // sum fee_structures
       .mockResolvedValueOnce({ rows: [{ id: 'student-1' }, { id: 'student-2' }] }) // enrolled students
       .mockResolvedValueOnce({
         rows: [{ id: 'inv-1', school_id: 'school-1', student_id: 'student-1', term_id: 'term-1', total_amount: '15000.00', amount_paid: '0.00', balance: '15000.00', status: 'unpaid', created_at: '', updated_at: null }],
@@ -118,10 +117,12 @@ describe('generateInvoices', () => {
       .mockResolvedValueOnce({ rows: [] }); // COMMIT
 
     const result = await generateInvoices('school-1', 'term-1', 'class-1');
+    if (!result || result === 'NO_FEE_LINES') throw new Error('expected invoices');
 
-    expect(result).toHaveLength(2);
-    expect(result![0].status).toBe('unpaid');
-    expect(result![1].status).toBe('partial');
+    expect(result.invoices).toHaveLength(2);
+    expect(result.invoices[0].status).toBe('unpaid');
+    expect(result.invoices[1].status).toBe('partial');
+    expect(result.totalKobo).toBe(1500000);
 
     expect(client.query).toHaveBeenNthCalledWith(1, 'BEGIN');
     expect(client.query).toHaveBeenNthCalledWith(
@@ -132,10 +133,25 @@ describe('generateInvoices', () => {
     expect(client.query).toHaveBeenNthCalledWith(
       5,
       expect.stringContaining('ON CONFLICT (student_id, term_id) DO UPDATE'),
-      ['school-1', 'student-1', 'term-1', 15000]
+      // The database's own numeric text, never a float.
+      ['school-1', 'student-1', 'term-1', '15000.00']
     );
     expect(client.query).toHaveBeenLastCalledWith('COMMIT');
     expect(client.release).toHaveBeenCalled();
+  });
+
+  it('refuses, and writes nothing, when the class has no mandatory fee lines', async () => {
+    const client = makeMockClient();
+    mockConnect.mockResolvedValueOnce(client);
+    client.query
+      .mockResolvedValueOnce({ rows: [] }) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ session_id: 'session-1' }] }) // term lookup
+      .mockResolvedValueOnce({ rows: [{ total: '0', lines: 0 }] }) // no mandatory lines
+      .mockResolvedValueOnce({ rows: [] }); // ROLLBACK
+
+    expect(await generateInvoices('school-1', 'term-1', 'class-1')).toBe('NO_FEE_LINES');
+    expect(client.query).toHaveBeenLastCalledWith('ROLLBACK');
+    expect(client.query).not.toHaveBeenCalledWith(expect.stringContaining('INSERT INTO fee_invoices'), expect.anything());
   });
 
   it('returns null when the term does not belong to the school', async () => {

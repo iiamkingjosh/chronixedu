@@ -48,6 +48,28 @@ export default function FeeStructuresPage() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  // A fee line could be added and never corrected (audit, 8 Oct 2026).
+  const [editing, setEditing] = useState<FeeStructureRow | null>(null);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+
+  function afterChange(message: string, invoicesToRegenerate: number) {
+    setRefreshKey((k) => k + 1);
+    show(invoicesToRegenerate > 0
+      ? `${message} ${invoicesToRegenerate} invoice${invoicesToRegenerate === 1 ? ' was' : 's were'} raised before this change: generate invoices again to update ${invoicesToRegenerate === 1 ? 'it' : 'them'}.`
+      : message);
+  }
+
+  async function deleteLine(row: FeeStructureRow) {
+    if (!schoolId) return;
+    if (!window.confirm(`Delete the fee line "${row.component_name}"?`)) return;
+    try {
+      const res = await apiFetch<{ success: boolean; data: { invoices_to_regenerate: number } }>(
+        `/api/schools/${schoolId}/fee-structures/${row.id}`, { method: 'DELETE' });
+      afterChange('Fee line deleted.', res.data.invoices_to_regenerate);
+    } catch (err) {
+      show(err instanceof Error ? err.message : 'Failed to delete the fee line', 'error');
+    }
+  }
 
   useEffect(() => {
     if (!termId && currentTermId) setTermId(currentTermId);
@@ -85,6 +107,14 @@ export default function FeeStructuresPage() {
           <Link href="/bursar/fee-structures/import" className="btn-secondary">
             Bulk Import Payments
           </Link>
+          <button
+            type="button"
+            onClick={() => setShowCopyModal(true)}
+            disabled={!termId || terms.length < 2}
+            className="btn-secondary"
+          >
+            Copy From Another Term
+          </button>
           <button
             type="button"
             onClick={() => setShowGenerateModal(true)}
@@ -151,14 +181,15 @@ export default function FeeStructuresPage() {
               <th className="px-4 py-3 text-left font-medium text-gray-500">Applies To</th>
               <th className="px-4 py-3 text-right font-medium text-gray-500">Amount</th>
               <th className="px-4 py-3 text-center font-medium text-gray-500">Mandatory</th>
+              <th className="px-4 py-3 text-right font-medium text-gray-500">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">Loading…</td></tr>
             )}
             {!loading && structures.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">No fee components configured for this term.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">No fee components configured for this term.</td></tr>
             )}
             {!loading && structures.map((s) => {
               const cls = classes.find((c) => c.id === s.class_id);
@@ -173,6 +204,10 @@ export default function FeeStructuresPage() {
                     ) : (
                       <span className="badge-default">Optional</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <button type="button" onClick={() => setEditing(s)} className="text-sm font-medium text-slate-700 hover:text-slate-900 mr-3">Edit</button>
+                    <button type="button" onClick={() => deleteLine(s)} className="text-sm font-medium text-red-600 hover:text-red-800">Delete</button>
                   </td>
                 </tr>
               );
@@ -195,6 +230,30 @@ export default function FeeStructuresPage() {
             show('Fee component added.');
           }}
           onError={(msg) => show(msg, 'error')}
+        />
+      )}
+
+      {editing && (
+        <EditFeeStructureModal
+          schoolId={schoolId!}
+          row={editing}
+          onClose={() => setEditing(null)}
+          onSaved={(n) => { setEditing(null); afterChange('Fee line saved.', n); }}
+        />
+      )}
+
+      {showCopyModal && termId && (
+        <CopyFeeLinesModal
+          schoolId={schoolId!}
+          toTermId={termId}
+          terms={terms.filter((t) => t.id !== termId).map((t) => ({ id: t.id, label: `${t.sessionName} — ${t.name}` }))}
+          toLabel={selectedTerm ? `${selectedTerm.sessionName} — ${selectedTerm.name}` : ''}
+          onClose={() => setShowCopyModal(false)}
+          onCopied={(copied, skipped) => {
+            setShowCopyModal(false);
+            setRefreshKey((k) => k + 1);
+            show(`${copied} fee line${copied === 1 ? '' : 's'} copied${skipped > 0 ? `, ${skipped} already here` : ''}.`);
+          }}
         />
       )}
 
@@ -251,7 +310,8 @@ function AddFeeStructureModal({
           term_id: termId,
           class_id: classId || null,
           component_name: componentName.trim(),
-          amount: Number(amount),
+          // Text, so the exact naira typed reaches the server: no float on either side (doctrine 11).
+          amount: amount.trim(),
           is_mandatory: isMandatory,
         }),
       });
@@ -283,11 +343,11 @@ function AddFeeStructureModal({
         <div>
           <label className="block text-xs font-medium text-gray-500 mb-1">Amount (₦)</label>
           <input
-            type="number"
-            min="0"
-            step="0.01"
+            type="text"
+            inputMode="decimal"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            placeholder="e.g. 15000 or 15000.50"
             required
             className="input-field"
           />
@@ -319,6 +379,113 @@ function AddFeeStructureModal({
           <button type="submit" disabled={submitting} className="btn-primary">
             {submitting ? 'Saving…' : 'Add Component'}
           </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function EditFeeStructureModal({ schoolId, row, onClose, onSaved }: {
+  schoolId: string;
+  row: FeeStructureRow;
+  onClose: () => void;
+  onSaved: (invoicesToRegenerate: number) => void;
+}) {
+  const [componentName, setComponentName] = useState(row.component_name);
+  const [amount, setAmount] = useState(String(row.amount));
+  const [isMandatory, setIsMandatory] = useState(row.is_mandatory);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const res = await apiFetch<{ success: boolean; data: { invoices_to_regenerate: number } }>(
+        `/api/schools/${schoolId}/fee-structures/${row.id}`,
+        { method: 'PATCH', body: JSON.stringify({ component_name: componentName.trim(), amount: amount.trim(), is_mandatory: isMandatory }) }
+      );
+      onSaved(res.data.invoices_to_regenerate);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save the fee line');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title="Edit Fee Line" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Component Name</label>
+          <input type="text" value={componentName} onChange={(e) => setComponentName(e.target.value)} required className="input-field" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Amount (₦)</label>
+          <input type="text" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} required className="input-field" />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={isMandatory} onChange={(e) => setIsMandatory(e.target.checked)} className="rounded border-gray-300" />
+          Mandatory (included in invoice totals)
+        </label>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+          <button type="submit" disabled={submitting} className="btn-primary">{submitting ? 'Saving…' : 'Save'}</button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function CopyFeeLinesModal({ schoolId, toTermId, toLabel, terms, onClose, onCopied }: {
+  schoolId: string;
+  toTermId: string;
+  toLabel: string;
+  terms: Array<{ id: string; label: string }>;
+  onClose: () => void;
+  onCopied: (copied: number, skipped: number) => void;
+}) {
+  const [fromTermId, setFromTermId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!fromTermId) { setError('Choose the term to copy from.'); return; }
+    setError('');
+    setSubmitting(true);
+    try {
+      const res = await apiFetch<{ success: boolean; data: { copied: number; skipped: number } }>(
+        `/api/schools/${schoolId}/fee-structures/copy-from-term`,
+        { method: 'POST', body: JSON.stringify({ from_term_id: fromTermId, to_term_id: toTermId }) }
+      );
+      onCopied(res.data.copied, res.data.skipped);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Copy failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Modal title="Copy Fee Lines" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <p className="text-sm text-gray-600">
+          Copy every fee line of another term into <span className="font-medium">{toLabel}</span>. Lines {toLabel} already has are kept as they are.
+        </p>
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">Copy from</label>
+          <select value={fromTermId} onChange={(e) => setFromTermId(e.target.value)} className="input-field">
+            <option value="">Choose a term…</option>
+            {terms.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2 pt-2">
+          <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+          <button type="submit" disabled={submitting} className="btn-primary">{submitting ? 'Copying…' : 'Copy Lines'}</button>
         </div>
       </form>
     </Modal>

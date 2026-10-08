@@ -8,6 +8,7 @@ import { clientIp } from '../middleware/clientIp';
 import { requireFeature } from '../middleware/requireFeature';
 import { logger } from '../config/logger';
 import { logAudit } from '../db/queries/auditLog';
+import pool from '../db/client';
 import { isParentLinkedToStudent } from '../db/queries/parents';
 import { findStudentByUserId, findStudentsByAdmissionNumbers } from '../db/queries/students';
 import { getActiveTerm } from '../db/queries/roster';
@@ -18,6 +19,12 @@ import { getSchoolPayoutConfig, resolveMinPartPayment, resolveConvenienceFeePaye
 import { sendFeeRemindersForSchool } from '../services/feeReminderService';
 import {
   insertFeeStructure,
+  updateFeeStructure,
+  deleteFeeStructure,
+  copyFeeStructures,
+  countInvoicesForLine,
+  checkFeeLineTargets,
+  DuplicateFeeLineError,
   listFeeStructures,
   generateInvoices,
   getInvoiceByStudent,
@@ -88,13 +95,33 @@ async function requireFeeInvoiceAccess(req: Request, res: Response, next: NextFu
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
+// A fee line's amount: naira as text, at most 2 decimal places, more than ₦0, to whole kobo. It was a
+// JSON number (a float) and ₦0 was allowed (audit, 8 Oct 2026; doctrine 11).
+const feeLineAmount = z
+  .string()
+  .trim()
+  .regex(/^\d+(\.\d{1,2})?$/, 'Amount must be in naira with at most 2 decimal places, e.g. "15000" or "15000.50"')
+  .transform(v => toKobo(v))
+  .refine(k => k > 0, 'A fee line must be more than ₦0');
+
 const feeStructureSchema = z.object({
   term_id: z.string().uuid(),
   class_id: z.string().uuid().nullable().optional(),
-  component_name: z.string().min(1).max(255),
-  amount: z.number().min(0),
+  component_name: z.string().trim().min(1).max(255),
+  amount: feeLineAmount,
   is_mandatory: z.boolean().optional().default(true),
 });
+
+const feeStructurePatchSchema = z.object({
+  component_name: z.string().trim().min(1).max(255).optional(),
+  amount: feeLineAmount.optional(),
+  is_mandatory: z.boolean().optional(),
+}).refine(o => Object.keys(o).length > 0, { message: 'Change at least one of: name, amount, mandatory' });
+
+const copyFeeLinesSchema = z.object({
+  from_term_id: z.string().uuid(),
+  to_term_id: z.string().uuid(),
+}).refine(o => o.from_term_id !== o.to_term_id, { message: 'Choose two different terms' });
 
 const listFeeStructuresQuerySchema = z.object({
   term_id: z.string().uuid(),
@@ -164,6 +191,12 @@ const paymentSchema = z
   .refine((data) => data.method === 'paystack' || !data.paystack_reference, {
     message: 'paystack_reference is only valid when method is paystack',
     path: ['paystack_reference'],
+  })
+  // A waiver moves no money, so its reason is the only record of why a balance went away (audit,
+  // 8 Oct 2026). It goes in `reference`, which a waiver has no other use for.
+  .refine((data) => data.method !== 'waiver' || (data.reference ?? '').trim().length >= 3, {
+    message: 'Give the reason for the waiver',
+    path: ['reference'],
   });
 
 // ── POST /:schoolId/fee-structures ──────────────────────────────────────────────
@@ -182,13 +215,26 @@ router.post(
 
       const { term_id, class_id, component_name, amount, is_mandatory } = parsed.data;
 
-      const structure = await insertFeeStructure(req.params.schoolId, {
-        term_id,
-        class_id: class_id ?? null,
-        component_name,
-        amount,
-        is_mandatory,
-      });
+      const missing = await checkFeeLineTargets(req.params.schoolId, term_id, class_id ?? null);
+      if (missing) {
+        return res.status(404).json({ success: false, error: { code: missing, message: missing === 'TERM_NOT_FOUND' ? 'Term not found in this school' : 'Class not found in this school' } });
+      }
+
+      let structure: Awaited<ReturnType<typeof insertFeeStructure>>;
+      try {
+        structure = await insertFeeStructure(req.params.schoolId, {
+          term_id,
+          class_id: class_id ?? null,
+          component_name,
+          amount_kobo: amount,
+          is_mandatory,
+        });
+      } catch (err) {
+        if (err instanceof DuplicateFeeLineError) {
+          return res.status(409).json({ success: false, error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
 
       await logAudit({
         ipAddress: clientIp(req) ?? null,
@@ -202,6 +248,127 @@ router.post(
       });
 
       return res.status(201).json({ success: true, data: structure });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── PATCH / DELETE /:schoolId/fee-structures/:id, POST .../copy-from-term ──────────
+// A fee line could be added and never corrected (audit, 8 Oct 2026). Each change is audited with what
+// it replaced, and says how many invoices already raised need regenerating to pick it up.
+
+router.patch(
+  '/:schoolId/fee-structures/:id',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('bursar', 'super_admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!z.string().uuid().safeParse(req.params.id).success) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Fee line not found' } });
+      }
+      const parsed = feeStructurePatchSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      let result: Awaited<ReturnType<typeof updateFeeStructure>>;
+      try {
+        result = await updateFeeStructure(req.params.id, req.params.schoolId, {
+          component_name: parsed.data.component_name,
+          amount_kobo: parsed.data.amount,
+          is_mandatory: parsed.data.is_mandatory,
+        });
+      } catch (err) {
+        if (err instanceof DuplicateFeeLineError) {
+          return res.status(409).json({ success: false, error: { code: err.code, message: err.message } });
+        }
+        throw err;
+      }
+      if (!result) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Fee line not found' } });
+      }
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'FEE_STRUCTURE_UPDATED',
+        entity: 'fee_structures',
+        entityId: req.params.id,
+        oldValue: result.prior,
+        newValue: result.updated,
+      });
+      const invoices = await countInvoicesForLine(req.params.schoolId, result.updated.term_id, result.updated.class_id);
+      return res.json({ success: true, data: { ...result.updated, invoices_to_regenerate: invoices } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.delete(
+  '/:schoolId/fee-structures/:id',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('bursar', 'super_admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!z.string().uuid().safeParse(req.params.id).success) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Fee line not found' } });
+      }
+      const removed = await deleteFeeStructure(req.params.id, req.params.schoolId);
+      if (!removed) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Fee line not found' } });
+      }
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'FEE_STRUCTURE_DELETED',
+        entity: 'fee_structures',
+        entityId: req.params.id,
+        oldValue: removed,
+        newValue: null,
+      });
+      const invoices = await countInvoicesForLine(req.params.schoolId, removed.term_id, removed.class_id);
+      return res.json({ success: true, data: { deleted: req.params.id, invoices_to_regenerate: invoices } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.post(
+  '/:schoolId/fee-structures/copy-from-term',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('bursar', 'super_admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = copyFeeLinesSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const { from_term_id, to_term_id } = parsed.data;
+      for (const termId of [from_term_id, to_term_id]) {
+        if (await checkFeeLineTargets(req.params.schoolId, termId, null)) {
+          return res.status(404).json({ success: false, error: { code: 'TERM_NOT_FOUND', message: 'Term not found in this school' } });
+        }
+      }
+      const result = await copyFeeStructures(req.params.schoolId, from_term_id, to_term_id);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'FEE_STRUCTURES_COPIED',
+        entity: 'fee_structures',
+        entityId: to_term_id,
+        newValue: { from_term_id, to_term_id, ...result },
+      });
+      return res.status(201).json({ success: true, data: result });
     } catch (err) {
       return next(err);
     }
@@ -276,12 +443,30 @@ router.post(
 
       const { term_id, class_id } = parsed.data;
 
-      const invoices = await generateInvoices(req.params.schoolId, term_id, class_id);
-      if (!invoices) {
+      const generated = await generateInvoices(req.params.schoolId, term_id, class_id);
+      if (!generated) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Term not found for this school' } });
       }
+      if (generated === 'NO_FEE_LINES') {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'NO_FEE_LINES', message: 'This class has no mandatory fee lines for this term, so there is nothing to invoice. Add them under Fee Structures first.' },
+        });
+      }
 
-      return res.json({ success: true, data: invoices });
+      // Raising a term's invoices was recorded nowhere (audit, 8 Oct 2026).
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'FEE_INVOICES_GENERATED',
+        entity: 'fee_invoices',
+        entityId: class_id,
+        newValue: { term_id, class_id, invoices: generated.invoices.length, total_kobo: generated.totalKobo },
+      });
+
+      return res.json({ success: true, data: generated.invoices });
     } catch (err) {
       return next(err);
     }
@@ -795,12 +980,54 @@ router.post(
   requireRole('bursar', 'super_admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const term = await getActiveTerm(req.params.schoolId);
+      const schoolId = req.params.schoolId;
+      const term = await getActiveTerm(schoolId);
       if (!term) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'No active term for this school' } });
       }
 
-      const remindersSent = await sendFeeRemindersForSchool(req.params.schoolId, term.id);
+      // Once an hour per school, and recorded (audit, 8 Oct 2026): a second click, or a second bursar,
+      // messaged every parent again, and nothing said who had sent them. The check and the record are
+      // made together under a per-school lock, in the database, so they hold with Redis down.
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(`SELECT pg_advisory_xact_lock(hashtext('fee-reminders:' || $1))`, [schoolId]);
+        const recent = await client.query<{ next_at: Date }>(
+          `SELECT created_at + interval '1 hour' AS next_at FROM audit_logs
+           WHERE school_id = $1 AND action_type = 'FEE_REMINDERS_RUN' AND created_at > NOW() - interval '1 hour'
+           ORDER BY created_at DESC LIMIT 1`, [schoolId]);
+        if (recent.rows[0]) {
+          await client.query('ROLLBACK');
+          const retryAfter = Math.max(1, Math.ceil((recent.rows[0].next_at.getTime() - Date.now()) / 1000));
+          return res.status(429).json({
+            success: false,
+            error: {
+              code: 'REMINDERS_RECENTLY_SENT',
+              message: `Fee reminders were sent less than an hour ago. They can be sent again in ${Math.ceil(retryAfter / 60)} minute${retryAfter > 60 ? 's' : ''}.`,
+              retry_after_seconds: retryAfter,
+            },
+          });
+        }
+        await logAudit({
+          ipAddress: clientIp(req) ?? null,
+          supportSession: req.supportSession,
+          schoolId,
+          userId: req.user!.user_id,
+          actionType: 'FEE_REMINDERS_RUN',
+          entity: 'fee_invoices',
+          entityId: term.id,
+          newValue: { term_id: term.id },
+        }, client);
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+
+      const remindersSent = await sendFeeRemindersForSchool(schoolId, term.id);
       return res.json({ success: true, data: { reminders_sent: remindersSent } });
     } catch (err) {
       return next(err);
@@ -977,7 +1204,7 @@ router.post(
         const student = students.get(row.payment.admission_no);
         const studentName = student ? `${student.first_name} ${student.last_name}` : row.payment.admission_no;
 
-        if (row.status === 'error' || !row.resolved_invoice_id || row.resolved_amount === null) {
+        if (row.status === 'error' || !row.resolved_invoice_id || row.resolved_amount_kobo === null) {
           const reason = row.errors.join(' ') || 'Could not be recorded.';
           results.push({ row_number: row.row_number, status: 'failed', reason });
           failedPayments.push({ row_number: row.row_number, admission_no: row.payment.admission_no, amount: row.payment.amount, method: row.payment.method, reason });
@@ -987,8 +1214,8 @@ router.post(
         let paymentResult: Awaited<ReturnType<typeof recordPayment>>;
         try {
           paymentResult = await recordPayment(req.params.schoolId, row.resolved_invoice_id, {
-            // resolved_amount is validated to 2 dp by the bulk-import preview.
-            amountKobo: toKobo(row.resolved_amount!),
+            // Parsed from the cell's text to whole kobo by the revalidation above; never a float.
+            amountKobo: row.resolved_amount_kobo,
             method: row.payment.method as 'cash' | 'bank_transfer' | 'waiver',
             reference: row.payment.reference,
             paystack_reference: null,
@@ -1025,7 +1252,7 @@ router.post(
           row_number: row.row_number,
           admission_no: row.payment.admission_no,
           student_name: studentName,
-          amount: row.resolved_amount,
+          amount: Number(fromKobo(row.resolved_amount_kobo)),
           method: row.payment.method,
         });
 

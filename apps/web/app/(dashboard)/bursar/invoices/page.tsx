@@ -247,9 +247,10 @@ export default function InvoicesPage() {
 const METHOD_LABELS: Record<string, string> = { cash: 'Cash', bank_transfer: 'Bank transfer', paystack: 'Online', waiver: 'Waiver' };
 
 /**
- * An invoice's payments, each with what has been refunded against it. A cash or bank-transfer payment
- * can be refunded here (bursar only). A Paystack payment is refunded in Paystack by Chronix, and the
- * refund appears here by itself when Paystack completes it. A refund never edits the payment.
+ * An invoice's payments, each with what has been refunded against it. The bursar records a refund here
+ * for a cash, bank-transfer or online payment: the school refunds from its own money, never through
+ * Paystack's dashboard (CLAUDE.md, Fee refunds). A waiver moved no money and is not refunded. A refund
+ * never edits the payment.
  */
 function PaymentsModal({
   schoolId, termId, invoice, onClose, onReceipt, onRefunded, onError,
@@ -457,9 +458,12 @@ function RecordPaymentModal({
   onError: (msg: string) => void;
 }) {
   const [amount, setAmount] = useState(String(invoice.balance));
-  const [method, setMethod] = useState<'cash' | 'bank_transfer' | 'waiver'>('cash');
+  const [method, setMethod] = useState<'cash' | 'bank_transfer' | 'waiver' | 'paystack'>('cash');
   const [reference, setReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // An online payment Paystack took but the school's record missed is recorded by its reference: the
+  // API checks it with Paystack and credits exactly what was paid (audit, 8 Oct 2026: no screen did).
+  const isPaystack = method === 'paystack';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -472,6 +476,14 @@ function RecordPaymentModal({
       onError('Enter an amount in naira with at most 2 decimal places, e.g. 1500.50');
       return;
     }
+    if (isPaystack && !reference.trim()) {
+      onError('Enter the Paystack reference of the payment.');
+      return;
+    }
+    if (method === 'waiver' && reference.trim().length < 3) {
+      onError('Give the reason for the waiver.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -481,7 +493,8 @@ function RecordPaymentModal({
           invoice_id: invoice.id,
           amount: typed,
           method,
-          reference: reference.trim() || null,
+          reference: isPaystack ? null : reference.trim() || null,
+          ...(isPaystack ? { paystack_reference: reference.trim() } : {}),
         }),
       });
       onSuccess(res.data.payment);
@@ -519,24 +532,30 @@ function RecordPaymentModal({
           <label className="block text-xs font-medium text-gray-500 mb-1">Payment Method</label>
           <select
             value={method}
-            onChange={(e) => setMethod(e.target.value as 'cash' | 'bank_transfer' | 'waiver')}
+            onChange={(e) => setMethod(e.target.value as 'cash' | 'bank_transfer' | 'waiver' | 'paystack')}
             className="input-field"
           >
             <option value="cash">Cash</option>
             <option value="bank_transfer">Bank Transfer</option>
+            <option value="paystack">Online payment (Paystack), by its reference</option>
             <option value="waiver">Waiver</option>
           </select>
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Reference (optional)</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1">
+            {isPaystack ? 'Paystack reference' : method === 'waiver' ? 'Reason for the waiver' : 'Reference (optional)'}
+          </label>
           <input
             type="text"
             value={reference}
             onChange={(e) => setReference(e.target.value)}
-            placeholder="e.g. teller number, transaction ID"
+            placeholder={isPaystack ? 'From the payment email or the Paystack dashboard' : method === 'waiver' ? 'e.g. scholarship, staff child' : 'e.g. teller number, transaction ID'}
             className="input-field"
           />
+          {isPaystack && (
+            <p className="text-xs text-gray-500 mt-1">The payment is checked with Paystack, and the invoice is credited what the parent actually paid.</p>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 pt-2">

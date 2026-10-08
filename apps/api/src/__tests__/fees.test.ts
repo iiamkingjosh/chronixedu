@@ -20,7 +20,13 @@ jest.mock('../db/client', () => ({
   __esModule: true,
   // two_factor_required: false, a platform admin who existed before migration 058; verifyToken
   // treats an admin row that does not say so as required, and refuses the super_admin tokens here.
-  default: { query: jest.fn().mockResolvedValue({ rows: [{ is_active: true, two_factor_required: false }] }), end: jest.fn() },
+  default: {
+    query: jest.fn().mockResolvedValue({ rows: [{ is_active: true, two_factor_required: false }] }),
+    end: jest.fn(),
+    // The fee-reminder route checks its once-an-hour limit in a transaction; here, no recent run.
+    // The limit itself is tested against the database (feeRemindersWaiver.db.test.ts).
+    connect: jest.fn(async () => ({ query: jest.fn().mockResolvedValue({ rows: [] }), release: jest.fn() })),
+  },
 }));
 jest.mock('../db/queries/fees');
 jest.mock('../db/queries/auditLog');
@@ -112,12 +118,12 @@ describe('POST /api/schools/:schoolId/fee-structures', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/fee-structures`)
       .set('Authorization', `Bearer ${makeToken('bursar', SCHOOL_ID)}`)
-      .send({ term_id: TERM_ID, class_id: CLASS_ID, component_name: 'Tuition', amount: 50000, is_mandatory: true });
+      .send({ term_id: TERM_ID, class_id: CLASS_ID, component_name: 'Tuition', amount: '50000', is_mandatory: true });
 
     expect(res.status).toBe(201);
     expect(res.body.data).toEqual(FEE_STRUCTURE_ROW);
     expect(mockFees.insertFeeStructure).toHaveBeenCalledWith(SCHOOL_ID, {
-      term_id: TERM_ID, class_id: CLASS_ID, component_name: 'Tuition', amount: 50000, is_mandatory: true,
+      term_id: TERM_ID, class_id: CLASS_ID, component_name: 'Tuition', amount_kobo: 5000000, is_mandatory: true,
     });
     expect(mockAudit.logAudit).toHaveBeenCalledWith(expect.objectContaining({
       schoolId: SCHOOL_ID, actionType: 'FEE_STRUCTURE_CREATED', entity: 'fee_structures', entityId: 'fs-1',
@@ -130,11 +136,11 @@ describe('POST /api/schools/:schoolId/fee-structures', () => {
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/fee-structures`)
       .set('Authorization', `Bearer ${makeToken('super_admin', SCHOOL_ID)}`)
-      .send({ term_id: TERM_ID, class_id: null, component_name: 'Sports Levy', amount: 1500 });
+      .send({ term_id: TERM_ID, class_id: null, component_name: 'Sports Levy', amount: '1500' });
 
     expect(res.status).toBe(201);
     expect(mockFees.insertFeeStructure).toHaveBeenCalledWith(SCHOOL_ID, {
-      term_id: TERM_ID, class_id: null, component_name: 'Sports Levy', amount: 1500, is_mandatory: true,
+      term_id: TERM_ID, class_id: null, component_name: 'Sports Levy', amount_kobo: 150000, is_mandatory: true,
     });
   });
 
@@ -251,7 +257,7 @@ describe('GET /api/schools/:schoolId/fee-invoices', () => {
 
 describe('POST /api/schools/:schoolId/fee-invoices/generate', () => {
   it('generates invoices for bursar', async () => {
-    mockFees.generateInvoices.mockResolvedValueOnce([{ id: 'inv-1' }] as never);
+    mockFees.generateInvoices.mockResolvedValueOnce({ invoices: [{ id: 'inv-1' }], totalKobo: 5000000 } as never);
 
     const res = await request(app)
       .post(`/api/schools/${SCHOOL_ID}/fee-invoices/generate`)

@@ -67,6 +67,8 @@ export default function OutstandingBalancesPage() {
   const totalOutstanding = rows.reduce((sum, r) => sum + Number(r.balance), 0);
 
   async function sendReminders() {
+    // Reminders go to every parent with a balance this term, whatever this page is filtered to: say so first.
+    if (!window.confirm('Send a fee reminder to every parent with an unpaid balance this term, in every class? Reminders can be sent once an hour.')) return;
     if (!schoolId) return;
     setSendingReminders(true);
     try {
@@ -133,7 +135,7 @@ export default function OutstandingBalancesPage() {
             disabled={sendingReminders}
             className="btn-secondary"
           >
-            {sendingReminders ? 'Sending…' : 'Send Fee Reminders'}
+            {sendingReminders ? 'Sending…' : 'Remind All Parents With a Balance'}
           </button>
           <button
             type="button"

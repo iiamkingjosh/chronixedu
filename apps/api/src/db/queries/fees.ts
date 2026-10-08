@@ -32,20 +32,150 @@ export interface FeeStructureInput {
   class_id: string | null;
   term_id: string;
   component_name: string;
-  amount: number;
+  /** Whole kobo, parsed from the naira text the route received (doctrine 11). */
+  amount_kobo: number;
   is_mandatory: boolean;
+}
+
+export class DuplicateFeeLineError extends Error {
+  code = 'DUPLICATE_FEE_LINE';
+  constructor(name: string) {
+    super(`"${name.trim()}" is already a fee line for this term and class. Edit that line instead.`);
+  }
 }
 
 // ── Fee structures ─────────────────────────────────────────────────────────────
 
-export async function insertFeeStructure(schoolId: string, input: FeeStructureInput): Promise<FeeStructureRow> {
-  const result = await pool.query<FeeStructureRow>(
-    `INSERT INTO fee_structures (school_id, class_id, term_id, component_name, amount, is_mandatory)
-     VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, school_id, class_id, term_id, component_name, amount, is_mandatory, created_at`,
-    [schoolId, input.class_id, input.term_id, input.component_name, input.amount, input.is_mandatory]
+/** 'TERM_NOT_FOUND' or 'CLASS_NOT_FOUND' when a fee line names another school's term or class. */
+export async function checkFeeLineTargets(schoolId: string, termId: string, classId: string | null): Promise<'TERM_NOT_FOUND' | 'CLASS_NOT_FOUND' | null> {
+  const { rows: [r] } = await pool.query<{ term_ok: boolean; class_ok: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM terms WHERE id = $2 AND school_id = $1) AS term_ok,
+            ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM classes WHERE id = $3 AND school_id = $1)) AS class_ok`,
+    [schoolId, termId, classId]
   );
-  return result.rows[0];
+  if (!r.term_ok) return 'TERM_NOT_FOUND';
+  if (!r.class_ok) return 'CLASS_NOT_FOUND';
+  return null;
+}
+
+// The same line twice for one term and class (case and spacing aside) is a typo that bills twice.
+const SAME_LINE = `school_id = $1 AND term_id = $2 AND class_id IS NOT DISTINCT FROM $3
+                   AND lower(btrim(component_name)) = lower(btrim($4))`;
+
+export async function insertFeeStructure(schoolId: string, input: FeeStructureInput): Promise<FeeStructureRow> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Serialises additions to one term's lines, so two at once cannot both miss the duplicate.
+    await client.query(`SELECT 1 FROM terms WHERE id = $1 AND school_id = $2 FOR UPDATE`, [input.term_id, schoolId]);
+    const dup = await client.query(`SELECT 1 FROM fee_structures WHERE ${SAME_LINE}`,
+      [schoolId, input.term_id, input.class_id, input.component_name]);
+    if (dup.rows[0]) throw new DuplicateFeeLineError(input.component_name);
+    const result = await client.query<FeeStructureRow>(
+      `INSERT INTO fee_structures (school_id, class_id, term_id, component_name, amount, is_mandatory)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, school_id, class_id, term_id, component_name, amount, is_mandatory, created_at`,
+      [schoolId, input.class_id, input.term_id, input.component_name.trim(), fromKobo(input.amount_kobo), input.is_mandatory]
+    );
+    await client.query('COMMIT');
+    return result.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export interface FeeLinePatch {
+  component_name?: string;
+  amount_kobo?: number;
+  is_mandatory?: boolean;
+}
+
+/**
+ * Corrects a fee line, returning what it replaced (read under the row's lock, doctrine 10) and what it
+ * now is; null if no such line in this school. A fee line could not be edited at all before 8 Oct 2026.
+ */
+export async function updateFeeStructure(id: string, schoolId: string, patch: FeeLinePatch): Promise<{ prior: FeeStructureRow; updated: FeeStructureRow } | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [prior] } = await client.query<FeeStructureRow>(
+      `SELECT id, school_id, class_id, term_id, component_name, amount, is_mandatory, created_at
+       FROM fee_structures WHERE id = $1 AND school_id = $2 FOR UPDATE`, [id, schoolId]);
+    if (!prior) { await client.query('ROLLBACK'); return null; }
+    if (patch.component_name !== undefined) {
+      const dup = await client.query(`SELECT 1 FROM fee_structures WHERE ${SAME_LINE} AND id <> $5`,
+        [schoolId, prior.term_id, prior.class_id, patch.component_name, id]);
+      if (dup.rows[0]) throw new DuplicateFeeLineError(patch.component_name);
+    }
+    const { rows: [updated] } = await client.query<FeeStructureRow>(
+      `UPDATE fee_structures
+          SET component_name = COALESCE($3, component_name),
+              amount = COALESCE($4::numeric, amount),
+              is_mandatory = COALESCE($5, is_mandatory)
+        WHERE id = $1 AND school_id = $2
+        RETURNING id, school_id, class_id, term_id, component_name, amount, is_mandatory, created_at`,
+      [id, schoolId, patch.component_name?.trim() ?? null,
+       patch.amount_kobo === undefined ? null : fromKobo(patch.amount_kobo), patch.is_mandatory ?? null]);
+    await client.query('COMMIT');
+    return { prior, updated };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Deletes a fee line, returning what it was; null if no such line in this school. */
+export async function deleteFeeStructure(id: string, schoolId: string): Promise<FeeStructureRow | null> {
+  const { rows } = await pool.query<FeeStructureRow>(
+    `DELETE FROM fee_structures WHERE id = $1 AND school_id = $2
+     RETURNING id, school_id, class_id, term_id, component_name, amount, is_mandatory, created_at`, [id, schoolId]);
+  return rows[0] ?? null;
+}
+
+/** Invoices already raised for a term (and class, when given), so a correction can say to regenerate. */
+export async function countInvoicesForLine(schoolId: string, termId: string, classId: string | null): Promise<number> {
+  const { rows: [r] } = await pool.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM fee_invoices fi
+     WHERE fi.school_id = $1 AND fi.term_id = $2
+       AND ($3::uuid IS NULL OR EXISTS (
+         SELECT 1 FROM student_classes sc JOIN terms t ON t.id = fi.term_id
+         WHERE sc.student_id = fi.student_id AND sc.class_id = $3 AND sc.session_id = t.session_id))`,
+    [schoolId, termId, classId]);
+  return r?.n ?? 0;
+}
+
+/** Copies one term's fee lines into another, skipping any the target already has. */
+export async function copyFeeStructures(schoolId: string, fromTermId: string, toTermId: string): Promise<{ copied: number; skipped: number }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT 1 FROM terms WHERE id = $1 AND school_id = $2 FOR UPDATE`, [toTermId, schoolId]);
+    const { rows: [counts] } = await client.query<{ total: number }>(
+      `SELECT count(*)::int AS total FROM fee_structures WHERE school_id = $1 AND term_id = $2`, [schoolId, fromTermId]);
+    const inserted = await client.query(
+      `INSERT INTO fee_structures (school_id, class_id, term_id, component_name, amount, is_mandatory)
+       SELECT f.school_id, f.class_id, $3, f.component_name, f.amount, f.is_mandatory
+       FROM fee_structures f
+       WHERE f.school_id = $1 AND f.term_id = $2
+         AND NOT EXISTS (
+           SELECT 1 FROM fee_structures t
+           WHERE t.school_id = $1 AND t.term_id = $3 AND t.class_id IS NOT DISTINCT FROM f.class_id
+             AND lower(btrim(t.component_name)) = lower(btrim(f.component_name)))`,
+      [schoolId, fromTermId, toTermId]);
+    await client.query('COMMIT');
+    const copied = inserted.rowCount ?? 0;
+    return { copied, skipped: counts.total - copied };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function listFeeStructures(
@@ -87,11 +217,16 @@ export interface FeeInvoiceRow {
 
 /** Generates/upserts a fee_invoices row for every student enrolled in classId for termId.
  *  Returns null if termId does not belong to schoolId. */
+/**
+ * Raises each student's invoice for the term: the sum of the mandatory lines for their class and the
+ * whole school, worked out in the database. 'NO_FEE_LINES' when there are none: it invoiced every
+ * student ₦0, "paid" in full (audit, 8 Oct 2026). null when the term is not this school's.
+ */
 export async function generateInvoices(
   schoolId: string,
   termId: string,
   classId: string
-): Promise<FeeInvoiceRow[] | null> {
+): Promise<{ invoices: FeeInvoiceRow[]; totalKobo: number } | 'NO_FEE_LINES' | null> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -106,14 +241,19 @@ export async function generateInvoices(
       return null;
     }
 
-    const totalResult = await client.query<{ total: string }>(
-      `SELECT COALESCE(SUM(amount), 0) AS total
+    const totalResult = await client.query<{ total: string; lines: number }>(
+      `SELECT COALESCE(SUM(amount), 0)::text AS total, count(*)::int AS lines
        FROM fee_structures
        WHERE school_id = $1 AND term_id = $2 AND is_mandatory = TRUE
          AND (class_id = $3 OR class_id IS NULL)`,
       [schoolId, termId, classId]
     );
-    const totalAmount = Number(totalResult.rows[0]?.total ?? 0);
+    if (!totalResult.rows[0] || totalResult.rows[0].lines === 0 || toKobo(totalResult.rows[0].total) <= 0) {
+      await client.query('ROLLBACK');
+      return 'NO_FEE_LINES';
+    }
+    // The sum stays the database's numeric text all the way back into the INSERT: no float between.
+    const totalAmount = totalResult.rows[0].total;
 
     const studentsResult = await client.query<{ id: string }>(
       `SELECT s.id
@@ -144,7 +284,7 @@ export async function generateInvoices(
     }
 
     await client.query('COMMIT');
-    return invoices;
+    return { invoices, totalKobo: toKobo(totalAmount) };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

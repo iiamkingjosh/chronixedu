@@ -32,9 +32,9 @@ describe('validatePaymentRowShape', () => {
 
   it('flags a missing or non-numeric amount', () => {
     expect(validatePaymentRowShape(row({ amount: '' }))).toContain('Amount is required.');
-    expect(validatePaymentRowShape(row({ amount: 'abc' }))).toContain('Amount must be a positive number.');
-    expect(validatePaymentRowShape(row({ amount: '-50' }))).toContain('Amount must be a positive number.');
-    expect(validatePaymentRowShape(row({ amount: '0' }))).toContain('Amount must be a positive number.');
+    for (const amount of ['abc', '-50', '0']) {
+      expect(validatePaymentRowShape(row({ amount }))).toEqual([expect.stringContaining('must be a positive amount in naira')]);
+    }
   });
 
   it('flags a method outside cash/bank_transfer/waiver', () => {
@@ -117,5 +117,29 @@ describe('runFullPaymentValidation', () => {
     const lookup = jest.fn(async () => new Map());
     await runFullPaymentValidation([], baseDeps({ lookupStudentsByAdmissionNumbers: lookup }));
     expect(lookup).not.toHaveBeenCalled();
+  });
+});
+
+describe('amounts in kobo, never naira floats (audit, 8 Oct 2026; doctrine 11)', () => {
+  it('two rows that pay a balance off exactly are both accepted', async () => {
+    // In floats 100009.59 - 100000 is 9.589999999996508, so the second row "exceeded" what was left.
+    const deps = baseDeps({ lookupInvoiceForStudent: async () => ({ id: 'invoice-1', balance: 100009.59 }) });
+    const results = await runFullPaymentValidation(
+      [row({ row_number: 2, amount: '100000' }), row({ row_number: 3, amount: '9.59' })], deps);
+    expect(results.map(r => r.status)).toEqual(['valid', 'valid']);
+    expect(results.map(r => r.resolved_amount_kobo)).toEqual([10000000, 959]);
+    // One kobo more is refused, naming what was left in naira.
+    const over = await runFullPaymentValidation(
+      [row({ row_number: 2, amount: '100000' }), row({ row_number: 3, amount: '9.60' })], deps);
+    expect(over[1].errors).toEqual([expect.stringContaining('₦9.59 remaining')]);
+  });
+
+  it('takes commas and a naira sign; refuses exponents, a third decimal place and zero', () => {
+    for (const ok of ['15000', '15,000.50', '₦1,500', '0.01']) {
+      expect({ ok, errors: validatePaymentRowShape(row({ amount: ok })) }).toEqual({ ok, errors: [] });
+    }
+    for (const bad of ['1e3', '10.123', '0', '0.00', '-5', '1,50', 'ten']) {
+      expect({ bad, refused: validatePaymentRowShape(row({ amount: bad })).length > 0 }).toEqual({ bad, refused: true });
+    }
   });
 });

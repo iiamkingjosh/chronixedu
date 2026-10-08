@@ -30,7 +30,9 @@ registrar is never stuck.
 
 - Fee structures, invoices, outstanding balances and collections.
 - Records payments (cash, bank transfer, or a Paystack reference) and **refunds** (bursar only).
-- Fee reminders, and the school's payout account (Settings → Payout Setup).
+- Fee reminders (to every parent with a balance, at most once an hour).
+- Can **see** the school's payout account (Settings → Payout Setup) but not change it: only the principal can
+  (decided 8 Oct 2026, "Only view to avoid changes").
 
 ## Teacher: teaches and assesses
 
@@ -55,4 +57,4 @@ registrar is never stuck.
 4. Settings → Users: teachers, the registrar and the bursar.
 5. Settings → Roster: which teacher takes which subject in which class this term.
 6. Registrar (or principal): register the students, each with a class.
-7. Bursar: fee structures, then invoices; the principal or bursar sets up the payout account for online payment.
+7. Bursar: fee structures, then invoices. The principal sets up the payout account for online payment.

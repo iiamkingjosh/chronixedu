@@ -948,6 +948,14 @@ Monorepo, npm workspaces:
 
 ## Fee refunds, chargebacks and Paystack (6 Oct 2026)
 
+- **Fee lines and invoices** (8 Oct 2026): a fee line's amount arrives as naira text and is stored from whole
+  kobo; ₦0, a third decimal place and a JSON number are refused. A line is unique per term, class and name (case
+  and spacing aside), can be edited and deleted (audited with what it replaced) and copied between terms.
+  `generateInvoices` sums in SQL and refuses `NO_FEE_LINES` rather than invoicing ₦0; generating is audited.
+  Bulk payment import parses each amount to kobo by string arithmetic (`parseNairaToKobo`). A manual fee-reminder
+  run is audited and refused (429) within an hour of the last, checked in the database under a per-school lock,
+  so it holds with Redis down. A waiver needs a reason (in `reference`).
+
 - **A school refunds from its own money, and the bursar records it** (migration 063,
   `db/queries/feeRefunds.ts`, `POST /:schoolId/payments/:paymentId/refunds`). Decided 5-6 Oct 2026.
   - **A refund is a record of its own.** The payment is never edited. The invoice is recomputed from

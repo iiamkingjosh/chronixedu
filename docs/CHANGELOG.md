@@ -1,5 +1,24 @@
 # Chronix Edu — Changelog
 
+## Fee lines can be corrected; amounts are exact (2026-10-08)
+
+### For bursars
+- **Fee lines can be edited and deleted** on Fee Structures, and **copied from another term**. Adding the same line
+  twice for one term and class is refused. After a change to a term whose invoices are already raised, the page
+  says to generate invoices again.
+- **Fee amounts are exact.** They are sent as typed, so ₦15,000.50 stays ₦15,000.50, and a ₦0 line is refused.
+- **Generating invoices with no mandatory fee lines is refused,** instead of invoicing every student ₦0.
+- **Bulk payment import counts in kobo.** Two rows that pay a balance off exactly are both accepted (a ₦9.59 second
+  row was refused as an overpayment), and amounts like "1e3" or "10.123" are refused. Commas and a ₦ sign are fine.
+- **Record Payment can record an online payment by its Paystack reference.** The payment is checked with Paystack.
+- **A waiver needs a reason.**
+- **Fee reminders** say first that they go to every parent with a balance, whatever the page is filtered to, and
+  can be sent once an hour. Each run is recorded with who sent it.
+- Generating invoices, and every change to a fee line, is recorded in the school's audit log.
+
+### For parents
+- **Refunds show in your payment history,** under the payment they were made against.
+
 ## Registering, importing and promoting students (2026-10-08)
 
 ### For registrars and principals
