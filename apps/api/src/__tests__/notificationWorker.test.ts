@@ -60,6 +60,10 @@ function mockQueueAndParents(parentRows: Array<{ parent_id: string; email: strin
     if (sql.includes('FROM schools')) {
       return Promise.resolve({ rows: [{ subscription_tier: 'trial', subscription_status: 'trial' }] });
     }
+    if (sql.includes('FROM school_settings')) {
+      // The school has chosen SMS for behaviour incidents (Settings → Notifications; off by default).
+      return Promise.resolve({ rows: [{ notification_config: { events: { behaviour_incident: { in_app: true, email: true, sms: true } } } }] });
+    }
     if (sql.includes('UPDATE audit_logs')) {
       return Promise.resolve({ rows: [] });
     }

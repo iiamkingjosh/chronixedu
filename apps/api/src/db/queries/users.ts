@@ -207,6 +207,45 @@ export async function reassignUserEmail(
   }
 }
 
+/**
+ * Gives a student a new temporary password, which they must change at their next sign-in: for a student
+ * with no real email, who cannot use a reset link (CLAUDE.md: a student's temporary password is shown,
+ * as at registration). Our hash and Supabase's password change in one transaction, Supabase's before
+ * COMMIT and rolled back with it, as reassignUserEmail does. Returns false if there is no such student.
+ */
+export async function setStudentTemporaryPassword(
+  userId: string,
+  schoolId: string,
+  passwordHash: string,
+  applyExternalUpdate: () => Promise<{ ok: boolean; error?: string }>
+): Promise<{ ok: boolean; error?: string }> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE users SET password_hash = $3, must_change_password = TRUE
+       WHERE id = $1 AND school_id = $2 AND role = 'student'`,
+      [userId, schoolId, passwordHash]
+    );
+    if ((result.rowCount ?? 0) === 0) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: 'not_found' };
+    }
+    const external = await applyExternalUpdate();
+    if (!external.ok) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: external.error ?? 'external_update_failed' };
+    }
+    await client.query('COMMIT');
+    return { ok: true };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ── Create ─────────────────────────────────────────────────────────────────────
 
 export interface NewUserInput {
@@ -276,6 +315,36 @@ export async function setUserActive(userId: string, schoolId: string, isActive: 
     [userId, schoolId, isActive]
   );
   return result.rows[0];
+}
+
+/**
+ * Sets an account active or not; refuses to deactivate the school's last active principal, who is the
+ * only person who can administer it. The school's principal rows are locked, so two deactivations at
+ * once cannot each leave the other as "the remaining one" (audit, 8 Oct 2026).
+ */
+export async function setUserActiveUnlessLastPrincipal(userId: string, schoolId: string, isActive: boolean): Promise<UserRow | 'LAST_PRINCIPAL' | null> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (!isActive) {
+      const { rows } = await client.query<{ id: string }>(
+        `SELECT id FROM users WHERE school_id = $1 AND role = 'principal' AND is_active ORDER BY id FOR UPDATE`, [schoolId]);
+      if (rows.length === 1 && rows[0].id === userId) {
+        await client.query('ROLLBACK');
+        return 'LAST_PRINCIPAL';
+      }
+    }
+    const result = await client.query<UserRow>(
+      `UPDATE users SET is_active = $3 WHERE id = $1 AND school_id = $2 RETURNING ${USER_COLUMNS}`,
+      [userId, schoolId, isActive]);
+    await client.query('COMMIT');
+    return result.rows[0] ?? null;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function findPrincipalsBySchool(schoolId: string): Promise<{ email: string; phone: string | null }[]> {

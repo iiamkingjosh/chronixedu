@@ -150,15 +150,27 @@ export async function bulkUpsertAttendance(
 
 export const LOW_ATTENDANCE_ALERT_TYPE = 'low_attendance';
 
-export async function countRecentAbsences(studentId: string, schoolId: string, throughDate: string): Promise<number> {
+/** Absences in the `windowDays` days ending on `throughDate`, inclusive (the school's alert window). */
+export async function countRecentAbsences(studentId: string, schoolId: string, throughDate: string, windowDays = 7): Promise<number> {
   const result = await pool.query<{ count: number }>(
     `SELECT COUNT(*)::int AS count
      FROM attendance
      WHERE student_id = $1 AND school_id = $2 AND status = 'absent'
-       AND date BETWEEN ($3::date - INTERVAL '6 days') AND $3::date`,
-    [studentId, schoolId, throughDate]
+       AND date BETWEEN ($3::date - ($4::int - 1)) AND $3::date`,
+    [studentId, schoolId, throughDate, windowDays]
   );
   return result.rows[0].count;
+}
+
+/** Marks an alert resolved; the alert as it was, or null if it is not this school's or already resolved. */
+export async function resolveAttendanceAlert(alertId: string, schoolId: string): Promise<AttendanceAlertRow | null> {
+  const result = await pool.query<AttendanceAlertRow>(
+    `UPDATE attendance_alerts SET is_resolved = TRUE
+     WHERE id = $1 AND school_id = $2 AND is_resolved = FALSE
+     RETURNING id, school_id, student_id, alert_type, triggered_at, is_resolved`,
+    [alertId, schoolId]
+  );
+  return result.rows[0] ?? null;
 }
 
 export async function hasUnresolvedAlert(studentId: string, schoolId: string, alertType: string): Promise<boolean> {

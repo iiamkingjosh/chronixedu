@@ -1,4 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { channelsFor, loadNotificationConfig } from '../services/notificationSettings';
+import { sendEmail } from '../services/emailService';
+import { appBaseUrl } from '../config/appUrls';
 import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
@@ -139,14 +142,27 @@ router.post(
       const notificationTitle = `New message from ${senderName}`;
       const notificationBody = subject ? subject : body.slice(0, 140);
 
-      createNotification({
-        user_id: recipient_id,
-        type: 'message',
-        title: notificationTitle,
-        body: notificationBody,
-        payload: { thread_id: message.thread_id, message_id: message.id },
-      // The message is saved and answered; a lost notification is logged and alerted, not swallowed.
-      }).catch(err => logger.error('message_notification_failed', { school_id: schoolId, thread_id: message.thread_id, error: err instanceof Error ? err.message : String(err) }));
+      // Each channel only if the school keeps it on (Settings → Notifications; audit, 8 Oct 2026). An
+      // email says who wrote, never what: the message stays in the app.
+      const channels = channelsFor(await loadNotificationConfig(schoolId), 'message');
+      if (channels.in_app) {
+        createNotification({
+          user_id: recipient_id,
+          type: 'message',
+          title: notificationTitle,
+          body: notificationBody,
+          payload: { thread_id: message.thread_id, message_id: message.id },
+        // The message is saved and answered; a lost notification is logged and alerted, not swallowed.
+        }).catch(err => logger.error('message_notification_failed', { school_id: schoolId, thread_id: message.thread_id, error: err instanceof Error ? err.message : String(err) }));
+      }
+      if (channels.email) {
+        const recipient = await findUserById(recipient_id, schoolId);
+        if (recipient?.email) {
+          // sendEmail never throws; it logs and queues a refused send itself.
+          await sendEmail(recipient.email, notificationTitle,
+            `${senderName} sent you a message on Chronix Edu. Sign in to read it and reply.\n\n${appBaseUrl()}/login`);
+        }
+      }
 
       return res.status(201).json({ success: true, data: message });
     } catch (err) {

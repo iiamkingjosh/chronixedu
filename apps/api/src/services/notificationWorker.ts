@@ -6,6 +6,7 @@ import { sendEmail } from './emailService';
 import { sendTermiiSms, isSmsEnabled, smsDisabledReason } from './termiiService';
 import { logger } from '../config/logger';
 import { schoolAllowsFeature } from './planFeatures';
+import { channelsFor, loadNotificationConfig, NOTIFICATION_EVENTS, type NotificationEvent, type Channels } from './notificationSettings';
 
 const POLL_INTERVAL_MS = 30_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -94,6 +95,12 @@ async function processRow(row: QueuedAuditRow, smsOn: boolean): Promise<number> 
   );
 
   const allowsSms = await schoolAllowsFeature(row.school_id, 'sms');
+  // The school's channels for this event (Settings → Notifications), read once per row. An event the
+  // page does not list goes in the app and by email, as every event did before (audit, 8 Oct 2026).
+  const eventType = row.new_value?.notification_type ?? 'general';
+  const channels: Channels = (NOTIFICATION_EVENTS as string[]).includes(eventType)
+    ? channelsFor(await loadNotificationConfig(row.school_id), eventType as NotificationEvent)
+    : { in_app: true, email: true, sms: true };
   let smsNotSent = 0;
   // The payload names this parent's child only: never the class list, nor who acted for the
   // school in a support session.
@@ -103,16 +110,20 @@ async function processRow(row: QueuedAuditRow, smsOn: boolean): Promise<number> 
 
   for (const parent of parents) {
     const { type, title, body } = buildNotification(row, parent.child_first_name);
-    await createNotification({
-      user_id: parent.parent_id,
-      type,
-      title,
-      body,
-      payload: { entity: row.entity, entity_id: row.entity_id, ...shared, student_id: parent.student_id },
-    });
-    await sendEmail(parent.email, title, body);
+    if (channels.in_app) {
+      await createNotification({
+        user_id: parent.parent_id,
+        type,
+        title,
+        body,
+        payload: { entity: row.entity, entity_id: row.entity_id, ...shared, student_id: parent.student_id },
+      });
+    }
+    if (channels.email) {
+      await sendEmail(parent.email, title, body);
+    }
 
-    if (parent.phone && allowsSms) {
+    if (parent.phone && allowsSms && channels.sms) {
       // SMS off is a stated state, not a failure: no provider call and no
       // notification_logs row per parent — the batch logs one line instead.
       if (!smsOn) {

@@ -1,7 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { logAudit } from '../db/queries/auditLog';
+import { clientIp } from '../middleware/clientIp';
+import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
-import { getActiveTerm } from '../db/queries/roster';
+import { getActiveTerm, rosterTargetMissing } from '../db/queries/roster';
 import { findUserById } from '../db/queries/users';
 import {
   insertSlot,
@@ -107,7 +110,25 @@ router.post(
         return res.status(404).json({ success: false, error: { code: 'TEACHER_NOT_FOUND', message: 'Teacher not found in this school' } });
       }
 
+      const missing = await rosterTargetMissing(schoolId, { class_id, subject_id, term_id });
+      if (missing) {
+        return res.status(404).json({ success: false, error: { code: missing, message: ({ CLASS_NOT_FOUND: 'Class not found in this school', SUBJECT_NOT_FOUND: 'Subject not found in this school', TERM_NOT_FOUND: 'Term not found in this school' })[missing] } });
+      }
+
       const slot = await insertSlot(schoolId, { class_id, term_id, day_of_week, period_number, subject_id, teacher_id });
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TIMETABLE_SLOT_CREATED',
+        entity: 'timetable_slots',
+        entityId: slot.id,
+        newValue: slot,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'TIMETABLE_SLOT_CREATED', error: err instanceof Error ? err.message : String(err) });
+      });
       return res.status(201).json({ success: true, data: slot });
     } catch (err) {
       return next(err);
@@ -202,6 +223,19 @@ router.delete(
       }
 
       await deleteSlot(slotId, schoolId);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TIMETABLE_SLOT_DELETED',
+        entity: 'timetable_slots',
+        entityId: slotId,
+        oldValue: slot,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'TIMETABLE_SLOT_DELETED', error: err instanceof Error ? err.message : String(err) });
+      });
       return res.json({ success: true, data: { id: slotId } });
     } catch (err) {
       return next(err);

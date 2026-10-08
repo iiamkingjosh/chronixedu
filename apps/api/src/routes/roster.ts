@@ -6,7 +6,7 @@ import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
 import {
   findClassByName, insertClass, updateClass, listClasses,
-  findClassById, classUses, deleteClass, findNearDuplicateLevel,
+  findClassById, classUses, deleteClass, findNearDuplicateLevel, rosterTargetMissing,
   findSubjectByCode, insertSubject, updateSubject, listActiveSubjects,
   findSubjectById, subjectUses, deleteSubject,
   getActiveTerm,
@@ -152,6 +152,19 @@ router.post(
 
       const cls = await insertClass(req.params.schoolId, name, level, stream ?? null, form_teacher_id ?? null);
       cache.del(`roster:${req.params.schoolId}:classes`);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'CLASS_CREATED',
+        entity: 'classes',
+        entityId: cls.id,
+        newValue: cls,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'CLASS_CREATED', error: err instanceof Error ? err.message : String(err) });
+      });
       return res.status(201).json({ success: true, data: cls });
     } catch (err) {
       return next(err);
@@ -220,6 +233,20 @@ router.patch(
         name, level, stream: stream ?? null, form_teacher_id: form_teacher_id ?? null,
       });
       cache.del(`roster:${req.params.schoolId}:classes`);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'CLASS_UPDATED',
+        entity: 'classes',
+        entityId: existing.id,
+        oldValue: existing,
+        newValue: cls,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'CLASS_UPDATED', error: err instanceof Error ? err.message : String(err) });
+      });
       // The change is made; what it leaves behind is said, not refused.
       const warnings = levelChanged ? await settingsKeyedToLevel(req.params.schoolId, existing.level) : [];
       return res.json({ success: true, data: cls, ...(warnings.length > 0 ? { warnings } : {}) });
@@ -253,6 +280,20 @@ router.delete(
 
       await deleteClass(req.params.classId, req.params.schoolId);
       cache.del(`roster:${req.params.schoolId}:classes`);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'CLASS_DELETED',
+        entity: 'classes',
+        entityId: cls.id,
+        oldValue: cls,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'CLASS_DELETED', error: err instanceof Error ? err.message : String(err) });
+      });
+
       return res.json({ success: true, data: { message: 'Class deleted' } });
     } catch (err) {
       return next(err);
@@ -284,6 +325,19 @@ router.post(
 
       const subject = await insertSubject(req.params.schoolId, name, upperCode);
       cache.del(`roster:${req.params.schoolId}:subjects`);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'SUBJECT_CREATED',
+        entity: 'subjects',
+        entityId: subject.id,
+        newValue: subject,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'SUBJECT_CREATED', error: err instanceof Error ? err.message : String(err) });
+      });
       return res.status(201).json({ success: true, data: subject });
     } catch (err) {
       return next(err);
@@ -338,6 +392,20 @@ router.patch(
 
       const subject = await updateSubject(req.params.subjectId, req.params.schoolId, { name, code: upperCode });
       cache.del(`roster:${req.params.schoolId}:subjects`);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'SUBJECT_UPDATED',
+        entity: 'subjects',
+        entityId: existing.id,
+        oldValue: existing,
+        newValue: subject,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'SUBJECT_UPDATED', error: err instanceof Error ? err.message : String(err) });
+      });
       return res.json({ success: true, data: subject });
     } catch (err) {
       return next(err);
@@ -369,6 +437,20 @@ router.delete(
 
       await deleteSubject(req.params.subjectId, req.params.schoolId);
       cache.del(`roster:${req.params.schoolId}:subjects`);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'SUBJECT_DELETED',
+        entity: 'subjects',
+        entityId: subject.id,
+        oldValue: subject,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'SUBJECT_DELETED', error: err instanceof Error ? err.message : String(err) });
+      });
+
       return res.json({ success: true, data: { message: 'Subject deleted' } });
     } catch (err) {
       return next(err);
@@ -397,6 +479,11 @@ router.post(
         return res.status(422).json({ success: false, error: { code: 'NO_ACTIVE_TERM', message: 'No active term found for this school. Activate a session and term first.' } });
       }
 
+      const missing = await rosterTargetMissing(req.params.schoolId, { class_id, subject_id });
+      if (missing) {
+        return res.status(404).json({ success: false, error: { code: missing, message: ({ CLASS_NOT_FOUND: 'Class not found in this school', SUBJECT_NOT_FOUND: 'Subject not found in this school', TERM_NOT_FOUND: 'Term not found in this school' })[missing] } });
+      }
+
       const isDuplicate = await findDuplicateAssignment(teacher_id, class_id, subject_id, term.id);
       if (isDuplicate) {
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_ASSIGNMENT', message: 'This teacher is already assigned to this class and subject for the current term' } });
@@ -409,6 +496,19 @@ router.post(
 
       const assignment = await insertTeacherAssignment(teacher_id, class_id, subject_id, term.id, req.params.schoolId);
       cache.del(`roster:${req.params.schoolId}:assignments:${teacher_id}`);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TEACHER_ASSIGNED',
+        entity: 'teacher_assignments',
+        entityId: assignment.id,
+        newValue: { teacher_id, class_id, subject_id, term_id: term.id },
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'TEACHER_ASSIGNED', error: err instanceof Error ? err.message : String(err) });
+      });
       return res.status(201).json({ success: true, data: assignment });
     } catch (err) {
       return next(err);
@@ -596,6 +696,20 @@ router.delete(
 
       await deleteTeacherAssignment(req.params.id, req.params.schoolId);
       cache.del(`roster:${req.params.schoolId}:assignments:${assignment.teacher_id}`);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'TEACHER_UNASSIGNED',
+        entity: 'teacher_assignments',
+        entityId: assignment.id,
+        oldValue: assignment,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'TEACHER_UNASSIGNED', error: err instanceof Error ? err.message : String(err) });
+      });
+
       return res.json({ success: true, data: { message: 'Assignment removed' } });
     } catch (err) {
       return next(err);

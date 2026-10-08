@@ -1,0 +1,11 @@
+{
+  "events": {
+    "low_attendance":     { "in_app": true, "email": true,  "sms": false },
+    "behaviour_incident": { "in_app": true, "email": true,  "sms": false },
+    "results_published":  { "in_app": true, "email": true,  "sms": false },
+    "results_returned":   { "in_app": true, "email": false, "sms": false },
+    "announcement":       { "in_app": true, "email": true,  "sms": false },
+    "message":            { "in_app": true, "email": false, "sms": false }
+  },
+  "attendance_alert": { "threshold": 3, "window_days": 7 }
+}

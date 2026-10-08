@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 40 — 2026-10-08  
 **Scope:** Fixes from the 8 Oct 2026 audit of every school role  
-**Round 40 total findings:** 3 (0 Critical · 0 High · 0 Medium · 3 Low) — remediated in code, not yet deployed
+**Round 40 total findings:** 5 (0 Critical · 0 High · 0 Medium · 5 Low) — remediated in code, not yet deployed
 
 ---
 
@@ -70,6 +70,42 @@ scale, with the engine's overall average. A published term whose results cannot 
 instead of disappearing from it.
 
 **Tests:** `transcriptPublishedOnly.db.test.ts` (with the published filter removed, it fails).
+
+### L-04 — Settings → Users showed each new staff member's password ✅ Remediated
+
+**Files:** `apps/api/src/routes/users.ts` (`POST /:schoolId/users`), `apps/web/app/(dashboard)/settings/users/page.tsx`.
+
+**Found** on 8 Oct 2026, in the audit of every school role.
+
+**The mechanism.** Round 39 L-01 stopped this form making parents; it still returned every new staff account's
+temporary password, which the screen showed to whoever made the account. Doctrine 7 again: the rule "a credential
+does not leave the server" (H2) held for bulk import and not for the single form beside it.
+
+**Why Low.** Only a principal or platform admin can make an account, and the password was a temporary one the person
+replaced at first sign-in.
+
+**Fix.** The account is made with a password nobody is told, and the person is sent the staff welcome email, as bulk
+import does (Moses, 8 Oct 2026: "Yes welcome email"). The answer says whether the email went. Reset Password, on the
+same page, now says whether its email went, and sends a link that returns to the reset page.
+
+**Tests:** `staffAccountsEmail.db.test.ts`.
+
+### L-05 — A teaching assignment or timetable slot could name another school's class, subject or term ✅ Remediated
+
+**Files:** `apps/api/src/routes/roster.ts`, `apps/api/src/routes/timetable.ts` (`rosterTargetMissing`).
+
+**Found** on 8 Oct 2026, in the audit of every school role.
+
+**The mechanism.** Both checked the teacher against the school and took any class, subject and term id (doctrine 3).
+A principal could write rows in their own school that pointed at another school's class or subject.
+
+**Why Low.** Only a principal could, by sending ids that no screen offers, and the rows exposed nothing of the other
+school.
+
+**Fix.** Both refuse, with 404 naming which, a class, subject or term that is not the school's. Classes, subjects,
+assignments and timetable slots are now audited, an edit with what it replaced.
+
+**Tests:** `rosterTargetsAudit.db.test.ts`.
 
 ---
 

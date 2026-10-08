@@ -1,4 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { channelsFor, loadNotificationConfig } from '../services/notificationSettings';
+import { sendEmail } from '../services/emailService';
+import { appBaseUrl } from '../config/appUrls';
 import { NO_ASSESSMENT_MESSAGE } from '../db/queries/assessmentConfig';
 import { logger } from '../config/logger';
 import { z } from 'zod';
@@ -634,6 +637,19 @@ router.post(
         logger.error('teacher_notification_queue_failed', {
           schoolId, class_id, term_id, teacher_count: teachers.length, error: err instanceof Error ? err.message : String(err),
         });
+      }
+
+      // The Score Entry page always shows a returned result; an email goes too when the school keeps
+      // "Result Returned" email on (Settings → Notifications; off by default; audit, 8 Oct 2026).
+      if (channelsFor(await loadNotificationConfig(schoolId), 'results_returned').email && teachers.length > 0) {
+        const { rows: recipients } = await pool.query<{ email: string }>(
+          `SELECT email FROM users WHERE id = ANY($1::uuid[]) AND school_id = $2 AND is_active`,
+          [teachers.map(t => t.teacher_id), schoolId]);
+        for (const t of recipients) {
+          // sendEmail never throws; it logs and queues a refused send itself.
+          await sendEmail(t.email, 'Results returned for correction',
+            `Results you submitted have been returned for correction.${reason ? `\n\nReason: ${reason}` : ''}\n\nSee Score Entry: ${appBaseUrl()}/teacher/scores`);
+        }
       }
 
       const notified = notificationsQueued

@@ -166,7 +166,7 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
 function CreateUserModal({ schoolId, onClose, onCreated }: {
   schoolId: string;
   onClose: () => void;
-  onCreated: (user: UserRow, tempPassword: string) => void;
+  onCreated: (user: UserRow, welcomeEmail: 'sent' | 'not_sent') => void;
 }) {
   const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<CreateForm>({
     resolver: zodResolver(createSchema),
@@ -187,11 +187,11 @@ function CreateUserModal({ schoolId, onClose, onCreated }: {
         role: values.role,
         ...(values.role === 'teacher' ? { teacher_mode: values.teacher_mode } : {}),
       };
-      const res = await apiFetch<{ success: boolean; data: { user: UserRow; temp_password: string } }>(
+      const res = await apiFetch<{ success: boolean; data: { user: UserRow; welcome_email: 'sent' | 'not_sent' } }>(
         `/api/schools/${schoolId}/users`,
         { method: 'POST', body: JSON.stringify(payload) }
       );
-      onCreated(res.data.user, res.data.temp_password);
+      onCreated(res.data.user, res.data.welcome_email);
     } catch (err: unknown) {
       setApiError(err instanceof Error ? err.message : 'Failed to create user');
     }
@@ -446,23 +446,36 @@ function StatusConfirmModal({ user, onClose, onConfirm }: {
 
 // ── Reset password link modal ─────────────────────────────────────────────────
 
-function ResetLinkModal({ user, onClose }: { user: UserRow; onClose: () => void }) {
+export interface ResetOutcome {
+  sent: boolean;
+  message?: string;
+  /** Only for a student with no real email: a new temporary password, shown once. */
+  temp_password?: string;
+}
+
+function ResetLinkModal({ user, outcome, onClose }: { user: UserRow; outcome: ResetOutcome; onClose: () => void }) {
+  const title = outcome.temp_password ? 'New Temporary Password' : outcome.sent ? 'Password Reset Email Sent' : 'Reset Email Not Sent';
   return (
-    <Modal title="Password Reset Email Sent" onClose={onClose}>
+    <Modal title={title} onClose={onClose}>
       <div className="space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-            <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-            </svg>
+        {outcome.temp_password ? (
+          <div className="space-y-2">
+            <p className="text-sm text-gray-700">{outcome.message}</p>
+            <p className="text-sm font-mono bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+              {user.email} &nbsp;/&nbsp; {outcome.temp_password}
+            </p>
+            <p className="text-xs text-gray-500">Shown only now. {fullName(user)} will choose their own password at their next sign-in.</p>
           </div>
+        ) : outcome.sent ? (
           <div>
             <p className="text-sm font-medium text-gray-900">Email sent to {user.email}</p>
             <p className="mt-1 text-sm text-gray-600">
               <span className="font-medium">{fullName(user)}</span> will receive a password reset link shortly. The link expires after a short time.
             </p>
           </div>
-        </div>
+        ) : (
+          <p className="text-sm text-amber-800">{outcome.message ?? `The reset email to ${user.email} was not sent.`}</p>
+        )}
         <div className="flex justify-end pt-2">
           <button type="button" onClick={onClose} className="px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors">Done</button>
         </div>
@@ -487,8 +500,9 @@ export default function UsersPage() {
   const [editing, setEditing] = useState<UserRow | null>(null);
   const [statusTarget, setStatusTarget] = useState<UserRow | null>(null);
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
-  const [resetLink, setResetLink] = useState<{ user: UserRow } | null>(null);
-  const [credentials, setCredentials] = useState<{ user: UserRow; temp_password: string } | null>(null);
+  const [resetLink, setResetLink] = useState<{ user: UserRow; outcome: ResetOutcome } | null>(null);
+  // A new staff account is emailed how to set its password; no password is shown (Moses, 8 Oct 2026).
+  const [created, setCreated] = useState<{ user: UserRow; welcome_email: 'sent' | 'not_sent' } | null>(null);
 
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
@@ -517,9 +531,9 @@ export default function UsersPage() {
     setPage(1);
   }
 
-  function handleCreated(user: UserRow, tempPassword: string) {
+  function handleCreated(user: UserRow, welcomeEmail: 'sent' | 'not_sent') {
     setCreateOpen(false);
-    setCredentials({ user, temp_password: tempPassword });
+    setCreated({ user, welcome_email: welcomeEmail });
     show('User created');
     setPage(1);
     load();
@@ -551,11 +565,11 @@ export default function UsersPage() {
   async function handleResetPassword(user: UserRow) {
     setResetTarget(user);
     try {
-      await apiFetch<{ success: boolean; data: { sent: boolean } }>(
+      const res = await apiFetch<{ success: boolean; data: ResetOutcome }>(
         `/api/schools/${schoolId}/users/${user.id}/reset-password`,
         { method: 'POST' }
       );
-      setResetLink({ user });
+      setResetLink({ user, outcome: res.data });
     } catch (err: unknown) {
       show(err instanceof Error ? err.message : 'Failed to send reset email', 'error');
     } finally {
@@ -598,17 +612,19 @@ export default function UsersPage() {
         added under Students.
       </p>
 
-      {credentials && (
+      {created && (
         <div className="mb-6 bg-green-50 border border-green-200 rounded-xl px-5 py-4 flex items-start justify-between gap-4">
           <div>
-            <p className="text-sm font-semibold text-green-800 mb-1">
-              {fullName(credentials.user)} was created — share these credentials securely:
-            </p>
-            <p className="text-sm text-green-700 font-mono">
-              {credentials.user.email} &nbsp;/&nbsp; {credentials.temp_password}
-            </p>
-            <p className="text-xs text-green-600 mt-1">This temporary password is shown only once. The user should change it on first login.</p>
-            {credentials.user.role === 'teacher' && (
+            <p className="text-sm font-semibold text-green-800 mb-1">{fullName(created.user)} was created.</p>
+            {created.welcome_email === 'sent' ? (
+              <p className="text-sm text-green-700">A welcome email went to {created.user.email}, saying how to set a password.</p>
+            ) : (
+              <p className="text-sm text-amber-800">
+                The welcome email to {created.user.email} was not sent. They can set a password with Forgot password on the
+                sign-in page, using that address.
+              </p>
+            )}
+            {created.user.role === 'teacher' && (
               <p className="text-xs text-green-700 mt-2">
                 This teacher isn&apos;t assigned to any class or subject yet.{' '}
                 <Link href="/settings/roster" className="font-medium underline hover:text-green-900">
@@ -617,7 +633,7 @@ export default function UsersPage() {
               </p>
             )}
           </div>
-          <button onClick={() => setCredentials(null)} className="text-green-500 hover:text-green-700">
+          <button onClick={() => setCreated(null)} className="text-green-500 hover:text-green-700">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -716,7 +732,7 @@ export default function UsersPage() {
       )}
 
       {resetLink && (
-        <ResetLinkModal user={resetLink.user} onClose={() => setResetLink(null)} />
+        <ResetLinkModal user={resetLink.user} outcome={resetLink.outcome} onClose={() => setResetLink(null)} />
       )}
     </div>
   );

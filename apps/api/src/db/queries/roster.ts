@@ -371,6 +371,26 @@ export const classUses = (classId: string): Promise<string[]> => usesOf(CLASS_US
 /** What still uses this subject; empty if nothing. */
 export const subjectUses = (subjectId: string): Promise<string[]> => usesOf(SUBJECT_USES, subjectId);
 
+/**
+ * Which of a write's class, subject and term is not this school's, or null if all are (doctrine 3:
+ * validate the target). Teacher assignments and timetable slots took any id (audit, 8 Oct 2026).
+ */
+export async function rosterTargetMissing(
+  schoolId: string,
+  ids: { class_id?: string; subject_id?: string; term_id?: string }
+): Promise<'CLASS_NOT_FOUND' | 'SUBJECT_NOT_FOUND' | 'TERM_NOT_FOUND' | null> {
+  const { rows: [r] } = await pool.query<{ class_ok: boolean; subject_ok: boolean; term_ok: boolean }>(
+    `SELECT ($2::uuid IS NULL OR EXISTS (SELECT 1 FROM classes WHERE id = $2 AND school_id = $1)) AS class_ok,
+            ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM subjects WHERE id = $3 AND school_id = $1)) AS subject_ok,
+            ($4::uuid IS NULL OR EXISTS (SELECT 1 FROM terms WHERE id = $4 AND school_id = $1)) AS term_ok`,
+    [schoolId, ids.class_id ?? null, ids.subject_id ?? null, ids.term_id ?? null]
+  );
+  if (!r.class_ok) return 'CLASS_NOT_FOUND';
+  if (!r.subject_ok) return 'SUBJECT_NOT_FOUND';
+  if (!r.term_ok) return 'TERM_NOT_FOUND';
+  return null;
+}
+
 /** An existing level of the school that differs from `level` only in case or spacing, or null. */
 export async function findNearDuplicateLevel(schoolId: string, level: string): Promise<string | null> {
   const { rows } = await pool.query<{ level: string }>(

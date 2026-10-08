@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { channelsFor, loadNotificationConfig } from '../services/notificationSettings';
 import { logger } from '../config/logger';
 import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
@@ -103,12 +104,17 @@ router.post(
       });
 
       // Fan out in-app notifications + batched emails to everyone targeted (non-blocking).
-      getTargetUsers(schoolId, target_role)
-        .then(async targets => {
-          await createNotificationsBulk(
-            targets.map(t => t.id),
-            { type: 'announcement', title: `Announcement: ${title}`, body }
-          );
+      // Each channel only if the school keeps it on (Settings → Notifications; audit, 8 Oct 2026).
+      Promise.all([getTargetUsers(schoolId, target_role), loadNotificationConfig(schoolId)])
+        .then(async ([targets, config]) => {
+          const channels = channelsFor(config, 'announcement');
+          if (channels.in_app) {
+            await createNotificationsBulk(
+              targets.map(t => t.id),
+              { type: 'announcement', title: `Announcement: ${title}`, body }
+            );
+          }
+          if (!channels.email) return;
           for (let i = 0; i < targets.length; i += BATCH_SIZE) {
             const batch = targets.slice(i, i + BATCH_SIZE);
             await Promise.all(

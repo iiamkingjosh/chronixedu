@@ -128,7 +128,19 @@ function ClassAttendanceSummary({ rows }: { rows: ClassTermSummaryRow[] }) {
 
 // ── Chronic absenteeism list ──────────────────────────────────────────────────
 
-function ChronicAbsenteeismList({ alerts }: { alerts: AlertRow[] }) {
+function ChronicAbsenteeismList({ alerts, schoolId, onResolved, show }: { alerts: AlertRow[]; schoolId: string; onResolved: (id: string) => void; show: ToastFn }) {
+  // An open alert holds back the next one for that child, so it is resolved once dealt with
+  // (audit, 8 Oct 2026: there was no way to, and parents were told once and never again).
+  async function resolve(alert: AlertRow) {
+    if (!window.confirm(`Mark ${alert.first_name} ${alert.last_name}'s attendance alert as dealt with? Their parents will be told again if absences build up.`)) return;
+    try {
+      await apiFetch(`/api/schools/${schoolId}/attendance/alerts/${alert.id}/resolve`, { method: 'PATCH' });
+      onResolved(alert.id);
+      show('Alert resolved');
+    } catch (err: unknown) {
+      show(err instanceof Error ? err.message : 'Failed to resolve the alert', 'error');
+    }
+  }
   if (alerts.length === 0) {
     return <p className="text-sm text-gray-500 py-6 text-center">No active low-attendance alerts. 🎉</p>;
   }
@@ -141,6 +153,7 @@ function ChronicAbsenteeismList({ alerts }: { alerts: AlertRow[] }) {
             <th className="px-4 py-3 text-left font-medium">Admission No.</th>
             <th className="px-4 py-3 text-left font-medium">Alert Type</th>
             <th className="px-4 py-3 text-left font-medium">Triggered</th>
+            <th className="px-4 py-3 text-right font-medium"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -155,6 +168,9 @@ function ChronicAbsenteeismList({ alerts }: { alerts: AlertRow[] }) {
               </td>
               <td className="px-4 py-2.5 whitespace-nowrap text-gray-500">
                 {new Date(alert.triggered_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </td>
+              <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                <button type="button" onClick={() => resolve(alert)} className="text-sm font-medium text-slate-700 hover:text-slate-900">Resolve</button>
               </td>
             </tr>
           ))}
@@ -351,8 +367,8 @@ export default function PrincipalAttendancePage() {
 
           <section className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
             <h2 className="text-base font-semibold text-gray-900 mb-1">Chronic absenteeism</h2>
-            <p className="text-xs text-gray-400 mb-4">Students with unresolved low-attendance alerts (3+ absences within a 7-day window).</p>
-            <ChronicAbsenteeismList alerts={alerts} />
+            <p className="text-xs text-gray-400 mb-4">Students with unresolved low-attendance alerts, by the rule in Settings → Notifications.</p>
+            <ChronicAbsenteeismList alerts={alerts} schoolId={schoolId!} onResolved={id => setAlerts(prev => prev.filter(a => a.id !== id))} show={show} />
           </section>
 
           <section className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">

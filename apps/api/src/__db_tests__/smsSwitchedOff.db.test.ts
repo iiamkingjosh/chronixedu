@@ -47,6 +47,11 @@ beforeEach(async () => {
   // The seed leaves both tiers null, which the plan check logs at error; a real school has one,
   // and "no error logged" below must be about SMS, not the fixture.
   await pool.query(`UPDATE schools SET subscription_tier = 'trial' WHERE id = ANY($1)`, [[I.schoolA, I.schoolB]]);
+  // The school has chosen SMS for attendance alerts (Settings → Notifications; off by default since
+  // 8 Oct 2026), so what decides below is the platform switch, which is what this file is about.
+  await pool.query(
+    `INSERT INTO school_settings (school_id, notification_config) VALUES ($1, '{"events": {"low_attendance": {"in_app": true, "email": true, "sms": true}}}'::jsonb)
+     ON CONFLICT (school_id) DO UPDATE SET notification_config = EXCLUDED.notification_config`, [I.schoolA]);
   // s1 has two parents with phones: parentA (from the seed, given a phone) and a second.
   await pool.query(`UPDATE users SET phone = '+2348011111111' WHERE id = $1`, [I.parentA]);
   await pool.query(

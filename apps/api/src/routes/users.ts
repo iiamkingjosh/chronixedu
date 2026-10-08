@@ -6,8 +6,9 @@ import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
+import { resetPasswordRedirect } from '../config/appUrls';
 import { supabaseAdmin } from '../supabaseClient';
-import { redis } from '../middleware/rateLimit';
+import { redis, bestEffort } from '../middleware/rateLimit';
 import { sendEmail } from '../services/emailService';
 import { logAudit, logSettingsChange } from '../db/queries/auditLog';
 import {
@@ -17,8 +18,9 @@ import {
   insertUser,
   updateUserProfile,
   reassignUserEmail,
-  setUserActive,
   updateUserSignature,
+  setStudentTemporaryPassword,
+  setUserActiveUnlessLastPrincipal,
 } from '../db/queries/users';
 import { findUsersRolesByEmails } from '../db/queries/students';
 import { parseStaffBulkImportFile, StaffBulkImportParseError } from '../services/staffBulkImportParser';
@@ -240,7 +242,20 @@ router.post(
       // waiting out the TTL.
       cache.del(schoolCacheKey(req.params.schoolId, 'dashboard-stats'));
 
-      return res.status(201).json({ success: true, data: { user, temp_password: tempPassword } });
+      // The new account is told by email how to set its own password, as bulk import does (Moses,
+      // 8 Oct 2026: "Yes welcome email"). Its temporary password was returned here and shown on
+      // screen to whoever made the account; it now goes to nobody.
+      const welcome = await sendWelcomeEmails(
+        req.params.schoolId,
+        [{ userId: user.id, email, name: `${first_name} ${last_name}`, role }],
+        'Welcome to Chronix Edu — Your Staff Account is Ready',
+        { introVerb: 'added' },
+      );
+
+      return res.status(201).json({
+        success: true,
+        data: { user, welcome_email: welcome.outcome === 'sent' ? 'sent' : 'not_sent', welcome_email_not_sent: welcome.not_sent },
+      });
     } catch (err) {
       return next(err);
     }
@@ -305,11 +320,29 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
       }
 
-      const updated = await setUserActive(req.params.userId, req.params.schoolId, parsed.data.is_active);
+      // A principal deactivating themselves, or the last active principal, would leave a school nobody
+      // can administer (audit, 8 Oct 2026).
+      if (!parsed.data.is_active && existing.id === req.user!.user_id) {
+        return res.status(409).json({ success: false, error: { code: 'CANNOT_DEACTIVATE_SELF', message: 'You cannot deactivate your own account.' } });
+      }
+      const result = await setUserActiveUnlessLastPrincipal(req.params.userId, req.params.schoolId, parsed.data.is_active);
+      if (result === 'LAST_PRINCIPAL') {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'LAST_PRINCIPAL', message: "This is the school's only active principal. Add or reactivate another principal first, or nobody could administer the school." },
+        });
+      }
+      if (!result) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
+      }
+      const updated = result;
 
-      // Immediately update the is_active cache so verifyToken blocks the user on the next request
+      // Update the is_active cache so verifyToken blocks the user on the next request. Best effort:
+      // a bare await here turned a Redis outage into a 500 after the change was saved (Round 19).
       if (redis) {
-        await redis.set(`user_active:${req.params.userId}`, parsed.data.is_active ? '1' : '0', 'EX', USER_ACTIVE_CACHE_SECONDS);
+        const r = redis;
+        await bestEffort('user_active_cache_unavailable', () =>
+          r.set(`user_active:${req.params.userId}`, parsed.data.is_active ? '1' : '0', 'EX', USER_ACTIVE_CACHE_SECONDS));
       }
 
       await logAudit({
@@ -430,9 +463,44 @@ router.post(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'User not found' } });
       }
 
+      // A student whose address is the made-up kind registration gives them has no mailbox: a link
+      // would go nowhere. They are given a new temporary password instead, shown once, as at
+      // registration (audit, 8 Oct 2026).
+      if (existing.role === 'student' && /@students\.internal$/i.test(existing.email)) {
+        const tempPassword = generateTempPassword();
+        const set = await setStudentTemporaryPassword(existing.id, req.params.schoolId, bcrypt.hashSync(tempPassword, 12), async () => {
+          const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existing.id, { password: tempPassword });
+          return updateError ? { ok: false, error: updateError.message } : { ok: true };
+        });
+        if (!set.ok) {
+          return res.status(500).json({ success: false, error: { code: 'RESET_FAILED', message: 'The new password could not be set. Nothing was changed; try again.' } });
+        }
+        await logAudit({
+          ipAddress: clientIp(req) ?? null,
+          supportSession: req.supportSession,
+          schoolId: req.params.schoolId,
+          userId: req.user!.user_id,
+          actionType: 'USER_TEMP_PASSWORD_SET',
+          entity: 'users',
+          entityId: existing.id,
+          newValue: { reason: 'student_without_email' },
+        });
+        return res.json({
+          success: true,
+          data: {
+            sent: false,
+            temp_password: tempPassword,
+            message: 'This student has no email address, so here is a new temporary password. Give it to the student; they choose their own when they next sign in.',
+          },
+        });
+      }
+
+      // The link returns to the reset page; without redirectTo it opened the home page, where nothing
+      // reads it (CLAUDE.md, "The reset email and where it lands").
       const { data, error } = await supabaseAdmin.auth.admin.generateLink({
         type: 'recovery',
         email: existing.email,
+        options: { redirectTo: resetPasswordRedirect() },
       });
       if (error) {
         return res.status(500).json({ success: false, error: { code: 'RESET_LINK_FAILED', message: error.message } });
@@ -443,12 +511,13 @@ router.post(
         return res.status(500).json({ success: false, error: { code: 'RESET_LINK_FAILED', message: 'Failed to generate reset link' } });
       }
 
-      // Email the link directly — never return it in the response body.
-      sendEmail(
+      // Email the link directly — never return it in the response body. Awaited, and its outcome is
+      // the answer: it said "sent" whatever happened.
+      const outcome = await sendEmail(
         existing.email,
         'Password Reset Request',
         `A password reset has been requested for your Chronix Edu account.\n\nClick the link below to reset your password:\n\n${actionLink}\n\nThis link expires shortly. If you did not request this, you can safely ignore this email.`
-      ).catch(err => logger.error('password_reset_link_email_failed', { user_id: existing.id, error: err instanceof Error ? err.message : String(err) }));
+      );
 
       await logAudit({
         ipAddress: clientIp(req) ?? null,
@@ -458,9 +527,20 @@ router.post(
         actionType: 'USER_PASSWORD_RESET_LINK',
         entity: 'users',
         entityId: existing.id,
+        newValue: { email_outcome: outcome },
       });
 
-      return res.json({ success: true, data: { sent: true } });
+      const sent = outcome === 'sent';
+      return res.json({
+        success: true,
+        data: {
+          sent,
+          outcome,
+          message: sent
+            ? `A reset link was emailed to ${existing.email}.`
+            : `The reset email was not sent (${outcome === 'disabled' ? 'email is not set up on this server' : 'the email service refused it'}). They can use Forgot password on the sign-in page.`,
+        },
+      });
     } catch (err) {
       return next(err);
     }
@@ -474,7 +554,10 @@ router.post(
 router.post(
   '/:schoolId/users/:userId/signature',
   verifyToken,
-  requireSchoolAccess,
+  // A member of the school, not this file's principal-only guard: the handler admits the person
+  // themselves or an admin, and the principal-only guard refused every teacher before it ran, so
+  // a teacher could never upload their own signature (audit, 8 Oct 2026).
+  requireSchoolMember,
   upload.single('signature'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

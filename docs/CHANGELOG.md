@@ -1,5 +1,25 @@
 # Chronix Edu — Changelog
 
+## Notification settings take effect; staff accounts get a welcome email (2026-10-08)
+
+### For principals
+- **Settings → Notifications now does what it says.** Each event's In-App and Email choices are followed (results,
+  attendance alerts, behaviour, announcements, messages), and attendance alerts use your own absence rule. Until
+  you save one, the page says the default (3 absences in 7 days) applies. A message email says who wrote, never what.
+- **Attendance alerts can be resolved** (Attendance → Resolve). A child's parents are told again if absences build up
+  after that; before, they were told once and never again.
+- **A new staff account is sent a welcome email** explaining how to set a password. No password is shown on screen.
+- **Reset Password says whether the email went**, and its link opens the reset page. For a student with no email
+  address it gives a new temporary password to hand over, as registration does.
+- **Teachers can upload their own signature.**
+- **You cannot deactivate your own account, or the school's last active principal.**
+- Teaching assignments and timetable slots only take this school's classes, subjects and terms, and changes to
+  classes, subjects, assignments and the timetable are recorded in the audit log.
+
+### For teachers
+- If the school turns on email for "Result Returned", you are emailed when results you submitted come back for
+  correction. Score Entry always shows it.
+
 ## Parents can look back at past terms and see class notices (2026-10-08)
 
 ### For parents

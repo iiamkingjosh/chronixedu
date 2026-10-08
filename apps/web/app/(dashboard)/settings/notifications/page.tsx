@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import notificationDefaults from '@/lib/notificationDefaults.json';
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -43,20 +44,22 @@ const EVENT_TYPES: { key: string; label: string; description: string }[] = [
   { key: 'message', label: 'New Message', description: 'A new direct message is received' },
 ];
 
-const DEFAULT_EVENT_CHANNELS: Record<string, Channels> = {
-  low_attendance:     { in_app: true, email: true,  sms: false },
-  behaviour_incident: { in_app: true, email: true,  sms: false },
-  results_published:  { in_app: true, email: true,  sms: false },
-  results_returned:   { in_app: true, email: false, sms: false },
-  announcement:       { in_app: true, email: true,  sms: false },
-  message:            { in_app: true, email: false, sms: false },
-};
+// The same file the API's senders read (apps/api/src/config/notificationDefaults.json; a test keeps the
+// two equal). Every switch on this page is read when its event happens, since 8 Oct 2026; before that
+// the page saved them and nothing read them.
+const DEFAULT_EVENT_CHANNELS: Record<string, Channels> = notificationDefaults.events;
+const DEFAULT_ALERT = notificationDefaults.attendance_alert;
 
 const DEFAULT_VALUES: FormValuesInput = {
   sms_sender_name: '',
-  attendance_alert_threshold: 3,
-  attendance_alert_window_days: 7,
+  attendance_alert_threshold: DEFAULT_ALERT.threshold,
+  attendance_alert_window_days: DEFAULT_ALERT.window_days,
   events: DEFAULT_EVENT_CHANNELS,
+};
+
+/** Channels that are not the school's to switch, and why. */
+const FIXED_CHANNELS: Record<string, Partial<Record<keyof Channels, string>>> = {
+  results_returned: { in_app: 'Teachers always see a returned result on their Score Entry page.' },
 };
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -78,6 +81,9 @@ export default function NotificationSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
+  // Whether the school has chosen its own absence rule: until it does, the default applies and the
+  // page says so (doctrine 8).
+  const [alertRuleChosen, setAlertRuleChosen] = useState(false);
 
   const {
     control,
@@ -100,10 +106,11 @@ export default function NotificationSettingsPage() {
         for (const { key } of EVENT_TYPES) {
           mergedEvents[key] = { ...DEFAULT_EVENT_CHANNELS[key], ...(nc.events?.[key] ?? {}) };
         }
+        setAlertRuleChosen(nc.attendance_alert?.threshold !== undefined || nc.attendance_alert?.window_days !== undefined);
         reset({
           sms_sender_name: nc.sms_sender_name ?? '',
-          attendance_alert_threshold: nc.attendance_alert?.threshold ?? 3,
-          attendance_alert_window_days: nc.attendance_alert?.window_days ?? 7,
+          attendance_alert_threshold: nc.attendance_alert?.threshold ?? DEFAULT_ALERT.threshold,
+          attendance_alert_window_days: nc.attendance_alert?.window_days ?? DEFAULT_ALERT.window_days,
           events: mergedEvents,
         });
       })
@@ -126,6 +133,7 @@ export default function NotificationSettingsPage() {
           ...(senderName ? { sms_sender_name: senderName } : {}),
         }),
       });
+      setAlertRuleChosen(true);
       show('Notification settings saved');
     } catch (err: unknown) {
       show(err instanceof Error ? err.message : 'Save failed', 'error');
@@ -214,6 +222,9 @@ export default function NotificationSettingsPage() {
         <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Attendance Alerts</h2>
           <p className="text-sm text-gray-500">Notify parents when a student&apos;s absences reach this threshold within the given period.</p>
+          {!alertRuleChosen && (
+            <p className="text-xs text-amber-700">Not chosen yet: the default, {DEFAULT_ALERT.threshold} absences in {DEFAULT_ALERT.window_days} days, applies until you save.</p>
+          )}
           <div className="flex items-center gap-3 flex-wrap">
             <span className="text-sm text-gray-700">Alert after</span>
             <Controller
@@ -288,8 +299,8 @@ export default function NotificationSettingsPage() {
                               type="checkbox"
                               checked={f.value as boolean}
                               onChange={e => f.onChange(e.target.checked)}
-                              disabled={channel === 'sms'}
-                              title={channel === 'sms' ? 'SMS notifications activate in Phase 3' : undefined}
+                              disabled={channel === 'sms' || !!FIXED_CHANNELS[key]?.[channel]}
+                              title={channel === 'sms' ? 'SMS is switched off for now' : FIXED_CHANNELS[key]?.[channel]}
                               className="h-4 w-4 rounded border-gray-300 accent-slate-700 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                             />
                           )}
@@ -302,7 +313,7 @@ export default function NotificationSettingsPage() {
             </table>
           </div>
           <div className="px-6 py-3 border-t border-gray-100">
-            <p className="text-xs text-gray-400">SMS notifications are not yet available — this column activates in Phase 3.</p>
+            <p className="text-xs text-gray-400">SMS is switched off for every school for now; notices go in the app and by email. Teachers always see a returned result on their Score Entry page.</p>
           </div>
         </section>
 

@@ -656,6 +656,10 @@ Monorepo, npm workspaces:
   screen and slip say how a parent sets one (the sign-in page, then Forgot password). A student's
   temporary password is still shown and printed: most students have no email to reset with.
 
+  **A single staff account made under Settings → Users gets the same welcome email** (Moses, 8 Oct 2026); it returned
+  the temporary password until then (SECURITY.md Round 40 L-04). Reset Password answers with the email's outcome; a
+  student with a `@students.internal` address gets a new temporary password instead, shown once.
+
   **"Sent" means SendGrid accepted it.** `sendEmail` never throws; it returns
   `'sent' | 'queued' | 'lost' | 'disabled'`. Anything that tells a person an email went reads that
   value, never the absence of an error. `email_queue` keeps the body of every refused email, so
@@ -1174,13 +1178,25 @@ Monorepo, npm workspaces:
   `ORDER BY created_at DESC LIMIT 20`; what needed a mechanism was removing a notice that
   is *wrong*, and a clock cannot express intent.
 
+## Notification settings (read since 8 Oct 2026)
+
+- **Settings → Notifications is read where each event happens** (`services/notificationSettings.ts`): the parent
+  queue worker (results, attendance alerts, behaviour), announcements, messages (an email names the sender, never
+  the content), and results returned (email only; Score Entry always shows it). Before, the page saved and nothing
+  read it. Defaults live in `config/notificationDefaults.json`, which `apps/web/lib` copies
+  (`notificationSettings.test.ts` keeps them equal). A stored value that is not a boolean reads as the default.
+- **The attendance alert rule is the school's** (`attendanceAlertRule`, default 3 absences in 7 days, inclusive).
+  An alert stays open until resolved (`PATCH /attendance/alerts/:id/resolve`, principal, audited), and a new one is
+  raised only when none is open.
+
 ## SMS is switched off (1 Oct 2026) — a decision, not a fault
 
 - **Termii is not funded; Moses decided 1 Oct 2026.** SMS is off. Do not "fix" it: no SMS row, no
   Termii call and an `sms_disabled` log line are the system working as intended.
 - **The Termii keys stay in Railway on purpose** (`TERMII_API_KEY`, `TERMII_SENDER_ID`; Moses, 1 Oct
   2026: SMS may come back). Do not delete them, and do not read their presence as "SMS is on".
-- **The switch is `SMS_ENABLED`**: SMS sends only when it is `true` AND a key is set
+- **The switch is `SMS_ENABLED`**: SMS sends only when it is `true` AND a key is set, and, since 8 Oct 2026, only for
+  an event the school has ticked SMS for in Settings → Notifications (off by default)
   (`isSmsEnabled()` in `services/termiiService.ts`). Unset means off, which is production's state.
   It is not the key, because a key existing answers *what* the key is, not *whether* to send
   (doctrine 8): the first version of this switch keyed off the key's absence, and with the keys kept

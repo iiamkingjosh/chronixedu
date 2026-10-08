@@ -60,7 +60,7 @@ export const ALERTS = {
   email_failing: {
     why: 'Sending email through SendGrid is failing: notifications and receipts are queued for retry, or lost if the queue write failed too',
     level: 'error',
-    events: ['sendgrid_email_failed', 'email_queue_insert_failed', 'announcement_email_failed', 'password_reset_link_email_failed'],
+    events: ['sendgrid_email_failed', 'email_queue_insert_failed', 'announcement_email_failed'],
     fields: ['error'],
   },
   password_reset_email_failing: {

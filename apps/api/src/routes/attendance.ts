@@ -1,4 +1,5 @@
 ﻿import { Router, Request, Response, NextFunction } from 'express';
+import { attendanceAlertRule, loadNotificationConfig } from '../services/notificationSettings';
 import { logger } from '../config/logger';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
@@ -9,6 +10,7 @@ import { findStudentById } from '../db/queries/students';
 import { isParentLinkedToStudent } from '../db/queries/parents';
 import {
   findTermForDate,
+  resolveAttendanceAlert,
   bulkUpsertAttendance,
   countRecentAbsences,
   hasUnresolvedAlert,
@@ -182,13 +184,16 @@ router.post(
         newValue: { class_id, date, term_id: term.id, count: saved.length },
       });
 
-      // Low-attendance alert: 3+ absences in the trailing 7 days (inclusive of the marked date)
+      // Low-attendance alert: the school's rule from Settings → Notifications, 3 absences in 7 days
+      // (inclusive of the marked date) until it chooses. It was fixed at 3 in 7 whatever the school had
+      // set (audit, 8 Oct 2026).
+      const rule = attendanceAlertRule(await loadNotificationConfig(schoolId));
       const alerts: AttendanceAlertRow[] = [];
       for (const entry of validEntries) {
         if (entry.status !== 'absent') continue;
 
-        const recentAbsences = await countRecentAbsences(entry.student_id, schoolId, date);
-        if (recentAbsences < 3) continue;
+        const recentAbsences = await countRecentAbsences(entry.student_id, schoolId, date, rule.window_days);
+        if (recentAbsences < rule.threshold) continue;
 
         const alreadyAlerted = await hasUnresolvedAlert(entry.student_id, schoolId, LOW_ATTENDANCE_ALERT_TYPE);
         if (alreadyAlerted) continue;
@@ -388,6 +393,43 @@ router.get(
     try {
       const alerts = await listUnresolvedAlerts(req.params.schoolId);
       return res.json({ success: true, data: alerts });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── PATCH /:schoolId/attendance/alerts/:alertId/resolve ───────────────────────
+// An alert stays open until someone resolves it, and a new one is raised only when none is open, so
+// with no way to resolve one a child's parents were told once and never again (audit, 8 Oct 2026).
+
+router.patch(
+  '/:schoolId/attendance/alerts/:alertId/resolve',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { schoolId, alertId } = req.params;
+      if (!z.string().uuid().safeParse(alertId).success) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Alert not found' } });
+      }
+      const resolved = await resolveAttendanceAlert(alertId, schoolId);
+      if (!resolved) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Alert not found, or already resolved' } });
+      }
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'ATTENDANCE_ALERT_RESOLVED',
+        entity: 'attendance_alerts',
+        entityId: alertId,
+        oldValue: { is_resolved: false },
+        newValue: { is_resolved: true, student_id: resolved.student_id },
+      });
+      return res.json({ success: true, data: { id: alertId, is_resolved: true } });
     } catch (err) {
       return next(err);
     }
