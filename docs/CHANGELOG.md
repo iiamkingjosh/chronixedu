@@ -1,5 +1,33 @@
 # Chronix Edu — Changelog
 
+## One set of rules for who does what (2026-10-08)
+
+Every screen and every action now follows one table of who does what. Your menu shows the screens of your job,
+and opening another role's screen by its address takes you back to your dashboard.
+
+### For principals
+- **Fees are in your sidebar.** You can do everything the bursar does: fee structures, invoices, payments,
+  refunds, payment import and reminders. A school without a bursar is never stuck.
+- **You set each class's form teacher,** and who teaches what. The registrar can now manage classes and
+  subjects, but not those.
+- Score Entry is the teachers' screen; you enter and review scores from Results.
+
+### For registrars
+- **Settings → Roster:** you can add, rename and remove classes and subjects. The principal sets form teachers
+  and who teaches what.
+
+### For bursars
+- **Students is in your sidebar,** to look a child up. It is read only.
+- Refunds can also be recorded by the principal.
+
+### For teachers
+- **You see the students of the classes you teach or form-teach.** The school-wide student list, and other
+  classes' students' attendance and behaviour, are no longer open to you; your class screens are unchanged.
+- The attendance summary by class and the attendance alerts are on the principal's attendance page.
+
+### For students
+- Fees are for parents: a student no longer sees an invoice or starts a payment.
+
 ## Principals reach the Students pages; class lists are this session's (2026-10-08)
 
 ### For principals

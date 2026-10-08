@@ -1,6 +1,6 @@
 # One table of who can do what — design
 
-Date: 8 Oct 2026. Status: approved (approach A); the later answers are in "Decided after review" below.
+Date: 8 Oct 2026. Status: built (Batch 9, 8 Oct 2026, not yet deployed); the later answers are in "Decided after review" below.
 Plan: `docs/superpowers/plans/2026-10-08-roles-permissions.md`.
 
 ## Why

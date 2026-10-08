@@ -31,20 +31,26 @@ Monorepo, npm workspaces:
 ## Non-negotiable doctrines
 
 1. **Tenant id comes from the verified JWT, never the request.** Every
-   `/api/schools/:schoolId/...` route runs `requireSchoolAccess`
-   (`req.user.school_id === req.params.schoolId`, super_admin excepted) and
-   filters every query by `school_id`. Never trust `school_id` in a body/query.
-   **Being replaced, file by file (Batch 9, 8 Oct 2026):** a moved file has no guard of its own; each route names
-   its job with `requireCapability(...)`, read from `config/capabilities.json` (the one table of who does what).
-   `capabilityRoutes.test.ts` lists the files not yet moved (`NOT_YET_MOVED`); for those, the warning below holds.
-   ⚠️ **`requireSchoolAccess` is defined per route file and they are NOT identical.**
-   Most files define the permissive version above; `routes/users.ts` and `routes/schools.ts` define one
-   that admits **only super_admin and principal** (`schools.ts` adds `requirePayoutAccess` for the bursar's
-   payout routes). Read the definition in the file
-   you are working in before concluding a route is or isn't guarded — a Round 10
-   audit pass misreported an endpoint as world-readable by assuming the common
-   version. When a route's access differs from its file's norm, add an explicit
-   `requireRole(...)` so the intent is visible at the call site.
+   `/api/schools/:schoolId/...` route runs exactly one `requireCapability(...)`
+   (`middleware/requireCapability.ts`): the caller's own school (`req.user.school_id ===
+   req.params.schoolId`; a platform admin where the table says so), then a role holding one of
+   the named capabilities. Every query still filters by `school_id`. Never trust `school_id` in a body/query.
+   **Who does what is one table, `config/capabilities.json`** (since 8 Oct 2026; spec
+   `docs/superpowers/specs/2026-10-08-roles-permissions-design.md`). It replaced 25 per-file
+   `requireSchoolAccess` copies that were not identical (a Round 10 audit pass misreported a route by
+   assuming the common one) and every `requireRole` on a school route.
+   - **The web reads an exact copy** (`apps/web/lib/capabilities.json`, `roleHolds`): the sidebar, the
+     Settings rail and index, the Roster tabs, the palette and the page guard on typed addresses.
+   - **The tests that keep it true:** `capabilities.test.ts` pins the rules (the principal holds every
+     capability the bursar or the registrar holds; a staff member's email is the platform admin's alone;
+     the bursar views payout and the principal saves it) and the identical copy; `capabilityRoutes.test.ts`
+     walks every mounted route and fails on one without exactly one `requireCapability`, on a route file
+     with a guard of its own, and on a route or role in `REMOVED` coming back; `capabilityMatrix.db.test.ts`
+     calls one route per capability as every role, both directions; `pageRouteAgreement.test.ts` fails when
+     a page is shown to a role the routes it calls refuse.
+   - **A new school route** names its capability; a new job is a new row (a decision for Moses, never a
+     role list in a route). Which records a role may touch (a teacher's classes, a parent's children)
+     stays in the handler; `holdsCapability` lets a handler ask the table ("their own, or anyone's?").
 2. **RLS is defence in depth, not the enforcement layer.** The API's `pg` pool
    connects as the table owner and **bypasses RLS**. Isolation lives in route
    guards + `WHERE school_id = $n`. Every table still has RLS enabled (CI
@@ -324,8 +330,8 @@ Monorepo, npm workspaces:
     on the Site URL (the home page), where nothing reads it. Use the app's Forgot password.
 - Roles (`public.users.role`): `super_admin, principal, teacher, registrar, bursar, parent, student`.
 - Middleware chain on `/api/schools`: `detectSupportSession → verifyToken →
-  requirePasswordChanged → requireActiveSchool → router`. Routes additionally
-  use `requireSchoolAccess` + `requireRole(...)`.
+  requirePasswordChanged → requireActiveSchool → router`. Each route additionally
+  runs one `requireCapability(...)` (doctrine 1).
 - Support sessions (impersonation) require the `x-support-session-id` header and
   a live `support_sessions` row. `ROOT_ADMIN_EMAIL` alone may manage other
   super_admins and wipe school data.
@@ -587,9 +593,14 @@ Monorepo, npm workspaces:
   form is invalid. A click must validate and show the field errors, or the screen looks broken.
   Offline score/attendance writes go through Dexie (`lib/offlineDb.ts`).
 - Path alias `@/` in web. Keep files where their siblings are.
-- **The sidebar is `lib/navigation.ts`.** The principal's daily work is four labelled groups
-  (12 links; Promotions joined Students on 8 Oct 2026); Settings is ONE sidebar entry whose
-  sub-nav lives in `settings/layout.tsx`, with `/settings` an index page. Labels must not collide even singular-vs-plural
+- **The sidebar is `lib/navigation.ts`.** Every school link names its capability, and a role is
+  shown only links it holds (`navigation.test.ts` fails on one it does not). The principal's daily
+  work is five labelled groups (16 links; Promotions and Fees joined on 8 Oct 2026); Settings is ONE
+  sidebar entry whose sub-nav lives in `settings/layout.tsx`, with `/settings` an index page. A role
+  with only some settings pages has them listed instead (the bursar's Payout Setup and Platform
+  Billing, the registrar's Roster). **One page guard** in the dashboard layout (`mayOpenPage`)
+  refuses a typed address the role may not open, by the longest page address it falls under;
+  pages no sidebar links to are `UNLINKED_SCHOOL_PAGES`. Labels must not collide even singular-vs-plural
   (`lib/__tests__/navigation.test.ts` — "Report Cards" beside "Report Card" was the wrong-click
   it exists for). Nothing reorders by usage. "School-wide Grading" and "Grading by Level" stay
   two pages: merged behind a level selector, the page would show a level's *effective* values
@@ -597,16 +608,15 @@ Monorepo, npm workspaces:
   (jest, pure TypeScript under `lib/`), and the root `test:unit` runs them after the API's.
 - **The Ctrl+K palette (`components/CommandPalette.tsx`) has no page list of its own.**
   `lib/commandPalette.ts` builds it from `getNavGroupsForRole`, which rests on
-  `getMainNavForRole`, plus `settingsGroupsForRole`, built on `settingsAccessForRole` (`all` |
-  `payout` | `none`). The dashboard sidebar, the Settings rail and the Settings index read the same
-  function, so a bursar is shown Payout Setup and Platform Billing and nothing else (the rail showed
-  every page to every role until 8 Oct 2026). Add a page to `navigation.ts` and
+  `getMainNavForRole`, plus `settingsGroupsForRole`, the settings pages whose capability the role
+  holds. The dashboard sidebar, the Settings rail and the Settings index read the same function (the
+  rail showed every page to every role until 8 Oct 2026). Add a page to `navigation.ts` and
   both the sidebar and the palette get it; never add one to the palette alone, or it will offer
   a page the role's guard refuses. **The platform-admin area is the same rule**: its eleven pages
   are `SUPER_ADMIN_NAV_GROUPS` in `navigation.ts` (they used to be a private list inside
   `app/super-admin/layout.tsx`). That layout renders its sidebar from them and mounts the palette,
   and `getMainNavForRole('super_admin')` returns them, not `PRINCIPAL_NAV`: a super admin has no
-  school, so school pages and school Settings are not theirs (`settingsAccessForRole` → `none`).
+  school, so school pages and school Settings are not theirs (`settingsGroupsForRole` → none).
   A test pins both directions: the platform palette offers exactly the platform pages, and no
   school role's palette offers one. `commandPalette.test.ts` asserts, per
   role, that the palette's set EQUALS the expected set, not merely that it is non-empty. It
@@ -738,9 +748,15 @@ Monorepo, npm workspaces:
 
 - `docs/roles-guide.md` is the school-facing page: each role's job and where it does it. Keep it true when a
   role's pages or rights change.
-- **The principal can do the registrar's work** (decided 8 Oct 2026, Moses): a new school has only its
-  principal, and many small schools have no registrar, so a registrar-only rule would leave them unable to
-  add a student.
+- **The principal can do the registrar's work, and the bursar's** (decided 8 Oct 2026, Moses): a new school
+  has only its principal, and many small schools have no registrar or bursar. It is a rule on the table,
+  tested (`capabilities.test.ts`), so a new student or fee job cannot be given to the registrar or bursar
+  alone.
+- **The 8 Oct answers held on the table:** the registrar manages classes and subjects, never a form teacher
+  (the field grants rights, so setting it is the principal's); the bursar reads students; a teacher sees
+  only the students of classes they teach or form-teach; teacher assignments are the principal's; a
+  student reads no invoice and starts no payment; a staff member's email is changed by the platform admin
+  only (it is the account's only key).
 - **A student is a `students` row, registered under Students;** a parent is linked to a child. Neither is
   made under Settings → Users, which creates staff only (Round 39 L-01). A `users` row with role `student`
   and no `students` row is on no list and can be given no class.
@@ -1178,7 +1194,7 @@ Monorepo, npm workspaces:
   (`form_teacher_id` OR `isTeacherAssignedToClass`, mirroring `routes/behaviour.ts`).
   Delete carries the identical check — guarding the write and leaving the un-write open is
   half a guard. The case that matters is a teacher on their OWN school's path posting to a
-  class they do not teach: `requireSchoolAccess` passes and only the class check stops them.
+  class they do not teach: the guard's tenant check passes and only the class check stops them.
 - `GET /:schoolId/notices` returns `{ notices, classes }` — the postable classes come from
   the same request that lists the notices, so the picker on `/notices` cannot offer a class
   the guard will refuse. Build any future notices UI from that list, not from a roster

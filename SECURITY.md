@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 40 — 2026-10-08  
 **Scope:** Fixes from the 8 Oct 2026 audit of every school role  
-**Round 40 total findings:** 6 (0 Critical · 0 High · 0 Medium · 6 Low) — remediated in code, not yet deployed
+**Round 40 total findings:** 8 (0 Critical · 0 High · 0 Medium · 8 Low) — remediated in code, not yet deployed
 
 ---
 
@@ -124,6 +124,45 @@ read or made.
 
 **Tests:** `analyticsTerm.db.test.ts` (this school's term is served and leaves its snapshot; another school's term
 leaves none). With the check removed, it fails.
+
+### L-07 — A teacher could read any student's record, attendance and behaviour ✅ Remediated
+
+**Files:** `apps/api/src/routes/students.ts`, `attendance.ts`, `behaviour.ts`; `db/queries/attendance.ts`
+(`teacherTeachesStudent`).
+
+**Found** on 8 Oct 2026, in the inventory of every school route.
+
+**The mechanism.** The student list and a student's profile admitted any teacher, and a student's attendance
+history and behaviour history checked only that the caller was staff. A teacher could read the details, parents
+and records of every child in the school, though their job covers the classes they teach.
+
+**Why Low.** Only a teacher of the same school, reading by an id no screen offered; nothing crossed schools, and
+nothing could be changed.
+
+**Fix.** Moses, 8 Oct 2026: a teacher sees only the students of classes they teach or form-teach. The list and
+profile are no longer a teacher's (students.view: principal, registrar, bursar); the attendance and behaviour
+histories need a class the teacher teaches this session or form-teaches.
+
+**Tests:** `studentsAccess.db.test.ts`, `classDailyAccess.db.test.ts` (each failed on the old code).
+
+### L-08 — Reads every member could make, though only the principal's screens used them ✅ Remediated
+
+**Files:** `apps/api/src/routes/roster.ts`, `assessmentConfig.ts`, `scores.ts`, `attendance.ts`.
+
+**Found** on 8 Oct 2026, in the inventory of every school route.
+
+**The mechanism.** Any member of the school, parents and students included, could read any teacher's teaching
+assignments, the assessment structure, and a teacher's pending scores (answered empty); any teacher could read the
+school's open attendance alerts, which name students of every class, and the attendance summary by class.
+
+**Why Low.** Same school only, and nothing a screen offered.
+
+**Fix.** Each is decided by the one table: teaching assignments and pending scores are the principal's and the
+teacher's own; the assessment structure, the attendance summary and the alerts are the principal's. Every school
+route now names its job (`requireCapability`), and `capabilityRoutes.test.ts` fails on a route that does not.
+
+**Tests:** `rosterAccess.db.test.ts`, `resultsAccess.db.test.ts`, `classDailyAccess.db.test.ts`,
+`capabilityMatrix.db.test.ts`.
 
 ---
 
