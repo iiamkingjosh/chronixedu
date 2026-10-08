@@ -3,7 +3,8 @@ import { getSetupStatus, lagosToday } from '../services/setupStatus';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { z } from 'zod';
-import { verifyToken, requireRole, type SupportSessionContext } from '../middleware/auth';
+import { verifyToken, requireSuperAdmin, type SupportSessionContext } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { requireFeature } from '../middleware/requireFeature';
 import { redis, bestEffort } from '../middleware/rateLimit';
@@ -150,32 +151,6 @@ const reportConfigFieldsSchema = z.object({
 const updateReportConfigSchema = reportConfigFieldsSchema
   .refine(obj => Object.keys(obj).length > 0, { message: 'At least one field is required' });
 
-// ── Middleware: allow super_admin or the school's own principal ────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.role === 'principal' && user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
-// ── Middleware: allow super_admin, or the school's own principal/bursar ────────
-
-function requirePayoutAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if ((user.role === 'principal' || user.role === 'bursar') && user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
 function maskAccountNumber(accountNumber: string | undefined): string | undefined {
   if (!accountNumber || accountNumber.length < 4) return accountNumber;
   return `••••${accountNumber.slice(-4)}`;
@@ -239,7 +214,7 @@ async function sendPayoutChangeAlerts(
 router.post(
   '/',
   verifyToken,
-  requireRole('super_admin'),
+  requireSuperAdmin,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = createSchoolSchema.safeParse(req.body);
@@ -277,13 +252,13 @@ router.post(
 // ── GET /:schoolId/export, GET /:schoolId/export/:dataset ─────────────────────
 // The school's own complete data export (db/queries/schoolExport.ts): the DPA and Terms §22
 // promise it, and the read-only notice tells a lapsed school it can still take its data.
-// GETs, so they work while read-only. This file's requireSchoolAccess admits the principal
-// and super_admin only — deliberately: this is every child's record in one place. Each
+// GETs, so they work while read-only. school.export is the principal's (and the platform
+// admin's) only — deliberately: this is every child's record in one place. Each
 // download is audited (doctrine 10: a bulk export of personal data is a sensitive act).
 router.get(
   '/:schoolId/export',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.export'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       return res.json({ success: true, data: { datasets: await exportSummary(req.params.schoolId) } });
@@ -301,7 +276,7 @@ router.get(
 router.get(
   '/:schoolId/export/archive',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.export'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       await logAudit({
@@ -350,7 +325,7 @@ router.get(
 router.get(
   '/:schoolId/export/:dataset',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.export'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const out = await exportDatasetCsv(req.params.schoolId, req.params.dataset);
@@ -379,16 +354,11 @@ router.get(
 
 // ── GET /:schoolId/subscription-status ──────────────────────────────────────
 // The trial gate's state, for the in-app notice (migration 046). Every member of the
-// school may read it — unlike this file's requireSchoolAccess, which admits principals
-// only — so the guard is written here, explicitly (CLAUDE.md doctrine 1). A GET, so it
-// still answers while the school is read-only; that is when it matters most.
+// school may read it. A GET, so it still answers while the school is read-only; that is
+// when it matters most.
 router.get(
   '/:schoolId/subscription-status',
-  (req: Request, res: Response, next: NextFunction) => {
-    const u = req.user;
-    if (u && (u.role === 'super_admin' || u.school_id === req.params.schoolId)) { next(); return; }
-    res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-  },
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const r = await findSubscriptionGate(req.params.schoolId);
@@ -422,7 +392,7 @@ router.get(
 router.get(
   '/:schoolId/setup-status',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const items = await getSetupStatus(req.params.schoolId, lagosToday());
@@ -436,7 +406,7 @@ router.get(
 router.get(
   '/:schoolId',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const cacheKey = schoolCacheKey(req.params.schoolId, 'data');
@@ -461,7 +431,7 @@ router.get(
 router.patch(
   '/:schoolId/identity',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // The images are set by uploading one, never by sending an address. This route took any address
@@ -527,13 +497,13 @@ router.patch(
 // minutes and sent with max-age=60. level_overrides is replaced wholesale on save, so a
 // screen that re-read a stale copy would write old overrides back over new ones.
 //
-// Access is this file's requireSchoolAccess: super_admin, or the school's own principal
-// — the same people the PATCH admits, so nobody can see a screen they cannot save.
+// Access is school.setup, the same capability the PATCH names, so nobody can see a screen
+// they cannot save.
 
 router.get(
   '/:schoolId/academic-config/levels',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -582,7 +552,7 @@ router.get(
 router.patch(
   '/:schoolId/academic-config',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = updateAcademicSchema.safeParse(req.body);
@@ -692,7 +662,7 @@ const updateFeeConfigSchema = z
 router.get(
   '/:schoolId/fee-config',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { kobo, isConfigured } = await resolveMinPartPayment(req.params.schoolId);
@@ -723,8 +693,7 @@ router.get(
 router.patch(
   '/:schoolId/fee-config',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('principal', 'bursar', 'super_admin'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = updateFeeConfigSchema.safeParse(req.body);
@@ -755,7 +724,7 @@ router.patch(
 router.patch(
   '/:schoolId/notification-config',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = updateNotificationSchema.safeParse(req.body);
@@ -815,7 +784,7 @@ router.patch(
 router.patch(
   '/:schoolId/report-config',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = updateReportConfigSchema.safeParse(req.body);
@@ -853,7 +822,7 @@ router.patch(
 router.post(
   '/:schoolId/report-config/preview',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = reportConfigFieldsSchema.safeParse(req.body);
@@ -882,7 +851,7 @@ router.post(
 router.post(
   '/:schoolId/notifications/test-email',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const email = req.user?.email;
@@ -919,7 +888,7 @@ router.post(
 router.post(
   '/:schoolId/logo',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   upload.single('logo'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -979,7 +948,7 @@ router.post(
 router.post(
   '/:schoolId/signature',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   upload.single('signature'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1039,7 +1008,7 @@ router.post(
 router.post(
   '/:schoolId/stamp',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.setup'),
   upload.single('stamp'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1099,7 +1068,7 @@ router.post(
 router.get(
   '/:schoolId/settings/payout',
   verifyToken,
-  requirePayoutAccess,
+  requireCapability('school.payout.view'),
   requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1128,7 +1097,7 @@ router.get(
 router.get(
   '/:schoolId/settings/payout/banks',
   verifyToken,
-  requirePayoutAccess,
+  requireCapability('school.payout.view'),
   requireFeature('online_payments'),
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1151,7 +1120,7 @@ router.get(
 router.post(
   '/:schoolId/settings/payout/resolve',
   verifyToken,
-  requirePayoutAccess,
+  requireCapability('school.payout.view'),
   requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -1183,9 +1152,9 @@ router.post(
 
 // ── PUT /api/schools/:schoolId/settings/payout ─────────────────────────────────
 // Redirecting where a school's fee settlement lands is high-stakes enough that
-// it's restricted to principal/super_admin (not bursar — bursar keeps read and
-// resolve access above) and gated behind a step-up re-authentication, on top of
-// the normal role check.
+// it's school.payout.manage, the principal's alone (the bursar views and resolves,
+// school.payout.view: "Only view to avoid changes", Moses, 8 Oct 2026), and gated
+// behind a step-up re-authentication on top of it.
 
 const MAX_STEP_UP_ATTEMPTS = 5;
 const MAX_STEP_UP_IP_ATTEMPTS = 20; // higher threshold to avoid blocking shared NAT addresses
@@ -1194,7 +1163,7 @@ const STEP_UP_LOCK_WINDOW_SECONDS = 15 * 60; // 15 minutes
 router.put(
   '/:schoolId/settings/payout',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.payout.manage'),
   requireFeature('online_payments'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

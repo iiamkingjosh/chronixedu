@@ -34,6 +34,9 @@ Monorepo, npm workspaces:
    `/api/schools/:schoolId/...` route runs `requireSchoolAccess`
    (`req.user.school_id === req.params.schoolId`, super_admin excepted) and
    filters every query by `school_id`. Never trust `school_id` in a body/query.
+   **Being replaced, file by file (Batch 9, 8 Oct 2026):** a moved file has no guard of its own; each route names
+   its job with `requireCapability(...)`, read from `config/capabilities.json` (the one table of who does what).
+   `capabilityRoutes.test.ts` lists the files not yet moved (`NOT_YET_MOVED`); for those, the warning below holds.
    ⚠️ **`requireSchoolAccess` is defined per route file and they are NOT identical.**
    Most files define the permissive version above; `routes/users.ts` and `routes/schools.ts` define one
    that admits **only super_admin and principal** (`schools.ts` adds `requirePayoutAccess` for the bursar's

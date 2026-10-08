@@ -1,7 +1,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { redis, bestEffort } from '../middleware/rateLimit';
 import { logAudit } from '../db/queries/auditLog';
@@ -21,7 +22,6 @@ import { latestTermWithConfigBefore, copyAssessmentConfigs } from '../db/queries
 import pool from '../db/client';
 
 const router = Router();
-
 
 // ── Validation schemas ─────────────────────────────────────────────────────────
 
@@ -71,26 +71,12 @@ async function findTermDateConflict(
   return clash ? `These dates overlap "${clash.name}" (${clash.start_date} – ${clash.end_date})` : null;
 }
 
-// ── Middleware: super_admin or any user belonging to the school ─────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
 // ── POST /:schoolId/sessions ───────────────────────────────────────────────────
 
 router.post(
   '/:schoolId/sessions',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = sessionSchema.safeParse(req.body);
@@ -111,7 +97,7 @@ router.post(
 router.get(
   '/:schoolId/sessions',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const sessions = await listSessionsWithTerms(req.params.schoolId);
@@ -127,8 +113,7 @@ router.get(
 router.post(
   '/:schoolId/sessions/:sessionId/terms',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = termSchema.safeParse(req.body);
@@ -212,8 +197,7 @@ router.post(
 router.patch(
   '/:schoolId/sessions/:sessionId/terms/:termId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = termPatchSchema.safeParse(req.body);
@@ -269,8 +253,7 @@ router.patch(
 router.patch(
   '/:schoolId/sessions/:sessionId/activate',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (req.body.confirm !== true) {
@@ -316,8 +299,7 @@ router.patch(
 router.patch(
   '/:schoolId/sessions/:sessionId/terms/:termId/activate',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.setup'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       if (req.body.confirm !== true) {
@@ -376,7 +358,7 @@ router.patch(
 router.get(
   '/:schoolId/current-context',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const cacheKey = `ctx:${req.params.schoolId}`;

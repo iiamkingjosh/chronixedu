@@ -29,14 +29,11 @@ export function requireCapability(...caps: Capability[]): RequestHandler {
       res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
       return;
     }
-    const platform = user.role === 'super_admin';
-    if (!platform && user.school_id !== req.params.schoolId) {
+    if (user.role !== 'super_admin' && user.school_id !== req.params.schoolId) {
       res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
       return;
     }
-    const role = user.role;
-    const admitted = caps.some((c) => (platform ? rows[c].platform_admin : role !== undefined && rows[c].roles.includes(role)));
-    if (!admitted) {
+    if (!caps.some((c) => holdsCapability(user, c))) {
       res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Forbidden' } });
       return;
     }
@@ -44,6 +41,15 @@ export function requireCapability(...caps: Capability[]): RequestHandler {
   };
   named.set(guard, Object.freeze([...caps]));
   return guard;
+}
+
+/**
+ * Whether a user's role holds a capability (a platform admin where the row says so). For a handler that decides
+ * between "their own record" and "anyone's", as the staff signature upload does; it never replaces the guard.
+ */
+export function holdsCapability(user: { role?: string } | undefined, cap: Capability): boolean {
+  if (!user?.role) return false;
+  return user.role === 'super_admin' ? rows[cap].platform_admin : rows[cap].roles.includes(user.role);
 }
 
 /** The capabilities a guard names, for the route walker; undefined for any other handler. */

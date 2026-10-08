@@ -4,7 +4,8 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability, holdsCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { resetPasswordRedirect } from '../config/appUrls';
 import { supabaseAdmin } from '../supabaseClient';
@@ -85,39 +86,9 @@ const changeEmailSchema = z.object({
   reason: z.string().min(10, 'Reason must be at least 10 characters'),
 });
 
-// ── Middleware: super_admin or the school's own principal ──────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.role === 'principal' && user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
-/**
- * Any authenticated member of the school (not just admins). requireSchoolAccess
- * above is deliberately admin-only because every other route in this file manages
- * OTHER users; this one is for routes that only ever expose the caller's own record.
- */
-function requireSchoolMember(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
-
 function generateTempPassword(): string {
   return crypto.randomBytes(12).toString('base64url');
 }
-
 
 // ── GET /:schoolId/users/me ────────────────────────────────────────────────────
 // Any authenticated member of the school can read THEIR OWN record, resolved from
@@ -129,7 +100,7 @@ function generateTempPassword(): string {
 router.get(
   '/:schoolId/users/me',
   verifyToken,
-  requireSchoolMember,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const me = await findUserById(req.user!.user_id, req.params.schoolId);
@@ -147,16 +118,13 @@ router.get(
 // ── GET /:schoolId/users ───────────────────────────────────────────────────────
 // Admin-only. This returns email, phone and last_login_at for every user in the
 // school and accepts a `role` filter, so it must never widen beyond admins.
-// requireSchoolAccess (above) already enforces super_admin/principal; the explicit
-// requireRole is defence in depth so the restriction survives any future edit to
-// that helper, and states the intent at the call site. Callers that only need
-// their own record use GET /:schoolId/users/me above.
+// staff.manage (the principal and the platform admin) states it at the call site. Callers
+// that only need their own record use GET /:schoolId/users/me above.
 
 router.get(
   '/:schoolId/users',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('staff.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = listQuerySchema.safeParse(req.query);
@@ -178,8 +146,7 @@ router.get(
 router.post(
   '/:schoolId/users',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('staff.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Defense-in-depth: block super_admin creation before schema parsing.
@@ -268,8 +235,7 @@ router.post(
 router.patch(
   '/:schoolId/users/:userId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('staff.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = patchUserSchema.safeParse(req.body);
@@ -306,8 +272,7 @@ router.patch(
 router.patch(
   '/:schoolId/users/:userId/status',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('staff.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = statusSchema.safeParse(req.body);
@@ -383,8 +348,7 @@ router.patch(
 router.patch(
   '/:schoolId/users/:userId/email',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin'),
+  requireCapability('staff.email'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = changeEmailSchema.safeParse(req.body);
@@ -454,8 +418,7 @@ router.patch(
 router.post(
   '/:schoolId/users/:userId/reset-password',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('staff.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const existing = await findUserById(req.params.userId, req.params.schoolId);
@@ -553,17 +516,16 @@ router.post(
 
 router.post(
   '/:schoolId/users/:userId/signature',
+  // Any member of the school: the handler admits the person themselves, or whoever manages staff. The
+  // principal-only guard refused every teacher before it ran, so a teacher could never upload their own
+  // signature (audit, 8 Oct 2026).
   verifyToken,
-  // A member of the school, not this file's principal-only guard: the handler admits the person
-  // themselves or an admin, and the principal-only guard refused every teacher before it ran, so
-  // a teacher could never upload their own signature (audit, 8 Oct 2026).
-  requireSchoolMember,
+  requireCapability('school.member'),
   upload.single('signature'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const isSelf = req.user!.user_id === req.params.userId;
-      const isAdmin = req.user!.role === 'super_admin' || req.user!.role === 'principal';
-      if (!isSelf && !isAdmin) {
+      if (!isSelf && !holdsCapability(req.user, 'staff.manage')) {
         return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
       }
 
@@ -629,8 +591,7 @@ const staffBulkImportUpload = multer({ storage: multer.memoryStorage(), limits: 
 router.post(
   '/:schoolId/staff-bulk-import/preview',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('staff.manage'),
   staffBulkImportUpload.single('file'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -737,8 +698,7 @@ const staffBulkImportCommitSchema = z.object({
 router.post(
   '/:schoolId/staff-bulk-import/commit',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('staff.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = staffBulkImportCommitSchema.safeParse(req.body);
