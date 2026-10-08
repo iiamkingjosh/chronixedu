@@ -5,7 +5,8 @@ import { z } from 'zod';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import sanitizeHtml from 'sanitize-html';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { redis, rateLimitStoreLogger } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
 import { createNotificationsBulk } from '../db/queries/notifications';
@@ -38,18 +39,6 @@ const announcementLimiter = rateLimit({
     }),
 });
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -64,9 +53,8 @@ const createSchema = z.object({
 router.post(
   '/:schoolId/announcements',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('announcements.post'),
   announcementLimiter,
-  requireRole('principal', 'super_admin'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = createSchema.safeParse(req.body);
@@ -140,7 +128,7 @@ router.post(
 router.get(
   '/:schoolId/announcements',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;

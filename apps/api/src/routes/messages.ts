@@ -7,6 +7,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { logger } from '../config/logger';
 import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { findUserById } from '../db/queries/users';
 import { createNotification } from '../db/queries/notifications';
 import { redis, rateLimitStoreLogger } from '../middleware/rateLimit';
@@ -44,18 +45,6 @@ const messageLimiter = rateLimit({
     }),
 });
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -71,7 +60,7 @@ const sendSchema = z.object({
 router.get(
   '/:schoolId/messages/contacts',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -89,7 +78,7 @@ router.get(
 router.post(
   '/:schoolId/messages',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   messageLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -176,7 +165,7 @@ router.post(
 router.get(
   '/:schoolId/messages/inbox',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -194,7 +183,7 @@ router.get(
 router.get(
   '/:schoolId/messages/thread/:threadId',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('school.member'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, threadId } = req.params;

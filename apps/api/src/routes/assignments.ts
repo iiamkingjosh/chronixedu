@@ -2,7 +2,8 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { supabaseAdmin } from '../supabaseClient';
 import { getActiveTerm } from '../db/queries/roster';
 import { findStudentByUserId, getStudentProfile } from '../db/queries/students';
@@ -11,7 +12,6 @@ import {
   updateAssignmentAttachment,
   findAssignmentById,
   listAssignmentsForTeacher,
-  listAssignmentsForSchool,
   listAssignmentsForStudent,
   listSubmissionsForAssignment,
   upsertSubmission,
@@ -37,17 +37,6 @@ const ALLOWED_FILE_TYPES: Record<string, string> = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
 };
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -87,8 +76,7 @@ async function withSignedAttachment<T extends { attachment_url: string | null }>
 router.post(
   '/:schoolId/assignments',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('teacher'),
+  requireCapability('teacher.workspace'),
   upload.single('attachment'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -164,20 +152,13 @@ router.post(
 router.get(
   '/:schoolId/assignments',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('teacher', 'student', 'super_admin', 'principal'),
+  requireCapability('teacher.workspace', 'student.portal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
 
       if (req.user!.role === 'teacher') {
         const data = await listAssignmentsForTeacher(req.user!.user_id, schoolId);
-        const signed = await Promise.all(data.map(withSignedAttachment));
-        return res.json({ success: true, data: signed });
-      }
-
-      if (req.user!.role === 'super_admin' || req.user!.role === 'principal') {
-        const data = await listAssignmentsForSchool(schoolId);
         const signed = await Promise.all(data.map(withSignedAttachment));
         return res.json({ success: true, data: signed });
       }
@@ -214,8 +195,7 @@ router.get(
 router.get(
   '/:schoolId/assignments/:assignmentId/submissions',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('teacher'),
+  requireCapability('teacher.workspace'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, assignmentId } = req.params;
@@ -249,8 +229,7 @@ router.get(
 router.post(
   '/:schoolId/assignments/:assignmentId/submissions',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('student'),
+  requireCapability('student.portal'),
   upload.single('file'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -313,8 +292,7 @@ router.post(
 router.patch(
   '/:schoolId/assignments/:assignmentId/submissions/:studentId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('teacher'),
+  requireCapability('teacher.workspace'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = gradeSchema.safeParse(req.body);

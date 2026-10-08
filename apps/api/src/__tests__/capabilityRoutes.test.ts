@@ -15,11 +15,11 @@ import { capabilitiesOf, requireCapability, rolesFor } from '../middleware/requi
 
 jest.mock('../supabaseClient', () => ({ supabase: {}, supabaseAdmin: {} }));
 
-/** Files whose routes still use their own guards. Shrinks file by file (Batch 9, tasks 3-9) and ends empty. */
-const NOT_YET_MOVED = new Set([
-  'routes/parent', 'routes/student', 'routes/assignments',
-  'routes/messages', 'routes/announcements', 'routes/notifications',
-]);
+/**
+ * Files whose routes still use their own guards. It shrank file by file (Batch 9, tasks 3-9) and is empty: every
+ * school router reads the table. A new router is judged as moved from its first commit.
+ */
+const NOT_YET_MOVED = new Set<string>([]);
 
 /** Routes behind the school mount that are not one school's job. Each keeps its own guard. */
 const NOT_SCHOOL_JOBS: Record<string, string> = {
@@ -104,6 +104,11 @@ describe('every school route is decided by the table', () => {
 
   it('every moved school route names exactly one requireCapability, and no moved file keeps a guard of its own', () => {
     expect(guardProblems(routes, sources, NOT_YET_MOVED)).toEqual([]);
+  });
+
+  it('every school router has moved: no file is left on its own guards', () => {
+    expect([...NOT_YET_MOVED]).toEqual([]);
+    expect(Object.values(sources).filter(src => OLD_GUARDS[0].test(src))).toEqual([]);
   });
 
   it('NOT_YET_MOVED lists only real school routers that still have something to move', () => {

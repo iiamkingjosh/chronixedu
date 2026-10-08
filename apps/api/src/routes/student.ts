@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { findStudentByUserId, getStudentProfile, StudentRow } from '../db/queries/students';
 import { getResultStatus } from '../db/queries/scores';
 import { getStudentAttendanceHistory } from '../db/queries/attendance';
@@ -18,17 +19,6 @@ declare module 'express-serve-static-core' {
 
 const router = Router();
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 /** Resolves the caller's own student record — students can never query another student's data. */
 async function requireStudentRecord(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -92,8 +82,7 @@ async function findPublishedReportCard(studentId: string, termId: string, school
 router.get(
   '/:schoolId/student/dashboard',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('student'),
+  requireCapability('student.portal'),
   requireStudentRecord,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -189,8 +178,7 @@ router.get(
 router.get(
   '/:schoolId/student/results',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('student'),
+  requireCapability('student.portal'),
   requireStudentRecord,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -279,8 +267,7 @@ router.get(
 router.get(
   '/:schoolId/student/report-card',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('student'),
+  requireCapability('student.portal'),
   requireStudentRecord,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -318,8 +305,7 @@ router.get(
 router.get(
   '/:schoolId/student/notices',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('student'),
+  requireCapability('student.portal'),
   requireStudentRecord,
   async (req: Request, res: Response, next: NextFunction) => {
     try {

@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { getLinkedChildren, isParentLinkedToStudent } from '../db/queries/parents';
 import { getStudentProfile } from '../db/queries/students';
 import { getResultStatus } from '../db/queries/scores';
@@ -12,23 +13,9 @@ import { getNoticesForClass } from '../db/queries/notices';
 
 const router = Router();
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 async function requireLinkedChild(req: Request, res: Response, next: NextFunction): Promise<void> {
   const user = req.user!;
-  if (user.role === 'super_admin') { next(); return; }
-
   const linked = await isParentLinkedToStudent(user.user_id, req.params.studentId);
   if (!linked) {
     res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You are not linked to this student' } });
@@ -87,8 +74,7 @@ async function findPublishedReportCard(studentId: string, termId: string, school
 router.get(
   '/:schoolId/parent/children',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('parent', 'super_admin'),
+  requireCapability('parent.portal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const children = await getLinkedChildren(req.user!.user_id, req.params.schoolId);
@@ -104,8 +90,7 @@ router.get(
 router.get(
   '/:schoolId/parent/students/:studentId/snapshot',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('parent', 'super_admin'),
+  requireCapability('parent.portal'),
   requireLinkedChild,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -182,8 +167,7 @@ router.get(
 router.get(
   '/:schoolId/parent/students/:studentId/results',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('parent', 'super_admin'),
+  requireCapability('parent.portal'),
   requireLinkedChild,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -271,8 +255,7 @@ router.get(
 router.get(
   '/:schoolId/parent/students/:studentId/report-card',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('parent', 'super_admin'),
+  requireCapability('parent.portal'),
   requireLinkedChild,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -309,8 +292,7 @@ router.get(
 router.get(
   '/:schoolId/parent/students/:studentId/attendance',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('parent', 'super_admin'),
+  requireCapability('parent.portal'),
   requireLinkedChild,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -340,8 +322,7 @@ router.get(
 router.get(
   '/:schoolId/parent/students/:studentId/notices',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('parent', 'super_admin'),
+  requireCapability('parent.portal'),
   requireLinkedChild,
   async (req: Request, res: Response, next: NextFunction) => {
     try {

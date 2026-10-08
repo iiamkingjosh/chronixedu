@@ -97,6 +97,9 @@ const ROUTES: Partial<Record<keyof typeof table.capabilities, Route>> = {
   'class.daily': { method: 'post', path: `${base}/notices`, body: {} },
   'fees.manage': { method: 'post', path: `${base}/fee-structures`, body: {} },
   'school.billing': { method: 'get', path: `${base}/platform-billing/status` },
+  'announcements.post': { method: 'post', path: `${base}/announcements`, body: {} },
+  'parent.portal': { method: 'get', path: `${base}/parent/children` },
+  'student.portal': { method: 'get', path: `${base}/student/notices` },
 };
 
 beforeAll(async () => {
@@ -120,6 +123,10 @@ function expected(cap: keyof typeof table.capabilities, caller: string): boolean
   if (caller === 'other_school_principal') return false;
   return (row.roles as string[]).includes(caller);
 }
+
+it('exercises every capability in the table', () => {
+  expect(Object.keys(ROUTES).sort()).toEqual(Object.keys(table.capabilities).sort());
+});
 
 describe.each(Object.entries(ROUTES))('%s', (cap, route) => {
   it('admits exactly the roles the table gives it', async () => {
