@@ -23,7 +23,7 @@ import {
   listUnresolvedAlerts,
   getClassRoster,
   isTeacherAssignedToClass,
-  isTeacherAssignedToClassAnyTerm,
+  isTeacherAssignedToClassThisSession,
   teacherTeachesStudent,
   LOW_ATTENDANCE_ALERT_TYPE,
   AttendanceAlertRow,
@@ -79,12 +79,11 @@ async function canTeacherViewClass(
   classId: string,
   schoolId: string
 ): Promise<boolean> {
-  const role = req.user!.role ?? '';
-  if (['super_admin', 'principal'].includes(role)) return true;
+  if (holdsCapability(req.user, 'school.overview')) return true;
 
   const userId = req.user!.user_id;
   if (cls.form_teacher_id === userId) return true;
-  if (await isTeacherAssignedToClassAnyTerm(userId, classId, schoolId)) return true;
+  if (await isTeacherAssignedToClassThisSession(userId, classId, schoolId)) return true;
 
   res.status(403).json({
     success: false,

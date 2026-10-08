@@ -996,7 +996,8 @@ Monorepo, npm workspaces:
     payments minus refunds under the invoice lock a payment takes, so "paid" becomes "partly paid", and
     two refunds at once cannot exceed the payment.
   - **The bursar or the principal** (the principal since 8 Oct 2026: Moses gave the principal everything the
-    bursar has, so a school with no bursar is never stuck; it was "bursar only" from 6 Oct). Cash,
+    bursar has, so a school with no bursar is never stuck; it was "bursar only" from 6 Oct). Never the platform
+    admin as itself: refunds are their own row, `fees.refund`, with `platform_admin: false`, as before. Cash,
     bank-transfer and online payments alike; a waiver is refused, because it moved no money.
   - **The form takes:** the amount; how it went back (cash or bank transfer); a reason (`REFUND_REASONS`:
     overpaid, paid twice, withdrew, wrong child, other, which needs a note); an optional reference (a

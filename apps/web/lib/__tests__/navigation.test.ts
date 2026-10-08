@@ -142,6 +142,14 @@ describe('a typed address meets the same rule as the sidebar', () => {
     expect(pageCapability('/settings/roster/import')).toBe('roster.teaching');
   });
 
+  it('keeps a parent and a student out of the staff area altogether', () => {
+    for (const role of ['parent', 'student']) {
+      expect({ role, messages: mayOpenPage(role, '/principal/messages'), settings: mayOpenPage(role, '/settings') })
+        .toEqual({ role, messages: false, settings: false });
+    }
+    expect(mayOpenPage('teacher', '/teacher/messages')).toBe(true);
+  });
+
   it('leaves a page with no rule open (the Settings index lists only what the role may open)', () => {
     expect(pageCapability('/settings')).toBeUndefined();
     expect(mayOpenPage('teacher', '/settings')).toBe(true);

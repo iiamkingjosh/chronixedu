@@ -259,6 +259,9 @@ export function pageCapability(pathname: string): Capability | undefined {
 }
 
 export function mayOpenPage(role: string, pathname: string): boolean {
+  // The dashboard area is staff work: a parent or a student has an area of their own and no page here, not even
+  // one every member may read (review of Batch 9, 8 Oct 2026: they got the staff shell).
+  if (getNavGroupsForRole(role).length === 0) return false;
   const cap = pageCapability(pathname);
   return cap === undefined || roleHolds(role, cap);
 }

@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { roleHolds } from '@/lib/capabilities';
 
 interface StaffNotice {
   id: string;
@@ -144,12 +145,18 @@ export default function NoticesPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-900 font-heading">Class Notices</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Posted to one class and shown on those students&rsquo; Notices page. To reach the whole
-          school with a notification and an email, use{' '}
-          <Link href="/principal/announcements" className="text-[#003366] underline">
-            Announcements
-          </Link>
-          .
+          Posted to one class and shown on those students&rsquo; Notices page.{' '}
+          {roleHolds(user?.role, 'announcements.post') ? (
+            <>
+              To reach the whole school with a notification and an email, use{' '}
+              <Link href="/principal/announcements" className="text-[#003366] underline">
+                Announcements
+              </Link>
+              .
+            </>
+          ) : (
+            <>To reach the whole school, ask the principal for an announcement.</>
+          )}
         </p>
       </div>
 

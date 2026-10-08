@@ -19,7 +19,7 @@ import fs from 'fs';
 import path from 'path';
 import { loadRoutes, type RouteInfo } from './helpers/routeWalk';
 import { capabilitiesOf } from '../middleware/requireCapability';
-import { pageCapability } from '../../../web/lib/navigation';
+import { pageCapability, mayOpenPage } from '../../../web/lib/navigation';
 import { roleHolds, type Capability } from '../../../web/lib/capabilities';
 
 jest.mock('../supabaseClient', () => ({ supabase: {}, supabaseAdmin: {} }));
@@ -120,11 +120,14 @@ describe('a page is never shown to a role the routes it calls refuse', () => {
     for (const area of AREAS) {
       for (const file of filesUnder(path.join(WEB_APP, area.dir))) {
         const rel = path.relative(WEB_APP, file).split(path.sep).join('/');
-        const pageCap = area.capability ?? SHARED_FILES[rel]?.capability ?? pageCapability(pagePath(file, area.dir));
+        const address = pagePath(file, area.dir);
+        const fixedCap = area.capability ?? SHARED_FILES[rel]?.capability;
+        const pageCap = fixedCap ?? pageCapability(address);
         const calls = callsIn(file);
         if (calls.length === 0) continue;
         if (!pageCap) { problems.push(`${rel}: calls the API but no page rule says who may open it`); continue; }
-        const admitted = ROLES.filter(role => roleHolds(role, pageCap));
+        // Who the page admits: its area's rule, or the dashboard's page guard itself.
+        const admitted = fixedCap ? ROLES.filter(role => roleHolds(role, fixedCap)) : ROLES.filter(role => mayOpenPage(role, address));
         for (const call of calls) {
           const matched = routesFor(routes, call);
           if (matched.length === 0) {

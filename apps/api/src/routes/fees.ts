@@ -751,7 +751,9 @@ const manualRefundSchema = z
 router.post(
   '/:schoolId/payments/:paymentId/refunds',
   verifyToken,
-  requireCapability('fees.manage'),
+  // Its own row: a refund is recorded by the school's bursar or principal, never by a platform admin acting as
+  // itself (it was the bursar's alone; the principal since 8 Oct 2026; review of Batch 9).
+  requireCapability('fees.refund'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = manualRefundSchema.safeParse(req.body);

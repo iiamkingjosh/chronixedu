@@ -96,6 +96,7 @@ const ROUTES: Partial<Record<keyof typeof table.capabilities, Route>> = {
   'class.comments': { method: 'put', path: `${base}/class-comments/${I.s1}`, body: {} },
   'class.daily': { method: 'post', path: `${base}/notices`, body: {} },
   'fees.manage': { method: 'post', path: `${base}/fee-structures`, body: {} },
+  'fees.refund': { method: 'post', path: `${base}/payments/${I.s1}/refunds`, body: {} },
   'school.billing': { method: 'get', path: `${base}/platform-billing/status` },
   'announcements.post': { method: 'post', path: `${base}/announcements`, body: {} },
   'parent.portal': { method: 'get', path: `${base}/parent/children` },

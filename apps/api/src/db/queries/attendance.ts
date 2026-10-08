@@ -91,20 +91,21 @@ export async function isTeacherAssignedToClass(
 }
 
 /**
- * Term-agnostic variant used by the attendance READ paths (AUDIT R10-M1).
- * Marking attendance is checked against the specific term that covers the date;
- * for reads we only need to know the teacher has a real relationship to the class
- * at some point, which also lets them review a previous term's history for a class
- * they still teach. Callers combine this with the class's form_teacher_id check.
+ * The read paths' rule (the class register, the monthly summary): an assignment to the class in any term of the
+ * current session. AUDIT R10-M1 made it term-agnostic, so a past term of the session stays readable; since 8 Oct
+ * 2026 it is this session's, the rule teacherTeachesStudent applies to one student, so a teacher who taught the class
+ * in an earlier session no longer reads its current pupils (spec decision 5; review of Batch 9).
  */
-export async function isTeacherAssignedToClassAnyTerm(
+export async function isTeacherAssignedToClassThisSession(
   teacherId: string,
   classId: string,
   schoolId: string
 ): Promise<boolean> {
   const result = await pool.query(
-    `SELECT id FROM teacher_assignments
-     WHERE teacher_id = $1 AND class_id = $2 AND school_id = $3
+    `SELECT ta.id FROM teacher_assignments ta
+       JOIN terms t ON t.id = ta.term_id
+       JOIN academic_sessions s ON s.id = t.session_id AND s.school_id = $3 AND s.is_current
+     WHERE ta.teacher_id = $1 AND ta.class_id = $2 AND ta.school_id = $3
      LIMIT 1`,
     [teacherId, classId, schoolId]
   );

@@ -141,7 +141,9 @@ nothing could be changed.
 
 **Fix.** Moses, 8 Oct 2026: a teacher sees only the students of classes they teach or form-teach. The list and
 profile are no longer a teacher's (students.view: principal, registrar, bursar); the attendance and behaviour
-histories need a class the teacher teaches this session or form-teaches.
+histories need a class the teacher teaches this session or form-teaches. The class register and monthly summary admitted a teacher
+assigned to the class in any term ever, so a teacher who taught it in an earlier session still read its current
+pupils; they now apply the same rule (found by the review of Batch 9).
 
 **Tests:** `studentsAccess.db.test.ts`, `classDailyAccess.db.test.ts` (each failed on the old code).
 

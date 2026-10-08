@@ -18,6 +18,7 @@
     "teacher.workspace":       { "roles": ["teacher"], "platform_admin": false },
     "announcements.post":      { "roles": ["principal"], "platform_admin": true },
     "fees.manage":             { "roles": ["principal", "bursar"], "platform_admin": true },
+    "fees.refund":             { "roles": ["principal", "bursar"], "platform_admin": false },
     "school.payout.view":      { "roles": ["principal", "bursar"], "platform_admin": true },
     "school.payout.manage":    { "roles": ["principal"], "platform_admin": true },
     "school.billing":          { "roles": ["principal", "bursar"], "platform_admin": true },

@@ -50,6 +50,12 @@ describe('the table', () => {
     expect(caps['school.payout.manage'].roles).toEqual(['principal']);
   });
 
+  it('leaves recording a refund to the school: the bursar or the principal, never the platform admin as itself', () => {
+    // Refunds were the bursar's alone (6 Oct 2026); the principal since 8 Oct. Folding them into fees.manage
+    // would have given them to the platform admin as well, which nobody decided (review of Batch 9).
+    expect(caps['fees.refund']).toEqual({ roles: ['principal', 'bursar'], platform_admin: false });
+  });
+
   it("keeps the parent's, student's and teacher's own portals from the platform admin", () => {
     // A platform admin sees a school as one of its users, through a support session, whose token carries
     // that user's role.
