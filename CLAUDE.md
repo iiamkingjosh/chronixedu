@@ -10,7 +10,8 @@ Multi-tenant school management SaaS for Nigerian private schools. No real paying
 client is live yet — every school currently in the database is either a test
 fixture (created by an integration test, never cleaned up — see `L-test-data`
 in `docs/AUDIT-2026-09.md`) or demo/sandbox data, all marked `is_demo`, plus Moses's own
-pilot (Chronix High School). There is no seed script: the old demo seeder, which wiped
+pilot (Chronix High School), which counts as a customer since 8 Oct 2026 for the ERP revenue pull test
+(`is_demo = false`, below). There is no seed script: the old demo seeder, which wiped
 every school and every Supabase Auth user with no guard and committed staff passwords to
 this public repo, was deleted on 1 Oct 2026 and removed from git history the same day (the
 rewrite changed every commit ID since June 2026; SECURITY.md Round 23 has the old→new map and
@@ -1118,8 +1119,12 @@ Monorepo, npm workspaces:
   working set-password link. A trial uses an address that reaches a mailbox Chronix reads, never an
   invented one (`docs/data-deletion-runbook.md`, "Mail during a production trial").
 - **No third party has accepted the Terms or DPA** (1 Oct 2026). Chronix High School is Moses's own
-  pilot (`is_demo = true`), not a customer, whatever older commits say. The deletion and backup
-  promises bind nobody yet, and must be proven before the first real school signs.
+  pilot, not a customer, whatever older commits say. **It is marked `is_demo = false` since 8 Oct 2026,
+  16:43 UTC,** so the ERP revenue pull is tested against it (Moses ran
+  `scripts/sql/2026-10-08_chronix_high_school_is_demo.sql`, recorded as `SCHOOL_DEMO_FLAG_SET`). It counts in
+  MRR and the platform totals until the same script, with `to_demo := true`, puts it back, which must happen
+  before the first real school pays (`docs/AUDIT-2026-09.md`). The deletion and backup promises bind nobody
+  yet, and must be proven before the first real school signs.
 - **A new table therefore needs two decisions in its commit**: exported or not, and deleted or
   not. Each has its own ratchet test, and both fail until the table is classified.
 - The homepage's "delete our copy within 90 days" is the same promise as the legal text and was
@@ -1152,10 +1157,10 @@ Monorepo, npm workspaces:
 - **The key is set in production and the endpoint has been verified live** (2 Oct 2026):
   `ERP_INTEGRATION_API_KEY` is configured on the API service, and a direct call carrying
   the matching `x-api-key` returned a real `200` with `total_mrr_kobo: 0`, not a refusal.
-  The `0` is correct, not a gap — every school in production is a test fixture, demo
+  The `0` was correct, not a gap — every school in production was a test fixture, demo
   data, or Moses's own `is_demo` pilot (see "What this is"), `getPlatformRevenue`
-  excludes demo tenants by design, and there is no real paying school yet. The figure
-  moves the moment one pays; nothing further needs building for that to happen.
+  excludes demo tenants by design, and there is no real paying school yet. Since 8 Oct 2026
+  the pilot counts, for the pull test: its ₦1,600 a term reads as 40000 kobo a month.
 - Keep partner routes in `routes/partner.ts`, never folded into `superAdmin.ts`. Every
   route in that file carries `...guard` (human session + super_admin); mixing the two
   guards in one file makes "a route drifted past the wrong guard" a one-line mistake in
