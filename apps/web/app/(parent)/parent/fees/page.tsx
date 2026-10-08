@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { useParentContext } from '@/lib/parentContext';
 import { apiFetch } from '@/lib/api';
+import { useParentTerms } from '@/lib/useParentTerms';
+import { TermSelect } from '@/components/TermSelect';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -94,26 +96,20 @@ export default function ParentFeesPage() {
     }
   }, []);
 
+  // Any term that has begun, so last term's balance can still be seen and paid (Moses, 8 Oct 2026).
+  const { choices, termId, setTermId, error: termsError } = useParentTerms(schoolId);
+
   useEffect(() => {
-    if (!schoolId || !selectedChild) return;
+    if (!schoolId || !selectedChild || !termId) return;
     let cancelled = false;
     setLoading(true);
     setError('');
     setInvoice(null);
     setCheckout(null);
 
-    apiFetch<{ success: boolean; data: { term: { id: string } | null } }>(`/api/schools/${schoolId}/current-context`)
-      .then(({ data }) => {
-        if (cancelled) return;
-        const termId = data.term?.id;
-        if (!termId) {
-          setError('No active term has been set up yet.');
-          return null;
-        }
-        return apiFetch<{ success: boolean; data: InvoiceData }>(
-          `/api/schools/${schoolId}/fee-invoices/student/${selectedChild.student_id}?term_id=${termId}`
-        );
-      })
+    apiFetch<{ success: boolean; data: InvoiceData }>(
+      `/api/schools/${schoolId}/fee-invoices/student/${selectedChild.student_id}?term_id=${termId}`
+    )
       .then(res => {
         if (cancelled || !res) return;
         setInvoice(res.data);
@@ -132,7 +128,7 @@ export default function ParentFeesPage() {
       });
 
     return () => { cancelled = true; };
-  }, [schoolId, selectedChild]);
+  }, [schoolId, selectedChild, termId]);
 
   async function handlePayNow() {
     if (!schoolId || !invoice) return;
@@ -226,7 +222,12 @@ export default function ParentFeesPage() {
         <p className="text-sm text-gray-500">
           {selectedChild.first_name} {selectedChild.last_name} · {selectedChild.class_name ?? 'No class assigned'}
         </p>
+        <div className="mt-2"><TermSelect choices={choices} termId={termId} onChange={setTermId} /></div>
       </div>
+
+      {termsError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">{termsError}</div>
+      )}
 
       {paymentStatus === 'success' && (
         <div className="bg-green-50 border border-green-200 rounded-lg px-4 py-3 text-sm text-green-700">

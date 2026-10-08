@@ -41,7 +41,9 @@ function SubmitForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file) return;
+    if (!file) { setError('Choose a file to submit.'); return; }
+    // Said before uploading: a file over the limit used to come back as a server error (audit, 8 Oct 2026).
+    if (file.size > SUBMISSION_MAX_BYTES) { setError('Files can be up to 5 MB. Choose a smaller file.'); return; }
 
     setSubmitting(true);
     setError('');
@@ -70,15 +72,19 @@ function SubmitForm({
         />
         <button
           type="submit"
-          disabled={!file || submitting}
+          disabled={submitting}
           className="shrink-0 px-4 py-2 bg-[#003366] text-white text-sm font-medium rounded-lg hover:bg-[#002347] disabled:opacity-50"
         >
           {submitting ? 'Submitting…' : 'Submit'}
         </button>
       </div>
+      <p className="text-xs text-gray-400">PDF, Word or a photo, up to 5 MB.</p>
     </form>
   );
 }
+
+/** The submission route's limit (multer, routes/assignments.ts). */
+const SUBMISSION_MAX_BYTES = 5 * 1024 * 1024;
 
 // ── Assignment card ───────────────────────────────────────────────────────────
 

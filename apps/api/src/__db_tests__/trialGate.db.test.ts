@@ -152,6 +152,19 @@ describe('the trial gate: trial, 14 days of grace, then read-only', () => {
     expect(write.body.error.code).toBe('SCHOOL_READ_ONLY');
   });
 
+  it("read-only tells a parent what it means for them, not the school's subscription terms", async () => {
+    await trialEndedDaysAgo(I.schoolA, 15);
+    await runTrialExpiryCheck();
+    const staff = await postNotice(tokens.principalA());
+    expect(staff.body.error.message).toMatch(/trial has ended/);
+
+    const parent = await request(app).post(`${base}/payments/paystack/initiate`).set('Authorization', tokens.parentA()).send({});
+    expect(parent.status).toBe(423);
+    expect(parent.body.error.code).toBe('SCHOOL_READ_ONLY');
+    expect(parent.body.error.message).toMatch(/contact the school/i);
+    expect(parent.body.error.message).not.toMatch(/trial|subscription|export/i);
+  });
+
   it('read-only takes the plan’s extras away: analytics answers FEATURE_NOT_IN_PLAN', async () => {
     await trialEndedDaysAgo(I.schoolA, 15);
     await runTrialExpiryCheck();

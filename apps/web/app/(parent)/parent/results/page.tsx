@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { useParentContext } from '@/lib/parentContext';
 import { apiFetch } from '@/lib/api';
+import { useParentTerms } from '@/lib/useParentTerms';
+import { TermSelect } from '@/components/TermSelect';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -45,25 +47,20 @@ export default function ParentResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [results, setResults] = useState<ResultsData | null>(null);
+  // Any term that has begun, not only the current one (Moses, 8 Oct 2026).
+  const { choices, termId, setTermId, error: termsError } = useParentTerms(schoolId);
 
   useEffect(() => {
-    if (!schoolId || !selectedChild) return;
+    if (!schoolId || !selectedChild || !termId) return;
     let cancelled = false;
     setLoading(true);
     setError('');
+    // Cleared first, so another child's or term's results never sit under this one's name.
+    setResults(null);
 
-    apiFetch<{ success: boolean; data: { term: { id: string; name: string } | null } }>(`/api/schools/${schoolId}/current-context`)
-      .then(({ data }) => {
-        if (cancelled) return;
-        const termId = data.term?.id;
-        if (!termId) {
-          setError('No active term has been set up yet.');
-          return null;
-        }
-        return apiFetch<{ success: boolean; data: ResultsData }>(
-          `/api/schools/${schoolId}/parent/students/${selectedChild.student_id}/results?term_id=${termId}`
-        );
-      })
+    apiFetch<{ success: boolean; data: ResultsData }>(
+      `/api/schools/${schoolId}/parent/students/${selectedChild.student_id}/results?term_id=${termId}`
+    )
       .then(res => {
         if (cancelled || !res) return;
         setResults(res.data);
@@ -76,7 +73,7 @@ export default function ParentResultsPage() {
       });
 
     return () => { cancelled = true; };
-  }, [schoolId, selectedChild]);
+  }, [schoolId, selectedChild, termId]);
 
   const componentColumns = useMemo(() => {
     if (!results) return [];
@@ -123,24 +120,36 @@ export default function ParentResultsPage() {
           <p className="text-sm text-gray-500">
             {selectedChild.first_name} {selectedChild.last_name} · {selectedChild.class_name ?? 'No class assigned'}
           </p>
+          <div className="mt-2"><TermSelect choices={choices} termId={termId} onChange={setTermId} /></div>
         </div>
-        {results && (
-          <a
-            href={results.report_card.available ? (results.report_card.pdf_url ?? '#') : undefined}
-            target={results.report_card.available ? '_blank' : undefined}
-            rel={results.report_card.available ? 'noopener noreferrer' : undefined}
-            aria-disabled={!results.report_card.available}
-            title={results.report_card.available ? 'Download report card' : 'Report card not yet published'}
-            className={`shrink-0 px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap ${
-              results.report_card.available
-                ? 'bg-[#003366] text-white hover:bg-[#002347]'
-                : 'bg-gray-200 text-gray-400 cursor-not-allowed pointer-events-none'
-            }`}
-          >
-            Download Report Card
-          </a>
-        )}
+        {results && (() => {
+          // A published card whose link could not be made used to give a button that did nothing (href "#").
+          const ready = results.report_card.available && !!results.report_card.pdf_url;
+          return (
+            <div className="shrink-0 text-right">
+              <a
+                href={ready ? results.report_card.pdf_url! : undefined}
+                target={ready ? '_blank' : undefined}
+                rel={ready ? 'noopener noreferrer' : undefined}
+                aria-disabled={!ready}
+                title={ready ? 'Download report card' : results.report_card.available ? 'The report card could not be opened just now' : 'Report card not yet published'}
+                className={`inline-block px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap ${
+                  ready ? 'bg-[#003366] text-white hover:bg-[#002347]' : 'bg-gray-200 text-gray-400 cursor-not-allowed pointer-events-none'
+                }`}
+              >
+                Download Report Card
+              </a>
+              {results.report_card.available && !results.report_card.pdf_url && (
+                <p className="text-xs text-red-600 mt-1">The report card could not be opened just now. Refresh the page to try again.</p>
+              )}
+            </div>
+          );
+        })()}
       </div>
+
+      {termsError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">{termsError}</div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>

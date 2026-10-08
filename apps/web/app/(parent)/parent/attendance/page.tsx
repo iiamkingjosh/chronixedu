@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { useParentContext } from '@/lib/parentContext';
 import { apiFetch } from '@/lib/api';
+import { useParentTerms } from '@/lib/useParentTerms';
+import { TermSelect } from '@/components/TermSelect';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -125,27 +127,26 @@ export default function ParentAttendancePage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [term, setTerm] = useState<TermContext | null>(null);
   const [attendance, setAttendance] = useState<AttendanceData | null>(null);
+  // Any term that has begun, not only the current one (Moses, 8 Oct 2026).
+  const { choices, termId, setTermId, error: termsError } = useParentTerms(schoolId);
+  const chosen = choices.find(c => c.id === termId) ?? null;
+  const term: TermContext | null = useMemo(
+    () => (chosen ? { id: chosen.id, name: chosen.name, start_date: chosen.start_date, end_date: chosen.end_date } : null),
+    [chosen]
+  );
 
   useEffect(() => {
-    if (!schoolId || !selectedChild) return;
+    if (!schoolId || !selectedChild || !termId) return;
     let cancelled = false;
     setLoading(true);
     setError('');
+    // Cleared first, so another child's or term's attendance never sits under this one's name.
+    setAttendance(null);
 
-    apiFetch<{ success: boolean; data: { term: TermContext | null } }>(`/api/schools/${schoolId}/current-context`)
-      .then(({ data }) => {
-        if (cancelled) return;
-        if (!data.term) {
-          setError('No active term has been set up yet.');
-          return null;
-        }
-        setTerm(data.term);
-        return apiFetch<{ success: boolean; data: AttendanceData }>(
-          `/api/schools/${schoolId}/parent/students/${selectedChild.student_id}/attendance?term_id=${data.term.id}`
-        );
-      })
+    apiFetch<{ success: boolean; data: AttendanceData }>(
+      `/api/schools/${schoolId}/parent/students/${selectedChild.student_id}/attendance?term_id=${termId}`
+    )
       .then(res => {
         if (cancelled || !res) return;
         setAttendance(res.data);
@@ -158,7 +159,7 @@ export default function ParentAttendancePage() {
       });
 
     return () => { cancelled = true; };
-  }, [schoolId, selectedChild]);
+  }, [schoolId, selectedChild, termId]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, AttendanceStatus>();
@@ -217,7 +218,12 @@ export default function ParentAttendancePage() {
           {selectedChild.first_name} {selectedChild.last_name}
           {term ? ` · ${term.name}` : ''}
         </p>
+        <div className="mt-2"><TermSelect choices={choices} termId={termId} onChange={setTermId} /></div>
       </div>
+
+      {termsError && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">{termsError}</div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">{error}</div>
@@ -230,7 +236,10 @@ export default function ParentAttendancePage() {
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-2xl font-bold text-[#2472B4]">{attendance.summary.percentage}%</p>
+                {/* Nothing marked yet is not 0% attendance (audit, 8 Oct 2026). */}
+                <p className="text-2xl font-bold text-[#2472B4]">
+                  {attendance.summary.present + attendance.summary.absent + attendance.summary.late + attendance.summary.excused === 0 ? '—' : `${attendance.summary.percentage}%`}
+                </p>
                 <p className="text-xs text-gray-500 mt-1">Term attendance rate</p>
               </div>
               <div className="text-right text-xs text-gray-500 space-y-0.5">

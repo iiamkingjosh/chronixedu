@@ -104,6 +104,9 @@ export default function ParentDashboardPage() {
   useEffect(() => {
     if (!schoolId || !selectedChild) return;
     let cancelled = false;
+    // Cleared first: a failed load must not leave the previous child's figures under this child's
+    // name (audit, 8 Oct 2026).
+    setBehaviour(null);
     apiFetch<{ success: boolean; data: BehaviourSummary }>(
       `/api/schools/${schoolId}/behaviour/students/${selectedChild.student_id}/summary`
     )
@@ -115,6 +118,7 @@ export default function ParentDashboardPage() {
   useEffect(() => {
     if (!schoolId || !selectedChild) return;
     let cancelled = false;
+    setFeeInvoice(null);
     apiFetch<{ success: boolean; data: { term: { id: string } | null } }>(`/api/schools/${schoolId}/current-context`)
       .then(({ data }) => {
         const termId = data.term?.id;
@@ -133,6 +137,7 @@ export default function ParentDashboardPage() {
     let cancelled = false;
     setLoading(true);
     setError('');
+    setSnapshot(null);
 
     apiFetch<{ success: boolean; data: { term: { id: string } | null } }>(`/api/schools/${schoolId}/current-context`)
       .then(({ data }) => {

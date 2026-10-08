@@ -8,6 +8,7 @@ import { getStudentAttendanceHistory } from '../db/queries/attendance';
 import { computeClassResults, getStudentClassId } from '../services/resultEngine';
 import { signReportCardAsset } from '../services/reportCardService';
 import pool from '../db/client';
+import { getNoticesForClass } from '../db/queries/notices';
 
 const router = Router();
 
@@ -56,7 +57,9 @@ function summarizeStudent(
 ) {
   const currentEnrollment =
     (classIdForTerm ? profile.enrollments.find(e => e.class_id === classIdForTerm) : null)
-    ?? profile.enrollments[0]
+    // This session's class when the term's is unknown, never the latest enrolment, which is last
+    // session's class for a child not yet placed this session (audit, 8 Oct 2026).
+    ?? profile.enrollments.find(e => e.session_is_current)
     ?? null;
   return {
     student_id:   profile.id,
@@ -324,6 +327,33 @@ router.get(
 
       const history = await getStudentAttendanceHistory(studentId, schoolId, termId);
       return res.json({ success: true, data: history });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── GET /:schoolId/parent/students/:studentId/notices ─────────────────────────
+// The class notices of the child's class this session (Moses, 8 Oct 2026: parents see the class
+// notices teachers post). A parent's Notices page showed school announcements only.
+
+router.get(
+  '/:schoolId/parent/students/:studentId/notices',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('parent', 'super_admin'),
+  requireLinkedChild,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { schoolId, studentId } = req.params;
+      const profile = await getStudentProfile(studentId, schoolId);
+      if (!profile) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
+      }
+      // This session's class only: a child not yet placed this session has no class board.
+      const classId = profile.enrollments.find(e => e.session_is_current)?.class_id ?? null;
+      const notices = await getNoticesForClass(schoolId, classId);
+      return res.json({ success: true, data: notices });
     } catch (err) {
       return next(err);
     }

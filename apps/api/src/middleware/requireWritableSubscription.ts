@@ -67,11 +67,16 @@ export function requireWritableSubscription(req: Request, res: Response, next: N
 
   if (isAllowedWhileReadOnly(req.method, req.path)) { next(); return; }
 
+  // Parents and students are told what it means for them; the subscription is the school's business,
+  // and "renewing the subscription" was addressed to a parent trying to pay a fee (audit, 8 Oct 2026).
+  const family = req.user?.role === 'parent' || req.user?.role === 'student';
   res.status(423).json({
     success: false,
     error: {
       code: 'SCHOOL_READ_ONLY',
-      message: "This school's trial has ended, so changes are paused. All records are still here and can be viewed and exported. Renewing the subscription restores full access.",
+      message: family
+        ? "Your school's Chronix Edu account is paused, so payments and messages can't be sent here for now. You can still view everything. Please contact the school."
+        : "This school's trial has ended, so changes are paused. All records are still here and can be viewed and exported. Renewing the subscription restores full access.",
     },
   });
 }

@@ -40,10 +40,11 @@ interface DashboardStudent {
 
 interface DashboardData {
   student: DashboardStudent;
-  term: { id: string; name: string | null };
+  /** null between terms: the school has no current term. */
+  term: { id: string; name: string | null } | null;
   academic: DashboardAcademic | null;
   subjects: DashboardSubject[];
-  attendance: DashboardAttendance;
+  attendance: DashboardAttendance | null;
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -101,10 +102,16 @@ export default function StudentDashboardPage() {
           {data.student.first_name} {data.student.last_name}
         </h1>
         <p className="text-sm text-gray-500">
-          {data.student.class_name ?? 'No class assigned'} · {data.student.admission_no}
-          {data.term.name ? ` · ${data.term.name}` : ''}
+          {data.student.class_name ?? 'No class this session yet'} · {data.student.admission_no}
+          {data.term?.name ? ` · ${data.term.name}` : ''}
         </p>
       </div>
+
+      {!data.term && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+          There is no term going on right now. Your results and attendance for the new term will show here once it starts.
+        </div>
+      )}
 
       {/* Academic Overview */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
@@ -129,7 +136,7 @@ export default function StudentDashboardPage() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">No results have been recorded for this term yet.</p>
+          <p className="text-sm text-gray-500">{data.term ? 'No results have been published for this term yet.' : 'No term is in progress.'}</p>
         )}
       </div>
 
@@ -138,14 +145,17 @@ export default function StudentDashboardPage() {
         <h2 className="text-sm font-semibold text-gray-900 mb-3">Attendance</h2>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-2xl font-bold text-[#2472B4]">{data.attendance.percentage}%</p>
-            <p className="text-xs text-gray-500 mt-1">Term attendance rate</p>
+            {/* Nothing marked yet is not 0% attendance (audit, 8 Oct 2026). */}
+            <p className="text-2xl font-bold text-[#2472B4]">
+              {!data.attendance || data.attendance.total === 0 ? '—' : `${data.attendance.percentage}%`}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">{data.attendance && data.attendance.total > 0 ? 'Term attendance rate' : 'No attendance marked yet'}</p>
           </div>
           <div className="text-right text-xs text-gray-500 space-y-0.5">
-            <p>Present: <span className="font-medium text-gray-700">{data.attendance.present}</span></p>
-            <p>Absent: <span className="font-medium text-gray-700">{data.attendance.absent}</span></p>
-            <p>Late: <span className="font-medium text-gray-700">{data.attendance.late}</span></p>
-            <p>Excused: <span className="font-medium text-gray-700">{data.attendance.excused}</span></p>
+            <p>Present: <span className="font-medium text-gray-700">{data.attendance?.present ?? 0}</span></p>
+            <p>Absent: <span className="font-medium text-gray-700">{data.attendance?.absent ?? 0}</span></p>
+            <p>Late: <span className="font-medium text-gray-700">{data.attendance?.late ?? 0}</span></p>
+            <p>Excused: <span className="font-medium text-gray-700">{data.attendance?.excused ?? 0}</span></p>
           </div>
         </div>
       </div>

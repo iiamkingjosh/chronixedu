@@ -61,7 +61,9 @@ function summarizeStudent(
 ) {
   const currentEnrollment =
     (classIdForTerm ? profile.enrollments.find(e => e.class_id === classIdForTerm) : null)
-    ?? profile.enrollments[0]
+    // This session's class when the term's is unknown, never the latest enrolment, which is last
+    // session's class for a child not yet placed this session (audit, 8 Oct 2026).
+    ?? profile.enrollments.find(e => e.session_is_current)
     ?? null;
   return {
     student_id:   profile.id,
@@ -101,18 +103,31 @@ router.get(
       let termId = req.query.term_id ? String(req.query.term_id) : undefined;
       let termName: string | null = null;
 
-      if (!termId) {
-        const { term } = await getCurrentContext(schoolId);
-        if (!term) {
-          return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'No active term has been set up yet' } });
-        }
-        termId = term.id;
-        termName = term.name;
-      }
-
       const profile = await getStudentProfile(studentId, schoolId);
       if (!profile) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
+      }
+
+      if (!termId) {
+        const { term } = await getCurrentContext(schoolId);
+        if (!term) {
+          // Between terms is a normal state, not an error: it was a 404, shown as a red error on the
+          // student's home page every holiday (audit, 8 Oct 2026).
+          return res.json({
+            success: true,
+            data: {
+              student: summarizeStudent(profile),
+              term: null,
+              academic: null,
+              subjects: [],
+              attendance: null,
+              result_status: null,
+              report_card_available: false,
+            },
+          });
+        }
+        termId = term.id;
+        termName = term.name;
       }
 
       const [classId, attendance, resultStatus, reportCard] = await Promise.all([
@@ -316,7 +331,9 @@ router.get(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
       }
 
-      const classId = profile.enrollments[0]?.class_id ?? null;
+      // This session's class: enrollments[0] is the LATEST, which is last session's class for a student
+      // not yet placed this session, so they read last year's class notices as current (audit, 8 Oct 2026).
+      const classId = profile.enrollments.find(e => e.session_is_current)?.class_id ?? null;
       const notices = await getNoticesForClass(schoolId, classId);
       return res.json({ success: true, data: notices });
     } catch (err) {

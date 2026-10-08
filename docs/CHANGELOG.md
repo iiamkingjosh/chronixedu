@@ -1,5 +1,26 @@
 # Chronix Edu — Changelog
 
+## Parents can look back at past terms and see class notices (2026-10-08)
+
+### For parents
+- **Results, Attendance and Fees have a Term picker.** Last term's results, report card, attendance and invoice
+  stay in reach after a new term begins, and a past term's balance can still be paid.
+- **Notices shows your child's class notices** (what the teachers post to the class), above the school's
+  announcements.
+- **Switching between your children** no longer leaves the other child's fee balance, scores or behaviour count on
+  screen while the new child's load, or if one of them fails.
+- **The Download Report Card button** says so when the card could not be opened, instead of doing nothing.
+- **If the school's Chronix account is paused**, the message says what that means for you, not the school's
+  subscription terms.
+- **Attendance shows "—", not 0%,** before any attendance has been marked.
+
+### For students
+- **Between terms, Home says there is no term going on,** instead of showing an error.
+- **Your class is this session's,** not last session's, until you are placed in a new class. The same goes for class
+  notices.
+- **Homework uploads say the 5 MB limit** and check it before uploading; a file that is too large is refused with a
+  message instead of an error.
+
 ## Fee lines can be corrected; amounts are exact (2026-10-08)
 
 ### For bursars
