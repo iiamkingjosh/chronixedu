@@ -61,8 +61,21 @@ describe('Notification pipeline — suspension → audit log → worker → in-a
   let studentUserId: string;
   let studentId: string;
   let behaviourRecordId: string;
+  // The school's Settings → Notifications row as it was, put back in afterAll (the fixture is shared).
+  let priorSettings: { notification_config: unknown } | undefined;
 
   beforeAll(async () => {
+    // Since 8 Oct 2026 an SMS also needs the school's own tick for the event (off by default), as well
+    // as SMS_ENABLED and a key. This test is the SMS-on path, so the school ticks it, as a principal would.
+    priorSettings = (await pool.query<{ notification_config: unknown }>(
+      `SELECT notification_config FROM school_settings WHERE school_id = $1`, [SCHOOL_ID])).rows[0];
+    const current = (priorSettings?.notification_config ?? {}) as { events?: Record<string, unknown> };
+    const withSms = { ...current, events: { ...(current.events ?? {}), behaviour_incident: { in_app: true, email: true, sms: true } } };
+    await pool.query(
+      `INSERT INTO school_settings (school_id, notification_config) VALUES ($1, $2::jsonb)
+       ON CONFLICT (school_id) DO UPDATE SET notification_config = EXCLUDED.notification_config`,
+      [SCHOOL_ID, JSON.stringify(withSms)]);
+
     const parentResult = await pool.query<{ id: string }>(
       `INSERT INTO users (school_id, email, password_hash, role, first_name, last_name, phone, must_change_password)
        VALUES ($1, $2, 'test-hash', 'parent', 'Notify', 'Parent', '+2348011111111', FALSE)
@@ -114,6 +127,12 @@ describe('Notification pipeline — suspension → audit log → worker → in-a
     await pool.query(`DELETE FROM student_classes WHERE student_id = $1`, [studentId]);
     await pool.query(`DELETE FROM students WHERE id = $1`, [studentId]);
     await pool.query(`DELETE FROM users WHERE id IN ($1, $2) AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)`, [parentUserId, studentUserId]);
+    if (priorSettings) {
+      await pool.query(`UPDATE school_settings SET notification_config = $2::jsonb WHERE school_id = $1`,
+        [SCHOOL_ID, priorSettings.notification_config === null ? null : JSON.stringify(priorSettings.notification_config)]);
+    } else {
+      await pool.query(`DELETE FROM school_settings WHERE school_id = $1`, [SCHOOL_ID]);
+    }
     await pool.end();
   }, 20000);
 

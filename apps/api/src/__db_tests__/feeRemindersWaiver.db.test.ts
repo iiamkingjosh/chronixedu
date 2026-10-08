@@ -10,6 +10,12 @@
  */
 import request from 'supertest';
 import { buildApp, seed, token, IDS as I, pool } from './helpers';
+import { notifyPaymentReceipt } from '../services/paymentReceiptNotifier';
+
+// A recorded payment starts the parent's receipt (a PDF) without waiting for it. Unstubbed, the PDF
+// renderer was still starting when the suite ended and took the process down after every test had
+// passed. Stubbed as convenienceFee.db.test.ts does, and asserted, so the stub cannot hide a no-op.
+jest.mock('../services/paymentReceiptNotifier', () => ({ notifyPaymentReceipt: jest.fn() }));
 
 const app = buildApp();
 const base = `/api/schools/${I.schoolA}`;
@@ -77,10 +83,12 @@ describe('a waiver', () => {
     const refused = await pay({});
     expect(refused.status).toBe(400);
     expect(JSON.stringify(refused.body.error)).toMatch(/reason for the waiver/);
+    expect(notifyPaymentReceipt).not.toHaveBeenCalled();
 
     const given = await pay({ reference: 'Staff child' });
     expect(given.status).toBe(201);
-    const [row] = (await pool.query(`SELECT method, reference FROM payments WHERE invoice_id = $1`, [invoice])).rows;
-    expect(row).toEqual({ method: 'waiver', reference: 'Staff child' });
+    const [row] = (await pool.query(`SELECT id, method, reference FROM payments WHERE invoice_id = $1`, [invoice])).rows;
+    expect(row).toEqual({ id: expect.any(String), method: 'waiver', reference: 'Staff child' });
+    expect(notifyPaymentReceipt).toHaveBeenCalledWith(I.schoolA, row.id, I.s1);
   });
 });
