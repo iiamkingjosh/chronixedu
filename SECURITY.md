@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 40 — 2026-10-08  
 **Scope:** Fixes from the 8 Oct 2026 audit of every school role  
-**Round 40 total findings:** 5 (0 Critical · 0 High · 0 Medium · 5 Low) — remediated in code, not yet deployed
+**Round 40 total findings:** 6 (0 Critical · 0 High · 0 Medium · 6 Low) — remediated in code, not yet deployed
 
 ---
 
@@ -106,6 +106,24 @@ school.
 assignments and timetable slots are now audited, an edit with what it replaced.
 
 **Tests:** `rosterTargetsAudit.db.test.ts`.
+
+### L-06 — Analytics took any term id, another school's included ✅ Remediated
+
+**Files:** `apps/api/src/routes/analytics.ts` (`GET /:schoolId/analytics/overview`).
+
+**Found** on 8 Oct 2026, in the audit of every school role.
+
+**The mechanism.** The overview used `term_id` from the address as given (doctrine 3). Another school's term made
+and stored a snapshot for this school under that term, and an id that was not a uuid was a 500.
+
+**Why Low.** Only a principal or platform admin reaches the route, every figure in a snapshot is read with this
+school's id, so the stray row held this school's own (empty) figures and nothing of the other school.
+
+**Fix.** A named term must be a uuid (400) and this school's (404 `TERM_NOT_FOUND`), checked before any snapshot is
+read or made.
+
+**Tests:** `analyticsTerm.db.test.ts` (this school's term is served and leaves its snapshot; another school's term
+leaves none). With the check removed, it fails.
 
 ---
 

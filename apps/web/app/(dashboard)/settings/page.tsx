@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { SETTINGS_NAV_GROUPS, visibleNavGroups } from '@/lib/navigation';
+import { settingsGroupsForRole } from '@/lib/navigation';
+import { useAuth } from '@/app/providers';
 
 /**
  * What each settings screen is for, in one line each, grouped. This replaced a silent
@@ -9,7 +10,9 @@ import { SETTINGS_NAV_GROUPS, visibleNavGroups } from '@/lib/navigation';
  * on the logo uploader.
  */
 export default function SettingsIndexPage() {
-  const groups = visibleNavGroups(SETTINGS_NAV_GROUPS, []);
+  const { user } = useAuth();
+  // The pages this role may open, as the rail beside it shows them.
+  const groups = settingsGroupsForRole(user?.role ?? '');
 
   return (
     <div className="max-w-2xl mx-auto p-8">

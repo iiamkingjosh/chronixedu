@@ -27,6 +27,10 @@ const MESSAGES_PATH_BY_ROLE: Record<string, string> = {
   parent: '/parent/messages',
   teacher: '/teacher/messages',
   principal: '/principal/messages',
+  // A registrar's and a bursar's message notices fell back to /parent/messages, which sent them away
+  // again (audit, 8 Oct 2026).
+  registrar: '/registrar/messages',
+  bursar: '/bursar/messages',
   super_admin: '/principal/messages',
   student: '/student/messages',
 };

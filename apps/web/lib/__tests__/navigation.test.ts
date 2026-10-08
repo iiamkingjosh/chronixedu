@@ -1,6 +1,6 @@
 /// <reference types="jest" />
 /**
- * The principal's sidebar: eleven daily links in four groups, and thirteen settings links in
+ * The principal's sidebar: twelve daily links in four groups, and thirteen settings links in
  * three, behind one entry. Pins the structure, and the one property a plain equality check
  * cannot see — "Report Cards" beside "Report Card" was a wrong-click generator and is not a
  * duplicate to `===`. Labels are compared lowercased with a trailing "s" removed, which is
@@ -9,7 +9,7 @@
 import {
   PRINCIPAL_NAV, PRINCIPAL_NAV_GROUPS, SETTINGS_NAV, SETTINGS_NAV_GROUPS,
   SUPER_ADMIN_NAV, SUPER_ADMIN_NAV_GROUPS,
-  getMainNavForRole, getNavGroupsForRole, settingsAccessForRole, visibleNavGroups,
+  getMainNavForRole, getNavGroupsForRole, settingsAccessForRole, settingsGroupsForRole, visibleNavGroups,
 } from '../navigation';
 
 const singular = (label: string) => label.toLowerCase().replace(/s$/, '');
@@ -33,9 +33,11 @@ describe('the platform-admin sidebar', () => {
 });
 
 describe('the principal sidebar', () => {
-  it('is eleven daily links in four groups of two or three', () => {
-    expect(PRINCIPAL_NAV).toHaveLength(11);
-    expect(PRINCIPAL_NAV_GROUPS.map((g) => g.items.length)).toEqual([2, 3, 3, 3]);
+  it('is twelve daily links in four groups of two to four', () => {
+    expect(PRINCIPAL_NAV).toHaveLength(12);
+    expect(PRINCIPAL_NAV_GROUPS.map((g) => g.items.length)).toEqual([2, 3, 4, 3]);
+    // Promotions is the registrar's page; the principal reaches it since 8 Oct 2026.
+    expect(PRINCIPAL_NAV.map((i) => i.href)).toContain('/registrar/promotions');
   });
 
   it('keeps settings as thirteen links in three groups', () => {
@@ -69,8 +71,18 @@ describe('the principal sidebar', () => {
 
   it('hides a tier-gated link without leaving an empty group behind', () => {
     const basic = visibleNavGroups(PRINCIPAL_NAV_GROUPS, ['/principal/analytics']);
-    expect(basic.flatMap((g) => g.items)).toHaveLength(10);
+    expect(basic.flatMap((g) => g.items)).toHaveLength(11);
     const overviewOnly = visibleNavGroups(PRINCIPAL_NAV_GROUPS, ['/principal/dashboard', '/principal/analytics']);
     expect(overviewOnly.map((g) => g.label)).toEqual(['Academics', 'Students', 'Communication']);
+  });
+});
+
+describe('the settings pages a role is shown', () => {
+  it('are every one for the principal, the payout pair for the bursar, and none for anyone else', () => {
+    expect(settingsGroupsForRole('principal')).toBe(SETTINGS_NAV_GROUPS);
+    expect(settingsGroupsForRole('bursar').flatMap((g) => g.items).map((i) => i.href)).toEqual(['/settings/payout', '/settings/billing']);
+    for (const role of ['teacher', 'registrar', 'parent', 'student', 'super_admin', '']) {
+      expect({ role, groups: settingsGroupsForRole(role) }).toEqual({ role, groups: [] });
+    }
   });
 });

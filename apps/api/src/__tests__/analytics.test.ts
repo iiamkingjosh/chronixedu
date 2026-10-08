@@ -16,6 +16,9 @@ jest.mock('../db/client', () => ({
 jest.mock('../db/queries/analytics');
 jest.mock('../db/queries/roster');
 jest.mock('../services/analyticsService');
+// The route checks a named term is this school's (doctrine 3); the term exists here. The refusals are
+// tested against a real database in analyticsTerm.db.test.ts.
+jest.mock('../db/queries/assessmentConfig', () => ({ findSchoolTerm: jest.fn().mockResolvedValue({ id: 'the-term' }) }));
 
 const mockAnalytics = analyticsQueries as jest.Mocked<typeof analyticsQueries>;
 const mockRoster = rosterQueries as jest.Mocked<typeof rosterQueries>;
@@ -54,7 +57,7 @@ app.use('/api/schools', analyticsRouter);
 app.use(errorHandler);
 
 const SCHOOL_ID = 'school-uuid-001';
-const TERM_ID = 'term-uuid-001';
+const TERM_ID = '20000000-0000-4000-8000-000000000001'; // a term id is a uuid, and the route refuses anything else
 
 beforeEach(() => jest.clearAllMocks());
 

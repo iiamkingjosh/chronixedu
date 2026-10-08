@@ -109,7 +109,8 @@ export async function listAssignmentsForTeacher(
      FROM assignments a
      JOIN classes c ON c.id = a.class_id
      JOIN subjects sub ON sub.id = a.subject_id
-     LEFT JOIN student_classes stc ON stc.class_id = a.class_id
+     -- This session's pupils: joined on the class alone, every former pupil counted (audit, 8 Oct 2026).
+     LEFT JOIN student_classes stc ON stc.class_id = a.class_id AND stc.session_id = (SELECT id FROM academic_sessions WHERE school_id = a.school_id AND is_current)
      LEFT JOIN assignment_submissions s ON s.assignment_id = a.id AND s.student_id = stc.student_id
      WHERE a.teacher_id = $1 AND a.school_id = $2
      GROUP BY a.id, c.name, sub.name
@@ -132,7 +133,8 @@ export async function listAssignmentsForSchool(schoolId: string): Promise<Teache
      FROM assignments a
      JOIN classes c ON c.id = a.class_id
      JOIN subjects sub ON sub.id = a.subject_id
-     LEFT JOIN student_classes stc ON stc.class_id = a.class_id
+     -- This session's pupils: joined on the class alone, every former pupil counted (audit, 8 Oct 2026).
+     LEFT JOIN student_classes stc ON stc.class_id = a.class_id AND stc.session_id = (SELECT id FROM academic_sessions WHERE school_id = a.school_id AND is_current)
      LEFT JOIN assignment_submissions s ON s.assignment_id = a.id AND s.student_id = stc.student_id
      WHERE a.school_id = $1
      GROUP BY a.id, c.name, sub.name
@@ -229,6 +231,7 @@ export async function listSubmissionsForAssignment(
      FROM students s
      JOIN users u ON u.id = s.user_id
      JOIN student_classes stc ON stc.student_id = s.id AND stc.class_id = $2
+       AND stc.session_id = (SELECT id FROM academic_sessions WHERE school_id = s.school_id AND is_current)
      LEFT JOIN assignment_submissions subm ON subm.assignment_id = $1 AND subm.student_id = s.id
      GROUP BY s.id, u.first_name, u.last_name, s.admission_no,
               subm.id, subm.submitted_at, subm.file_url, subm.grade, subm.feedback, subm.graded_by

@@ -1,4 +1,4 @@
-import { getNavGroupsForRole, visibleNavGroups, settingsAccessForRole, SETTINGS_NAV_GROUPS } from './navigation';
+import { getNavGroupsForRole, visibleNavGroups, settingsAccessForRole, settingsGroupsForRole } from './navigation';
 
 /**
  * The Ctrl+K palette's index: pages only, and only pages this role can open.
@@ -27,19 +27,14 @@ export function paletteEntriesForRole(role: string): PaletteEntry[] {
     g.items.map((i) => ({ label: i.label, href: i.href, group: g.label, description: i.description })),
   );
   const access = settingsAccessForRole(role);
-  let settings: PaletteEntry[] = [];
-  if (access === 'all') {
-    settings = visibleNavGroups(SETTINGS_NAV_GROUPS, []).flatMap((g) =>
-      g.items.map((i) => ({ label: i.label, href: i.href, group: `Settings · ${g.label}`, description: i.description })),
-    );
-  } else if (access === 'payout') {
-    // The two money-handling settings screens a bursar (or principal/super_admin, who
-    // already got 'all' above) reaches: where parents' fee payments settle to, and what
-    // this school owes Chronix.
-    settings = SETTINGS_NAV_GROUPS.flatMap((g) => g.items)
-      .filter((i) => i.href === '/settings/payout' || i.href === '/settings/billing')
-      .map((i) => ({ label: i.label, href: i.href, group: 'Settings', description: i.description }));
-  }
+  // The same pages the Settings rail shows this role (settingsGroupsForRole). A bursar's two are
+  // labelled plain "Settings": they are the only ones, so the group name would say nothing.
+  const settings: PaletteEntry[] = settingsGroupsForRole(role).flatMap((g) =>
+    g.items.map((i) => ({
+      label: i.label, href: i.href, description: i.description,
+      group: access === 'all' ? `Settings · ${g.label}` : 'Settings',
+    })),
+  );
   return [...own, ...settings];
 }
 

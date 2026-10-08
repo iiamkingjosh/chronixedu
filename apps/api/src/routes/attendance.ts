@@ -161,7 +161,7 @@ router.post(
 
       // Only mark attendance for students actually enrolled in this class — never
       // blindly trust client-supplied student_ids.
-      const roster = await getClassRoster(class_id, schoolId);
+      const roster = await getClassRoster(class_id, schoolId, term.session_id);
       const enrolledIds = new Set(roster.map(r => r.student_id));
       const validEntries = entries.filter(entry => enrolledIds.has(entry.student_id));
       if (validEntries.length === 0) {

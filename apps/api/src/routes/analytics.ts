@@ -1,4 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
+import { findSchoolTerm } from '../db/queries/assessmentConfig';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { requireFeature } from '../middleware/requireFeature';
 import { getActiveTerm } from '../db/queries/roster';
@@ -51,7 +53,18 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
-      const termId = (req.query.term_id as string | undefined) ?? (await getActiveTerm(schoolId))?.id;
+      // A term named by the caller must be this school's (doctrine 3): it was used as given, so another
+      // school's term made a snapshot here under it, and a malformed id was a 500 (audit, 8 Oct 2026).
+      const asked = req.query.term_id as string | undefined;
+      if (asked !== undefined) {
+        if (!z.string().uuid().safeParse(asked).success) {
+          return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'term_id must be a term id' } });
+        }
+        if (!(await findSchoolTerm(asked, schoolId))) {
+          return res.status(404).json({ success: false, error: { code: 'TERM_NOT_FOUND', message: 'Term not found in this school' } });
+        }
+      }
+      const termId = asked ?? (await getActiveTerm(schoolId))?.id;
 
       if (!termId) {
         return res.json({ success: true, data: null });

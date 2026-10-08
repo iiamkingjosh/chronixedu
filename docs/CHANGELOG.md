@@ -1,5 +1,26 @@
 # Chronix Edu — Changelog
 
+## Principals reach the Students pages; class lists are this session's (2026-10-08)
+
+### For principals
+- **Students opens for a principal.** It sent you back to your dashboard, so registering a student, Assign Class,
+  imports and Promotions were out of reach. **Promotions** is now in your sidebar beside Students.
+- **A class's lists are this session's pupils.** A pupil who moved up last session no longer appears on their old
+  class's attendance register, monthly summary, homework totals, report cards or fee collection figures.
+- **Analytics takes only this school's terms.** A wrong term in the address is refused instead of showing an error.
+
+### For teachers
+- **The attendance register is this session's class,** and a pupil who has moved on cannot be marked in it.
+- **Class Comments says who can open it for you:** comments are written by a class's form teacher, set by the
+  principal in Settings → Roster.
+
+### For bursars
+- **Settings shows the two pages you can use:** Payout Setup (to view) and Platform Billing, now also in your
+  sidebar. Before, the Settings page listed every school setting, each of which refused you.
+
+### For registrars and bursars
+- **A message notification opens your own Messages page,** instead of sending you elsewhere.
+
 ## Notification settings take effect; staff accounts get a welcome email (2026-10-08)
 
 ### For principals

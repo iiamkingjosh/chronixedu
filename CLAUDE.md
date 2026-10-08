@@ -584,8 +584,8 @@ Monorepo, npm workspaces:
   Offline score/attendance writes go through Dexie (`lib/offlineDb.ts`).
 - Path alias `@/` in web. Keep files where their siblings are.
 - **The sidebar is `lib/navigation.ts`.** The principal's daily work is four labelled groups
-  (11 links); Settings is ONE sidebar entry whose sub-nav lives in `settings/layout.tsx`, with
-  `/settings` an index page. Labels must not collide even singular-vs-plural
+  (12 links; Promotions joined Students on 8 Oct 2026); Settings is ONE sidebar entry whose
+  sub-nav lives in `settings/layout.tsx`, with `/settings` an index page. Labels must not collide even singular-vs-plural
   (`lib/__tests__/navigation.test.ts` — "Report Cards" beside "Report Card" was the wrong-click
   it exists for). Nothing reorders by usage. "School-wide Grading" and "Grading by Level" stay
   two pages: merged behind a level selector, the page would show a level's *effective* values
@@ -593,8 +593,10 @@ Monorepo, npm workspaces:
   (jest, pure TypeScript under `lib/`), and the root `test:unit` runs them after the API's.
 - **The Ctrl+K palette (`components/CommandPalette.tsx`) has no page list of its own.**
   `lib/commandPalette.ts` builds it from `getNavGroupsForRole`, which rests on
-  `getMainNavForRole`, plus `SETTINGS_NAV_GROUPS` gated by `settingsAccessForRole`, the one rule
-  the school sidebar also reads (`all` | `payout` | `none`). Add a page to `navigation.ts` and
+  `getMainNavForRole`, plus `settingsGroupsForRole`, built on `settingsAccessForRole` (`all` |
+  `payout` | `none`). The dashboard sidebar, the Settings rail and the Settings index read the same
+  function, so a bursar is shown Payout Setup and Platform Billing and nothing else (the rail showed
+  every page to every role until 8 Oct 2026). Add a page to `navigation.ts` and
   both the sidebar and the palette get it; never add one to the palette alone, or it will offer
   a page the role's guard refuses. **The platform-admin area is the same rule**: its eleven pages
   are `SUPER_ADMIN_NAV_GROUPS` in `navigation.ts` (they used to be a private list inside
@@ -743,6 +745,14 @@ Monorepo, npm workspaces:
   correction route (PATCH) moves a student who already has one, with a reason. The assignment locks the
   student's row because `student_classes` has no unique constraint on `(student_id, session_id)`, and it
   reprices the subscription through 045's trigger (`assignClass.db.test.ts`).
+- **"Who is in this class" always says which session** (audit, 8 Oct 2026). `student_classes` keeps every
+  session's rows, so a join on the class alone lists every pupil the class has ever had. The attendance
+  register (and marking, which reads it), the monthly summary, homework totals and submissions, a class's
+  report cards and its fee collection figures all joined that way; a pupil who moved on last session stayed
+  on last year's class register and could be marked present there. Each now names the session: the term's,
+  the date's term's, or the current one (`sessionScopedClasses.db.test.ts`). A new class list does the same.
+- **The principal reaches the registrar's pages** (`/registrar/*`, whose layout admitted only the registrar
+  until 8 Oct 2026, so the principal's Students link bounced). Promotions is in the principal's sidebar.
 
 ## Primary vs secondary (teaching model)
 

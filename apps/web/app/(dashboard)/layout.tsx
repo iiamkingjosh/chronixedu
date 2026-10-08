@@ -7,7 +7,7 @@ import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useMemo, memo, useState } from 'react';
 import { useAuth } from '@/app/providers';
-import { getNavGroupsForRole, visibleNavGroups, settingsAccessForRole, type NavItem } from '@/lib/navigation';
+import { getNavGroupsForRole, visibleNavGroups, settingsAccessForRole, settingsGroupsForRole, type NavItem } from '@/lib/navigation';
 import NotificationBell from '@/components/NotificationBell';
 import CommandPalette from '@/components/CommandPalette';
 import SyncIndicator from '@/components/SyncIndicator';
@@ -82,6 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const settingsAccess = settingsAccessForRole(user.role);
   const showSettings = settingsAccess === 'all';
   const showPayoutSettings = settingsAccess !== 'none';
+  const payoutSettingsItems = settingsGroupsForRole(user.role).flatMap((g) => g.items);
   const visibleGroups = visibleNavGroups(navGroups, []);
 
   function handleLogout() {
@@ -116,7 +117,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <p className="px-5 mb-2 text-xs font-semibold text-white/40 uppercase tracking-widest">
               Settings
             </p>
-            <NavLink item={{ label: 'Payout Setup', href: '/settings/payout' }} pathname={pathname} onNavigate={onNavigate} />
+            {/* Both pages the 'payout' level opens, as the palette offers them: Platform Billing was
+                missing here until 8 Oct 2026. Payout Setup is view-only for a bursar. */}
+            {payoutSettingsItems.map((item) => (
+              <NavLink key={item.href} item={{ label: item.label, href: item.href }} pathname={pathname} onNavigate={onNavigate} />
+            ))}
           </div>
         )}
       </>

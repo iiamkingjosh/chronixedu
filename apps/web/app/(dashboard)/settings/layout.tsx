@@ -2,16 +2,21 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { SETTINGS_NAV_GROUPS, visibleNavGroups } from '@/lib/navigation';
+import { settingsGroupsForRole } from '@/lib/navigation';
+import { useAuth } from '@/app/providers';
 
 /**
- * The eleven settings screens, grouped, beside whichever one is open. The sidebar shows a
- * single "Settings" entry; this is where the rest of it lives. Desktop: a rail with group
- * labels. Phone: one scrolling row of the same links, no labels.
+ * The settings screens this role may open (all thirteen for a principal), grouped, beside
+ * whichever one is open. The sidebar shows a single "Settings" entry; this is where the rest of
+ * it lives. Desktop: a rail with group labels. Phone: one scrolling row of the same links, no
+ * labels.
  */
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const groups = visibleNavGroups(SETTINGS_NAV_GROUPS, []);
+  const { user } = useAuth();
+  // Only the pages this role may open: a bursar on Payout Setup was offered every settings page,
+  // each of which refused them (audit, 8 Oct 2026).
+  const groups = settingsGroupsForRole(user?.role ?? '');
   const isActive = (href: string) => pathname === href || pathname.startsWith(href + '/');
   const linkClass = (href: string) =>
     `block rounded-md px-3 py-1.5 text-sm ${isActive(href) ? 'bg-gray-100 font-medium text-gray-900' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`;

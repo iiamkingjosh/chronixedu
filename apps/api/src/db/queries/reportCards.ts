@@ -207,6 +207,7 @@ export async function getReportCardsForClass(
     `SELECT rc.id, rc.student_id, rc.pdf_url, rc.is_published, rc.generated_at
      FROM report_cards rc
      JOIN student_classes sc ON sc.student_id = rc.student_id AND sc.class_id = $1
+       AND sc.session_id = (SELECT session_id FROM terms WHERE id = $2)
      WHERE rc.term_id = $2 AND rc.school_id = $3`,
     [classId, termId, schoolId]
   );

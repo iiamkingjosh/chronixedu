@@ -677,7 +677,9 @@ export async function getCollectionSummary(
   let classCondition = '';
   if (classId) {
     params.push(classId);
-    classCondition = ` AND fi.student_id IN (SELECT student_id FROM student_classes WHERE class_id = $${params.length})`;
+    // The class's pupils in the term's session, not everyone ever in the class (audit, 8 Oct 2026).
+    classCondition = ` AND fi.student_id IN (SELECT sc.student_id FROM student_classes sc
+      WHERE sc.class_id = $${params.length} AND sc.session_id = (SELECT session_id FROM terms WHERE id = fi.term_id))`;
   }
 
   const result = await pool.query<{

@@ -43,7 +43,7 @@ router.get(
 
       const cls = await findClassByFormTeacher(req.user!.user_id, req.params.schoolId);
       if (!cls) {
-        return res.status(404).json({ success: false, error: { code: 'NOT_FORM_TEACHER', message: 'You are not assigned as a form teacher for any class.' } });
+        return res.status(404).json({ success: false, error: { code: 'NOT_FORM_TEACHER', message: 'Class comments are written by a class\'s form teacher, and you are not the form teacher of any class. The principal sets form teachers in Settings → Roster.' } });
       }
 
       const students = await listClassStudentsForComments(cls.id, term.id, term.session_id);

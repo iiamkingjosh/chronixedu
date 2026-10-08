@@ -7,13 +7,14 @@ export interface NavItem {
   description?: string;
 }
 
-/** A labelled run of links. A principal reads four of these instead of a list of eleven. */
+/** A labelled run of links. A principal reads four of these instead of a list of twelve. */
 export interface NavGroup {
   label: string;
   items: NavItem[];
 }
 
-// The same eleven links a principal always had, scanned as four groups of two or three.
+// Twelve links, scanned as four groups of two to four. Promotions joined Students on 8 Oct 2026, when
+// the principal was given the registrar's work.
 // Order within a group never changes and nothing reorders itself by usage: a principal
 // signs in a few times a week and needs the menu where it was last time.
 export const PRINCIPAL_NAV_GROUPS: NavGroup[] = [
@@ -36,6 +37,7 @@ export const PRINCIPAL_NAV_GROUPS: NavGroup[] = [
     label: 'Students',
     items: [
       { label: 'Students', href: '/registrar/students' },
+      { label: 'Promotions', href: '/registrar/promotions' },
       { label: 'Attendance', href: '/principal/attendance' },
       { label: 'Behaviour', href: '/principal/behaviour' },
     ],
@@ -192,9 +194,10 @@ export function getMainNavForRole(role: string): NavItem[] {
 /**
  * Which school Settings pages a role reaches: all of them, only the two money-handling screens
  * (Payout Setup and Platform Billing — 'payout', the name predates Platform Billing joining it),
- * or none. One rule, read by the palette (lib/commandPalette.ts filters its 'payout' entries to
- * exactly those two hrefs) — the sidebar itself (settings/layout.tsx) shows every group to every
- * role and leaves the real gate to each page's own guard, backed by the API
+ * or none. One rule, applied through settingsGroupsForRole by the palette, the dashboard sidebar,
+ * the Settings rail (settings/layout.tsx) and the Settings index. The rail showed every group to
+ * every role until 8 Oct 2026, so a bursar on Payout Setup was offered eleven pages that refused
+ * them. Each page's own guard, backed by the API, is still the real gate
  * (requireRole('principal', 'bursar', 'super_admin') on Platform Billing's own routes, same
  * roles canAccessPayoutSettings already names). A super admin gets none: no school of their own
  * (see getMainNavForRole).
@@ -204,6 +207,19 @@ export function settingsAccessForRole(role: string): 'all' | 'payout' | 'none' {
   if (isAdminRole(role)) return 'all';
   if (canAccessPayoutSettings(role)) return 'payout';
   return 'none';
+}
+
+/** The two settings pages the 'payout' level opens: where fee payments settle, and what the school owes Chronix. */
+export const PAYOUT_SETTINGS_HREFS: readonly string[] = ['/settings/payout', '/settings/billing'];
+
+/** The settings pages a role may open, in their groups: every one, the payout pair, or none. */
+export function settingsGroupsForRole(role: string): NavGroup[] {
+  const access = settingsAccessForRole(role);
+  if (access === 'all') return SETTINGS_NAV_GROUPS;
+  if (access === 'none') return [];
+  return SETTINGS_NAV_GROUPS
+    .map((g) => ({ ...g, items: g.items.filter((i) => PAYOUT_SETTINGS_HREFS.includes(i.href)) }))
+    .filter((g) => g.items.length > 0);
 }
 
 /** The sidebar's groups for a role: the principal's four, the platform's four, or one group labelled by role. */

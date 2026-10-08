@@ -53,15 +53,20 @@ export async function findTermForDate(schoolId: string, date: string): Promise<T
 
 // ── Class roster ───────────────────────────────────────────────────────────────
 
-export async function getClassRoster(classId: string, schoolId: string): Promise<RosterStudent[]> {
+/**
+ * The class's pupils in one session. Every "who is in this class" asks "in which session": joined on the
+ * class alone, a pupil who moved on last session stayed on the register and could be marked present
+ * (audit, 8 Oct 2026).
+ */
+export async function getClassRoster(classId: string, schoolId: string, sessionId: string): Promise<RosterStudent[]> {
   const result = await pool.query<RosterStudent>(
     `SELECT s.id AS student_id, u.first_name, u.last_name, s.admission_no
      FROM students s
      JOIN users u ON u.id = s.user_id
-     JOIN student_classes stc ON stc.student_id = s.id AND stc.class_id = $1
+     JOIN student_classes stc ON stc.student_id = s.id AND stc.class_id = $1 AND stc.session_id = $3
      WHERE s.school_id = $2
      ORDER BY u.last_name, u.first_name`,
-    [classId, schoolId]
+    [classId, schoolId, sessionId]
   );
   return result.rows;
 }
@@ -210,6 +215,9 @@ export async function getClassAttendanceForDate(
      FROM students s
      JOIN users u ON u.id = s.user_id
      JOIN student_classes stc ON stc.student_id = s.id AND stc.class_id = $1
+       AND stc.session_id = COALESCE(
+         (SELECT t.session_id FROM terms t WHERE t.school_id = $3 AND t.start_date <= $2::date AND t.end_date >= $2::date LIMIT 1),
+         (SELECT id FROM academic_sessions WHERE school_id = $3 AND is_current))
      LEFT JOIN attendance a ON a.student_id = s.id AND a.class_id = $1 AND a.date = $2
      WHERE s.school_id = $3
      ORDER BY u.last_name, u.first_name`,
@@ -297,6 +305,12 @@ export async function getMonthlySummary(
      FROM students s
      JOIN users u ON u.id = s.user_id
      JOIN student_classes stc ON stc.student_id = s.id AND stc.class_id = $1
+       -- The class's pupils in the session(s) the month falls in.
+       AND stc.session_id IN (
+         SELECT id FROM academic_sessions
+         WHERE school_id = $4
+           AND start_date <= (make_date($3::int, $2::int, 1) + interval '1 month' - interval '1 day')::date
+           AND end_date >= make_date($3::int, $2::int, 1))
      LEFT JOIN attendance a ON a.student_id = s.id AND a.class_id = $1
        AND EXTRACT(MONTH FROM a.date) = $2 AND EXTRACT(YEAR FROM a.date) = $3
      WHERE s.school_id = $4

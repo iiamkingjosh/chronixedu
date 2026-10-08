@@ -6,7 +6,7 @@ Every role sees only its own school. Written 8 Oct 2026, from what the app allow
 ## Principal: runs the school
 
 The principal is the school's administrator, and can also do the registrar's work, so a school without a
-registrar is never stuck.
+registrar is never stuck: Students and Promotions are in the principal's sidebar too.
 
 - **Settings:** School Identity (name, logo, signature, stamp), Academic Structure (sessions and terms),
   School-wide Grading and Grading by Level (grade bands and pass mark), Assessment Config, Report Card
