@@ -71,7 +71,9 @@ export const PRINCIPAL_NAV: NavItem[] = PRINCIPAL_NAV_GROUPS.flatMap((g) => g.it
 export const TEACHER_NAV: NavItem[] = [
   { label: 'Dashboard', href: '/teacher/dashboard', capability: 'teacher.workspace' },
   { label: 'Timetable', href: '/teacher/timetable', capability: 'school.member' },
-  { label: 'Score Entry', href: '/teacher/scores', capability: 'results.enter' },
+  // The teacher's own score screen, built on the teacher's dashboard: the principal enters and reviews scores from
+  // Results (pageRouteAgreement.test.ts found it open to the principal, whom its calls refuse; 8 Oct 2026).
+  { label: 'Score Entry', href: '/teacher/scores', capability: 'teacher.workspace' },
   { label: 'Class Comments', href: '/teacher/class-comments', capability: 'class.comments' },
   { label: 'Attendance', href: '/teacher/attendance', capability: 'class.daily' },
   { label: 'Assignments', href: '/teacher/assignments', capability: 'teacher.workspace' },
