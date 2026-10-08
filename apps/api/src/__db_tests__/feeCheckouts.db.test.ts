@@ -42,10 +42,12 @@ function publicApp() {
 const app = publicApp();
 const schoolsApp = buildApp();
 
-function deliver(body: object, school = A) {
+/** Delivered to a school's address, or (school null) to the address that names no school. */
+function deliver(body: object, school: string | null = A) {
   const raw = JSON.stringify(body);
   const sig = crypto.createHmac('sha512', process.env.PAYSTACK_SECRET_KEY!).update(raw).digest('hex');
-  return request(app).post(`/api/schools/${school}/payments/paystack/webhook`)
+  const address = school === null ? '/api/schools/payments/paystack/webhook' : `/api/schools/${school}/payments/paystack/webhook`;
+  return request(app).post(address)
     .set('x-paystack-signature', sig).set('Content-Type', 'application/json').send(raw);
 }
 const charge = (reference: string) => ({ event: 'charge.success', data: { reference } });
@@ -120,6 +122,18 @@ describe('the webhook credits through the record, never the metadata or the addr
     await started('ref-2', 1_000_000);
     expect((await deliver(charge('ref-2'), B)).body.data).toEqual({ processed: true });
     expect(await payments()).toMatchObject([{ school_id: A, invoice_id: invoiceA }]);
+  });
+
+  it('arriving at the address that names no school credits the same way, so no deletion can cut it off', async () => {
+    // Paystack's dashboard named the pilot school's address; deleting that school would have made every
+    // school's webhook a 404 that nothing reports (reviewer, 8 Oct 2026).
+    await started('ref-n', 1_000_000);
+    expect((await deliver(charge('ref-n'), null)).body.data).toEqual({ processed: true });
+    expect(await payments()).toMatchObject([{ school_id: A, invoice_id: invoiceA, paystack_reference: 'ref-n' }]);
+    // The same signature check guards it.
+    const forged = await request(app).post('/api/schools/payments/paystack/webhook')
+      .set('x-paystack-signature', 'not-a-signature').set('Content-Type', 'application/json').send(JSON.stringify(charge('ref-n')));
+    expect(forged.status).toBe(401);
   });
 
   it('a payment no record started is not credited, and alerts', async () => {

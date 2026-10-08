@@ -11,12 +11,19 @@ details again, and the settings below are made again in the new account.
 
 ## Settings to make in the Paystack dashboard
 
-- **Live Webhook URL** (Settings → API Keys & Webhooks): the pilot school's own address,
+- **Live Webhook URL** (Settings → API Keys & Webhooks): the address that names no school,
+
+      https://api.chronixtechnology.com/api/schools/payments/paystack/webhook
+
+  It credits every school's payments: a payment is matched by its own record (migration 062), never by an
+  address. Until 8 Oct 2026 the dashboard held the pilot school's address,
 
       https://api.chronixtechnology.com/api/schools/f1347b5c-584f-43e5-ba05-6770139c6c8f/payments/paystack/webhook
 
-  It credits every school's payments, not only the pilot's: a payment is matched by its own record
-  (migration 062), never by the school in the address. Leave the **Callback URL** as it is; Chronix Edu
+  which still answers. **While the dashboard still holds it, Chronix High School must not be deleted:** its
+  address would answer 404, and every school's online payments would stop being credited by webhook, with
+  nothing reporting it (a payment would land only if the payer's browser came back). Change the URL once the
+  code with the new address is live, then send a test event from the dashboard and see it answered 200. Leave the **Callback URL** as it is; Chronix Edu
   sets the return address on every payment itself.
 - **Disputes Email** (Settings → Contact): an inbox someone reads every working day. Chargebacks have a
   16-hour deadline (below).

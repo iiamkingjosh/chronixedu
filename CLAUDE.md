@@ -930,7 +930,7 @@ Monorepo, npm workspaces:
   Paystack's metadata and the `:schoolId` in the return page's or webhook's address are never used; the
   return page took the school from its own address until then (SECURITY.md Round 38). A payment with
   no record is not credited and alerts (`fee_payment_not_credited`); the bursar records it by reference.
-  Because payments are matched by reference, one webhook address serves every school. Here the money is Chronix's own revenue, not a tenant's, so identity is
+  Because payments are matched by reference, one webhook address serves every school: `/api/schools/payments/paystack/webhook`, which names none (8 Oct 2026). The dashboard named the pilot school's address, and deleting that school would have silenced every school's webhook; the old address still answers until the dashboard is changed (`docs/paystack-runbook.md`), and the deletion runbook checks first. Here the money is Chronix's own revenue, not a tenant's, so identity is
   resolved ONLY from the local `reference`-keyed row this server wrote before calling Paystack
   (`findPendingPaymentForSchool`/`settlePayment` in `db/queries/platformBilling.ts`) — never from the
   webhook or callback's `metadata`, not even cross-checked. `platformBillingFullStack.test.ts` proves

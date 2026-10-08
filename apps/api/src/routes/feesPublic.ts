@@ -94,9 +94,12 @@ router.get(
   }
 );
 
-// ── POST /:schoolId/payments/paystack/webhook ────────────────────────────────────
+// ── POST /payments/paystack/webhook (and the older /:schoolId/payments/paystack/webhook) ──────────────
 // Paystack sends every event of the account to the one address in its dashboard. A charge is credited
-// through its record whichever school's address this is, so the pilot's address serves every school.
+// through its record whichever school's address this is. The dashboard named the pilot school's address,
+// so deleting that school would have turned every school's webhook into a 404 that nothing reports
+// (reviewer, 8 Oct 2026). The address that names no school is the one to give Paystack; the old one
+// keeps answering until the dashboard is changed (docs/paystack-runbook.md).
 // Chronix's own subscription payments arriving here are settled by their reference, as the
 // platform-billing webhook settles them. Any other event is acknowledged and logged by name: the
 // account-wide handling of refunds and disputes is parked for the second school (branch
@@ -107,70 +110,70 @@ interface PaystackWebhookEvent {
   data?: { reference?: string };
 }
 
-router.post(
-  '/:schoolId/payments/paystack/webhook',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      if (!req.rawBody) {
-        logger.warn('paystack_webhook_malformed', { route: 'fees_webhook', detail: 'rawBody missing: possible middleware misconfiguration' });
-        return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Invalid webhook request' } });
-      }
-
-      const signature = req.headers['x-paystack-signature'];
-      if (typeof signature !== 'string' || !verifyPaystackWebhookSignature(req.rawBody, signature)) {
-        return res.status(401).json({ success: false, error: { code: 'INVALID_SIGNATURE', message: 'Invalid Paystack signature' } });
-      }
-
-      const event = req.body as PaystackWebhookEvent;
-      if (event.event !== 'charge.success') {
-        // Never dropped silently: a refund, a dispute or anything else Paystack sends is visible by name.
-        logger.warn('paystack_event_unhandled', { event: typeof event.event === 'string' ? event.event : '(none)' });
-        return res.status(200).json({ success: true, data: { ignored: true } });
-      }
-
-      const reference = event.data?.reference;
-      if (!reference) {
-        return res.status(200).json({ success: true, data: { processed: false } });
-      }
-      // Re-verified with Paystack's API: the amount and currency are Paystack's, never the event's.
-      const verification = await verifyPaystackTransaction(reference);
-      if (!verification || verification.status !== 'success') {
-        return res.status(200).json({ success: true, data: { processed: false } });
-      }
-
-      const settled = await settleFeeCheckout(reference, verification.amountKobo, verification.currency);
-      if (settled.outcome === 'no_checkout') {
-        const platform = await settlePayment(reference, verification.amountKobo, verification.currency);
-        if (platform.outcome !== 'not_found') {
-          return res.status(200).json({ success: true, data: { processed: platform.outcome === 'settled', outcome: platform.outcome } });
-        }
-      }
-      if (settled.outcome === 'duplicate') {
-        return res.status(200).json({ success: true, data: { processed: false, duplicate: true } });
-      }
-      if (settled.outcome !== 'credited') {
-        // Acknowledged (200): delivering it again would not change the answer. Alerted instead.
-        logNotCredited('fees_webhook', reference, settled);
-        return res.status(200).json({ success: true, data: { processed: false, reason: settled.outcome } });
-      }
-
-      notifyPaymentReceipt(settled.schoolId, settled.payment.id, settled.invoice.student_id);
-      await logAudit({
-        // Null, not clientIp(req): this request is Paystack's server, not the person the row names.
-        ipAddress: null,
-        supportSession: req.supportSession,
-        schoolId: settled.schoolId,
-        userId: settled.recordedBy,
-        actionType: 'PAYMENT_RECORDED',
-        entity: 'payments',
-        entityId: settled.payment.id,
-        newValue: settled.payment,
-      });
-      return res.status(200).json({ success: true, data: { processed: true } });
-    } catch (err) {
-      return next(err);
+async function paystackWebhook(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!req.rawBody) {
+      logger.warn('paystack_webhook_malformed', { route: 'fees_webhook', detail: 'rawBody missing: possible middleware misconfiguration' });
+      return res.status(400).json({ success: false, error: { code: 'INVALID_REQUEST', message: 'Invalid webhook request' } });
     }
+
+    const signature = req.headers['x-paystack-signature'];
+    if (typeof signature !== 'string' || !verifyPaystackWebhookSignature(req.rawBody, signature)) {
+      return res.status(401).json({ success: false, error: { code: 'INVALID_SIGNATURE', message: 'Invalid Paystack signature' } });
+    }
+
+    const event = req.body as PaystackWebhookEvent;
+    if (event.event !== 'charge.success') {
+      // Never dropped silently: a refund, a dispute or anything else Paystack sends is visible by name.
+      logger.warn('paystack_event_unhandled', { event: typeof event.event === 'string' ? event.event : '(none)' });
+      return res.status(200).json({ success: true, data: { ignored: true } });
+    }
+
+    const reference = event.data?.reference;
+    if (!reference) {
+      return res.status(200).json({ success: true, data: { processed: false } });
+    }
+    // Re-verified with Paystack's API: the amount and currency are Paystack's, never the event's.
+    const verification = await verifyPaystackTransaction(reference);
+    if (!verification || verification.status !== 'success') {
+      return res.status(200).json({ success: true, data: { processed: false } });
+    }
+
+    const settled = await settleFeeCheckout(reference, verification.amountKobo, verification.currency);
+    if (settled.outcome === 'no_checkout') {
+      const platform = await settlePayment(reference, verification.amountKobo, verification.currency);
+      if (platform.outcome !== 'not_found') {
+        return res.status(200).json({ success: true, data: { processed: platform.outcome === 'settled', outcome: platform.outcome } });
+      }
+    }
+    if (settled.outcome === 'duplicate') {
+      return res.status(200).json({ success: true, data: { processed: false, duplicate: true } });
+    }
+    if (settled.outcome !== 'credited') {
+      // Acknowledged (200): delivering it again would not change the answer. Alerted instead.
+      logNotCredited('fees_webhook', reference, settled);
+      return res.status(200).json({ success: true, data: { processed: false, reason: settled.outcome } });
+    }
+
+    notifyPaymentReceipt(settled.schoolId, settled.payment.id, settled.invoice.student_id);
+    await logAudit({
+      // Null, not clientIp(req): this request is Paystack's server, not the person the row names.
+      ipAddress: null,
+      supportSession: req.supportSession,
+      schoolId: settled.schoolId,
+      userId: settled.recordedBy,
+      actionType: 'PAYMENT_RECORDED',
+      entity: 'payments',
+      entityId: settled.payment.id,
+      newValue: settled.payment,
+    });
+    return res.status(200).json({ success: true, data: { processed: true } });
+  } catch (err) {
+    return next(err);
   }
-);
+}
+
+router.post('/payments/paystack/webhook', paystackWebhook);
+router.post('/:schoolId/payments/paystack/webhook', paystackWebhook);
 
 export default router;
