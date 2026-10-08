@@ -5,8 +5,8 @@ import { supabaseAdmin } from '../supabaseClient';
 import { findSchoolById } from '../db/queries/schools';
 import { getStudentProfile } from '../db/queries/students';
 import { listSessionsWithTerms } from '../db/queries/sessions';
-import { computeClassResults } from './resultEngine';
-import type { ClassResult } from './resultEngine';
+import pool from '../db/client';
+import { computeClassResults, resolveGradingScale } from './resultEngine';
 import { getBrowser, ordinal, gradeCss, buildSubjectPositions, REPORT_CARDS_BUCKET } from './reportCardService';
 import { lookupGrade } from './resultEngine';
 import type { GradeBand } from './resultEngine';
@@ -29,63 +29,55 @@ function getTemplate(): CompiledTemplate {
 
 // ── Core PDF generator ─────────────────────────────────────────────────────────
 
+export interface TranscriptTerm {
+  termName: string;
+  subjects: Array<{ name: string; totalScore: string; grade: string; gradeCss: string; position: string; classAverage: string }>;
+  overall: { average: string; grade: string; gradeCss: string; position: string };
+}
+
+export interface TranscriptSession {
+  sessionName: string;
+  className: string;
+  classLevel: string;
+  terms: TranscriptTerm[];
+}
+
 /**
- * Renders a student's transcript PDF and stores it. Returns the storage path (not a URL) —
- * the object lives in a private bucket, so callers must mint a signed URL via
- * `signReportCardAsset` at the point of serving it to a client.
+ * What a transcript shows: each session the student was enrolled in, and each term of it whose
+ * results are PUBLISHED for this student (doctrine 5). A transcript is the document a student
+ * takes to another school, and it took every term with scores, unpublished marks included (audit,
+ * 8 Oct 2026). Grades come from the class's own scale (its level's, else the school's), as the
+ * report card's do, and the overall average and grade are the engine's, not a third derivation.
+ * A published term whose results cannot be computed fails the transcript rather than vanishing
+ * from it.
  */
-export async function generateTranscript(studentId: string, schoolId: string): Promise<string> {
-  const [profile, school, sessions] = await Promise.all([
+export async function transcriptSessions(studentId: string, schoolId: string, today: Date = new Date()): Promise<TranscriptSession[]> {
+  const [profile, sessions, published] = await Promise.all([
     getStudentProfile(studentId, schoolId),
-    findSchoolById(schoolId),
     listSessionsWithTerms(schoolId),
+    pool.query<{ term_id: string }>(
+      `SELECT term_id FROM result_status WHERE student_id = $1 AND school_id = $2 AND status = 'published'`,
+      [studentId, schoolId]),
   ]);
-
   if (!profile) throw new Error(`Student not found: ${studentId}`);
-  if (!school)  throw new Error(`School not found: ${schoolId}`);
+  const publishedTerms = new Set(published.rows.map(r => r.term_id));
 
-  const identityConfig = (school.identity_config ?? {}) as Record<string, string | null>;
-  const academicConfig = (school.academic_config ?? {}) as Record<string, unknown>;
-
-  // Third copy of this scale, now removed — reportCardService had one too. A leaving
-  // transcript graded against a hard-coded 70/60/50/40 the school never configured is
-  // the worst place for this defect: it is the document a student carries to another
-  // school. No fallback: an empty scale yields no grade rather than a wrong one.
-  const gradingScale: GradeBand[] = Array.isArray(academicConfig.grading_scale)
-    ? (academicConfig.grading_scale as GradeBand[])
-    : [];
-
-  const today = new Date();
-
-  const sessionsData: Array<{
-    sessionName: string;
-    className: string;
-    classLevel: string;
-    terms: Array<{
-      termName: string;
-      subjects: Array<{ name: string; totalScore: string; grade: string; gradeCss: string; position: string; classAverage: string }>;
-      overall: { average: string; grade: string; gradeCss: string; position: string };
-    }>;
-  }> = [];
-
+  const out: TranscriptSession[] = [];
   for (const enrollment of profile.enrollments) {
     const session = sessions.find(s => s.id === enrollment.session_id);
     if (!session) continue;
 
     const terms = session.terms
-      .filter(t => new Date(t.start_date) <= today)
+      .filter(t => new Date(t.start_date) <= today && publishedTerms.has(t.id))
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
+    if (terms.length === 0) continue;
 
-    const termRows: typeof sessionsData[number]['terms'] = [];
+    // No fallback: an empty scale yields no grade rather than a wrong one.
+    const gradingScale: GradeBand[] = await resolveGradingScale(schoolId, enrollment.class_id);
+    const termRows: TranscriptTerm[] = [];
 
     for (const term of terms) {
-      let classResult: ClassResult;
-      try {
-        classResult = await computeClassResults(enrollment.class_id, term.id, schoolId);
-      } catch {
-        continue;
-      }
-
+      const classResult = await computeClassResults(enrollment.class_id, term.id, schoolId);
       const studentRecord = classResult.students.find(s => s.student_id === studentId);
       if (!studentRecord) continue;
 
@@ -120,7 +112,7 @@ export async function generateTranscript(studentId: string, schoolId: string): P
         };
       });
 
-      const overallAvg = scoredSubjects.reduce((sum, s) => sum + (s.result?.total_score ?? 0), 0) / scoredSubjects.length;
+      const overallAvg = studentRecord.overall_average ?? 0;
       const overallBand = lookupGrade(overallAvg, gradingScale);
 
       termRows.push({
@@ -128,7 +120,7 @@ export async function generateTranscript(studentId: string, schoolId: string): P
         subjects: subjectRows,
         overall: {
           average:  overallAvg.toFixed(2),
-          grade:    overallBand ? overallBand.grade : '—',
+          grade:    studentRecord.overall_grade ?? (overallBand ? overallBand.grade : '—'),
           gradeCss: gradeCss(overallBand, gradingScale),
           position: ordinal(studentRecord.position),
         },
@@ -136,14 +128,32 @@ export async function generateTranscript(studentId: string, schoolId: string): P
     }
 
     if (termRows.length === 0) continue;
-
-    sessionsData.push({
+    out.push({
       sessionName: enrollment.session_name,
       className:   enrollment.class_name,
       classLevel:  enrollment.class_level,
       terms:       termRows,
     });
   }
+  return out;
+}
+
+/**
+ * Renders a student's transcript PDF and stores it. Returns the storage path (not a URL) —
+ * the object lives in a private bucket, so callers must mint a signed URL via
+ * `signReportCardAsset` at the point of serving it to a client.
+ */
+export async function generateTranscript(studentId: string, schoolId: string): Promise<string> {
+  const [profile, school, sessionsData] = await Promise.all([
+    getStudentProfile(studentId, schoolId),
+    findSchoolById(schoolId),
+    transcriptSessions(studentId, schoolId),
+  ]);
+
+  if (!profile) throw new Error(`Student not found: ${studentId}`);
+  if (!school)  throw new Error(`School not found: ${schoolId}`);
+
+  const identityConfig = (school.identity_config ?? {}) as Record<string, string | null>;
 
   // The images go inside the page, read from the private bucket; the renderer fetches nothing.
   const [logoImage, stampImage, photoImage] = await Promise.all([

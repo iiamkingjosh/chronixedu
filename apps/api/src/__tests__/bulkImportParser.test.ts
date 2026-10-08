@@ -15,6 +15,18 @@ function makeCsvBuffer(headers: string[], rows: string[][]): Buffer {
   return Buffer.from(lines.join('\n'), 'utf-8');
 }
 
+describe('parseBulkImportFile — the Class column', () => {
+  it('reads Class when the sheet has it, and leaves it empty when it does not', async () => {
+    const withClass = await parseBulkImportFile(
+      await makeXlsxBuffer(['First Name', 'Last Name', 'Class'], [['Tunde', 'Okonkwo', 'JSS 1A'], ['Ada', 'Bello', '']]), 'students.xlsx');
+    expect(withClass.map(r => r.class_name)).toEqual(['JSS 1A', null]);
+
+    // A sheet made from the old template, with no Class column, still parses.
+    const without = await parseBulkImportFile(await makeXlsxBuffer(['First Name', 'Last Name'], [['Tunde', 'Okonkwo']]), 'students.xlsx');
+    expect(without[0].class_name).toBeNull();
+  });
+});
+
 describe('parseBulkImportFile — .xlsx', () => {
   it('parses a well-formed row with a student and one parent', async () => {
     const buffer = await makeXlsxBuffer(

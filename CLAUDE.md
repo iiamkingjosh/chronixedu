@@ -540,6 +540,12 @@ Monorepo, npm workspaces:
 - API response envelope: `{ success: true, data }` / `{ success: false, error: { code, message } }`.
   Status codes: 400 validation, 401 auth, 403 role/tenant, 404, 409 conflict/transition, 422 bulk validation, 423 locked.
 - Validate every body/query with zod before touching the DB. Parameterised SQL only.
+- **A parent account belongs to one school, and only a parent account is linked as a parent** (Moses, 8 Oct
+  2026). `refuseUnlinkableParents` (`db/queries/students.ts`) checks every parent email before any login is made, in
+  registration, add-parent and the bulk-import preview (`findEmailsAtOtherSchools`). A transcript includes a term only
+  where the student's results are published (`transcriptSessions`): it leaves the school, so doctrine 5 applies.
+- **An upload over multer's size limit answers 413 `FILE_TOO_LARGE`** (`middleware/errorHandler.ts`, logged at warn as
+  `upload_refused`), not a 500. Each upload form states its own limit.
 - DB access lives in `apps/api/src/db/queries/*`; routes orchestrate, services hold business logic.
 - API logging via `logger` (winston). No `console.log` in app code.
 - **Sentry gets technical data only**, because the DPA names it a sub-processor on that basis.

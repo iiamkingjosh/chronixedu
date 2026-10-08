@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 40 — 2026-10-08  
 **Scope:** Fixes from the 8 Oct 2026 audit of every school role  
-**Round 40 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+**Round 40 total findings:** 3 (0 Critical · 0 High · 0 Medium · 3 Low) — remediated in code, not yet deployed
 
 ---
 
@@ -28,6 +28,48 @@ sender to start a new message. A new message to the same person still works.
 
 **Tests:** `messagingContacts.db.test.ts` (the parent pulled in is refused and cannot read the thread; the same
 teacher can still message the parent in a new conversation). With the check removed, it fails.
+
+### L-02 — Registration made any account of the school a child's parent ✅ Remediated
+
+**Files:** `apps/api/src/db/queries/students.ts` (`refuseUnlinkableParents`, `registerStudent`), `apps/api/src/routes/students.ts`
+(registration, add-parent, bulk import), `apps/api/src/services/bulkImportValidation.ts`.
+
+**Found** on 8 Oct 2026, in the audit of every school role.
+
+**The mechanism.** Registration looked a parent up by email alone and linked whatever account it found. A
+teacher's, the bursar's or another student's account at the same school became the child's "parent", and the
+parent routes then served it the child's results, attendance and fees. Another school's parent was refused only by
+migration 033's trigger, inside the transaction, after the student's login had been created in Supabase: a 500, and
+a login with no account behind it. The add-parent route sent another school's address to "create a new account",
+which Supabase refused: a 500.
+
+**Why Low.** Only a registrar, principal or platform admin can register a student or add a parent, and only with an
+email they type. Nothing crossed schools.
+
+**Fix.** Each parent email is checked before any login is made: an account of another school is refused
+(`PARENT_AT_ANOTHER_SCHOOL`, or `EMAIL_IN_USE` for a non-parent; one parent account belongs to one school, Moses,
+8 Oct 2026), and an account of this school that is not a parent is refused (`NOT_A_PARENT`). Both routes answer 409
+with the reason; the bulk-import preview flags the row.
+
+**Tests:** `registrationParents.db.test.ts` (refusals make no login and no student), `bulkImportValidation.test.ts`.
+
+### L-03 — A transcript carried marks that had not been published ✅ Remediated
+
+**Files:** `apps/api/src/services/transcriptService.ts` (`transcriptSessions`).
+
+**Found** on 8 Oct 2026, in the audit of every school role.
+
+**The mechanism.** A transcript took every term with scores, so marks still being entered, or returned for
+correction, could leave the school as final results on the document a student takes elsewhere (doctrine 5). It
+also graded them on the school-wide scale, ignoring a level's own.
+
+**Why Low.** Only staff generate a transcript, and the school chooses whom to give it to.
+
+**Fix.** A transcript includes a term only where the student's results are published, graded on the class's own
+scale, with the engine's overall average. A published term whose results cannot be computed fails the transcript
+instead of disappearing from it.
+
+**Tests:** `transcriptPublishedOnly.db.test.ts` (with the published filter removed, it fails).
 
 ---
 

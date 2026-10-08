@@ -109,6 +109,44 @@ export type CreateAuthAccount = (input: {
   last_name: string;
 }) => Promise<string>;
 
+// ── Who may be linked as a parent ─────────────────────────────────────────────
+
+/** A refusal that names its reason, for the route to answer with `status` instead of a 500. */
+export class RegistrationRefusal extends Error {
+  constructor(public readonly code: string, message: string, public readonly status = 409) {
+    super(message);
+    this.name = 'RegistrationRefusal';
+  }
+}
+
+/**
+ * Checks each parent's email before anything is created (audit, 8 Oct 2026). An existing account
+ * with the email is linked as the parent only if it is a parent of this school: one parent account
+ * belongs to one school (Moses, 8 Oct 2026), and a staff or student account is never made someone's
+ * parent. Registration linked any account with the email; another school's parent was then refused
+ * by migration 033's trigger, after the student's login had been made: a 500 and a stray login.
+ */
+export async function refuseUnlinkableParents(schoolId: string, emails: string[]): Promise<void> {
+  if (emails.length === 0) return;
+  const { rows } = await pool.query<{ email: string; school_id: string | null; role: string }>(
+    `SELECT email, school_id, role FROM users WHERE lower(email) = ANY($1::text[])`,
+    [emails.map(e => e.trim().toLowerCase())]
+  );
+  for (const account of rows) {
+    if (account.school_id !== schoolId) {
+      throw account.role === 'parent'
+        ? new RegistrationRefusal('PARENT_AT_ANOTHER_SCHOOL',
+            `${account.email} belongs to a parent account at another school. A parent account belongs to one school, so give this parent a different email here.`)
+        : new RegistrationRefusal('EMAIL_IN_USE',
+            `${account.email} is already used by an account at another school. Give this parent a different email.`);
+    }
+    if (account.role !== 'parent') {
+      throw new RegistrationRefusal('NOT_A_PARENT',
+        `${account.email} belongs to a ${account.role.replace('_', ' ')} account at this school. A parent needs an email of their own.`);
+    }
+  }
+}
+
 // ── Register (transaction) ─────────────────────────────────────────────────────
 
 export async function registerStudent(
@@ -117,6 +155,25 @@ export async function registerStudent(
   parents: Array<ParentInput & { passwordHash: string; tempPassword: string }>,
   createAuthAccount: CreateAuthAccount
 ): Promise<RegistrationResult> {
+  // Before any login is made, so a refusal leaves nothing behind.
+  await refuseUnlinkableParents(schoolId, parents.map(p => p.email));
+  if (data.class_id) {
+    // The class is checked against the school (doctrine 3), and a class asked for is never dropped:
+    // with no current session the student used to be registered without one, and nobody was told.
+    const { rows: [check] } = await pool.query<{ class_ok: boolean; session_id: string | null }>(
+      `SELECT EXISTS (SELECT 1 FROM classes WHERE id = $1 AND school_id = $2) AS class_ok,
+              (SELECT id FROM academic_sessions WHERE school_id = $2 AND is_current) AS session_id`,
+      [data.class_id, schoolId]
+    );
+    if (!check.class_ok) {
+      throw new RegistrationRefusal('CLASS_NOT_FOUND', "That class is not one of this school's classes.", 404);
+    }
+    if (!check.session_id) {
+      throw new RegistrationRefusal('NO_CURRENT_SESSION',
+        'This school has no current session, so the student cannot be put in a class yet. Make a session current in Settings → Academic Structure, or register the student without a class and use Assign Class later.');
+    }
+  }
+
   // ── Phase 1: resolve identifiers and create auth accounts OUTSIDE the transaction.
   // users.ts:594-603 documents why the auth call must not sit inside one: an external
   // API call in a transaction orphans the remote account whenever the DB later rolls
@@ -243,13 +300,15 @@ export async function registerStudent(
         [schoolId]
       );
       const sessionId = sessionResult.rows[0]?.id;
-      if (sessionId) {
-        await client.query(
-          `INSERT INTO student_classes (student_id, class_id, session_id) VALUES ($1, $2, $3)`,
-          [student.id, data.class_id, sessionId]
-        );
-        enrollment = { class_id: data.class_id, session_id: sessionId };
+      if (!sessionId) {
+        // Checked before anything was made; a session switched off since then fails the registration.
+        throw new RegistrationRefusal('NO_CURRENT_SESSION', 'The school has no current session any more. Register the student again.');
       }
+      await client.query(
+        `INSERT INTO student_classes (student_id, class_id, session_id) VALUES ($1, $2, $3)`,
+        [student.id, data.class_id, sessionId]
+      );
+      enrollment = { class_id: data.class_id, session_id: sessionId };
     }
 
     await client.query('COMMIT');
@@ -298,6 +357,12 @@ export async function listStudents(
   if (opts.classId) {
     params.push(opts.classId);
     whereExtra.push(`sc.class_id = $${params.length}`);
+  }
+  // A session named by the caller lists that session's students, and only them. It listed every
+  // student of the school, so the Promotion Manager offered children never in the session (audit,
+  // 8 Oct 2026). With no session named, the list still shows students without a class this session.
+  if (opts.sessionId) {
+    whereExtra.push('sc.id IS NOT NULL');
   }
 
   if (opts.search) {
@@ -404,14 +469,29 @@ export interface BioUpdate {
   emergency_contact_phone?: string | null;
 }
 
+/** Updates a student's details; returns the values the patched fields held before, read under the
+ *  same row locks as the write, for the audit row (doctrine 10: an old value is read, never assumed). */
 export async function updateStudentBio(
   studentId: string,
   schoolId: string,
   patch: BioUpdate
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const { rows: [before] } = await client.query<Record<string, unknown>>(
+      `SELECT s.dob::text AS dob, s.gender, s.address, s.blood_group, s.emergency_contact_name, s.emergency_contact_phone,
+              u.first_name, u.last_name, u.phone
+         FROM students s JOIN users u ON u.id = s.user_id
+        WHERE s.id = $1 AND s.school_id = $2
+        FOR UPDATE OF s, u`,
+      [studentId, schoolId]
+    );
+    const prior: Record<string, unknown> = {};
+    for (const key of Object.keys(patch)) {
+      if (before && key in before) prior[key] = before[key];
+    }
 
     const studentFields: string[] = [];
     const studentParams: unknown[] = [studentId, schoolId];
@@ -447,6 +527,7 @@ export async function updateStudentBio(
     }
 
     await client.query('COMMIT');
+    return prior;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -457,15 +538,19 @@ export async function updateStudentBio(
 
 // ── Photo URL ─────────────────────────────────────────────────────────────────
 
+/** Stores the photo's path; returns the path it replaced (null if none), for the audit row. */
 export async function updateStudentPhotoUrl(
   studentId: string,
   schoolId: string,
   photoUrl: string
-): Promise<void> {
-  await pool.query(
-    `UPDATE students SET photo_url = $1 WHERE id = $2 AND school_id = $3`,
+): Promise<string | null> {
+  const { rows } = await pool.query<{ prior: string | null }>(
+    `WITH old AS (SELECT photo_url FROM students WHERE id = $2 AND school_id = $3 FOR UPDATE)
+     UPDATE students SET photo_url = $1 WHERE id = $2 AND school_id = $3
+     RETURNING (SELECT photo_url FROM old) AS prior`,
     [photoUrl, studentId, schoolId]
   );
+  return rows[0]?.prior ?? null;
 }
 
 // ── Promote ───────────────────────────────────────────────────────────────────
@@ -629,6 +714,68 @@ export async function findUsersRolesByEmails(emails: string[]): Promise<Map<stri
     [emails.map(e => e.toLowerCase())]
   );
   return new Map(result.rows.map(r => [r.email.toLowerCase(), r.role]));
+}
+
+/** Which of these emails (lower-cased) belong to an account of a school other than this one. */
+export async function findEmailsAtOtherSchools(emails: string[], schoolId: string): Promise<Set<string>> {
+  if (emails.length === 0) return new Set();
+  const result = await pool.query<{ email: string }>(
+    `SELECT email FROM users WHERE LOWER(email) = ANY($1::text[]) AND school_id IS DISTINCT FROM $2`,
+    [emails.map(e => e.toLowerCase()), schoolId]
+  );
+  return new Set(result.rows.map(r => r.email.toLowerCase()));
+}
+
+export type PromotionOutcome = { status: 'enrolled' } | { status: 'skipped'; reason: string };
+
+/**
+ * Enrols one student in the next session, as promoted or repeating, in its own transaction with the
+ * student's row locked: two runs at once could both find the student not yet enrolled and enrol
+ * them twice, since student_classes has no unique (student, session). The student must be in the
+ * session being promoted from, and a promotion must name a different class from the one they are in
+ * (audit, 8 Oct 2026: "Promoted" beside the current class enrolled them in the same class again).
+ */
+export async function promoteStudent(
+  schoolId: string,
+  studentId: string,
+  fromSessionId: string,
+  toSessionId: string,
+  classId: string,
+  decision: 'promoted' | 'repeat'
+): Promise<PromotionOutcome> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const student = await client.query(`SELECT id FROM students WHERE id = $1 AND school_id = $2 FOR UPDATE`, [studentId, schoolId]);
+    if (!student.rows[0]) {
+      await client.query('ROLLBACK');
+      return { status: 'skipped', reason: 'Student not found' };
+    }
+    const from = await client.query<{ class_id: string }>(
+      `SELECT class_id FROM student_classes WHERE student_id = $1 AND session_id = $2 ORDER BY enrolled_at DESC LIMIT 1`,
+      [studentId, fromSessionId]);
+    if (!from.rows[0]) {
+      await client.query('ROLLBACK');
+      return { status: 'skipped', reason: 'Not in the session being promoted from' };
+    }
+    const already = await client.query(`SELECT 1 FROM student_classes WHERE student_id = $1 AND session_id = $2`, [studentId, toSessionId]);
+    if (already.rows[0]) {
+      await client.query('ROLLBACK');
+      return { status: 'skipped', reason: 'Already enrolled for target session' };
+    }
+    if (decision === 'promoted' && from.rows[0].class_id === classId) {
+      await client.query('ROLLBACK');
+      return { status: 'skipped', reason: 'Marked promoted, but into the same class they are in. Choose the class they move up to, or mark them as repeating.' };
+    }
+    await client.query(`INSERT INTO student_classes (student_id, class_id, session_id) VALUES ($1, $2, $3)`, [studentId, classId, toSessionId]);
+    await client.query('COMMIT');
+    return { status: 'enrolled' };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ── Bulk payment import support ─────────────────────────────────────────────

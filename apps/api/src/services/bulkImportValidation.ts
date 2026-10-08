@@ -81,7 +81,15 @@ export function findDuplicatesWithinFile(rows: ParsedStudentRow[]): Set<number> 
  */
 export async function runFullValidation(
   rows: ParsedStudentRow[],
-  lookupEmailRoles: (emails: string[]) => Promise<Map<string, string>>
+  lookupEmailRoles: (emails: string[]) => Promise<Map<string, string>>,
+  /** Emails held by an account of another school (lower-cased). A parent account belongs to one
+   *  school (Moses, 8 Oct 2026), so such an email is refused here, at preview, instead of failing
+   *  the row at commit. Optional so the role check can be tested alone. */
+  lookupEmailsAtOtherSchools?: (emails: string[]) => Promise<Set<string>>,
+  /** The school's classes, lower-cased name → id, to check a row's Class against. Import gave no way
+   *  to put a student in a class, so every imported student needed Assign Class one by one (audit,
+   *  8 Oct 2026). Optional so the other checks can be tested alone. */
+  classIdsByName?: Map<string, string>
 ): Promise<RowValidationResult[]> {
   const duplicateRowNumbers = findDuplicatesWithinFile(rows);
 
@@ -92,6 +100,9 @@ export async function runFullValidation(
     if (row.parent2?.email) allEmails.add(row.parent2.email.toLowerCase());
   }
   const existingRoles = allEmails.size > 0 ? await lookupEmailRoles([...allEmails]) : new Map<string, string>();
+  const atOtherSchools = allEmails.size > 0 && lookupEmailsAtOtherSchools
+    ? await lookupEmailsAtOtherSchools([...allEmails])
+    : new Set<string>();
 
   return rows.map(row => {
     const errors = validateRowShape(row);
@@ -107,10 +118,18 @@ export async function runFullValidation(
       }
     }
 
+    if (row.class_name && classIdsByName && !classIdsByName.has(row.class_name.trim().toLowerCase())) {
+      errors.push(`Class "${row.class_name}" is not one of this school's classes. Use the class name exactly as it appears under Settings → Roster, or leave Class empty.`);
+    }
+
     (['parent1', 'parent2'] as const).forEach(key => {
       const parent = row[key];
       const label = key === 'parent1' ? 'Parent 1' : 'Parent 2';
       if (!parent?.email) return;
+      if (atOtherSchools.has(parent.email.toLowerCase())) {
+        errors.push(`${label} email "${parent.email}" belongs to an account at another school. A parent account belongs to one school, so use a different email.`);
+        return;
+      }
       const existingRole = existingRoles.get(parent.email.toLowerCase());
       if (existingRole && existingRole !== 'parent') {
         errors.push(`${label} email "${parent.email}" already belongs to an existing ${existingRole} account and cannot be used as a parent contact.`);

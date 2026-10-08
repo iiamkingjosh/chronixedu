@@ -149,6 +149,29 @@ describe('runFullValidation', () => {
     expect(results[0].status).toBe('valid');
   });
 
+  it("flags a parent email held by another school's account, even a parent's: one parent account, one school", async () => {
+    const rows = [baseRow({
+      parent1: { first_name: 'Bisi', last_name: 'Okonkwo', email: 'Bisi@Example.com', phone: null, relationship_type: 'Mother', is_primary_contact: false },
+    })];
+    const roles = async () => new Map([['bisi@example.com', 'parent']]);
+    // Control: the same parent, of this school, is a legitimate reuse.
+    expect((await runFullValidation(rows, roles, async () => new Set()))[0].status).toBe('valid');
+
+    const results = await runFullValidation(rows, roles, async () => new Set(['bisi@example.com']));
+    expect(results[0].status).toBe('error');
+    expect(results[0].errors).toEqual([expect.stringContaining('another school')]);
+  });
+
+  it("checks a row's Class against the school's classes, without regard to case", async () => {
+    const classes = new Map([['jss 1a', 'class-id-1']]);
+    const none = async () => new Map<string, string>();
+    const results = await runFullValidation(
+      [baseRow({ row_number: 1, class_name: 'jss 1A' }), baseRow({ row_number: 2, first_name: 'Ada', class_name: 'JSS 9Z' }), baseRow({ row_number: 3, first_name: 'Bayo' })],
+      none, async () => new Set(), classes);
+    expect(results.map(r => r.status)).toEqual(['valid', 'error', 'valid']);
+    expect(results[1].errors).toEqual([expect.stringContaining('"JSS 9Z" is not one of this school')]);
+  });
+
   it('flags in-file duplicate student emails via runFullValidation end-to-end', async () => {
     const rows = [
       baseRow({ row_number: 1, email: 'dupe@example.com' }),

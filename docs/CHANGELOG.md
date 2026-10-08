@@ -1,5 +1,28 @@
 # Chronix Edu — Changelog
 
+## Registering, importing and promoting students (2026-10-08)
+
+### For registrars and principals
+- **A parent must be a parent of this school.** Registering a student, or adding a parent, with an email that
+  belongs to a staff member or student here, or to any account at another school, is refused with the reason,
+  before anything is created. One parent account belongs to one school. It used to link the account anyway, or fail
+  with an error.
+- **The class you register a student into is checked.** If the school has no current session, registering with a
+  class is refused and says so, instead of quietly registering the student without one.
+- **Bulk import takes a Class column** (download the template again). Each student is put in that class for this
+  session; a class name the school does not have is flagged in the preview. The page now says the real limit, 50
+  students per file, and after an import it says how many students came in without a class.
+- **Promotion Manager:** nobody is marked promoted or repeating until you choose. "Promoted" needs the class they move
+  up to; "Repeats" keeps their class unless you pick another. Only students who were in the session you are
+  promoting from are listed, and a student cannot be enrolled twice in the new session.
+- **Student photos** can be added or changed on the student's profile (JPEG, PNG or WebP, up to 2 MB). A file that is
+  too large is now refused with a message instead of an error.
+- **The Students page shows the current session and term**, and warns when there is no current session.
+- **Transcripts show published results only**, graded on the class's own scale. They used to include marks that were
+  still being entered.
+- **Registering, editing, photographing, enrolling and linking a parent to a student are now recorded** in the
+  school's audit log, an edit with the values it replaced.
+
 ## A setup checklist, term dates that can be corrected, and a trial from day one (2026-10-08)
 
 ### For principals

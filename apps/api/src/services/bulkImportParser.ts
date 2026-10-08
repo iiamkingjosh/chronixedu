@@ -22,6 +22,8 @@ export interface ParsedStudentRow {
   blood_group: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
+  /** The class's name as the school has it (Settings → Roster); optional. Matched without regard to case. */
+  class_name?: string | null;
   parent1: ParsedParentRow | null;
   parent2: ParsedParentRow | null;
 }
@@ -33,6 +35,7 @@ const REQUIRED_HEADERS = ['first name', 'last name'];
 const COLUMN_MAP: Record<string, string> = {
   'first name': 'first_name',
   'last name': 'last_name',
+  'class': 'class_name',
   'email': 'email',
   'phone': 'phone',
   'date of birth (yyyy-mm-dd)': 'dob',
@@ -147,6 +150,7 @@ export async function parseBulkImportFile(buffer: Buffer, filename: string): Pro
       blood_group: raw.blood_group ?? null,
       emergency_contact_name: raw.emergency_contact_name ?? null,
       emergency_contact_phone: raw.emergency_contact_phone ?? null,
+      class_name: raw.class_name ?? null,
       parent1: buildParent(raw, 'parent1'),
       parent2: buildParent(raw, 'parent2'),
     });

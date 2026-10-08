@@ -476,6 +476,9 @@ export default function StudentRegistrationPage() {
   const canSeeAcademics = user?.role === 'principal' || user?.role === 'super_admin';
   const [termId, setTermId] = useState<string | null>(null);
   const [termName, setTermName] = useState<string | null>(null);
+  // Shown to everyone who opens this page: the registrar could not see which session and term the
+  // school was in, and classes are given for the current session (audit, 8 Oct 2026).
+  const [calendar, setCalendar] = useState<{ session: string | null; term: string | null } | null>(null);
   const [academics, setAcademics] = useState<Record<string, AcademicRow>>({});
 
   const [classes, setClasses] = useState<ClassRow[]>([]);
@@ -506,12 +509,15 @@ export default function StudentRegistrationPage() {
   // Current term, for the academic columns. A school between terms has none, and the
   // page must stay fully usable then — the registrar registers students year-round.
   useEffect(() => {
-    if (!schoolId || !canSeeAcademics) return;
-    apiFetch<{ success: boolean; data: { term: { id: string; name: string } | null } }>(
+    if (!schoolId) return;
+    apiFetch<{ success: boolean; data: { session: { name: string } | null; term: { id: string; name: string } | null } }>(
       `/api/schools/${schoolId}/current-context`
     )
-      .then(({ data }) => { setTermId(data.term?.id ?? null); setTermName(data.term?.name ?? null); })
-      .catch(() => { setTermId(null); setTermName(null); }); // silent: academics are additive
+      .then(({ data }) => {
+        setCalendar({ session: data.session?.name ?? null, term: data.term?.name ?? null });
+        if (canSeeAcademics) { setTermId(data.term?.id ?? null); setTermName(data.term?.name ?? null); }
+      })
+      .catch(() => { setCalendar(null); setTermId(null); setTermName(null); }); // academics are additive; the line below just stays off
   }, [schoolId, canSeeAcademics]);
 
   // Academic figures for the students currently on screen. class-summary is keyed by
@@ -607,7 +613,13 @@ export default function StudentRegistrationPage() {
           </button>
         </div>
       </div>
-      <p className="text-sm text-gray-500 mb-6">Search existing students or register a new student into the school.</p>
+      <p className="text-sm text-gray-500 mb-1">Search existing students or register a new student into the school.</p>
+      {calendar && (
+        calendar.session
+          ? <p className="text-sm text-gray-600 mb-6">Current session: <span className="font-medium">{calendar.session}</span>{calendar.term ? <> · term: <span className="font-medium">{calendar.term}</span></> : ' · no current term'}. Classes given here are for this session.</p>
+          : <p className="text-sm text-amber-700 mb-6">This school has no current session, so students can be registered but not put in a class yet. The principal sets it in Settings → Academic Structure.</p>
+      )}
+      {!calendar && <div className="mb-5" />}
 
       {credentials && (
         <div className="mb-6 bg-green-50 border border-green-200 rounded-xl px-5 py-4">

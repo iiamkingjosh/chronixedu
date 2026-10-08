@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import PrincipalRemarkCard from './PrincipalRemarkCard';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiUpload } from '@/lib/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -397,6 +397,9 @@ function AssignClassModal({ schoolId, studentId, classes, onClose, onAssigned }:
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+/** The photo route's limit (multer, routes/students.ts): checked here first so nobody waits to be told. */
+const PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+
 export default function StudentProfilePage() {
   const { schoolId, user } = useAuth();
   const params = useParams<{ id: string }>();
@@ -413,6 +416,9 @@ export default function StudentProfilePage() {
   const [savingBio, setSavingBio] = useState(false);
   const [transcriptUrl, setTranscriptUrl] = useState<string | null>(null);
   const [generatingTranscript, setGeneratingTranscript] = useState(false);
+  // The photo route existed and no screen used it (audit, 8 Oct 2026).
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState('');
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<BioForm>({
     resolver: zodResolver(bioFormSchema),
@@ -485,6 +491,24 @@ export default function StudentProfilePage() {
     }
   }
 
+  async function handlePhotoChosen(file: File | undefined) {
+    if (!file || !schoolId) return;
+    setPhotoError('');
+    if (file.size > PHOTO_MAX_BYTES) { setPhotoError('Photos can be up to 2 MB. Choose a smaller one.'); return; }
+    setUploadingPhoto(true);
+    try {
+      const form = new FormData();
+      form.append('photo', file);
+      const res = await apiUpload<{ success: boolean; data: { photo_url: string } }>(`/api/schools/${schoolId}/students/${studentId}/photo`, form);
+      setProfile(prev => (prev ? { ...prev, photo_url: res.data.photo_url } : prev));
+      show('Photo saved');
+    } catch (err: unknown) {
+      setPhotoError(err instanceof Error ? err.message : 'Photo upload failed');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
+
   async function handleGenerateTranscript() {
     if (!schoolId) return;
     setGeneratingTranscript(true);
@@ -551,6 +575,25 @@ export default function StudentProfilePage() {
       <Link href="/registrar/students" className="text-sm font-medium text-[#2472B4] hover:underline">&larr; Back to Students</Link>
 
       <div className="flex items-start justify-between mt-2 mb-6">
+        <div className="flex items-start gap-4">
+          <div className="shrink-0 text-center">
+            {profile.photo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.photo_url} alt={`${profile.first_name} ${profile.last_name}`} className="w-20 h-20 rounded-lg object-cover border border-gray-200" />
+            ) : (
+              <div className="w-20 h-20 rounded-lg bg-gray-100 border border-gray-200 flex items-center justify-center text-xs text-gray-400">No photo</div>
+            )}
+            <label className="mt-1 block text-xs font-medium text-[#2472B4] hover:underline cursor-pointer">
+              {uploadingPhoto ? 'Uploading…' : profile.photo_url ? 'Change photo' : 'Add photo'}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                disabled={uploadingPhoto}
+                onChange={e => { handlePhotoChosen(e.target.files?.[0]); e.target.value = ''; }}
+              />
+            </label>
+          </div>
         <div>
           <h1 className="font-heading text-xl font-semibold text-gray-900">{profile.first_name} {profile.last_name}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -559,6 +602,9 @@ export default function StudentProfilePage() {
               ? ` · ${currentEnrollment.class_name} (${currentEnrollment.class_level}${currentEnrollment.class_stream ? ` — ${currentEnrollment.class_stream}` : ''}) · ${currentEnrollment.session_name}`
               : ' · No class this session'}
           </p>
+          <p className="text-xs text-gray-400 mt-1">Photo: JPEG, PNG or WebP, up to 2 MB.</p>
+          {photoError && <p className="text-xs text-red-600 mt-1">{photoError}</p>}
+        </div>
         </div>
         {currentEnrollment ? (
           <button

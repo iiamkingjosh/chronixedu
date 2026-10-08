@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { buildPromotionPayload, type PromotionRowState, type PromotionChoice } from '@/lib/promotionDecisions';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -40,10 +41,7 @@ interface PromotionResult {
   reason?: string;
 }
 
-interface Decision {
-  promote:  boolean;
-  classId:  string;
-}
+type Decision = PromotionRowState;
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
@@ -83,6 +81,7 @@ export default function PromotionsPage() {
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [results, setResults] = useState<PromotionResult[] | null>(null);
+  const [problems, setProblems] = useState<string[]>([]);
 
   // Load sessions + classes
   useEffect(() => {
@@ -121,11 +120,13 @@ export default function PromotionsPage() {
 
       setStudents(all);
 
+      // Nobody is decided until someone decides (doctrine 8).
       const initial: Record<string, Decision> = {};
       for (const s of all) {
-        initial[s.id] = { promote: true, classId: s.class_id ?? '' };
+        initial[s.id] = { decision: null, classId: '' };
       }
       setDecisions(initial);
+      setProblems([]);
     } catch {
       show('Failed to load students for this session', 'error');
     } finally {
@@ -140,10 +141,10 @@ export default function PromotionsPage() {
     setDecisions(prev => ({ ...prev, [studentId]: { ...prev[studentId], ...patch } }));
   }
 
-  function setAllPromote(promote: boolean) {
+  function setAll(decision: PromotionChoice) {
     setDecisions(prev => {
       const next: Record<string, Decision> = {};
-      for (const [id, d] of Object.entries(prev)) next[id] = { ...d, promote };
+      for (const [id, d] of Object.entries(prev)) next[id] = { ...d, decision };
       return next;
     });
   }
@@ -155,15 +156,10 @@ export default function PromotionsPage() {
   async function handleSubmit() {
     if (!schoolId || !fromSessionId || !toSessionId) return;
 
-    const decisionList = visibleStudents.map(s => {
-      const d = decisions[s.id];
-      return { student_id: s.id, class_id: d?.classId ?? '', decision: d?.promote ? 'promoted' as const : 'repeat' as const };
-    });
-
-    if (decisionList.some(d => !d.class_id)) {
-      show('Every student must have a class assigned before promoting', 'error');
-      return;
-    }
+    const payload = buildPromotionPayload(visibleStudents, decisions);
+    setProblems(payload.problems);
+    if (payload.problems.length > 0) return;
+    const decisionList = payload.decisions;
 
     setSubmitting(true);
     setResults(null);
@@ -258,12 +254,12 @@ export default function PromotionsPage() {
             Students ({visibleStudents.length})
           </h2>
           <div className="flex gap-2">
-            <button onClick={() => setAllPromote(true)} className="text-xs font-medium text-[#2472B4] hover:underline transition-colors duration-200">
+            <button onClick={() => setAll('promoted')} className="text-xs font-medium text-[#2472B4] hover:underline transition-colors duration-200">
               Mark all promoted
             </button>
             <span className="text-gray-300">|</span>
-            <button onClick={() => setAllPromote(false)} className="text-xs font-medium text-[#2472B4] hover:underline transition-colors duration-200">
-              Mark all repeat
+            <button onClick={() => setAll('repeat')} className="text-xs font-medium text-[#2472B4] hover:underline transition-colors duration-200">
+              Mark all repeating
             </button>
           </div>
         </div>
@@ -289,13 +285,13 @@ export default function PromotionsPage() {
                 <th className="text-left px-5 py-2.5 font-medium">Student</th>
                 <th className="text-left px-5 py-2.5 font-medium">Admission No.</th>
                 <th className="text-left px-5 py-2.5 font-medium">Current Class</th>
-                <th className="text-center px-5 py-2.5 font-medium">Promoted</th>
-                <th className="text-left px-5 py-2.5 font-medium">New Class</th>
+                <th className="text-left px-5 py-2.5 font-medium">Decision</th>
+                <th className="text-left px-5 py-2.5 font-medium">Class next session</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {visibleStudents.map(s => {
-                const d = decisions[s.id] ?? { promote: true, classId: s.class_id ?? '' };
+                const d = decisions[s.id] ?? { decision: null, classId: '' };
                 const result = results?.find(r => r.student_id === s.id);
                 return (
                   <tr key={s.id} className="table-row-hover">
@@ -304,21 +300,26 @@ export default function PromotionsPage() {
                     <td className="px-5 py-3 text-gray-600">
                       {s.class_name ? `${s.class_name}${s.class_level ? ` (${s.class_level})` : ''}` : '—'}
                     </td>
-                    <td className="px-5 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={d.promote}
-                        onChange={e => setDecision(s.id, { promote: e.target.checked })}
-                        className="w-4 h-4"
-                      />
+                    <td className="px-5 py-3">
+                      <select
+                        value={d.decision ?? ''}
+                        onChange={e => setDecision(s.id, { decision: (e.target.value || null) as PromotionChoice })}
+                        className={inputClass}
+                        aria-label={`Decision for ${fullName(s)}`}
+                      >
+                        <option value="">Not decided</option>
+                        <option value="promoted">Promoted</option>
+                        <option value="repeat">Repeats</option>
+                      </select>
                     </td>
                     <td className="px-5 py-3">
                       <select
                         value={d.classId}
                         onChange={e => setDecision(s.id, { classId: e.target.value })}
                         className={inputClass}
+                        aria-label={`Class next session for ${fullName(s)}`}
                       >
-                        <option value="">Select class…</option>
+                        <option value="">{d.decision === 'repeat' ? 'Same class' : 'Select class…'}</option>
                         {classes.map(c => (
                           <option key={c.id} value={c.id}>{classLabel(c)}</option>
                         ))}
@@ -337,6 +338,14 @@ export default function PromotionsPage() {
           </div>
         )}
       </div>
+
+      {problems.length > 0 && (
+        <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+          <ul className="list-disc list-inside text-sm text-red-700 space-y-0.5">
+            {problems.map((p, i) => <li key={i}>{p}</li>)}
+          </ul>
+        </div>
+      )}
 
       <div className="flex justify-end">
         <button

@@ -32,6 +32,7 @@ interface RowValidationResult {
     blood_group: string | null;
     emergency_contact_name: string | null;
     emergency_contact_phone: string | null;
+    class_name?: string | null;
     parent1: RowParent | null;
     parent2: RowParent | null;
   };
@@ -144,7 +145,7 @@ export default function StudentBulkImportPage() {
       <div className="mb-6">
         <Link href="/registrar/students" className="text-sm text-[#2472B4] hover:underline">← Back to Students</Link>
         <h1 className="text-xl font-semibold text-gray-900 mt-2">Bulk Import Students</h1>
-        <p className="text-sm text-gray-500 mt-1">Upload a spreadsheet to register up to 200 students (and their parents) at once.</p>
+        <p className="text-sm text-gray-500 mt-1">Upload a spreadsheet to register up to 50 students (and their parents) at once. Fill in each student&apos;s Class, spelt as it is under Settings → Roster, to put them in it for this session.</p>
       </div>
 
       {step === 'upload' && (
@@ -192,6 +193,7 @@ export default function StudentBulkImportPage() {
                 <tr className="border-b border-gray-100 text-left text-xs uppercase text-gray-400">
                   <th className="px-4 py-2">Row</th>
                   <th className="px-4 py-2">Student</th>
+                  <th className="px-4 py-2">Class</th>
                   <th className="px-4 py-2">Parent(s)</th>
                   <th className="px-4 py-2">Status</th>
                 </tr>
@@ -201,6 +203,7 @@ export default function StudentBulkImportPage() {
                   <tr key={r.row_number}>
                     <td className="px-4 py-2 text-gray-500">{r.row_number}</td>
                     <td className="px-4 py-2">{r.student.first_name} {r.student.last_name}</td>
+                    <td className="px-4 py-2 text-gray-500">{r.student.class_name || 'None'}</td>
                     <td className="px-4 py-2 text-gray-500">{parentSummary(r.student)}</td>
                     <td className="px-4 py-2">
                       {r.status === 'valid' ? (
@@ -270,6 +273,17 @@ export default function StudentBulkImportPage() {
             {commitResult.created} student{commitResult.created === 1 ? '' : 's'} created
             {commitResult.failed > 0 && <span className="text-red-600">, {commitResult.failed} failed</span>}
           </p>
+          {(() => {
+            // Students imported without a Class have no class this session; say so, and where to give one.
+            const createdRows = new Set(commitResult.results.filter(r => r.status === 'created').map(r => r.row_number));
+            const withoutClass = rows.filter(r => createdRows.has(r.row_number) && !r.student.class_name).length;
+            return withoutClass > 0 ? (
+              <p className="text-sm text-amber-700">
+                {withoutClass} student{withoutClass === 1 ? ' was' : 's were'} imported without a class. Give each one a class from their
+                profile (Students → the student → Assign Class).
+              </p>
+            ) : null;
+          })()}
           {commitResult.welcome_emails === 'sent' && (
             <p className="text-sm text-green-700">Welcome emails sent.</p>
           )}

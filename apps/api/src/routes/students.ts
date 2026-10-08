@@ -22,6 +22,10 @@ import {
   assignClassForCurrentSession,
   findUsersRolesByEmails,
   type CreateAuthAccount,
+  RegistrationRefusal,
+  refuseUnlinkableParents,
+  findEmailsAtOtherSchools,
+  promoteStudent,
 } from '../db/queries/students';
 import { findClassById } from '../db/queries/roster';
 import { logAudit } from '../db/queries/auditLog';
@@ -188,6 +192,27 @@ router.post(
         createAuthAccountFor(req.params.schoolId)
       );
 
+      // Registration was recorded nowhere (audit, 8 Oct 2026). Ids and counts, no contact details.
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'STUDENT_REGISTERED',
+        entity: 'students',
+        entityId: result.student.id,
+        newValue: {
+          student_id: result.student.id,
+          admission_no: result.admission_no,
+          class_id: result.enrollment?.class_id ?? null,
+          parents_linked: parentsWithHashes.length,
+          parent_accounts_created: result.new_parents.length,
+        },
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'STUDENT_REGISTERED', error: err instanceof Error ? err.message : String(err) });
+      });
+
       // Welcome emails to newly created parent accounts: no credential in them (item H2), and the
       // response says whether they went.
       const welcomeEmails = await sendWelcomeEmails(
@@ -227,6 +252,9 @@ router.post(
         },
       });
     } catch (err: unknown) {
+      if (err instanceof RegistrationRefusal) {
+        return res.status(err.status).json({ success: false, error: { code: err.code, message: err.message } });
+      }
       if (err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505') {
         // Unique violation — most likely duplicate email
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE', message: 'An account with this email already exists' } });
@@ -301,7 +329,7 @@ router.post(
         });
       }
 
-      const results = await runFullValidation(parsedRows, findUsersRolesByEmails);
+      const results = await runFullValidation(parsedRows, findUsersRolesByEmails, emails => findEmailsAtOtherSchools(emails, req.params.schoolId), await classIdsByName(req.params.schoolId));
       const summary = {
         total: results.length,
         valid: results.filter(r => r.status === 'valid').length,
@@ -340,6 +368,12 @@ function generateTempPassword(): string {
   return randomBytes(9).toString('base64url');
 }
 
+/** The school's classes by lower-cased name, for a bulk import's Class column. */
+async function classIdsByName(schoolId: string): Promise<Map<string, string>> {
+  const { rows } = await pool.query<{ id: string; name: string }>(`SELECT id, name FROM classes WHERE school_id = $1`, [schoolId]);
+  return new Map(rows.map(r => [r.name.trim().toLowerCase(), r.id]));
+}
+
 const bulkImportParentSchema = z.object({
   first_name: z.string().nullable(),
   last_name: z.string().nullable(),
@@ -369,6 +403,7 @@ const bulkImportCommitSchema = z.object({
       blood_group: z.string().nullable(),
       emergency_contact_name: z.string().nullable(),
       emergency_contact_phone: z.string().nullable(),
+      class_name: z.string().nullable().optional(),
       parent1: bulkImportParentSchema.nullable(),
       parent2: bulkImportParentSchema.nullable(),
     }),
@@ -395,7 +430,8 @@ router.post(
       }
 
       const submittedRows = parsed.data.rows.map(r => r.student);
-      const revalidated = await runFullValidation(submittedRows, findUsersRolesByEmails);
+      const classIds = await classIdsByName(req.params.schoolId);
+      const revalidated = await runFullValidation(submittedRows, findUsersRolesByEmails, emails => findEmailsAtOtherSchools(emails, req.params.schoolId), classIds);
 
       const results: Array<{ row_number: number; status: 'created' | 'failed'; reason?: string; admission_no?: string }> = [];
       const createdStudents: CreatedStudentRecord[] = [];
@@ -443,6 +479,7 @@ router.post(
               blood_group: student.blood_group,
               emergency_contact_name: student.emergency_contact_name,
               emergency_contact_phone: student.emergency_contact_phone,
+              class_id: student.class_name ? classIds.get(student.class_name.trim().toLowerCase()) : undefined,
               passwordHash,
               tempPassword: studentTempPassword,
             },
@@ -469,9 +506,11 @@ router.post(
             parentRecipients.push({ userId: p.user_id, email: p.email, name: `${source?.first_name ?? ''} ${source?.last_name ?? ''}`.trim() || p.email, role: 'parent' });
           }
         } catch (err: unknown) {
-          const reason = err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
-            ? 'An account with this email already exists.'
-            : 'Failed to create this record.';
+          const reason = err instanceof RegistrationRefusal
+            ? err.message
+            : err instanceof Error && 'code' in err && (err as { code?: string }).code === '23505'
+              ? 'An account with this email already exists.'
+              : 'Failed to create this record.';
           results.push({ row_number: row.row_number, status: 'failed', reason });
         }
       }
@@ -631,7 +670,21 @@ router.patch(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
       }
 
-      await updateStudentBio(req.params.studentId, req.params.schoolId, parsed.data);
+      const prior = await updateStudentBio(req.params.studentId, req.params.schoolId, parsed.data);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'STUDENT_UPDATED',
+        entity: 'students',
+        entityId: req.params.studentId,
+        oldValue: prior,
+        newValue: parsed.data,
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'STUDENT_UPDATED', error: err instanceof Error ? err.message : String(err) });
+      });
       return res.json({ success: true, data: { message: 'Student updated' } });
     } catch (err) {
       return next(err);
@@ -681,7 +734,21 @@ router.post(
 
       // The record keeps the file's path in the bucket, never a link: the bucket is private
       // (services/schoolAssets.ts). The answer carries a link that expires, for the screen to show.
-      await updateStudentPhotoUrl(req.params.studentId, req.params.schoolId, storagePath);
+      const priorPhoto = await updateStudentPhotoUrl(req.params.studentId, req.params.schoolId, storagePath);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'STUDENT_PHOTO_SET',
+        entity: 'students',
+        entityId: req.params.studentId,
+        oldValue: { photo_path: priorPhoto },
+        newValue: { photo_path: storagePath },
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'STUDENT_PHOTO_SET', error: err instanceof Error ? err.message : String(err) });
+      });
 
       return res.json({ success: true, data: { photo_url: await signAsset(storagePath) } });
     } catch (err) {
@@ -734,6 +801,19 @@ router.post(
       }
 
       const enrollment = await insertStudentClass(req.params.studentId, class_id, session_id);
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId: req.params.schoolId,
+        userId: req.user!.user_id,
+        actionType: 'STUDENT_PROMOTED',
+        entity: 'student_classes',
+        entityId: req.params.studentId,
+        newValue: { student_id: req.params.studentId, class_id, session_id },
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'STUDENT_PROMOTED', error: err instanceof Error ? err.message : String(err) });
+      });
       return res.status(201).json({ success: true, data: enrollment });
     } catch (err) {
       return next(err);
@@ -931,12 +1011,15 @@ router.post(
       const { schoolId } = req.params;
       const { from_session_id, to_session_id, decisions } = parsed.data;
 
-      const sessionCheck = await pool.query(
-        `SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2`,
-        [to_session_id, schoolId]
+      if (from_session_id === to_session_id) {
+        return res.status(400).json({ success: false, error: { code: 'SAME_SESSION', message: 'Promote from one session into a different one.' } });
+      }
+      const sessionCheck = await pool.query<{ id: string }>(
+        `SELECT id FROM academic_sessions WHERE id = ANY($1::uuid[]) AND school_id = $2`,
+        [[from_session_id, to_session_id], schoolId]
       );
-      if (!sessionCheck.rows[0]) {
-        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Target session not found in this school' } });
+      if (sessionCheck.rows.length !== 2) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Session not found in this school' } });
       }
 
       const classIds = [...new Set(decisions.map(d => d.class_id))];
@@ -951,20 +1034,8 @@ router.post(
       const results: Array<{ student_id: string; status: 'enrolled' | 'skipped'; reason?: string }> = [];
 
       for (const decision of decisions) {
-        const student = await findStudentById(decision.student_id, schoolId);
-        if (!student) {
-          results.push({ student_id: decision.student_id, status: 'skipped', reason: 'Student not found' });
-          continue;
-        }
-
-        const alreadyEnrolled = await findEnrollmentForSession(decision.student_id, to_session_id);
-        if (alreadyEnrolled) {
-          results.push({ student_id: decision.student_id, status: 'skipped', reason: 'Already enrolled for target session' });
-          continue;
-        }
-
-        await insertStudentClass(decision.student_id, decision.class_id, to_session_id);
-        results.push({ student_id: decision.student_id, status: 'enrolled' });
+        const outcome = await promoteStudent(schoolId, decision.student_id, from_session_id, to_session_id, decision.class_id, decision.decision);
+        results.push({ student_id: decision.student_id, ...outcome });
       }
 
       await logAudit({
@@ -1015,6 +1086,18 @@ router.post(
       const student = await findStudentById(studentId, schoolId);
       if (!student) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
+      }
+
+      // Another school's account, or this school's staff or student, is refused by name before any login
+      // is made. An address used at another school fell through to "new account" and Supabase refused it:
+      // a 500 (audit, 8 Oct 2026).
+      try {
+        await refuseUnlinkableParents(schoolId, [email]);
+      } catch (err) {
+        if (err instanceof RegistrationRefusal) {
+          return res.status(err.status).json({ success: false, error: { code: err.code, message: err.message } });
+        }
+        throw err;
       }
 
       // H-06: scope the lookup to this school to prevent cross-school parent linking.
@@ -1068,6 +1151,19 @@ router.post(
          VALUES ($1, $2, $3, $4)`,
         [parentUserId, studentId, relationship_type, is_primary_contact ?? false]
       );
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'PARENT_LINKED',
+        entity: 'parent_students',
+        entityId: studentId,
+        newValue: { student_id: studentId, parent_id: parentUserId, relationship_type, new_account: isNewAccount },
+      }).catch(err => {
+        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
+        logger.error('audit_write_failed', { action: 'PARENT_LINKED', error: err instanceof Error ? err.message : String(err) });
+      });
 
       // Welcome email for a newly created parent account: no credential in it (item H2), and the
       // response says whether it went.
