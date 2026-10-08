@@ -5,7 +5,8 @@ import { randomBytes } from 'crypto';
 import { hashSync } from 'bcryptjs';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import * as Sentry from '@sentry/node';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { supabaseAdmin } from '../supabaseClient';
 import {
@@ -15,8 +16,6 @@ import {
   updateStudentBio,
   updateStudentPhotoUrl,
   findStudentById,
-  findEnrollmentForSession,
-  insertStudentClass,
   findEnrollmentForCurrentSession,
   updateEnrollmentClass,
   assignClassForCurrentSession,
@@ -104,10 +103,6 @@ const patchSchema = z.object({
   emergency_contact_phone:  z.string().max(30).optional().nullable(),
 }).refine(obj => Object.keys(obj).length > 0, { message: 'At least one field is required' });
 
-const promoteSchema = z.object({
-  class_id:   z.string().uuid(),
-  session_id: z.string().uuid(),
-});
 
 const classCorrectionSchema = z.object({
   class_id: z.string().uuid(),
@@ -124,18 +119,6 @@ const promoteBulkSchema = z.object({
   })).min(1),
 });
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 /**
  * Builds the auth-account creator handed to registerStudent. Every account this app
@@ -164,8 +147,7 @@ function createAuthAccountFor(schoolId: string): CreateAuthAccount {
 router.post(
   '/:schoolId/students',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = registerSchema.safeParse(req.body);
@@ -279,8 +261,7 @@ const bulkImportUpload = multer({ storage: multer.memoryStorage(), limits: { fil
 router.post(
   '/:schoolId/students/bulk-import/preview',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   bulkImportUpload.single('file'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -413,8 +394,7 @@ const bulkImportCommitSchema = z.object({
 router.post(
   '/:schoolId/students/bulk-import/commit',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = bulkImportCommitSchema.safeParse(req.body);
@@ -577,8 +557,7 @@ router.post(
 router.get(
   '/:schoolId/students',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar', 'teacher'),
+  requireCapability('students.view'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const page  = Math.max(1, parseInt(String(req.query.page  ?? '1'),  10) || 1);
@@ -613,8 +592,7 @@ router.get(
 router.get(
   '/:schoolId/students/:studentId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar', 'teacher', 'parent', 'student'),
+  requireCapability('students.view', 'parent.portal', 'student.portal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, studentId } = req.params;
@@ -656,8 +634,7 @@ router.get(
 router.patch(
   '/:schoolId/students/:studentId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = patchSchema.safeParse(req.body);
@@ -697,8 +674,7 @@ router.patch(
 router.post(
   '/:schoolId/students/:studentId/photo',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   upload.single('photo'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -757,77 +733,12 @@ router.post(
   }
 );
 
-// ── POST /:schoolId/students/:studentId/promote ───────────────────────────────
-
-router.post(
-  '/:schoolId/students/:studentId/promote',
-  verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const parsed = promoteSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
-      }
-
-      const { class_id, session_id } = parsed.data;
-
-      const student = await findStudentById(req.params.studentId, req.params.schoolId);
-      if (!student) {
-        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
-      }
-
-      // Verify session and class both belong to this school
-      const [sessionCheck, classCheck] = await Promise.all([
-        pool.query(`SELECT id FROM academic_sessions WHERE id = $1 AND school_id = $2`, [session_id, req.params.schoolId]),
-        pool.query(`SELECT id FROM classes WHERE id = $1 AND school_id = $2`, [class_id, req.params.schoolId]),
-      ]);
-
-      if (!sessionCheck.rows[0]) {
-        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Session not found in this school' } });
-      }
-      if (!classCheck.rows[0]) {
-        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Class not found in this school' } });
-      }
-
-      // Prevent duplicate enrollment for the same session
-      const alreadyEnrolled = await findEnrollmentForSession(req.params.studentId, session_id);
-      if (alreadyEnrolled) {
-        return res.status(409).json({
-          success: false,
-          error: { code: 'ALREADY_ENROLLED', message: 'Student is already enrolled in a class for this session. Prior enrolment records are preserved.' },
-        });
-      }
-
-      const enrollment = await insertStudentClass(req.params.studentId, class_id, session_id);
-      await logAudit({
-        ipAddress: clientIp(req) ?? null,
-        supportSession: req.supportSession,
-        schoolId: req.params.schoolId,
-        userId: req.user!.user_id,
-        actionType: 'STUDENT_PROMOTED',
-        entity: 'student_classes',
-        entityId: req.params.studentId,
-        newValue: { student_id: req.params.studentId, class_id, session_id },
-      }).catch(err => {
-        // Logged, never swallowed: a sensitive write without its audit row must be visible (doctrine 10).
-        logger.error('audit_write_failed', { action: 'STUDENT_PROMOTED', error: err instanceof Error ? err.message : String(err) });
-      });
-      return res.status(201).json({ success: true, data: enrollment });
-    } catch (err) {
-      return next(err);
-    }
-  }
-);
-
 // ── GET /:schoolId/students/:studentId/report-card ────────────────────────────
 
 router.get(
   '/:schoolId/students/:studentId/report-card',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar', 'parent'),
+  requireCapability('students.manage', 'parent.portal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, studentId } = req.params;
@@ -892,8 +803,7 @@ const assignClassSchema = z.object({ class_id: z.string().uuid() });
 router.post(
   '/:schoolId/students/:studentId/class',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = assignClassSchema.safeParse(req.body);
@@ -940,8 +850,7 @@ router.post(
 router.patch(
   '/:schoolId/students/:studentId/class',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = classCorrectionSchema.safeParse(req.body);
@@ -999,8 +908,7 @@ router.patch(
 router.post(
   '/:schoolId/students/promote-bulk',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = promoteBulkSchema.safeParse(req.body);
@@ -1071,8 +979,7 @@ const addParentSchema = z.object({
 router.post(
   '/:schoolId/students/:studentId/parents',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = addParentSchema.safeParse(req.body);
@@ -1204,8 +1111,7 @@ router.post(
 router.post(
   '/:schoolId/students/:studentId/transcript',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'registrar'),
+  requireCapability('students.manage'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, studentId } = req.params;

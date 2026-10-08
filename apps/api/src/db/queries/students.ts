@@ -588,31 +588,6 @@ export async function findStudentByUserId(
   return result.rows[0] ?? null;
 }
 
-export async function findEnrollmentForSession(
-  studentId: string,
-  sessionId: string
-): Promise<boolean> {
-  const result = await pool.query(
-    `SELECT id FROM student_classes WHERE student_id = $1 AND session_id = $2`,
-    [studentId, sessionId]
-  );
-  return result.rows.length > 0;
-}
-
-export async function insertStudentClass(
-  studentId: string,
-  classId: string,
-  sessionId: string
-): Promise<StudentClassRow> {
-  const result = await pool.query<StudentClassRow>(
-    `INSERT INTO student_classes (student_id, class_id, session_id)
-     VALUES ($1, $2, $3)
-     RETURNING id, student_id, class_id, session_id, enrolled_at`,
-    [studentId, classId, sessionId]
-  );
-  return result.rows[0];
-}
-
 // ── Intra-session class correction ─────────────────────────────────────────────
 
 export async function findEnrollmentForCurrentSession(

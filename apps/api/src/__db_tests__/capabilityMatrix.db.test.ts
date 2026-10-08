@@ -87,6 +87,8 @@ const ROUTES: Partial<Record<keyof typeof table.capabilities, Route>> = {
   'roster.classes_subjects': { method: 'patch', path: `${base}/classes/${I.jss2a}`, body: {} },
   'roster.teaching': { method: 'post', path: `${base}/teacher-assignments`, body: {} },
   'timetable.manage': { method: 'post', path: `${base}/timetable`, body: {} },
+  'students.manage': { method: 'post', path: `${base}/students/${I.s1}/class`, body: {} },
+  'students.view': { method: 'get', path: `${base}/students` },
 };
 
 beforeAll(async () => {

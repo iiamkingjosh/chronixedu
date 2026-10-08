@@ -64,13 +64,14 @@ it('linking an existing parent is recorded', async () => {
   expect(row.new_value).toEqual({ student_id: I.s2, parent_id: PARENT, relationship_type: 'mother', new_account: false });
 });
 
-it('enrolling a student in a session is recorded', async () => {
+it('enrolling a student in a new session is recorded', async () => {
+  // Through Promotions: the single-student promote route was removed on 8 Oct 2026.
   await pool.query(
     `INSERT INTO academic_sessions (id, school_id, name, start_date, end_date, is_current) VALUES ($1, $2, '2027/2028', '2027-09-13', '2028-07-21', false)`,
     [NEXT_SESSION, I.schoolA]);
-  const res = await request(app).post(`${base}/students/${I.s1}/promote`).set('Authorization', tokens.principalA())
-    .send({ class_id: I.jss3b, session_id: NEXT_SESSION });
+  const res = await request(app).post(`${base}/students/promote-bulk`).set('Authorization', tokens.principalA())
+    .send({ from_session_id: I.sessionA, to_session_id: NEXT_SESSION, decisions: [{ student_id: I.s1, class_id: I.jss3b, decision: 'promoted' }] });
   expect(res.status).toBe(201);
-  const [row] = await audits('STUDENT_PROMOTED');
-  expect(row.new_value).toEqual({ student_id: I.s1, class_id: I.jss3b, session_id: NEXT_SESSION });
+  const [row] = await audits('BULK_PROMOTION');
+  expect(row.new_value).toMatchObject({ to_session_id: NEXT_SESSION, decisions: [{ student_id: I.s1, class_id: I.jss3b, decision: 'promoted' }] });
 });
