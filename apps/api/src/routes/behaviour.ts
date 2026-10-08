@@ -1,14 +1,15 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../config/logger';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability, holdsCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { logAudit } from '../db/queries/auditLog';
 import { getActiveTerm, findClassById } from '../db/queries/roster';
 import { findStudentById, findStudentByUserId } from '../db/queries/students';
 import { isParentLinkedToStudent } from '../db/queries/parents';
 import { findStudentsNotInClass } from '../db/queries/scores';
-import { isTeacherAssignedToClass } from '../db/queries/attendance';
+import { isTeacherAssignedToClass, teacherTeachesStudent } from '../db/queries/attendance';
 import {
   createBehaviourRecord,
   getStudentBehaviourHistory,
@@ -18,18 +19,6 @@ import {
 
 const router = Router();
 
-// ── Middleware ─────────────────────────────────────────────────────────────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -56,8 +45,7 @@ function todayDate(): string {
 router.post(
   '/:schoolId/behaviour',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('teacher', 'principal', 'super_admin'),
+  requireCapability('class.daily'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = createSchema.safeParse(req.body);
@@ -95,8 +83,8 @@ router.post(
         });
       }
 
-      const role = req.user!.role ?? '';
-      if (!['super_admin', 'principal'].includes(role)) {
+      // The principal records against any class; a teacher only their own (unchanged; read from the table).
+      if (!holdsCapability(req.user, 'school.overview')) {
         const reporterId = req.user!.user_id;
         const isAssigned = cls.form_teacher_id === reporterId
           || await isTeacherAssignedToClass(reporterId, class_id, schoolId, term.id);
@@ -153,8 +141,7 @@ router.post(
 router.get(
   '/:schoolId/behaviour/students/:studentId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('teacher', 'principal', 'super_admin'),
+  requireCapability('class.daily'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, studentId } = req.params;
@@ -162,6 +149,10 @@ router.get(
       const student = await findStudentById(studentId, schoolId);
       if (!student) {
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
+      }
+      // A teacher reads only a student of a class they teach or form-teach (spec decision 5, 8 Oct 2026).
+      if (!holdsCapability(req.user, 'school.overview') && !await teacherTeachesStudent(req.user!.user_id, studentId, schoolId)) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You can only see students in the classes you teach' } });
       }
 
       const termId = typeof req.query.term_id === 'string' ? req.query.term_id : undefined;
@@ -178,8 +169,7 @@ router.get(
 router.get(
   '/:schoolId/behaviour/students/:studentId/summary',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('parent', 'student', 'super_admin'),
+  requireCapability('parent.portal', 'student.portal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, studentId } = req.params;
@@ -217,8 +207,7 @@ router.get(
 router.get(
   '/:schoolId/behaviour/summary',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('principal', 'super_admin'),
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;

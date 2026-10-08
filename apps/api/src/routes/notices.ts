@@ -47,7 +47,7 @@
  *
  * ## The guard that matters
  *
- * Not a teacher reaching another school — that is `requireSchoolAccess`, a 403, ordinary.
+ * Not a teacher reaching another school — that is the tenant check in `requireCapability`, a 403, ordinary.
  * It is a teacher **on their own school's path** posting to a class they do not teach:
  * the tenant check passes cleanly and only the class check stands between them and every
  * student in that class. Identical in shape to the behaviour-record defect (AUDIT R10-M2),
@@ -61,7 +61,8 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import sanitizeHtml from 'sanitize-html';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { getActiveTerm, findClassById, listClasses } from '../db/queries/roster';
 import { isTeacherAssignedToClass } from '../db/queries/attendance';
@@ -69,17 +70,6 @@ import { createNotice, deleteNotice, findNoticeById, listNoticesForStaff } from 
 import { logAudit } from '../db/queries/auditLog';
 
 const router = Router();
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 const createSchema = z.object({
   // Required. A notice without a class has no meaning here any more — that intent is an
@@ -147,8 +137,7 @@ async function classAccessError(
 router.get(
   '/:schoolId/notices',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('class.daily'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId } = req.params;
@@ -185,8 +174,7 @@ router.get(
 router.post(
   '/:schoolId/notices',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('class.daily'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = createSchema.safeParse(req.body);
@@ -242,8 +230,7 @@ router.post(
 router.delete(
   '/:schoolId/notices/:noticeId',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('class.daily'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, noticeId } = req.params;

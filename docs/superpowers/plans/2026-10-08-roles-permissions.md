@@ -253,7 +253,7 @@ code, written and run first.
 | 4 | roster.ts, assessmentConfig.ts, timetable.ts | Registrar gains classes and subjects, never the form teacher; a teacher reads only their own assignments; assessment-structure reads are principal only |
 | 5 | students.ts | Teacher loses the student list and profile; bursar gains them read-only; `POST /promote` removed |
 | 6 | scores.ts, results.ts, principalRemarks.ts, dashboard.ts, teacherDashboard.ts, analytics.ts, classComments.ts | Pending scores: principal, and a teacher their own |
-| 7 | attendance.ts, behaviour.ts, notices.ts | Decision 7: a teacher's reads of a student's attendance and behaviour, the class summary and alerts, keep to classes they teach or form-teach |
+| 7 | attendance.ts, behaviour.ts, notices.ts | Decision 7: a teacher's reads of a student's attendance and behaviour keep to classes they teach or form-teach. Ruling (8 Oct 2026): the class summary and the open alerts become the principal's (`school.overview`) instead of being filtered per teacher, as decision 4 did for reads only the principal's screens use; the alerts named students of every class |
 | 8 | fees.ts, platformBilling.ts | Principal gains every bursar fee job (fee lines, invoices, payments, refunds, import, reminders); a student no longer reads invoices or starts a payment |
 | 9 | parent.ts, student.ts, assignments.ts, messages.ts, announcements.ts, notifications.ts | `GET /assignments` drops the principal; parent routes stop admitting a platform admin |
 

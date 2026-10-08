@@ -111,6 +111,28 @@ export async function isTeacherAssignedToClassAnyTerm(
   return result.rows.length > 0;
 }
 
+/**
+ * Whether a teacher teaches or form-teaches a class the student is in this session (spec decision 5, 8 Oct 2026):
+ * a teacher reads a student's attendance and behaviour only for their own classes. "Teaches" is an assignment to
+ * the class in a term of the current session.
+ */
+export async function teacherTeachesStudent(teacherId: string, studentId: string, schoolId: string): Promise<boolean> {
+  const result = await pool.query(
+    `SELECT 1
+       FROM student_classes sc
+       JOIN classes c ON c.id = sc.class_id AND c.school_id = $3
+       JOIN academic_sessions s ON s.id = sc.session_id AND s.school_id = $3 AND s.is_current
+      WHERE sc.student_id = $2
+        AND (c.form_teacher_id = $1
+             OR EXISTS (SELECT 1 FROM teacher_assignments ta
+                          JOIN terms t ON t.id = ta.term_id AND t.session_id = s.id
+                         WHERE ta.teacher_id = $1 AND ta.class_id = c.id AND ta.school_id = $3))
+      LIMIT 1`,
+    [teacherId, studentId, schoolId]
+  );
+  return result.rows.length > 0;
+}
+
 // ── Mark attendance (bulk upsert — same-day correction allowed) ───────────────
 
 export interface BulkAttendanceEntry {

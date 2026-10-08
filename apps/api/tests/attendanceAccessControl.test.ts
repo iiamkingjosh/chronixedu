@@ -87,11 +87,14 @@ describe('Attendance access control', () => {
 
   // ── Bug 1: role gate on monthly-summary / class-summary / alerts ────────────
 
+  // The third column: whether a teacher gets through. The summary by class and the open alerts are the
+  // principal's since 8 Oct 2026 (only the principal's attendance page reads them, and the alerts name students of
+  // every class); the principal's admission is shown in classDailyAccess.db.test.ts.
   describe.each([
-    ['monthly-summary', () => request(app).get(`/api/schools/${SCHOOL_ID}/attendance/monthly-summary`).query({ class_id: CLASS_ID, month: 1, year: 2026 })],
-    ['class-summary',   () => request(app).get(`/api/schools/${SCHOOL_ID}/attendance/class-summary`).query({ term_id: randomUUID() })],
-    ['alerts',          () => request(app).get(`/api/schools/${SCHOOL_ID}/attendance/alerts`)],
-  ] as const)('GET /:schoolId/attendance/%s', (_name, buildRequest) => {
+    ['monthly-summary', () => request(app).get(`/api/schools/${SCHOOL_ID}/attendance/monthly-summary`).query({ class_id: CLASS_ID, month: 1, year: 2026 }), true],
+    ['class-summary',   () => request(app).get(`/api/schools/${SCHOOL_ID}/attendance/class-summary`).query({ term_id: randomUUID() }), false],
+    ['alerts',          () => request(app).get(`/api/schools/${SCHOOL_ID}/attendance/alerts`), false],
+  ] as const)('GET /:schoolId/attendance/%s', (_name, buildRequest, teacherAdmitted) => {
     it('rejects a student with 403', async () => {
       const studentToken = makeToken('student', SCHOOL_ID, studentUserId);
       const res = await buildRequest().set('Authorization', `Bearer ${studentToken}`);
@@ -106,10 +109,11 @@ describe('Attendance access control', () => {
       expect(res.body.success).toBe(false);
     });
 
-    it('allows a teacher through the role gate (no 403)', async () => {
+    it(teacherAdmitted ? 'allows a teacher through the role gate (no 403)' : "refuses a teacher: it is the principal's", async () => {
       const teacherToken = makeToken('teacher', SCHOOL_ID, TEACHER_ID);
       const res = await buildRequest().set('Authorization', `Bearer ${teacherToken}`);
-      expect(res.status).not.toBe(403);
+      if (teacherAdmitted) expect(res.status).not.toBe(403);
+      else expect(res.status).toBe(403);
     });
   });
 

@@ -2,7 +2,8 @@
 import { attendanceAlertRule, loadNotificationConfig } from '../services/notificationSettings';
 import { logger } from '../config/logger';
 import { z } from 'zod';
-import { verifyToken, requireRole } from '../middleware/auth';
+import { verifyToken } from '../middleware/auth';
+import { requireCapability, holdsCapability } from '../middleware/requireCapability';
 import { clientIp } from '../middleware/clientIp';
 import { logAudit } from '../db/queries/auditLog';
 import { findClassById } from '../db/queries/roster';
@@ -23,6 +24,7 @@ import {
   getClassRoster,
   isTeacherAssignedToClass,
   isTeacherAssignedToClassAnyTerm,
+  teacherTeachesStudent,
   LOW_ATTENDANCE_ALERT_TYPE,
   AttendanceAlertRow,
 } from '../db/queries/attendance';
@@ -61,18 +63,6 @@ const termQuerySchema = z.object({
   term_id: z.string().uuid(),
 });
 
-// ── Middleware: super_admin or any authenticated member of the school ───────────
-
-function requireSchoolAccess(req: Request, res: Response, next: NextFunction): void {
-  const user = req.user;
-  if (!user) {
-    res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'Not authenticated' } });
-    return;
-  }
-  if (user.role === 'super_admin') { next(); return; }
-  if (user.school_id === req.params.schoolId) { next(); return; }
-  res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-}
 
 /**
  * AUDIT R10-M1: attendance READ guard. The write path (POST /attendance/mark) has
@@ -108,8 +98,7 @@ async function canTeacherViewClass(
 router.post(
   '/:schoolId/attendance/mark',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('class.daily'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = markSchema.safeParse(req.body);
@@ -239,8 +228,7 @@ router.post(
 router.get(
   '/:schoolId/attendance/class',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('class.daily'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = classQuerySchema.safeParse(req.query);
@@ -274,7 +262,7 @@ router.get(
 router.get(
   '/:schoolId/attendance/student/:studentId',
   verifyToken,
-  requireSchoolAccess,
+  requireCapability('class.daily', 'parent.portal', 'student.portal'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = studentQuerySchema.safeParse(req.query);
@@ -294,21 +282,19 @@ router.get(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Student not found' } });
       }
 
-      // Staff roles can view any student's attendance within their school.
-      const isStaff = ['super_admin', 'principal', 'teacher'].includes(user.role ?? '');
-      if (!isStaff) {
-        if (user.role === 'parent') {
-          const linked = await isParentLinkedToStudent(user.user_id, student.id);
-          if (!linked) {
-            return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-          }
-        } else if (user.role === 'student') {
-          if (student.user_id !== user.user_id) {
-            return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
-          }
-        } else {
+      // A parent reads their own child's, a student their own, the principal anyone's, and a teacher only a
+      // student of a class they teach or form-teach (spec decision 5, 8 Oct 2026; it was any student).
+      if (user.role === 'parent') {
+        const linked = await isParentLinkedToStudent(user.user_id, student.id);
+        if (!linked) {
           return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
         }
+      } else if (user.role === 'student') {
+        if (student.user_id !== user.user_id) {
+          return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'Access denied' } });
+        }
+      } else if (!holdsCapability(user, 'school.overview') && !await teacherTeachesStudent(user.user_id, student.id, schoolId)) {
+        return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You can only see students in the classes you teach' } });
       }
 
       const history = await getStudentAttendanceHistory(req.params.studentId, schoolId, term_id);
@@ -324,8 +310,7 @@ router.get(
 router.get(
   '/:schoolId/attendance/monthly-summary',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('class.daily'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = monthlyQuerySchema.safeParse(req.query);
@@ -359,8 +344,7 @@ router.get(
 router.get(
   '/:schoolId/attendance/class-summary',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = termQuerySchema.safeParse(req.query);
@@ -387,8 +371,7 @@ router.get(
 router.get(
   '/:schoolId/attendance/alerts',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal', 'teacher'),
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const alerts = await listUnresolvedAlerts(req.params.schoolId);
@@ -406,8 +389,7 @@ router.get(
 router.patch(
   '/:schoolId/attendance/alerts/:alertId/resolve',
   verifyToken,
-  requireSchoolAccess,
-  requireRole('super_admin', 'principal'),
+  requireCapability('school.overview'),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { schoolId, alertId } = req.params;
