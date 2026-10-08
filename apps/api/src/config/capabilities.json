@@ -1,0 +1,28 @@
+{
+  "roles": ["principal", "registrar", "bursar", "teacher", "parent", "student"],
+  "capabilities": {
+    "school.setup":            { "roles": ["principal"], "platform_admin": true },
+    "school.export":           { "roles": ["principal"], "platform_admin": true },
+    "staff.manage":            { "roles": ["principal"], "platform_admin": true },
+    "staff.email":             { "roles": [], "platform_admin": true },
+    "roster.classes_subjects": { "roles": ["principal", "registrar"], "platform_admin": true },
+    "roster.teaching":         { "roles": ["principal"], "platform_admin": true },
+    "timetable.manage":        { "roles": ["principal"], "platform_admin": true },
+    "students.manage":         { "roles": ["principal", "registrar"], "platform_admin": true },
+    "students.view":           { "roles": ["principal", "registrar", "bursar"], "platform_admin": true },
+    "results.enter":           { "roles": ["principal", "teacher"], "platform_admin": true },
+    "results.manage":          { "roles": ["principal"], "platform_admin": true },
+    "class.daily":             { "roles": ["principal", "teacher"], "platform_admin": true },
+    "class.comments":          { "roles": ["principal", "teacher"], "platform_admin": true },
+    "school.overview":         { "roles": ["principal"], "platform_admin": true },
+    "teacher.workspace":       { "roles": ["teacher"], "platform_admin": false },
+    "announcements.post":      { "roles": ["principal"], "platform_admin": true },
+    "fees.manage":             { "roles": ["principal", "bursar"], "platform_admin": true },
+    "school.payout.view":      { "roles": ["principal", "bursar"], "platform_admin": true },
+    "school.payout.manage":    { "roles": ["principal"], "platform_admin": true },
+    "school.billing":          { "roles": ["principal", "bursar"], "platform_admin": true },
+    "parent.portal":           { "roles": ["parent"], "platform_admin": false },
+    "student.portal":          { "roles": ["student"], "platform_admin": false },
+    "school.member":           { "roles": ["principal", "registrar", "bursar", "teacher", "parent", "student"], "platform_admin": true }
+  }
+}
