@@ -331,16 +331,55 @@ export async function findClassById(classId: string, schoolId: string): Promise<
   return result.rows[0] ?? null;
 }
 
-export async function classHasReferences(classId: string, schoolId: string): Promise<boolean> {
-  const result = await pool.query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM student_classes WHERE class_id = $1
-       UNION ALL
-       SELECT 1 FROM teacher_assignments WHERE class_id = $1 AND school_id = $2
-     ) AS exists`,
-    [classId, schoolId]
+/**
+ * Everything that refers to a class or a subject, so a delete can be refused by name instead of
+ * failing on a foreign key (a 500). It checked two or three tables of the nine and seven that refer
+ * (audit, 8 Oct 2026). rosterIntegrity.db.test.ts fails if a foreign key to classes or subjects is
+ * missing here, so a new table cannot bring the 500 back. Table and column names are constants.
+ */
+export const CLASS_USES = [
+  { table: 'assignments', column: 'class_id', label: 'homework' },
+  { table: 'attendance', column: 'class_id', label: 'attendance records' },
+  { table: 'behaviour_records', column: 'class_id', label: 'behaviour records' },
+  { table: 'fee_structures', column: 'class_id', label: 'fee lines' },
+  { table: 'notices', column: 'class_id', label: 'class notices' },
+  { table: 'student_classes', column: 'class_id', label: 'students enrolled in it' },
+  { table: 'subject_result_status', column: 'class_id', label: 'results' },
+  { table: 'teacher_assignments', column: 'class_id', label: 'teacher assignments' },
+  { table: 'timetable_slots', column: 'class_id', label: 'the timetable' },
+] as const;
+
+export const SUBJECT_USES = [
+  { table: 'assessment_configs', column: 'subject_id', label: 'assessment structures' },
+  { table: 'assignments', column: 'subject_id', label: 'homework' },
+  { table: 'scores', column: 'subject_id', label: 'scores' },
+  { table: 'subject_result_status', column: 'subject_id', label: 'results' },
+  { table: 'teacher_assignments', column: 'subject_id', label: 'teacher assignments' },
+  { table: 'timetable_slots', column: 'subject_id', label: 'the timetable' },
+] as const;
+
+async function usesOf(uses: ReadonlyArray<{ table: string; column: string; label: string }>, id: string): Promise<string[]> {
+  const sql = uses
+    .map((u, i) => `SELECT ${i} AS i WHERE EXISTS (SELECT 1 FROM ${u.table} WHERE ${u.column} = $1)`)
+    .join(' UNION ALL ');
+  const { rows } = await pool.query<{ i: number }>(sql, [id]);
+  return rows.map(r => uses[r.i].label);
+}
+
+/** What still uses this class, as words for a person ("homework", "the timetable"); empty if nothing. */
+export const classUses = (classId: string): Promise<string[]> => usesOf(CLASS_USES, classId);
+/** What still uses this subject; empty if nothing. */
+export const subjectUses = (subjectId: string): Promise<string[]> => usesOf(SUBJECT_USES, subjectId);
+
+/** An existing level of the school that differs from `level` only in case or spacing, or null. */
+export async function findNearDuplicateLevel(schoolId: string, level: string): Promise<string | null> {
+  const { rows } = await pool.query<{ level: string }>(
+    `SELECT DISTINCT level FROM classes
+     WHERE school_id = $1 AND lower(btrim(level)) = lower(btrim($2)) AND level <> $2
+     LIMIT 1`,
+    [schoolId, level]
   );
-  return result.rows[0].exists;
+  return rows[0]?.level ?? null;
 }
 
 export async function deleteClass(classId: string, schoolId: string): Promise<void> {
@@ -358,20 +397,6 @@ export async function findSubjectById(subjectId: string, schoolId: string): Prom
     [subjectId, schoolId]
   );
   return result.rows[0] ?? null;
-}
-
-export async function subjectHasReferences(subjectId: string, schoolId: string): Promise<boolean> {
-  const result = await pool.query<{ exists: boolean }>(
-    `SELECT EXISTS (
-       SELECT 1 FROM teacher_assignments WHERE subject_id = $1 AND school_id = $2
-       UNION ALL
-       SELECT 1 FROM scores WHERE subject_id = $1 AND school_id = $2
-       UNION ALL
-       SELECT 1 FROM assessment_configs WHERE subject_id = $1 AND school_id = $2
-     ) AS exists`,
-    [subjectId, schoolId]
-  );
-  return result.rows[0].exists;
 }
 
 export async function deleteSubject(subjectId: string, schoolId: string): Promise<void> {

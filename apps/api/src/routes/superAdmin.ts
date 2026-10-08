@@ -22,6 +22,7 @@ import { getRecentErrorCount } from '../services/platformAnalyticsService';
 import { redis } from '../middleware/rateLimit';
 import { terminateActiveSupportSessions } from '../services/supportSessions';
 import { removeTwoFactor } from '../db/queries/twoFactorStore';
+import { logPlatformAudit } from '../db/queries/platformAudit';
 // Imported for their module-level registerCron() side effects, so GET /health/crons
 // reflects every scheduled job even before the crons have started running.
 import '../services/analyticsService';
@@ -1763,6 +1764,10 @@ router.patch(
           }
           const { name, address, phone } = parsed.data;
           await pool.query(`UPDATE schools SET name = $1, address = $2, phone = $3 WHERE id = $4`, [name, address, phone, school.id]);
+          // Receipts and report cards print identity_config.address; schools.address is read by
+          // nothing, so an address typed here never reached a document (audit, 8 Oct 2026).
+          await ensureSchoolSettings(school.id, name);
+          await updateIdentityConfig(school.id, { address: address.trim() });
           stepData = { name, address, phone };
           break;
         }
@@ -1793,20 +1798,46 @@ router.patch(
           }
           const { session_name, term } = parsed.data;
 
-          // One term: the session spans it for now and grows as later terms are added.
-          const sessionRowResult = await pool.query<{ id: string }>(
-            `INSERT INTO academic_sessions (school_id, name, start_date, end_date, is_current)
-             VALUES ($1, $2, $3, $4, TRUE)
-             RETURNING id`,
-            [school.id, session_name, term.start_date, term.end_date]
-          );
-          const academicSessionId = sessionRowResult.rows[0].id;
-
-          await pool.query(
-            `INSERT INTO terms (session_id, school_id, name, start_date, end_date, is_current)
-             VALUES ($1, $2, $3, $4, $5, TRUE)`,
-            [academicSessionId, school.id, term.name, term.start_date, term.end_date]
-          );
+          // One term: the session spans it for now and grows as later terms are added. Saved again
+          // (a date corrected on the way back through the wizard), the step updates the session and
+          // term its first save made. It inserted another current session each time, which the
+          // one-current-session index refused: a 500, and no way to fix a date (audit, 8 Oct 2026).
+          const client = await pool.connect();
+          try {
+            await client.query('BEGIN');
+            const existingSession = await client.query<{ id: string }>(
+              `SELECT id FROM academic_sessions WHERE school_id = $1 AND is_current FOR UPDATE`, [school.id]);
+            let academicSessionId = existingSession.rows[0]?.id;
+            if (academicSessionId) {
+              await client.query(
+                `UPDATE academic_sessions SET name = $2, start_date = $3, end_date = $4 WHERE id = $1`,
+                [academicSessionId, session_name, term.start_date, term.end_date]);
+            } else {
+              const sessionRowResult = await client.query<{ id: string }>(
+                `INSERT INTO academic_sessions (school_id, name, start_date, end_date, is_current)
+                 VALUES ($1, $2, $3, $4, TRUE)
+                 RETURNING id`,
+                [school.id, session_name, term.start_date, term.end_date]
+              );
+              academicSessionId = sessionRowResult.rows[0].id;
+            }
+            const updatedTerm = await client.query(
+              `UPDATE terms SET name = $2, start_date = $3, end_date = $4 WHERE session_id = $1 AND is_current`,
+              [academicSessionId, term.name, term.start_date, term.end_date]);
+            if (updatedTerm.rowCount === 0) {
+              await client.query(
+                `INSERT INTO terms (session_id, school_id, name, start_date, end_date, is_current)
+                 VALUES ($1, $2, $3, $4, $5, TRUE)`,
+                [academicSessionId, school.id, term.name, term.start_date, term.end_date]
+              );
+            }
+            await client.query('COMMIT');
+          } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+          } finally {
+            client.release();
+          }
 
           stepData = { session_name, term };
           break;
@@ -1964,10 +1995,33 @@ router.post(
         });
       }
 
+      // A new school starts on a trial (Moses, 8 Oct 2026). It used to start with no subscription at
+      // all: no plan, no trial clock, nothing for the trial gate to act on until someone remembered
+      // the Subscriptions page. A subscription already made during onboarding is left as it is.
+      const trial = await pool.query<{ trial_ends_at: string }>(
+        `INSERT INTO platform_subscriptions (school_id, plan, billing_cycle, trial_ends_at, subscription_status)
+         VALUES ($1, 'trial', 'termly', $2, 'trial')
+         ON CONFLICT (school_id) DO NOTHING
+         RETURNING trial_ends_at`,
+        [session.school_id, defaultTrialEndsAt()]
+      );
+      const trialEndsAt = trial.rows[0]?.trial_ends_at ?? null;
+      if (trialEndsAt) {
+        await pool.query(`UPDATE schools SET subscription_tier = 'trial' WHERE id = $1`, [session.school_id]);
+        await logPlatformAudit({
+          adminId: req.user!.user_id,
+          actionType: 'SUBSCRIPTION_CREATED',
+          targetSchoolId: session.school_id,
+          metadata: { plan: 'trial', billing_cycle: 'termly', trial_ends_at: trialEndsAt, reason: 'onboarding_completed' },
+          ipAddress: clientIp(req) ?? null,
+        });
+      }
+
       await pool.query(
         `UPDATE schools SET is_active = TRUE, legal_terms_accepted_at = NOW(), legal_terms_accepted_ip = $2 WHERE id = $1`,
         [session.school_id, clientIp(req)]
       );
+      cache.del(schoolCacheKey(session.school_id, 'data'));
       await pool.query(
         `UPDATE onboarding_sessions SET status = 'completed', completed_at = NOW(), updated_at = NOW() WHERE id = $1`,
         [req.params.sessionId]
@@ -2009,6 +2063,8 @@ router.post(
           school_name: school.name,
           principal_email: principalEmail,
           is_active: true,
+          // When the trial this onboarding started ends; null if the school already had a subscription.
+          trial_ends_at: trialEndsAt,
           welcome_email: welcomeEmail,
           // It said "Welcome email sent" even when none was (email not configured).
           message: welcomeEmail === 'sent'

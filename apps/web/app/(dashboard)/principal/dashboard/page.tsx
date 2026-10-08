@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import SetupChecklist from '@/components/SetupChecklist';
 
 interface PrincipalOverview {
   greeting: string;
@@ -146,6 +147,8 @@ export default function PrincipalDashboardPage() {
         <h1 className="text-2xl font-semibold text-gray-900">{overview.greeting}</h1>
         <p className="mt-1 text-sm text-gray-500">{termLabel}</p>
       </div>
+
+      {schoolId && <SetupChecklist schoolId={schoolId} />}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard label="Students" value={overview.total_students} accent="navy" />

@@ -6,9 +6,9 @@ import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
 import {
   findClassByName, insertClass, updateClass, listClasses,
-  findClassById, classHasReferences, deleteClass,
+  findClassById, classUses, deleteClass, findNearDuplicateLevel,
   findSubjectByCode, insertSubject, updateSubject, listActiveSubjects,
-  findSubjectById, subjectHasReferences, deleteSubject,
+  findSubjectById, subjectUses, deleteSubject,
   getActiveTerm,
   findDuplicateAssignment, insertTeacherAssignment, listTeacherAssignments,
   findAssignmentById, scoresExistForAssignment, deleteTeacherAssignment,
@@ -17,6 +17,7 @@ import {
 } from '../db/queries/roster';
 import { findUserById } from '../db/queries/users';
 import { logAudit } from '../db/queries/auditLog';
+import { findSchoolById } from '../db/queries/schools';
 import pool from '../db/client';
 import { cache } from '../services/cacheService';
 import { parseRosterBulkImportFile, RosterBulkImportParseError } from '../services/rosterBulkImportParser';
@@ -30,10 +31,37 @@ const router = Router();
 
 const classSchema = z.object({
   name:            z.string().min(1).max(255),
-  level:           z.string().min(1).max(100),
+  // Trimmed: levels are matched exactly by grading overrides and assessment configs (CLAUDE.md).
+  level:           z.string().trim().min(1).max(100),
   stream:          z.string().max(100).optional(),
   form_teacher_id: z.string().uuid().nullable().optional(),
 });
+
+// ── A level must not be a near miss of one the school already has ─────────────
+// "Jss" beside "JSS" is a second level, and its classes silently fall back to the school-wide
+// grading and assessment. Refused when typed, naming the spelling already in use (audit, 8 Oct 2026).
+
+async function nearDuplicateLevelError(schoolId: string, level: string): Promise<string | null> {
+  const existing = await findNearDuplicateLevel(schoolId, level);
+  return existing === null ? null
+    : `This school already has the level "${existing}". Use exactly that spelling: grading and assessment settings match levels letter for letter.`;
+}
+
+/** Settings keyed to a level that a class is leaving, to be named in a warning (they stay as they are). */
+async function settingsKeyedToLevel(schoolId: string, level: string): Promise<string[]> {
+  const school = await findSchoolById(schoolId);
+  const overrides = ((school?.academic_config as Record<string, unknown> | null)?.level_overrides ?? {}) as Record<string, unknown>;
+  const warnings: string[] = [];
+  if (Object.prototype.hasOwnProperty.call(overrides, level)) {
+    warnings.push(`Grading by Level has settings for "${level}". This class no longer uses them; check its grading under its new level.`);
+  }
+  const { rows } = await pool.query(
+    `SELECT 1 FROM assessment_configs WHERE school_id = $1 AND class_level = $2 LIMIT 1`, [schoolId, level]);
+  if (rows.length > 0) {
+    warnings.push(`Assessment Config has a structure for "${level}". This class no longer uses it; check its assessment under its new level.`);
+  }
+  return warnings;
+}
 
 // ── Validate that form_teacher_id (if provided) is a teacher in this school ─────
 
@@ -117,6 +145,11 @@ router.post(
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_CLASS', message: `A class named "${name}" already exists in this school` } });
       }
 
+      const levelError = await nearDuplicateLevelError(req.params.schoolId, level);
+      if (levelError) {
+        return res.status(409).json({ success: false, error: { code: 'LEVEL_NEAR_DUPLICATE', message: levelError } });
+      }
+
       const cls = await insertClass(req.params.schoolId, name, level, stream ?? null, form_teacher_id ?? null);
       cache.del(`roster:${req.params.schoolId}:classes`);
       return res.status(201).json({ success: true, data: cls });
@@ -175,11 +208,21 @@ router.patch(
         return res.status(409).json({ success: false, error: { code: 'DUPLICATE_CLASS', message: `A class named "${name}" already exists in this school` } });
       }
 
+      const levelChanged = level !== existing.level;
+      if (levelChanged) {
+        const levelError = await nearDuplicateLevelError(req.params.schoolId, level);
+        if (levelError) {
+          return res.status(409).json({ success: false, error: { code: 'LEVEL_NEAR_DUPLICATE', message: levelError } });
+        }
+      }
+
       const cls = await updateClass(req.params.classId, req.params.schoolId, {
         name, level, stream: stream ?? null, form_teacher_id: form_teacher_id ?? null,
       });
       cache.del(`roster:${req.params.schoolId}:classes`);
-      return res.json({ success: true, data: cls });
+      // The change is made; what it leaves behind is said, not refused.
+      const warnings = levelChanged ? await settingsKeyedToLevel(req.params.schoolId, existing.level) : [];
+      return res.json({ success: true, data: cls, ...(warnings.length > 0 ? { warnings } : {}) });
     } catch (err) {
       return next(err);
     }
@@ -200,11 +243,11 @@ router.delete(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Class not found' } });
       }
 
-      const hasRefs = await classHasReferences(req.params.classId, req.params.schoolId);
-      if (hasRefs) {
+      const uses = await classUses(req.params.classId);
+      if (uses.length > 0) {
         return res.status(409).json({
           success: false,
-          error: { code: 'CLASS_HAS_REFERENCES', message: 'Cannot delete class: students or teacher assignments exist for this class' },
+          error: { code: 'CLASS_IN_USE', message: `This class cannot be deleted while it has ${uses.join(', ')}.`, uses },
         });
       }
 
@@ -316,11 +359,11 @@ router.delete(
         return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Subject not found' } });
       }
 
-      const hasRefs = await subjectHasReferences(req.params.subjectId, req.params.schoolId);
-      if (hasRefs) {
+      const uses = await subjectUses(req.params.subjectId);
+      if (uses.length > 0) {
         return res.status(409).json({
           success: false,
-          error: { code: 'SUBJECT_HAS_REFERENCES', message: 'Cannot delete subject: teacher assignments, scores, or assessment configs reference this subject' },
+          error: { code: 'SUBJECT_IN_USE', message: `This subject cannot be deleted while it has ${uses.join(', ')}.`, uses },
         });
       }
 

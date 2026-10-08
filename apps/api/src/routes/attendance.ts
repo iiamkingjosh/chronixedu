@@ -138,6 +138,18 @@ router.post(
         const isFormTeacher = cls.form_teacher_id === markedBy;
         const isAssigned = isFormTeacher || await isTeacherAssignedToClass(markedBy, class_id, schoolId, term.id);
         if (!isAssigned) {
+          // The date falls in a term the principal has not made current, and nobody has been given
+          // its teaching roster: the cause is the term, not the teacher, and only the principal can
+          // fix it. It used to read "You are not assigned", to every teacher (audit, 8 Oct 2026).
+          if (!term.is_current) {
+            return res.status(409).json({
+              success: false,
+              error: {
+                code: 'TERM_NOT_ACTIVE',
+                message: `${term.name} has not been made the current term yet, and its teaching assignments are not set. Ask the principal to make it current in Settings → Academic Structure and carry the roster over in Settings → Roster.`,
+              },
+            });
+          }
           return res.status(403).json({
             success: false,
             error: { code: 'NOT_ASSIGNED', message: 'You are not assigned to this class for the selected term' },

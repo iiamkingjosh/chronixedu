@@ -751,6 +751,18 @@ Monorepo, npm workspaces:
 - `classes.level` is free text (e.g. "Primary", "JSS", "SSS") and is matched
   **exactly**, so keep it consistent: a typo silently falls back to school-wide config
   rather than erroring. It resolves both `assessment_configs` and grading overrides.
+  Since 8 Oct 2026 the class routes trim it and refuse a near miss of an existing level
+  (`LEVEL_NEAR_DUPLICATE`, naming the spelling in use), and a level change answers with
+  `warnings` naming the overrides and configs the class leaves behind. Roster bulk import does
+  not check near misses yet.
+- **Deleting a class or subject checks every table that refers to it** (`CLASS_USES`,
+  `SUBJECT_USES` in `db/queries/roster.ts`) and answers 409 naming the uses. A new foreign key to
+  `classes` or `subjects` must be added there: `rosterIntegrity.db.test.ts` compares the lists with
+  `pg_constraint`.
+- **Each new term starts with the last term's assessment structure** (8 Oct 2026): `POST .../terms`
+  copies the configs of the latest earlier term that has any, in the same transaction, structure
+  only. `POST /assessment-config/copy-from-term` does it for a term that exists without one. Adding
+  or deleting a config is refused (423) once its term has scores, as editing already was.
 - **A new school has no grading scale, pass mark or assessment structure** until its
   principal sets them in Settings. Neither creation path seeds them (`newSchoolAcademicConfig`
   in `services/schoolService.ts`), and onboarding no longer asks. An unset scale is visibly
@@ -1221,9 +1233,14 @@ Monorepo, npm workspaces:
   - `/complete` then makes a Supabase set-password link (`generateLink`, type `recovery`,
     redirect `resetPasswordRedirect()` from `config/appUrls.ts`, shared with forgot-password) BEFORE
     activating anything, and emails it.
+  - `/complete` starts a 30-day trial (`trial`, termly, `SUBSCRIPTION_CREATED` with reason
+    `onboarding_completed`) unless the school already has a subscription (Moses, 8 Oct 2026).
   The read-back is the control. The double entry catches typos. The link means nobody relays a
   password, and a wrong address shows at once, because the real principal never gets the link.
   If any of it is ever trimmed, keep the read-back.
+- **A school's address lives in `identity_config.address`**, which receipts and report cards print
+  (8 Oct 2026). Onboarding step 1 and Settings → School Identity both write it there; `schools.address`
+  is written by onboarding and read by nothing. Migration 064 copied the addresses already typed.
 - A session has **at most 3 terms**, and onboarding takes **exactly one**: the term the school
   is starting in, which becomes current. Three pre-filled rows made the wizard's optional-row
   check always true, so Next never enabled. Schools rarely know later term dates at sign-up and Nigerian

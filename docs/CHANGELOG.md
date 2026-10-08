@@ -1,5 +1,35 @@
 # Chronix Edu — Changelog
 
+## A setup checklist, term dates that can be corrected, and a trial from day one (2026-10-08)
+
+### For principals
+- **"Finish setting up your school" on the dashboard** lists what is still missing, each with a Set up button
+  that opens the right page: current term, grading scale, pass mark, this term's assessment, classes,
+  subjects, teachers, teaching assignments, students in classes, this term's fees and the payout account. It
+  disappears when everything is done. It also says when the current term has ended and the next one needs
+  making current.
+- **Term names and dates can be edited** (Settings → Academic Structure → Edit). Before, a wrong date could
+  only be fixed by Chronix.
+- **Settings → Roster → Assignments** can copy every teacher's assignments from last term into this one, and
+  give one teacher every subject of a class at once (a primary class teacher).
+- **The school's address is saved,** and printed on receipts and report cards. The Address field on School
+  Identity said "saved" and kept nothing, and the address typed at onboarding never reached a document; those
+  addresses have been copied across.
+- **A class level must be spelt as it already is.** Typing "jss" when the school has "JSS" is refused, because
+  grading and assessment settings match levels letter for letter. Changing a class's level warns when the old
+  level has its own settings.
+- **Deleting a class or subject that is still in use** says what uses it (homework, the timetable, fee lines and
+  so on) instead of failing with an error.
+
+### For teachers
+- **Marking attendance on a day of a term that has not been made current** now says the term is not active yet
+  and that the principal makes it current, instead of "You are not assigned to this class".
+
+### For Chronix
+- **Completing onboarding starts a 30-day trial,** unless the school already has a subscription. Schools used to
+  start with none.
+- **The onboarding calendar step can be saved again** after going back to correct a date. It failed with an error.
+
 ## Pass mark on screen; each new term keeps the last term's assessment (2026-10-08)
 
 ### For schools

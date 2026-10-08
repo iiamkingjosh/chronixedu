@@ -1,4 +1,5 @@
 ﻿import { Router, Request, Response, NextFunction } from 'express';
+import { getSetupStatus, lagosToday } from '../services/setupStatus';
 import multer from 'multer';
 import { fromBuffer as fileTypeFromBuffer } from 'file-type';
 import { z } from 'zod';
@@ -72,6 +73,9 @@ const IMAGE_FIELDS = ['logo_url', 'stamp_url', 'signature_url'] as const;
 const updateIdentitySchema = z.object({
   name: z.string().min(1).max(255).optional(),
   motto: z.string().max(500).optional(),
+  // Printed on receipts and report cards. It was missing here, and zod drops keys it does not
+  // know, so the Address field on School Identity answered "saved" and kept nothing.
+  address: z.string().trim().max(500).optional(),
   primary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
   secondary_colour: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex colour').optional(),
   admission_prefix: z.string().trim().min(1).max(10).regex(/^[A-Za-z0-9]+$/, 'Must be alphanumeric').optional(),
@@ -405,6 +409,24 @@ router.get(
             : null,
         },
       });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── GET /api/schools/:schoolId/setup-status ───────────────────────────────────
+// The principal's setup checklist: what the school still has to set up, and the page for each
+// (audit, 8 Oct 2026). Read only. Principal and platform admin, as this file's guard admits.
+
+router.get(
+  '/:schoolId/setup-status',
+  verifyToken,
+  requireSchoolAccess,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const items = await getSetupStatus(req.params.schoolId, lagosToday());
+      return res.json({ success: true, data: { items } });
     } catch (err) {
       return next(err);
     }

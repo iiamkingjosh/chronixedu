@@ -197,6 +197,65 @@ function AddTermModal({ schoolId, sessionId, onClose, onAdded }: {
   );
 }
 
+// ── Edit Term Modal ───────────────────────────────────────────────────────────
+// Term dates move (holidays, strikes, elections). The route existed; nothing on screen used it, so a
+// wrong date could only be fixed in the database (audit, 8 Oct 2026). Overlaps are refused by the API
+// with its own message, shown here.
+
+function EditTermModal({ schoolId, sessionId, term, onClose, onSaved }: {
+  schoolId: string;
+  sessionId: string;
+  term: Term;
+  onClose: () => void;
+  onSaved: (t: Term) => void;
+}) {
+  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<TermForm>({
+    resolver: zodResolver(termSchema),
+    defaultValues: { name: term.name, start_date: term.start_date?.slice(0, 10), end_date: term.end_date?.slice(0, 10) },
+  });
+  const [apiError, setApiError] = useState('');
+
+  async function onSubmit(values: TermForm) {
+    setApiError('');
+    try {
+      const res = await apiFetch<{ success: boolean; data: Term }>(
+        `/api/schools/${schoolId}/sessions/${sessionId}/terms/${term.id}`,
+        { method: 'PATCH', body: JSON.stringify(values) }
+      );
+      onSaved({ ...term, ...res.data });
+    } catch (err: unknown) {
+      setApiError(err instanceof Error ? err.message : 'Failed to save the term');
+    }
+  }
+
+  return (
+    <Modal title={`Edit ${term.name}`} onClose={onClose}>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <Field label="Term Name" error={errors.name?.message}>
+          <input {...register('name')} className={inputClass} />
+        </Field>
+        <Field label="Start Date" error={errors.start_date?.message}>
+          <input type="date" {...register('start_date')} className={inputClass} />
+        </Field>
+        <Field label="End Date" error={errors.end_date?.message}>
+          <input type="date" {...register('end_date')} className={inputClass} />
+        </Field>
+        {apiError && <p className="text-sm text-red-600">{apiError}</p>}
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">Cancel</button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50"
+          >
+            {isSubmitting ? 'Saving…' : 'Save Term'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Activate Confirmation Modal ───────────────────────────────────────────────
 
 function ActivateModal({ session, schoolId, onClose, onActivated }: {
@@ -356,6 +415,7 @@ export default function AcademicStructurePage() {
   const [addTermFor, setAddTermFor]                 = useState<Session | null>(null);
   const [activateSession, setActivateSession]       = useState<Session | null>(null);
   const [activateTermFor, setActivateTermFor]       = useState<{ session: Session; term: Term } | null>(null);
+  const [editTermFor, setEditTermFor]               = useState<{ session: Session; term: Term } | null>(null);
   const [expandedSession, setExpandedSession]       = useState<string | null>(null);
 
   useEffect(() => {
@@ -396,6 +456,14 @@ export default function AcademicStructurePage() {
     ));
     show(`${activateSession!.name} is now the active session`);
     setActivateSession(null);
+  }
+
+  function handleTermSaved(sessionId: string, saved: Term) {
+    setSessions(prev => prev.map(s =>
+      s.id === sessionId ? { ...s, terms: (s.terms ?? []).map(t => (t.id === saved.id ? saved : t)) } : s
+    ));
+    setEditTermFor(null);
+    show(`${saved.name} saved`);
   }
 
   function handleTermActivated() {
@@ -518,14 +586,22 @@ export default function AcademicStructurePage() {
                               {term.start_date?.slice(0, 10)} — {term.end_date?.slice(0, 10)}
                             </p>
                           </div>
-                          {!term.is_current && session.is_current && (
+                          <div className="flex items-center gap-2">
                             <button
-                              onClick={() => setActivateTermFor({ session, term })}
-                              className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50"
+                              onClick={() => setEditTermFor({ session, term })}
+                              className="px-3 py-1.5 text-xs font-medium text-slate-700 border border-slate-200 rounded-lg hover:bg-slate-50"
                             >
-                              Activate
+                              Edit
                             </button>
-                          )}
+                            {!term.is_current && session.is_current && (
+                              <button
+                                onClick={() => setActivateTermFor({ session, term })}
+                                className="px-3 py-1.5 text-xs font-medium text-amber-700 border border-amber-300 rounded-lg hover:bg-amber-50"
+                              >
+                                Activate
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -560,6 +636,16 @@ export default function AcademicStructurePage() {
           schoolId={schoolId}
           onClose={() => setActivateSession(null)}
           onActivated={handleActivated}
+        />
+      )}
+
+      {editTermFor && schoolId && (
+        <EditTermModal
+          schoolId={schoolId}
+          sessionId={editTermFor.session.id}
+          term={editTermFor.term}
+          onClose={() => setEditTermFor(null)}
+          onSaved={t => handleTermSaved(editTermFor.session.id, t)}
         />
       )}
 

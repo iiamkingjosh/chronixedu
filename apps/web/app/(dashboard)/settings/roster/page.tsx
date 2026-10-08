@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { currentAndPreviousTerm, type SessionLike, type TermPair, type TermLike } from '@/lib/termOrder';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -629,6 +630,14 @@ function AssignmentsTab({ schoolId, show }: { schoolId: string; show: ToastFn })
   const [deleteTarget, setDeleteTarget] = useState<AssignmentDetail | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Carrying the roster into a new term, and a whole class for one teacher (audit, 8 Oct 2026): both
+  // routes existed, and no screen used them, so each term started with no assignments at all.
+  const [terms, setTerms] = useState<TermPair<TermLike> | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [wholeClassId, setWholeClassId] = useState('');
+  const [wholeClassError, setWholeClassError] = useState('');
+  const [assigningWhole, setAssigningWhole] = useState(false);
+
   useEffect(() => {
     if (!schoolId) return;
     let cancelled = false;
@@ -638,12 +647,14 @@ function AssignmentsTab({ schoolId, show }: { schoolId: string; show: ToastFn })
       apiFetch<{ success: boolean; data: { users: TeacherOption[]; total: number } }>(`/api/schools/${schoolId}/users?role=teacher&limit=100`),
       apiFetch<{ success: boolean; data: ClassRow[] }>(`/api/schools/${schoolId}/classes`),
       apiFetch<{ success: boolean; data: SubjectRow[] }>(`/api/schools/${schoolId}/subjects`),
+      apiFetch<{ success: boolean; data: SessionLike[] }>(`/api/schools/${schoolId}/sessions`),
     ])
-      .then(([teachersRes, classesRes, subjectsRes]) => {
+      .then(([teachersRes, classesRes, subjectsRes, sessionsRes]) => {
         if (cancelled) return;
         setTeachers(teachersRes.data.users);
         setClasses(classesRes.data);
         setSubjects(subjectsRes.data);
+        setTerms(currentAndPreviousTerm(sessionsRes.data));
         setTeacherId(prev => prev ?? (teachersRes.data.users[0]?.id ?? null));
       })
       .catch((err: unknown) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load assignment data'); })
@@ -673,6 +684,47 @@ function AssignmentsTab({ schoolId, show }: { schoolId: string; show: ToastFn })
     show('Assignment created');
   }
 
+  async function copyFromPreviousTerm() {
+    if (!terms?.previous) return;
+    const { previous, current } = terms;
+    if (!window.confirm(`Copy every teacher's assignments from ${previous.name} into ${current.name}? Assignments already in ${current.name} are kept.`)) return;
+    setCopying(true);
+    try {
+      const res = await apiFetch<{ success: boolean; data: { copied: number } }>(`/api/schools/${schoolId}/teacher-assignments/copy-from-term`, {
+        method: 'POST',
+        body: JSON.stringify({ from_term_id: previous.id, to_term_id: current.id }),
+      });
+      show(res.data.copied === 0
+        ? `Nothing to copy: ${current.name} already has every assignment ${previous.name} had.`
+        : `${res.data.copied} assignment${res.data.copied === 1 ? '' : 's'} copied into ${current.name}`);
+      loadAssignments();
+    } catch (err: unknown) {
+      show(err instanceof Error ? err.message : 'Copy failed', 'error');
+    } finally {
+      setCopying(false);
+    }
+  }
+
+  async function assignWholeClass() {
+    if (!selectedTeacher) return;
+    if (!wholeClassId) { setWholeClassError('Choose a class.'); return; }
+    setWholeClassError('');
+    setAssigningWhole(true);
+    try {
+      const res = await apiFetch<{ success: boolean; data: { created: number; skipped: number } }>(`/api/schools/${schoolId}/teacher-assignments/bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ teacher_id: selectedTeacher.id, all_subjects_for_class_ids: [wholeClassId] }),
+      });
+      show(`${res.data.created} subject${res.data.created === 1 ? '' : 's'} added${res.data.skipped > 0 ? `, ${res.data.skipped} already assigned` : ''}`);
+      setWholeClassId('');
+      loadAssignments();
+    } catch (err: unknown) {
+      setWholeClassError(err instanceof Error ? err.message : 'Could not assign the class');
+    } finally {
+      setAssigningWhole(false);
+    }
+  }
+
   async function handleDelete() {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -696,6 +748,22 @@ function AssignmentsTab({ schoolId, show }: { schoolId: string; show: ToastFn })
     <div>
       <p className="text-sm text-gray-500 mb-4">Assign a teacher to a class and subject for the current term, or remove an existing assignment.</p>
 
+      {terms?.previous && (
+        <div className="mb-5 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <p className="text-sm text-slate-700">
+            Starting {terms.current.name}? Carry over every teacher&apos;s assignments from {terms.previous.name}.
+          </p>
+          <button
+            type="button"
+            onClick={copyFromPreviousTerm}
+            disabled={copying}
+            className="shrink-0 px-3 py-1.5 bg-white border border-slate-300 text-slate-800 text-sm font-medium rounded-lg hover:bg-slate-100 disabled:opacity-50"
+          >
+            {copying ? 'Copying…' : `Copy from ${terms.previous.name}`}
+          </button>
+        </div>
+      )}
+
       <div className="mb-5 max-w-xs">
         <label className="block text-sm font-medium text-gray-700 mb-1">Teacher</label>
         <select
@@ -718,6 +786,30 @@ function AssignmentsTab({ schoolId, show }: { schoolId: string; show: ToastFn })
             >
               Add Assignment
             </button>
+          </div>
+
+          <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+            <p className="text-xs text-gray-500 mb-2">A class teacher who takes every subject (primary): give them the whole class at once.</p>
+            <div className="flex flex-wrap items-start gap-2">
+              <select
+                value={wholeClassId}
+                onChange={e => { setWholeClassId(e.target.value); setWholeClassError(''); }}
+                className="border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white"
+                aria-label="Class to give this teacher every subject of"
+              >
+                <option value="">Choose a class…</option>
+                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              <button
+                type="button"
+                onClick={assignWholeClass}
+                disabled={assigningWhole}
+                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-100 disabled:opacity-50"
+              >
+                {assigningWhole ? 'Assigning…' : 'Give every subject in this class'}
+              </button>
+            </div>
+            {wholeClassError && <p className="text-xs text-red-600 mt-1">{wholeClassError}</p>}
           </div>
 
           {assignmentsLoading ? (

@@ -38,11 +38,12 @@ export interface TermRow {
   id: string;
   name: string;
   session_id: string;
+  is_current: boolean;
 }
 
 export async function findTermForDate(schoolId: string, date: string): Promise<TermRow | null> {
   const result = await pool.query<TermRow>(
-    `SELECT id, name, session_id FROM terms
+    `SELECT id, name, session_id, is_current FROM terms
      WHERE school_id = $1 AND start_date <= $2 AND end_date >= $2
      LIMIT 1`,
     [schoolId, date]
