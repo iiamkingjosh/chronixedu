@@ -8,6 +8,7 @@ import { logger } from '../config/logger';
 import { schoolAllowsFeature } from './planFeatures';
 
 const POLL_INTERVAL_MS = 30_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BATCH_SIZE = 50;
 
 interface QueuedAuditRow {
@@ -17,6 +18,7 @@ interface QueuedAuditRow {
   entity_id: string | null;
   new_value: {
     student_id?: string;
+    student_ids?: unknown;
     notification_type?: string;
     severity?: string;
     incident_type?: string;
@@ -28,10 +30,32 @@ interface ParentRecipient {
   parent_id: string;
   email: string;
   phone: string | null;
+  student_id: string;
+  child_first_name: string;
 }
 
-function buildNotification(row: QueuedAuditRow): { type: string; title: string; body: string } {
+/**
+ * The students a queued row is about. Attendance and behaviour rows name one (`student_id`);
+ * a results row names the whole class (`student_ids`). The worker read only the first shape,
+ * so every results notice was marked processed and delivered to nobody (audit, 8 Oct 2026).
+ */
+export function studentIdsOf(newValue: QueuedAuditRow['new_value']): string[] {
+  const ids = Array.isArray(newValue?.student_ids) ? newValue.student_ids : [];
+  // Only ids that can be ids: one malformed value would fail the row's query on every poll.
+  const all = [...ids, newValue?.student_id].filter((v): v is string => typeof v === 'string' && UUID.test(v));
+  return [...new Set(all)];
+}
+
+function buildNotification(row: QueuedAuditRow, childFirstName: string): { type: string; title: string; body: string } {
   const notificationType = row.new_value?.notification_type ?? 'general';
+
+  if (notificationType === 'results_published') {
+    return {
+      type: notificationType,
+      title: 'Results published',
+      body: `${childFirstName}'s results for this term have been published. Sign in to view them.`,
+    };
+  }
 
   if (notificationType === 'behaviour_incident') {
     const title = row.new_value?.severity === 'suspension' ? 'Suspension notice' : 'Behaviour incident reported';
@@ -52,28 +76,39 @@ function buildNotification(row: QueuedAuditRow): { type: string; title: string; 
 
 /** Delivers one queued notification. Returns how many parents would have been texted had SMS been on. */
 async function processRow(row: QueuedAuditRow, smsOn: boolean): Promise<number> {
-  const studentId = row.new_value?.student_id;
-  if (!studentId) return 0;
+  const studentIds = studentIdsOf(row.new_value);
+  if (studentIds.length === 0) return 0;
 
+  // One recipient per (parent, child): a parent of two children in the class is told about
+  // each. DISTINCT because parent_students has no unique (parent_id, student_id). The school
+  // join keeps a row from ever reaching a student of another school.
   const { rows: parents } = await pool.query<ParentRecipient>(
-    `SELECT u.id AS parent_id, u.email, u.phone
+    `SELECT DISTINCT u.id AS parent_id, u.email, u.phone, st.id AS student_id, su.first_name AS child_first_name
      FROM parent_students ps
+     JOIN students st ON st.id = ps.student_id AND st.school_id = $2
+     JOIN users su ON su.id = st.user_id
      JOIN users u ON u.id = ps.parent_id
-     WHERE ps.student_id = $1`,
-    [studentId]
+     WHERE ps.student_id = ANY($1::uuid[])
+     ORDER BY u.id, st.id`,
+    [studentIds, row.school_id]
   );
 
-  const { type, title, body } = buildNotification(row);
   const allowsSms = await schoolAllowsFeature(row.school_id, 'sms');
   let smsNotSent = 0;
+  // The payload names this parent's child only: never the class list, nor who acted for the
+  // school in a support session.
+  const shared: Record<string, unknown> = { ...(row.new_value ?? {}) };
+  delete shared.student_ids;
+  delete shared._support;
 
   for (const parent of parents) {
+    const { type, title, body } = buildNotification(row, parent.child_first_name);
     await createNotification({
       user_id: parent.parent_id,
       type,
       title,
       body,
-      payload: { entity: row.entity, entity_id: row.entity_id, ...row.new_value },
+      payload: { entity: row.entity, entity_id: row.entity_id, ...shared, student_id: parent.student_id },
     });
     await sendEmail(parent.email, title, body);
 

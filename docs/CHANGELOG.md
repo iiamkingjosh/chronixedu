@@ -1,5 +1,22 @@
 # Chronix Edu — Changelog
 
+## Parents are told when results are published; messages can be answered (2026-10-08)
+
+### For parents
+- **"Results published" now reaches you.** When the school publishes a class's results, each parent gets an
+  in-app notice and an email for each of their children in that class, naming the child. Until now the notice
+  was queued and then delivered to nobody.
+- **Your contacts are your children's teachers this term,** including each class's form teacher. Teachers
+  from earlier terms and staff who have left no longer appear.
+
+### For teachers
+- **You can answer your students.** A student could message a teacher, but the teacher could not reply. Your
+  contacts now include the students in the classes you teach this session, as well as their parents.
+
+### For everyone
+- **A reply goes to the person you are talking to.** It can no longer be addressed to someone outside the
+  conversation; start a new message for them instead.
+
 ## A locked sign-in counts down to when it lifts (2026-10-08)
 
 ### For everyone signing in

@@ -1,8 +1,33 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 39 — 2026-10-08  
-**Scope:** Which accounts Settings → Users creates  
-**Round 39 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+**Latest audit:** Round 40 — 2026-10-08  
+**Scope:** Fixes from the 8 Oct 2026 audit of every school role  
+**Round 40 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+
+---
+
+## Round 40 — 2026-10-08
+
+### L-01 — A reply could pull anyone into a conversation, who could then read all of it ✅ Remediated
+
+**Files:** `apps/api/src/routes/messages.ts` (`POST /:schoolId/messages`).
+
+**Found** on 8 Oct 2026, in the audit of every school role.
+
+**The mechanism.** A reply carries the `thread_id` of the conversation. The route checked that the sender was in
+that conversation and that the recipient was one of the sender's contacts, but not that the recipient was in the
+conversation. Reading a conversation needs only one message in it to or from you. So a teacher answering a
+student could address the reply to the student's parent, or to any other contact, and that person could then
+open the whole conversation, the student's own messages included.
+
+**Why Low.** Only a member of the conversation could do it, only towards their own contacts, and the
+conversation's other member could see the reply. Nothing reached another school.
+
+**Fix.** A reply's recipient must already be in the conversation; otherwise 403 `NOT_IN_THREAD`, telling the
+sender to start a new message. A new message to the same person still works.
+
+**Tests:** `messagingContacts.db.test.ts` (the parent pulled in is refused and cannot read the thread; the same
+teacher can still message the parent in a new conversation). With the check removed, it fails.
 
 ---
 

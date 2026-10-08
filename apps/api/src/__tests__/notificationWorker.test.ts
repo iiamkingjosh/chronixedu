@@ -4,7 +4,7 @@ import { sendEmail } from '../services/emailService';
 import { sendTermiiSms, isSmsEnabled } from '../services/termiiService';
 import { logger } from '../config/logger';
 import { insertNotificationLog, hasReachedSmsLimit } from '../db/queries/notificationLogs';
-import { processNotificationQueue } from '../services/notificationWorker';
+import { processNotificationQueue, studentIdsOf } from '../services/notificationWorker';
 
 jest.mock('../db/client', () => ({
   __esModule: true,
@@ -32,7 +32,7 @@ const AUDIT_ROW = {
   entity: 'behaviour_records',
   entity_id: 'record-1',
   new_value: {
-    student_id: 'student-1',
+    student_id: '60000000-0000-4000-8000-000000000001',
     notification_type: 'behaviour_incident',
     severity: 'suspension',
     incident_type: 'Fighting',
@@ -185,5 +185,20 @@ describe('processNotificationQueue — SMS delivery', () => {
     expect(mockSendEmail).toHaveBeenCalled();
     expect(mockSendTermiiSms).not.toHaveBeenCalled();
     expect(mockInsertLog).not.toHaveBeenCalled();
+  });
+});
+
+describe('studentIdsOf', () => {
+  const A = '60000000-0000-4000-8000-000000000001';
+  const B = '60000000-0000-4000-8000-000000000002';
+  it('reads both shapes of queue row, once each', () => {
+    expect(studentIdsOf({ student_id: A })).toEqual([A]);
+    expect(studentIdsOf({ student_ids: [A, B, A] })).toEqual([A, B]);
+    expect(studentIdsOf({ student_ids: [A], student_id: A })).toEqual([A]);
+  });
+  it('drops values that cannot be ids, so one bad value cannot wedge the queue', () => {
+    expect(studentIdsOf({ student_ids: [A, 'x', 7, null], student_id: "'; DROP" })).toEqual([A]);
+    expect(studentIdsOf({ student_ids: 'not-an-array' })).toEqual([]);
+    expect(studentIdsOf(null)).toEqual([]);
   });
 });

@@ -115,6 +115,14 @@ router.post(
         if (!participant) {
           return res.status(403).json({ success: false, error: { code: 'FORBIDDEN', message: 'You are not part of this conversation' } });
         }
+        // A reply goes to someone already in the conversation. Otherwise a reply could pull anyone
+        // in the sender's contacts into a thread, and being in it lets them read all of it.
+        if (!(await isThreadParticipant(thread_id, recipient_id, schoolId))) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'NOT_IN_THREAD', message: 'A reply can only go to someone in this conversation. Start a new message instead.' },
+          });
+        }
       }
 
       const message = await createMessage({

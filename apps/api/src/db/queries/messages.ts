@@ -54,54 +54,93 @@ export interface ThreadMessageRow {
 // ── Contacts (also used to enforce role-pair rules for POST /messages) ──────────
 
 const CURRENT_SESSION = `(SELECT id FROM academic_sessions WHERE school_id = $2 AND is_current = TRUE)`;
+// The current term of the current session. An older session can still hold a term marked current.
+const CURRENT_TERM = `(SELECT t.id FROM terms t WHERE t.school_id = $2 AND t.is_current = TRUE AND t.session_id = ${CURRENT_SESSION})`;
 
+// Who teaches a class: this term's assignments, plus the form teacher, who may have no assignment row.
+// Expects a CTE `classes_of_interest(class_id)`.
+const TEACHERS_OF_CLASSES = `
+      SELECT ta.teacher_id AS id FROM teacher_assignments ta
+      JOIN classes_of_interest ci ON ci.class_id = ta.class_id
+      WHERE ta.school_id = $2 AND ta.term_id = ${CURRENT_TERM}
+      UNION
+      SELECT c.form_teacher_id FROM classes c
+      JOIN classes_of_interest ci ON ci.class_id = c.id
+      WHERE c.school_id = $2 AND c.form_teacher_id IS NOT NULL`;
+
+const ACTIVE_PRINCIPALS = `
+      SELECT u.id, u.first_name, u.last_name, u.role, u.email
+      FROM users u WHERE u.school_id = $2 AND u.role = 'principal' AND u.is_active = TRUE`;
+
+// Contacts are people of this school who are active, and the teaching links are this term's and
+// this session's (audit, 8 Oct 2026: they read assignments of any term, kept deactivated staff and
+// left out the form teacher).
 const CONTACT_QUERIES: Record<string, string> = {
-  // Parent: teachers of their linked children's current classes, plus any principal.
+  // Parent: this term's teachers of their children's classes this session, plus the principal.
   parent: `
-    WITH contacts AS (
-      SELECT DISTINCT u.id, u.first_name, u.last_name, u.role, u.email
+    WITH classes_of_interest AS (
+      SELECT sc.class_id
       FROM parent_students ps
-      JOIN students s ON s.id = ps.student_id
+      JOIN students s ON s.id = ps.student_id AND s.school_id = $2
       JOIN student_classes sc ON sc.student_id = s.id AND sc.session_id = ${CURRENT_SESSION}
-      JOIN teacher_assignments ta ON ta.class_id = sc.class_id AND ta.school_id = $2
-      JOIN users u ON u.id = ta.teacher_id
       WHERE ps.parent_id = $1
-      UNION
+    ),
+    teachers AS (${TEACHERS_OF_CLASSES}
+    ),
+    contacts AS (
       SELECT u.id, u.first_name, u.last_name, u.role, u.email
-      FROM users u WHERE u.school_id = $2 AND u.role = 'principal'
+      FROM teachers t JOIN users u ON u.id = t.id
+      WHERE u.school_id = $2 AND u.is_active = TRUE
+      UNION${ACTIVE_PRINCIPALS}
     )
     SELECT * FROM contacts ORDER BY first_name, last_name`,
 
-  // Teacher: parents of students they teach, any principal, and other teachers.
+  // Teacher: the students they teach this session and those students' parents, the principal,
+  // and other teachers. A teacher teaches a class through this term's assignment or as its form
+  // teacher. Students are included so that a teacher can answer them (audit, Fix first 2).
   teacher: `
-    WITH contacts AS (
-      SELECT DISTINCT u.id, u.first_name, u.last_name, u.role, u.email
-      FROM teacher_assignments ta
-      JOIN student_classes sc ON sc.class_id = ta.class_id
-      JOIN parent_students ps ON ps.student_id = sc.student_id
-      JOIN users u ON u.id = ps.parent_id
-      WHERE ta.teacher_id = $1 AND ta.school_id = $2
+    WITH my_classes AS (
+      SELECT ta.class_id FROM teacher_assignments ta
+      WHERE ta.teacher_id = $1 AND ta.school_id = $2 AND ta.term_id = ${CURRENT_TERM}
+      UNION
+      SELECT c.id FROM classes c WHERE c.form_teacher_id = $1 AND c.school_id = $2
+    ),
+    my_students AS (
+      SELECT DISTINCT sc.student_id
+      FROM student_classes sc JOIN my_classes mc ON mc.class_id = sc.class_id
+      WHERE sc.session_id = ${CURRENT_SESSION}
+    ),
+    people AS (
+      SELECT ps.parent_id AS id FROM my_students ms JOIN parent_students ps ON ps.student_id = ms.student_id
+      UNION
+      SELECT s.user_id FROM my_students ms JOIN students s ON s.id = ms.student_id
+    ),
+    contacts AS (
+      SELECT u.id, u.first_name, u.last_name, u.role, u.email
+      FROM people p JOIN users u ON u.id = p.id
+      WHERE u.school_id = $2 AND u.is_active = TRUE
+      UNION${ACTIVE_PRINCIPALS}
       UNION
       SELECT u.id, u.first_name, u.last_name, u.role, u.email
-      FROM users u WHERE u.school_id = $2 AND u.role = 'principal'
-      UNION
-      SELECT u.id, u.first_name, u.last_name, u.role, u.email
-      FROM users u WHERE u.school_id = $2 AND u.role = 'teacher' AND u.id != $1
+      FROM users u WHERE u.school_id = $2 AND u.role = 'teacher' AND u.id != $1 AND u.is_active = TRUE
     )
     SELECT * FROM contacts ORDER BY first_name, last_name`,
 
-  // Student: teachers of their current class, plus any principal.
+  // Student: this term's teachers of their class this session, plus the principal.
   student: `
-    WITH contacts AS (
-      SELECT DISTINCT u.id, u.first_name, u.last_name, u.role, u.email
+    WITH classes_of_interest AS (
+      SELECT sc.class_id
       FROM students s
       JOIN student_classes sc ON sc.student_id = s.id AND sc.session_id = ${CURRENT_SESSION}
-      JOIN teacher_assignments ta ON ta.class_id = sc.class_id AND ta.school_id = $2
-      JOIN users u ON u.id = ta.teacher_id
-      WHERE s.user_id = $1
-      UNION
+      WHERE s.user_id = $1 AND s.school_id = $2
+    ),
+    teachers AS (${TEACHERS_OF_CLASSES}
+    ),
+    contacts AS (
       SELECT u.id, u.first_name, u.last_name, u.role, u.email
-      FROM users u WHERE u.school_id = $2 AND u.role = 'principal'
+      FROM teachers t JOIN users u ON u.id = t.id
+      WHERE u.school_id = $2 AND u.is_active = TRUE
+      UNION${ACTIVE_PRINCIPALS}
     )
     SELECT * FROM contacts ORDER BY first_name, last_name`,
 
