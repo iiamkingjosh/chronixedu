@@ -13,68 +13,18 @@
  * Routes are read, never run. The runtime half (the middleware calls this matcher with the full
  * path) is adminTwoFactorRequired.db.test.ts.
  */
-import fs from 'fs';
-import path from 'path';
 import express from 'express';
 import { verifyToken, TWO_FACTOR_SETUP_ROUTES, isTwoFactorSetupRoute } from '../middleware/auth';
+import { loadRoutes, routesOf, fullPattern, type RouteInfo } from './helpers/routeWalk';
 
 // The routers import the Supabase clients, which refuse to load without credentials. Nothing here
 // calls them.
 jest.mock('../supabaseClient', () => ({ supabase: {}, supabaseAdmin: {} }));
 
-const SRC = path.join(__dirname, '..');
 const SAMPLE = '11111111-1111-4111-8111-111111111111';
 
-interface Mount { prefix: string; name: string; file: string; behindAppVerify: boolean }
-interface RouteInfo { file: string; method: string; prefix: string; path: string; regexp: RegExp; behindVerify: boolean }
 type Matcher = (method: string, fullPath: string) => boolean;
 
-/** Every router index.ts mounts, in order, and whether an app-level verifyToken runs before it. */
-function mounts(): Mount[] {
-  const src = fs.readFileSync(path.join(SRC, 'index.ts'), 'utf8');
-  const imports = new Map<string, string>();
-  for (const m of src.matchAll(/^import (\w+) from '\.\/(routes\/\w+)';\r?$/gm)) imports.set(m[1], m[2]);
-  const verified: string[] = [];
-  const out: Mount[] = [];
-  for (const m of src.matchAll(/^app\.use\('([^']+)', (\w+)\);/gm)) {
-    const [, prefix, name] = m;
-    if (name === 'verifyToken') { verified.push(prefix); continue; }
-    const file = imports.get(name);
-    if (!file) continue; // other app-level middleware (detectSupportSession, requireActiveSchool, ...)
-    out.push({ prefix, name, file, behindAppVerify: verified.some(v => prefix === v || prefix.startsWith(v + '/')) });
-  }
-  // Every imported router is mounted, so the walk below sees all of them.
-  expect([...imports.keys()].filter(name => !out.some(o => o.name === name))).toEqual([]);
-  return out;
-}
-
-type Layer = {
-  route?: { path: unknown; methods: Record<string, boolean>; stack: Array<{ handle: unknown }> };
-  handle: unknown;
-  regexp: RegExp;
-};
-
-function routesOf(router: express.Router, mount: Mount): RouteInfo[] {
-  const out: RouteInfo[] = [];
-  for (const layer of (router as unknown as { stack: Layer[] }).stack) {
-    // A router-level use() or a nested router would hide routes or guards from this walk. None
-    // exists today; if one is added, this fails and the walker must learn it first.
-    expect({ file: mount.file, routerLevelLayer: !layer.route }).toEqual({ file: mount.file, routerLevelLayer: false });
-    const route = layer.route!;
-    expect({ file: mount.file, path: route.path, isString: typeof route.path === 'string' }).toMatchObject({ isString: true });
-    const ownVerify = route.stack.some(l => l.handle === verifyToken);
-    for (const [method, on] of Object.entries(route.methods)) {
-      if (!on) continue;
-      out.push({
-        file: mount.file, method: method.toUpperCase(), prefix: mount.prefix, path: route.path as string,
-        regexp: layer.regexp, behindVerify: mount.behindAppVerify || ownVerify,
-      });
-    }
-  }
-  return out;
-}
-
-const fullPattern = (r: RouteInfo) => `${r.method} ${r.prefix}${r.path}`;
 const concrete = (r: RouteInfo) => `${r.prefix}${r.path.replace(/:\w+/g, SAMPLE)}`;
 
 /** The routes a required-but-unenrolled admin's token gets through, by a given matcher. */
@@ -94,15 +44,7 @@ const ALLOWLIST = TWO_FACTOR_SETUP_ROUTES.map(r => `${r.method} ${r.path}`).sort
 
 describe('a platform admin who must set up two-factor reaches the setup routes and nothing else', () => {
   let routes: RouteInfo[] = [];
-  beforeAll(() => {
-    // routes/superAdmin.ts refuses to load without it. Nothing here compares against it.
-    process.env.ROOT_ADMIN_EMAIL ??= 'root@walk.invalid';
-    for (const mount of mounts()) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const mod = require(path.join(SRC, mount.file));
-      routes = routes.concat(routesOf(mod.default as express.Router, mount));
-    }
-  });
+  beforeAll(() => { routes = loadRoutes(); });
 
   it('control: the walker finds the real routes, and tells guarded from unguarded', () => {
     expect(routes.filter(r => r.behindVerify).length).toBeGreaterThanOrEqual(150);

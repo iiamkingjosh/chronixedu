@@ -38,9 +38,9 @@ From the spec (Moses, 8 Oct 2026), and the answers relayed with the reviewer's a
    a teacher sees only the students of classes they teach or form-teach; the parent, student and teacher-workspace
    portals are not a platform admin's (they reach a school through a support session as one of its users).
 
-**One open question (the plan asks before Task 4):** may a registrar set a class's form teacher? Recommendation: no.
-The form teacher takes the class's attendance and comments, which is teaching work (decision 6 of the spec: teacher
-assignments are principal only). The registrar's class form then has no form-teacher field, and the API keeps the
+**Decided (8 Oct 2026): a registrar does not set a class's form teacher.** The field grants rights (the class's
+attendance and comments), so setting it is a permissions action, and granting rights is the principal's. The
+registrar's class form has no form-teacher field, and the API refuses a registrar's change to it while keeping the
 existing value when a registrar edits a class.
 
 ## Global Constraints
@@ -250,7 +250,7 @@ code, written and run first.
 | Task | Files | Changes from today (each tested first) |
 |---|---|---|
 | 3 | schools.ts, sessions.ts, users.ts | Payout save is `school.payout.manage`; Fee Settings stops naming the bursar; email change is `staff.email` |
-| 4 | roster.ts, assessmentConfig.ts, timetable.ts | Registrar gains classes and subjects (form teacher per the open question); a teacher reads only their own assignments; assessment-structure reads are principal only |
+| 4 | roster.ts, assessmentConfig.ts, timetable.ts | Registrar gains classes and subjects, never the form teacher; a teacher reads only their own assignments; assessment-structure reads are principal only |
 | 5 | students.ts | Teacher loses the student list and profile; bursar gains them read-only; `POST /promote` removed |
 | 6 | scores.ts, results.ts, principalRemarks.ts, dashboard.ts, teacherDashboard.ts, analytics.ts, classComments.ts | Pending scores: principal, and a teacher their own |
 | 7 | attendance.ts, behaviour.ts, notices.ts | Decision 7: a teacher's reads of a student's attendance and behaviour, the class summary and alerts, keep to classes they teach or form-teach |

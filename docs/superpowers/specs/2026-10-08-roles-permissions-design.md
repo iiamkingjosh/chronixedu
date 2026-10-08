@@ -112,8 +112,9 @@ notes:
 6. **Fees appear in the principal's sidebar.**
 
 Already decided: Payout Setup is viewed by the bursar and saved by the principal only ("Only view to avoid changes"),
-hence `school.payout.view` and `school.payout.manage`. Open: whether a registrar may set a class's form teacher
-(recommended: no; it is teaching work, principal only).
+hence `school.payout.view` and `school.payout.manage`. A registrar does not set a class's form teacher: the field
+grants rights (attendance and class comments), so setting it is a permissions action, and granting rights is the
+principal's (8 Oct 2026).
 
 The reviewer's condition: the decisions land in the one table the API guard and the sidebar both read, with a test
 that walks every mounted route and fails on a route outside the table, and a test that fails when a page is shown to a
