@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import pool from '../client';
 
 export interface SessionRow {
@@ -84,9 +85,10 @@ export async function insertTerm(
   schoolId: string,
   name: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  db: Pick<PoolClient, 'query'> = pool
 ): Promise<TermRow> {
-  const result = await pool.query<TermRow>(
+  const result = await db.query<TermRow>(
     `INSERT INTO terms (session_id, school_id, name, start_date, end_date)
      VALUES ($1, $2, $3, $4, $5)
      RETURNING id, session_id, school_id, name, start_date, end_date, is_current`,

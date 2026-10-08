@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { NO_ASSESSMENT_MESSAGE } from '../db/queries/assessmentConfig';
 import { logger } from '../config/logger';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
@@ -131,7 +132,7 @@ router.post(
       if (completion.no_config) {
         return res.status(400).json({
           success: false,
-          error: { code: 'NO_ASSESSMENT_CONFIG', message: 'This school has no assessment configuration set up.' },
+          error: { code: 'NO_ASSESSMENT_CONFIG', message: NO_ASSESSMENT_MESSAGE },
         });
       }
 

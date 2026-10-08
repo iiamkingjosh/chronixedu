@@ -1,5 +1,29 @@
 # Chronix Edu — Changelog
 
+## Pass mark on screen; each new term keeps the last term's assessment (2026-10-08)
+
+### For schools
+- **Settings → School-wide Grading has a Pass mark field.** The school-wide pass mark could not be set from any
+  screen before. Until a school saves one, the page says it is not set.
+- **The grading page no longer shows a scale nobody chose.** A school without a grading scale sees "Grading
+  scale: not set" and an empty form, with a button to start from a common A to F scale and change it. Nothing
+  is saved until Save Grading Scale.
+- **A new term starts with the last term's assessment structure** (CA, Exam and their weights), copied when the
+  term is added. Only the structure is copied, never scores. Change it in Assessment Config if the new term is
+  different. Adding a term now says what it was given.
+- **Assessment Config lists the terms that have no structure**, each with a Copy button, and a structure can be
+  deleted until scores are entered against its term. Once scores exist for a term, its structure can no longer
+  be added to or removed, as it already could not be edited.
+- **Analytics judges a pass against your pass mark**, per level where a level has its own. The pass-mark line on
+  the subject chart sits at your pass mark, and is not drawn until you set one. It was fixed at 40 for every
+  school.
+- **"Promoted" and "Repeat Class" print on the third term's report cards whatever the term is called.** It
+  appeared only on a term named exactly "Third Term".
+
+### For teachers
+- **A term without an assessment structure says so.** The score sheet used to show the class with no boxes to
+  fill; it now says the term isn't set up yet and that the principal sets it up in Settings → Assessment Config.
+
 ## Parents are told when results are published; messages can be answered (2026-10-08)
 
 ### For parents

@@ -5,8 +5,6 @@ import {
   PieChart, Pie, Cell, Legend, ReferenceLine,
 } from 'recharts';
 
-const PASS_MARK = 40;
-
 const ATTENDANCE_COLORS: Record<string, string> = {
   Present: '#22c55e',
   Absent: '#ef4444',
@@ -22,9 +20,11 @@ interface Props {
   subjectData: Array<{ name: string; average: number }>;
   attendanceData: Array<{ name: string; value: number }>;
   feeData: Array<{ name: string; amount: number }>;
+  /** The school-wide pass mark; no line is drawn when the school has not set one. */
+  passMark?: number | null;
 }
 
-export default function PrincipalAnalyticsCharts({ subjectData, attendanceData, feeData }: Props) {
+export default function PrincipalAnalyticsCharts({ subjectData, attendanceData, feeData, passMark }: Props) {
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -39,7 +39,9 @@ export default function PrincipalAnalyticsCharts({ subjectData, attendanceData, 
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} domain={[0, 100]} />
                 <Tooltip formatter={(value) => `${value}%`} />
-                <ReferenceLine y={PASS_MARK} stroke="#94a3b8" strokeDasharray="3 3" label={{ value: 'Pass mark', fontSize: 11, position: 'insideTopLeft' }} />
+                {typeof passMark === 'number' && (
+                  <ReferenceLine y={passMark} stroke="#94a3b8" strokeDasharray="3 3" label={{ value: `Pass mark (${passMark}%)`, fontSize: 11, position: 'insideTopLeft' }} />
+                )}
                 <Bar dataKey="average" fill="#003366" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

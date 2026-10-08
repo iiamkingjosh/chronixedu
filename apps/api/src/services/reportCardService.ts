@@ -197,14 +197,19 @@ export function gradeCss(band: GradeBand | null, scale: GradeBand[]): string {
   return tiers[Math.round((rank * (tiers.length - 1)) / (bestFirst.length - 1))];
 }
 
-// Promotion decisions are only made at the end of the academic session (Third Term).
+/** A session has at most three terms (CLAUDE.md, Academic calendar); the third ends the year. */
+export const TERMS_PER_SESSION = 3;
+
+// Promotion decisions are only made at the end of the academic session: its third term by start
+// date. It used to be the term NAMED "Third Term", so a school calling it "3rd Term" or "Term 3"
+// never saw a promotion decision on any report card (audit, 8 Oct 2026).
 export function computePromotionStatus(
-  termName: string,
+  termPosition: number,
   scoredSubjectsCount: number,
   overallAvg: number,
   promotionCutoff: number | null
 ): { promotionClass: 'promoted' | 'repeat' | 'pending' | 'not-applicable'; promotionStatus: string } {
-  if (termName.trim().toLowerCase() !== 'third term') {
+  if (termPosition < TERMS_PER_SESSION) {
     return { promotionClass: 'not-applicable', promotionStatus: 'Term Completed' };
   }
   if (scoredSubjectsCount === 0) {
@@ -377,7 +382,7 @@ export async function generateReportCard(
   const overallGradeText = studentRecord?.overall_grade ?? (overallBand ? overallBand.grade : null);
 
   const { promotionClass, promotionStatus } = computePromotionStatus(
-    studentData.term_name,
+    studentData.term_position,
     scoredSubjects.length,
     overallAvg,
     promotionCutoff

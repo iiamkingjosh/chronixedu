@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { COMMON_SCALE, initialGradingForm, parsePassMark } from '@/lib/gradingDefaults';
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -71,7 +72,6 @@ const formSchema = z.object({
 
 type FormValues = z.output<typeof formSchema>;
 type FormValuesInput = z.input<typeof formSchema>;
-type Band = z.output<typeof bandSchema>;
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
@@ -86,14 +86,6 @@ function useToast() {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-const DEFAULT_BANDS: Band[] = [
-  { grade: 'A',  min: 75,  max: 100, label: 'Distinction',    remark: 'Excellent' },
-  { grade: 'B',  min: 60,  max: 74,  label: 'Credit',         remark: 'Very Good' },
-  { grade: 'C',  min: 50,  max: 59,  label: 'Merit',          remark: 'Good'      },
-  { grade: 'D',  min: 40,  max: 49,  label: 'Pass',           remark: 'Fair'      },
-  { grade: 'F',  min: 0,   max: 39,  label: 'Fail',           remark: 'Poor'      },
-];
-
 export default function GradingScalePage() {
   const { schoolId } = useAuth();
   const { toast, show } = useToast();
@@ -101,6 +93,12 @@ export default function GradingScalePage() {
   const [saving, setSaving]             = useState(false);
   const [warnings, setWarnings]         = useState<string[]>([]);
   const [warningsConfirmed, setWarningsConfirmed] = useState(false);
+  // Nothing is shown as set until the school has saved it (doctrine 8): the form opens empty.
+  const [scaleSet, setScaleSet]         = useState(false);
+  const [passMark, setPassMark]         = useState('');
+  const [passMarkSet, setPassMarkSet]   = useState(false);
+  const [passMarkError, setPassMarkError] = useState<string | null>(null);
+  const [savingPassMark, setSavingPassMark] = useState(false);
 
   const {
     control,
@@ -110,22 +108,23 @@ export default function GradingScalePage() {
     formState: { errors },
   } = useForm<FormValuesInput, unknown, FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { bands: DEFAULT_BANDS },
+    defaultValues: { bands: [] },
   });
 
-  const { fields, append, remove, move } = useFieldArray({ control, name: 'bands' });
+  const { fields, append, remove, replace } = useFieldArray({ control, name: 'bands' });
 
   // Load existing scale
   useEffect(() => {
     if (!schoolId) return;
-    apiFetch<{ success: boolean; data: { academic_config?: { grading_scale?: Band[] } } }>(
+    apiFetch<{ success: boolean; data: { academic_config?: { grading_scale?: unknown; promotion_cutoff?: unknown } } }>(
       `/api/schools/${schoolId}`
     )
       .then(({ data }) => {
-        const scale = data.academic_config?.grading_scale;
-        if (scale && scale.length > 0) {
-          reset({ bands: scale });
-        }
+        const start = initialGradingForm(data.academic_config);
+        reset({ bands: start.bands });
+        setScaleSet(start.scaleSet);
+        setPassMark(start.passMark);
+        setPassMarkSet(start.passMarkSet);
       })
       .catch(() => show('Failed to load grading scale', 'error'))
       .finally(() => setLoading(false));
@@ -145,11 +144,33 @@ export default function GradingScalePage() {
         }
       );
       setWarnings(res.data.warnings ?? []);
+      setScaleSet(true);
       show('Grading scale saved');
     } catch (err: unknown) {
       show(err instanceof Error ? err.message : 'Save failed', 'error');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function savePassMark() {
+    if (!schoolId) return;
+    const parsed = parsePassMark(passMark);
+    if (!parsed.ok) { setPassMarkError(parsed.message); return; }
+    setPassMarkError(null);
+    setSavingPassMark(true);
+    try {
+      await apiFetch(`/api/schools/${schoolId}/academic-config`, {
+        method: 'PATCH',
+        body: JSON.stringify({ promotion_cutoff: parsed.value }),
+      });
+      setPassMark(String(parsed.value));
+      setPassMarkSet(true);
+      show('Pass mark saved');
+    } catch (err: unknown) {
+      show(err instanceof Error ? err.message : 'Save failed', 'error');
+    } finally {
+      setSavingPassMark(false);
     }
   }
 
@@ -202,6 +223,28 @@ export default function GradingScalePage() {
               I understand the implications and want to make further changes
             </span>
           </label>
+        </div>
+      )}
+
+      {!scaleSet && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
+          <p className="text-sm font-semibold text-amber-800">Grading scale: not set</p>
+          <p className="text-sm text-amber-700 mt-1">
+            This school has no grading scale yet, so results cannot be published. Add your grade bands below and
+            save them{fields.length === 0 ? ', or start from a common scale and change it to match your school' : ''}.
+          </p>
+          {fields.length === 0 && (
+            <button
+              type="button"
+              onClick={() => replace(COMMON_SCALE)}
+              className="mt-3 px-4 py-2 bg-white border border-amber-300 text-amber-900 text-sm font-medium rounded-lg hover:bg-amber-100"
+            >
+              Start from a common scale (A to F)
+            </button>
+          )}
+          {fields.length > 0 && (
+            <p className="text-xs text-amber-700 mt-2">Nothing is saved until you press Save Grading Scale.</p>
+          )}
         </div>
       )}
 
@@ -353,6 +396,43 @@ export default function GradingScalePage() {
           </button>
         </div>
       </form>
+
+      {/* Pass mark — the school-wide one. A level can have its own on Grading by Level. */}
+      <section className="mt-10 bg-white rounded-xl border border-gray-200 px-5 py-5">
+        <h2 className="text-base font-semibold text-gray-900">Pass mark</h2>
+        <p className="text-sm text-gray-500 mt-1">
+          The average a student needs to pass the term, used on report cards and class results. Grading by Level can
+          set a different pass mark for a level.
+        </p>
+        {!passMarkSet && (
+          <p className="text-sm text-amber-700 mt-3">Not set: this school has not chosen a pass mark.</p>
+        )}
+        <div className="mt-4 flex items-start gap-3">
+          <div>
+            <label htmlFor="pass-mark" className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+              Pass mark (%)
+            </label>
+            <input
+              id="pass-mark"
+              type="text"
+              inputMode="numeric"
+              value={passMark}
+              onChange={e => { setPassMark(e.target.value); setPassMarkError(null); }}
+              className="w-28 border border-gray-300 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+              placeholder="e.g. 40"
+            />
+            {passMarkError && <p className="text-xs text-red-600 mt-1">{passMarkError}</p>}
+          </div>
+          <button
+            type="button"
+            onClick={savePassMark}
+            disabled={savingPassMark}
+            className="mt-5 px-5 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 disabled:opacity-50 transition-colors"
+          >
+            {savingPassMark ? 'Saving…' : 'Save Pass Mark'}
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

@@ -2,14 +2,21 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
-import { logSettingsChange } from '../db/queries/auditLog';
+import { logSettingsChange, logAudit } from '../db/queries/auditLog';
+import pool from '../db/client';
 import {
   insertAssessmentConfig,
   listAssessmentConfigs,
   findConfigById,
   resolveAssessmentConfig,
   scoresExistForConfigTerm,
+  scoresExistForTerm,
   updateAssessmentConfig,
+  findSchoolTerm,
+  subjectBelongsToSchool,
+  copyAssessmentConfigs,
+  termHasConfig,
+  deleteAssessmentConfig,
 } from '../db/queries/assessmentConfig';
 
 const router = Router();
@@ -37,6 +44,13 @@ const patchSchema = z.object({
   class_level: z.string().max(50).optional().nullable(),
   is_default:  z.boolean().optional(),
 });
+
+const copySchema = z.object({
+  from_term_id: z.string().uuid(),
+  to_term_id:   z.string().uuid(),
+}).refine(v => v.from_term_id !== v.to_term_id, { message: 'Choose two different terms' });
+
+const LOCKED_MESSAGE = 'Scores have already been entered for this term, so its assessment structure is locked. Adding or removing a structure would change how those scores are read.';
 
 const resolveQuerySchema = z.object({
   class_id:   z.string().uuid(),
@@ -76,6 +90,7 @@ router.post(
       }
 
       const { term_id, subject_id, class_level, is_default, components } = parsed.data;
+      const schoolId = req.params.schoolId;
 
       const total = sumWeights(components);
       if (Math.round(total * 100) !== 10000) {
@@ -85,8 +100,21 @@ router.post(
         });
       }
 
+      // A structure names this school's own term and subject (doctrine 3: validate the target).
+      if (!(await findSchoolTerm(term_id, schoolId))) {
+        return res.status(404).json({ success: false, error: { code: 'TERM_NOT_FOUND', message: 'Term not found in this school' } });
+      }
+      if (subject_id && !(await subjectBelongsToSchool(subject_id, schoolId))) {
+        return res.status(404).json({ success: false, error: { code: 'SUBJECT_NOT_FOUND', message: 'Subject not found in this school' } });
+      }
+      // Same lock as editing: a new structure for a term with scores could take over a subject
+      // whose scores were entered against another structure's components.
+      if (await scoresExistForTerm(term_id, schoolId)) {
+        return res.status(423).json({ success: false, error: { code: 'CONFIG_LOCKED', message: LOCKED_MESSAGE } });
+      }
+
       const config = await insertAssessmentConfig(
-        req.params.schoolId,
+        schoolId,
         term_id,
         subject_id ?? null,
         class_level ?? null,
@@ -94,7 +122,86 @@ router.post(
         components
       );
 
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'ASSESSMENT_CONFIG_CREATED',
+        entity: 'assessment_configs',
+        entityId: config.id,
+        newValue: { config_id: config.id, term_id, subject_id: subject_id ?? null, class_level: class_level ?? null, is_default, components },
+      });
+
       return res.status(201).json({ success: true, data: config });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── POST /:schoolId/assessment-config/copy-from-term ──────────────────────────
+// Gives a term with no structure a copy of another term's. A new term is given one when it is
+// created; this is for a term that already exists without one (audit, 8 Oct 2026).
+
+router.post(
+  '/:schoolId/assessment-config/copy-from-term',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const parsed = copySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: parsed.error.flatten() } });
+      }
+      const { from_term_id, to_term_id } = parsed.data;
+      const schoolId = req.params.schoolId;
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        // The target term's row is locked, so two copies at once cannot both find it empty.
+        const target = await client.query<{ id: string }>(
+          `SELECT id FROM terms WHERE id = $1 AND school_id = $2 FOR UPDATE`, [to_term_id, schoolId]);
+        const source = await findSchoolTerm(from_term_id, schoolId, client);
+        if (!target.rows[0] || !source) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ success: false, error: { code: 'TERM_NOT_FOUND', message: 'Term not found in this school' } });
+        }
+        if (await termHasConfig(client, to_term_id, schoolId)) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            success: false,
+            error: { code: 'TARGET_HAS_CONFIG', message: 'This term already has an assessment structure. Change it instead of copying over it.' },
+          });
+        }
+        const configs = await copyAssessmentConfigs(client, schoolId, from_term_id, to_term_id);
+        if (configs === 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            success: false,
+            error: { code: 'NOTHING_TO_COPY', message: `${source.name} has no assessment structure to copy.` },
+          });
+        }
+        await logAudit({
+          ipAddress: clientIp(req) ?? null,
+          supportSession: req.supportSession,
+          schoolId,
+          userId: req.user!.user_id,
+          actionType: 'ASSESSMENT_CONFIG_COPIED',
+          entity: 'assessment_configs',
+          entityId: to_term_id,
+          newValue: { from_term_id, to_term_id, configs, reason: 'copied_by_hand' },
+        }, client);
+        await client.query('COMMIT');
+        return res.status(201).json({ success: true, data: { from_term_id, to_term_id, configs } });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
     } catch (err) {
       return next(err);
     }
@@ -212,6 +319,54 @@ router.patch(
       );
 
       return res.json({ success: true, data: updated });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+// ── DELETE /:schoolId/assessment-config/:configId ─────────────────────────────
+// Until scores exist for its term; after that it is locked, as editing is.
+
+router.delete(
+  '/:schoolId/assessment-config/:configId',
+  verifyToken,
+  requireSchoolAccess,
+  requireRole('super_admin', 'principal'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { schoolId, configId } = req.params;
+      if (!z.string().uuid().safeParse(configId).success) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Assessment configuration not found' } });
+      }
+      const config = await findConfigById(configId, schoolId);
+      if (!config) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Assessment configuration not found' } });
+      }
+      if (await scoresExistForTerm(config.term_id, schoolId)) {
+        return res.status(423).json({ success: false, error: { code: 'CONFIG_LOCKED', message: LOCKED_MESSAGE } });
+      }
+
+      const removed = await deleteAssessmentConfig(configId, schoolId);
+      if (!removed) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Assessment configuration not found' } });
+      }
+      await logAudit({
+        ipAddress: clientIp(req) ?? null,
+        supportSession: req.supportSession,
+        schoolId,
+        userId: req.user!.user_id,
+        actionType: 'ASSESSMENT_CONFIG_DELETED',
+        entity: 'assessment_configs',
+        entityId: configId,
+        oldValue: {
+          config_id: removed.id, term_id: removed.term_id, subject_id: removed.subject_id,
+          class_level: removed.class_level, is_default: removed.is_default, components: removed.components,
+        },
+        newValue: null,
+      });
+
+      return res.json({ success: true, data: { deleted: configId } });
     } catch (err) {
       return next(err);
     }

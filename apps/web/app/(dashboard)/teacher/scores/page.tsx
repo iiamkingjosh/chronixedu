@@ -48,6 +48,8 @@ interface ClassSheet {
   class_info: { id: string; name: string; level: string; stream: string | null };
   subject_info: { id: string; name: string; code: string };
   term_info: { id: string; name: string };
+  /** False when the term has no assessment structure for this class and subject. */
+  assessment_set?: boolean;
   components: ComponentInfo[];
   students: SheetStudent[];
 }
@@ -283,6 +285,16 @@ function ScoreGrid({
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
         {error || 'No score sheet available for this selection.'}
+      </div>
+    );
+  }
+
+  // A term without a structure has no columns: say why, rather than show students and no boxes.
+  if (sheet.assessment_set === false) {
+    return (
+      <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+        Assessment for {sheet.term_info.name} isn&apos;t set up yet, so there is nowhere to enter scores. Ask the
+        principal to set it up in Settings → Assessment Config.
       </div>
     );
   }

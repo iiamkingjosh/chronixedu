@@ -115,7 +115,7 @@ Monorepo, npm workspaces:
 9. **Advisory output is indistinguishable from no output once you have decided to push.**
    The corollary to doctrine 7: verifying what a guard *does* is useless if the guard only
    reports. The lint scripts therefore carry `--max-warnings` pinned to the current count
-   (api 1, web 4), so an existing warning stays tolerated and a NEW one fails at the
+   (api 1, web 3), so an existing warning stays tolerated and a NEW one fails at the
    moment of introduction rather than scrolling past in pre-commit hook output.
    Proof this was needed: a new unused-import warning was introduced and pushed in
    3abbabe with the hook reporting it the whole time.
@@ -125,7 +125,8 @@ Monorepo, npm workspaces:
    lowering the number in the same commit, and nothing here prompts that. Never raise
    them: a raise is the ratchet being removed, one notch at a time. First notch down:
    web 5 → 4 on 1 Oct 2026, when the one-term onboarding step put the unused
-   `termSchema` to use.
+   `termSchema` to use. Second: web 4 → 3 on 8 Oct 2026, when the grading page's unused
+   `move` went with its pre-filled scale.
 10. **Every sensitive write is audited** (`logAudit`, or an `audit_logs` insert in
    the same transaction for batch writes): scores (old + new), result status,
    settings, payments, support-session actions. `audit_logs` has no DELETE, except migration

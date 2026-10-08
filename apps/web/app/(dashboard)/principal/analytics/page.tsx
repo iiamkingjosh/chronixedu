@@ -26,13 +26,15 @@ interface OverallPerformance {
   students_with_scores: number;
   school_average: number | null;
   pass_rate: number | null;
+  /** Absent on snapshots taken before 8 Oct 2026. */
+  pass_mark?: number | null;
 }
 
 interface SubjectPerformanceRow {
   subject_id: string;
   subject_name: string;
   average: number;
-  pass_rate: number;
+  pass_rate: number | null;
   students_count: number;
 }
 
@@ -216,6 +218,7 @@ export default function PrincipalAnalyticsPage() {
 
       <PrincipalAnalyticsCharts
         subjectData={subjectChartData}
+        passMark={overall_performance.pass_mark ?? null}
         attendanceData={attendanceChartData}
         feeData={[
           { name: 'Expected', amount: fee_collection.total_expected },

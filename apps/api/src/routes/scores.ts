@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { NO_ASSESSMENT_MESSAGE } from '../db/queries/assessmentConfig';
 import { z } from 'zod';
 import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
@@ -107,7 +108,7 @@ router.post(
       if (!allowed) {
         return res.status(400).json({
           success: false,
-          error: { code: 'NO_ASSESSMENT_CONFIG', message: 'This school has no assessment configuration set up.' },
+          error: { code: 'NO_ASSESSMENT_CONFIG', message: NO_ASSESSMENT_MESSAGE },
         });
       }
       const comp = await getComponentInfo(component_id, schoolId);
@@ -254,7 +255,7 @@ router.post(
       if (!allowedComponentIds) {
         return res.status(400).json({
           success: false,
-          error: { code: 'NO_ASSESSMENT_CONFIG', message: 'This school has no assessment configuration set up.' },
+          error: { code: 'NO_ASSESSMENT_CONFIG', message: NO_ASSESSMENT_MESSAGE },
         });
       }
 

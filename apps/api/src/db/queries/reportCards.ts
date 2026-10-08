@@ -11,6 +11,8 @@ export interface StudentReportData {
   class_level:   string | null;
   term_id:       string;
   term_name:     string;
+  /** 1, 2 or 3: the term's place in its session by start date. Promotion is decided at 3. */
+  term_position: number;
   session_name:  string;
   next_term_resumption: string | null;
 }
@@ -54,6 +56,8 @@ export async function fetchStudentReportData(
        c.level           AS class_level,
        t.id              AS term_id,
        t.name            AS term_name,
+       (SELECT COUNT(*)::int FROM terms pt
+         WHERE pt.session_id = t.session_id AND (pt.start_date, pt.id) <= (t.start_date, t.id)) AS term_position,
        sess.name         AS session_name,
        (
          SELECT nt.start_date::text
@@ -65,7 +69,7 @@ export async function fetchStudentReportData(
        ) AS next_term_resumption
      FROM students s
      JOIN users u            ON u.id = s.user_id
-     JOIN terms t            ON t.id = $2
+     JOIN terms t            ON t.id = $2 AND t.school_id = $3
      JOIN academic_sessions sess ON sess.id = t.session_id
      JOIN student_classes sc ON sc.student_id = s.id
                             AND sc.session_id = sess.id

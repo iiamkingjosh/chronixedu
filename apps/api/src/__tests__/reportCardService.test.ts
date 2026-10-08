@@ -139,27 +139,27 @@ describe('applyReportConfig', () => {
 
 describe('computePromotionStatus', () => {
   it('is not applicable for First Term regardless of average', () => {
-    const result = computePromotionStatus('First Term', 3, 90, 40);
+    const result = computePromotionStatus(1, 3, 90, 40);
     expect(result).toEqual({ promotionClass: 'not-applicable', promotionStatus: 'Term Completed' });
   });
 
   it('is not applicable for Second Term regardless of average', () => {
-    const result = computePromotionStatus('Second Term', 3, 10, 40);
+    const result = computePromotionStatus(2, 3, 10, 40);
     expect(result).toEqual({ promotionClass: 'not-applicable', promotionStatus: 'Term Completed' });
   });
 
   it('is pending in Third Term when no subjects have been scored', () => {
-    const result = computePromotionStatus('Third Term', 0, 0, 40);
+    const result = computePromotionStatus(3, 0, 0, 40);
     expect(result).toEqual({ promotionClass: 'pending', promotionStatus: 'Pending' });
   });
 
   it('is promoted in Third Term when the overall average meets the cutoff', () => {
-    const result = computePromotionStatus('Third Term', 3, 65, 40);
+    const result = computePromotionStatus(3, 3, 65, 40);
     expect(result).toEqual({ promotionClass: 'promoted', promotionStatus: 'Promoted' });
   });
 
   it('is repeat in Third Term when the overall average is below the cutoff', () => {
-    const result = computePromotionStatus('Third Term', 3, 30, 40);
+    const result = computePromotionStatus(3, 3, 30, 40);
     expect(result).toEqual({ promotionClass: 'repeat', promotionStatus: 'Repeat Class' });
   });
 });

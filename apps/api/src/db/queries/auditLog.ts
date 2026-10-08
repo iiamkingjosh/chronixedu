@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import pool from '../client';
 import type { SupportSessionContext } from '../../middleware/auth';
 
@@ -21,7 +22,8 @@ interface AuditLogEntry {
   ipAddress: string | null;
 }
 
-export async function logAudit(entry: AuditLogEntry): Promise<void> {
+/** Writes one audit row. Pass the transaction's client to write it inside that transaction. */
+export async function logAudit(entry: AuditLogEntry, db: Pick<PoolClient, 'query'> = pool): Promise<void> {
   // When a support session is active, the action was taken by a platform admin
   // impersonating a school user. Merge attribution into new_value so the real
   // actor is always recoverable from the audit record without a schema change.
@@ -37,7 +39,7 @@ export async function logAudit(entry: AuditLogEntry): Promise<void> {
       }
     : entry.newValue;
 
-  await pool.query(
+  await db.query(
     `INSERT INTO audit_logs (school_id, user_id, action_type, entity, entity_id, old_value, new_value, ip_address)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [entry.schoolId, entry.userId, entry.actionType, entry.entity, entry.entityId ?? null, entry.oldValue ?? null, newValue ?? null, entry.ipAddress]

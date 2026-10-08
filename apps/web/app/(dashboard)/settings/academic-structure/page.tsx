@@ -15,6 +15,8 @@ interface Term {
   start_date: string;
   end_date: string;
   is_current: boolean;
+  /** Set on the answer to adding a term: where its assessment structure was copied from, if anywhere. */
+  assessment_copied_from?: { term_id: string; term_name: string; configs: number } | null;
 }
 
 interface Session {
@@ -381,7 +383,11 @@ export default function AcademicStructurePage() {
       s.id === sessionId ? { ...s, terms: [...(s.terms ?? []), term] } : s
     ));
     setAddTermFor(null);
-    show('Term added');
+    // Say what the new term starts with, so nobody assumes a structure that is not there.
+    const copied = term.assessment_copied_from;
+    show(copied
+      ? `Term added. Its assessment structure was copied from ${copied.term_name}; change it in Assessment Config if this term is different.`
+      : 'Term added. It has no assessment structure yet: set one in Assessment Config before scores are entered.');
   }
 
   function handleActivated() {

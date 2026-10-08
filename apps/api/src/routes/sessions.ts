@@ -17,6 +17,8 @@ import {
   listTermsBySession,
   updateTerm,
 } from '../db/queries/sessions';
+import { latestTermWithConfigBefore, copyAssessmentConfigs } from '../db/queries/assessmentConfig';
+import pool from '../db/client';
 
 const router = Router();
 
@@ -147,7 +149,41 @@ router.post(
         return res.status(409).json({ success: false, error: { code: 'TERM_DATE_CONFLICT', message: conflict } });
       }
 
-      const term = await insertTerm(req.params.sessionId, req.params.schoolId, name, start_date, end_date);
+      // The new term starts with the structure of the latest earlier term that has one, in the
+      // same transaction as the term, so a term never exists half-made. Teachers otherwise met an
+      // empty score sheet every new term (audit, 8 Oct 2026). The structure only: never scores.
+      // The principal can still change the copy before any score is entered.
+      const schoolId = req.params.schoolId;
+      const client = await pool.connect();
+      let term: Awaited<ReturnType<typeof insertTerm>>;
+      let copiedFrom: { term_id: string; term_name: string; configs: number } | null = null;
+      try {
+        await client.query('BEGIN');
+        term = await insertTerm(req.params.sessionId, schoolId, name, start_date, end_date, client);
+        const source = await latestTermWithConfigBefore(client, schoolId, start_date, term.id);
+        if (source) {
+          const configs = await copyAssessmentConfigs(client, schoolId, source.id, term.id);
+          copiedFrom = { term_id: source.id, term_name: source.name, configs };
+          // In the transaction: the copy and its record land together or not at all.
+          await logAudit({
+            ipAddress: clientIp(req) ?? null,
+            supportSession: req.supportSession,
+            schoolId,
+            userId: req.user!.user_id,
+            actionType: 'ASSESSMENT_CONFIG_COPIED',
+            entity: 'assessment_configs',
+            entityId: term.id,
+            newValue: { from_term_id: source.id, to_term_id: term.id, configs, reason: 'term_created' },
+          }, client);
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+
       await logAudit({
         ipAddress: clientIp(req) ?? null,
         schoolId: req.params.schoolId,
@@ -162,7 +198,7 @@ router.post(
         logger.error('audit_write_failed', { action: 'TERM_CREATED', error: err instanceof Error ? err.message : String(err) });
       });
 
-      return res.status(201).json({ success: true, data: term });
+      return res.status(201).json({ success: true, data: { ...term, assessment_copied_from: copiedFrom } });
     } catch (err) {
       return next(err);
     }

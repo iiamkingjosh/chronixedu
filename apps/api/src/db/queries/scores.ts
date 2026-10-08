@@ -352,6 +352,9 @@ export interface ClassSheetResult {
   class_info:  { id: string; name: string; level: string; stream: string | null };
   subject_info: { id: string; name: string; code: string };
   term_info:   { id: string; name: string };
+  /** False when this term has no assessment structure for the class and subject: the screen says so
+   *  instead of showing students with no columns (audit, 8 Oct 2026). */
+  assessment_set: boolean;
   components:  ComponentInfo[];
   students:    SheetStudent[];
 }
@@ -433,6 +436,7 @@ export async function getClassSheet(
     class_info:   cls,
     subject_info: subject,
     term_info:    { id: term.id, name: term.name },
+    assessment_set: config !== null,
     components,
     students,
   };

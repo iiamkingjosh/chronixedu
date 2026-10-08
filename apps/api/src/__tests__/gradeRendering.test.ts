@@ -143,22 +143,22 @@ describe('a school that never set a pass mark gets no promotion decision', () =>
   // school that never set a pass mark, 40 was Chronix's number presented as theirs.
   // 42 of 45 schools have no school_settings row, so the default was exercised.
   it('says Not determined rather than Repeat Class', () => {
-    expect(computePromotionStatus('Third Term', 5, 35, null)).toEqual({
+    expect(computePromotionStatus(3, 5, 35, null)).toEqual({
       promotionClass: 'pending',
       promotionStatus: 'Not determined',
     });
   });
 
   it('does not promote either — it declines to decide in both directions', () => {
-    expect(computePromotionStatus('Third Term', 5, 85, null).promotionStatus).toBe('Not determined');
+    expect(computePromotionStatus(3, 5, 85, null).promotionStatus).toBe('Not determined');
   });
 
   it('still decides when the school HAS set a pass mark', () => {
-    expect(computePromotionStatus('Third Term', 5, 45, 40).promotionStatus).toBe('Promoted');
-    expect(computePromotionStatus('Third Term', 5, 35, 40).promotionStatus).toBe('Repeat Class');
+    expect(computePromotionStatus(3, 5, 45, 40).promotionStatus).toBe('Promoted');
+    expect(computePromotionStatus(3, 5, 35, 40).promotionStatus).toBe('Repeat Class');
   });
 
   it('is unchanged for terms that are not the third', () => {
-    expect(computePromotionStatus('First Term', 5, 35, null).promotionStatus).toBe('Term Completed');
+    expect(computePromotionStatus(1, 5, 35, null).promotionStatus).toBe('Term Completed');
   });
 });

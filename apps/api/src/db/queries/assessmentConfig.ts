@@ -1,4 +1,11 @@
+import type { PoolClient } from 'pg';
 import pool from '../client';
+
+type Queryable = Pick<PoolClient, 'query'>;
+
+// Said of the term, not the school: a school set up last term still meets this every new term it has
+// not been given a structure for (audit, 8 Oct 2026).
+export const NO_ASSESSMENT_MESSAGE = "Assessment for this term isn't set up yet, so scores can't be entered. The principal sets it up in Settings → Assessment Config.";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -282,6 +289,103 @@ export async function updateAssessmentConfig(
 
     const config = await fetchConfigWithComponents(configId);
     return config!;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function scoresExistForTerm(termId: string, schoolId: string): Promise<boolean> {
+  const result = await pool.query<{ exists: boolean }>(
+    `SELECT EXISTS (SELECT 1 FROM scores WHERE school_id = $1 AND term_id = $2) AS exists`,
+    [schoolId, termId]
+  );
+  return result.rows[0].exists;
+}
+
+/** A term of this school, or null: a structure may name only its own school's term. */
+export async function findSchoolTerm(termId: string, schoolId: string, db: Queryable = pool): Promise<{ id: string; name: string } | null> {
+  const result = await db.query<{ id: string; name: string }>(
+    `SELECT id, name FROM terms WHERE id = $1 AND school_id = $2`,
+    [termId, schoolId]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function subjectBelongsToSchool(subjectId: string, schoolId: string): Promise<boolean> {
+  const result = await pool.query(`SELECT 1 FROM subjects WHERE id = $1 AND school_id = $2`, [subjectId, schoolId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+// ── Carry forward (audit, 8 Oct 2026) ─────────────────────────────────────────
+//
+// Configs belong to one term, and nothing carried them into the next: every new term
+// started without a structure, and teachers met a score sheet with no columns.
+
+/** The latest term of the school starting before `startDate` that has a structure to copy. */
+export async function latestTermWithConfigBefore(
+  db: Queryable,
+  schoolId: string,
+  startDate: string,
+  excludeTermId: string
+): Promise<{ id: string; name: string } | null> {
+  const result = await db.query<{ id: string; name: string }>(
+    `SELECT t.id, t.name FROM terms t
+     WHERE t.school_id = $1 AND t.id <> $3 AND t.start_date < $2
+       AND EXISTS (SELECT 1 FROM assessment_configs ac WHERE ac.term_id = t.id AND ac.school_id = $1)
+     ORDER BY t.start_date DESC
+     LIMIT 1`,
+    [schoolId, startDate, excludeTermId]
+  );
+  return result.rows[0] ?? null;
+}
+
+/**
+ * Copies every config of one term, with its components, to another term of the same school.
+ * The structure only: scores are never copied, and the source term is not touched. Runs on the
+ * caller's transaction; the deferred weight check fires at its COMMIT. Returns configs copied.
+ */
+export async function copyAssessmentConfigs(db: Queryable, schoolId: string, fromTermId: string, toTermId: string): Promise<number> {
+  const { rows: configs } = await db.query<{ id: string; subject_id: string | null; class_level: string | null; is_default: boolean }>(
+    `SELECT id, subject_id, class_level, is_default FROM assessment_configs
+     WHERE school_id = $1 AND term_id = $2
+     ORDER BY is_default DESC, class_level NULLS FIRST, subject_id NULLS FIRST, id`,
+    [schoolId, fromTermId]
+  );
+  for (const config of configs) {
+    const { rows: [copy] } = await db.query<{ id: string }>(
+      `INSERT INTO assessment_configs (school_id, term_id, subject_id, class_level, is_default)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [schoolId, toTermId, config.subject_id, config.class_level, config.is_default]
+    );
+    await db.query(
+      `INSERT INTO assessment_components (config_id, name, max_score, weight_percent, display_order)
+       SELECT $1, name, max_score, weight_percent, display_order FROM assessment_components WHERE config_id = $2`,
+      [copy.id, config.id]
+    );
+  }
+  return configs.length;
+}
+
+export async function termHasConfig(db: Queryable, termId: string, schoolId: string): Promise<boolean> {
+  const result = await db.query(`SELECT 1 FROM assessment_configs WHERE term_id = $1 AND school_id = $2 LIMIT 1`, [termId, schoolId]);
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** Deletes a config and its components; returns what it held, for the audit row. */
+export async function deleteAssessmentConfig(configId: string, schoolId: string): Promise<ConfigWithComponents | null> {
+  const existing = await fetchConfigWithComponents(configId);
+  if (!existing || existing.school_id !== schoolId) return null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Migration 047: the total check skips a config that no longer exists, so both go together.
+    await client.query(`DELETE FROM assessment_components WHERE config_id = $1`, [configId]);
+    await client.query(`DELETE FROM assessment_configs WHERE id = $1 AND school_id = $2`, [configId, schoolId]);
+    await client.query('COMMIT');
+    return existing;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

@@ -9,6 +9,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { apiFetch } from '@/lib/api';
+import { splitTermsByStructure, termLabel } from '@/lib/assessmentTerms';
 
 // ── Domain types ───────────────────────────────────────────────────────────────
 
@@ -740,6 +741,85 @@ function ResolutionPreview({
 
 // ── Main page ──────────────────────────────────────────────────────────────────
 
+function TermsWithoutStructure({
+  schoolId, terms, configs, onCopied, show,
+}: {
+  schoolId: string;
+  terms: Term[];
+  configs: AssessmentConfig[];
+  onCopied: () => void;
+  show: (msg: string, ok?: boolean) => void;
+}) {
+  const { without, sources } = splitTermsByStructure(terms, configs);
+  const [chosen, setChosen] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  if (without.length === 0) return null;
+
+  async function copy(toTermId: string) {
+    const from = chosen[toTermId];
+    if (!from) { setErrors(e => ({ ...e, [toTermId]: 'Choose the term to copy from.' })); return; }
+    setErrors(e => ({ ...e, [toTermId]: '' }));
+    setBusy(toTermId);
+    try {
+      await apiFetch(`/api/schools/${schoolId}/assessment-config/copy-from-term`, {
+        method: 'POST',
+        body: JSON.stringify({ from_term_id: from, to_term_id: toTermId }),
+      });
+      show('Assessment structure copied');
+      onCopied();
+    } catch (err: unknown) {
+      setErrors(e => ({ ...e, [toTermId]: err instanceof Error ? err.message : 'Copy failed' }));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4">
+      <h2 className="text-sm font-semibold text-amber-900">Terms without an assessment structure</h2>
+      <p className="text-sm text-amber-800 mt-1">
+        Teachers cannot enter scores for these terms until they have one. A new term is given the last term&apos;s
+        structure when it is created; copy one here, or create one with + Create New Config.
+      </p>
+      <ul className="mt-3 space-y-3">
+        {without.map(t => (
+          <li key={t.id} className="flex flex-col sm:flex-row sm:items-start gap-2">
+            <span className="text-sm font-medium text-amber-900 sm:w-56 pt-1.5">{termLabel(t)}</span>
+            {sources.length === 0 ? (
+              <span className="text-sm text-amber-800 pt-1.5">No term has a structure to copy yet.</span>
+            ) : (
+              <div>
+                <div className="flex gap-2">
+                  <select
+                    value={chosen[t.id] ?? ''}
+                    onChange={e => setChosen(c => ({ ...c, [t.id]: e.target.value }))}
+                    className="border border-amber-300 rounded-md px-2 py-1.5 text-sm bg-white"
+                    aria-label={`Copy a structure into ${termLabel(t)} from`}
+                  >
+                    <option value="">Copy from…</option>
+                    {sources.map(src => <option key={src.id} value={src.id}>{termLabel(src)}</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => copy(t.id)}
+                    disabled={busy === t.id}
+                    className="px-3 py-1.5 bg-white border border-amber-300 text-amber-900 text-sm font-medium rounded-md hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    {busy === t.id ? 'Copying…' : 'Copy'}
+                  </button>
+                </div>
+                {errors[t.id] && <p className="text-xs text-red-600 mt-1">{errors[t.id]}</p>}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function AssessmentConfigPage() {
   const { schoolId } = useAuth();
   const { toast, show } = useToast();
@@ -778,6 +858,25 @@ export default function AssessmentConfigPage() {
       .finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
+
+  function reloadConfigs() {
+    if (!schoolId) return;
+    apiFetch<{ success: boolean; data: AssessmentConfig[] }>(`/api/schools/${schoolId}/assessment-config`)
+      .then(res => setConfigs(res.data))
+      .catch(() => show('Failed to reload configurations', false));
+  }
+
+  async function deleteConfig(cfg: AssessmentConfig) {
+    if (!schoolId) return;
+    if (!window.confirm(`Delete "${scopeLabel(cfg)}" for ${cfg.term_name ?? 'this term'}? Teachers will no longer see its columns.`)) return;
+    try {
+      await apiFetch(`/api/schools/${schoolId}/assessment-config/${cfg.id}`, { method: 'DELETE' });
+      setConfigs(prev => prev.filter(c => c.id !== cfg.id));
+      show('Configuration deleted');
+    } catch (err: unknown) {
+      show(err instanceof Error ? err.message : 'Delete failed', false);
+    }
+  }
 
   function handleCreated(c: AssessmentConfig) {
     setConfigs(prev => [c, ...prev]);
@@ -833,6 +932,10 @@ export default function AssessmentConfigPage() {
         </button>
       </div>
 
+      {schoolId && (
+        <TermsWithoutStructure schoolId={schoolId} terms={terms} configs={configs} onCopied={reloadConfigs} show={show} />
+      )}
+
       {/* Config list table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {configs.length === 0 ? (
@@ -879,6 +982,14 @@ export default function AssessmentConfigPage() {
                     >
                       {cfg.is_locked ? 'View' : 'Edit'}
                     </button>
+                    {!cfg.is_locked && (
+                      <button
+                        onClick={() => deleteConfig(cfg)}
+                        className="ml-2 text-sm font-medium text-red-600 hover:text-red-800 border border-red-200 rounded-md px-3 py-1 hover:bg-red-50 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
