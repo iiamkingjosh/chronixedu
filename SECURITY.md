@@ -1,8 +1,41 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 38 — 2026-10-06  
-**Scope:** Where an online fee payment is credited  
-**Round 38 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+**Latest audit:** Round 39 — 2026-10-08  
+**Scope:** Which accounts Settings → Users creates  
+**Round 39 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+
+---
+
+## Round 39 — 2026-10-08
+
+### L-01 — Settings → Users made parent accounts and showed their password ✅ Remediated
+
+**Files:** `apps/api/src/routes/users.ts` (`POST /:schoolId/users`), `apps/web/app/(dashboard)/settings/users/page.tsx`.
+
+**Found** on 8 Oct 2026, while tracing why a student made at King High School Test (a test school) did not
+appear on the registrar's list.
+
+**The mechanism.** The account form under Settings → Users took any role but super_admin, and the route
+returned every new account's temporary password, which the screen showed. Round 37 L-01 had stopped a parent's
+password leaving the server on the two routes that create a parent, and missed this third one: doctrine 7, a
+credential rule checked against some of the paths that hand the credential out. The same form made a "student"
+that was only a login, with no student record, so no class, no place on the registrar's list and nothing a
+class could be given to.
+
+**Why Low.** Only a principal (or a platform admin) can reach the form, and the password is a temporary one
+the parent replaces at first sign-in. The harm is a parent's password on a staff screen, which Round 37 decided
+against, and accounts that look like students and parents but are linked to nothing.
+
+**Fix.** The form and the route create staff only: teacher, registrar, bursar or principal, the list staff bulk
+import already used (`STAFF_ROLES`). A student or parent is refused with a 400 naming where they are added
+(Students → Register Student; a parent at registration or from the child's profile), before any login is
+created. `usersCreatableRoles.test.ts` keeps the web form's list equal to the API's.
+
+**Accounts made before the fix are left as they are.** Production holds one student login and one parent login
+made this way, both at King High School Test.
+
+**Tests:** `staffOnlyAccounts.db.test.ts` (each staff role still created; student and parent refused, no
+login made). With the old role list restored, it fails.
 
 ---
 

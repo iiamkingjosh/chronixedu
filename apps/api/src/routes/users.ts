@@ -34,8 +34,12 @@ const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 const ROLES = ['super_admin', 'principal', 'teacher', 'parent', 'student', 'registrar', 'bursar'] as const;
-// super_admin is intentionally excluded — creating platform admins must go through /auth/create-user
-const CREATABLE_ROLES = ['principal', 'teacher', 'parent', 'student', 'registrar', 'bursar'] as const;
+// Staff only, the same list staff bulk import takes (8 Oct 2026). A student made here was a login with
+// no student record, so no class and no place on the registrar's list; a parent was a login linked to no
+// child, and this route returned its password, which Round 37 had stopped everywhere else. Students are
+// registered under Students; a parent is added at registration or from the child's profile.
+// super_admin is excluded too: platform admins are created through /super-admin/admins.
+const CREATABLE_ROLES = STAFF_ROLES;
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 
@@ -50,7 +54,9 @@ const createUserSchema = z.object({
   email:        z.string().trim().toLowerCase().email('Enter a valid email address'),
   first_name:   z.string().min(1).max(255),
   last_name:    z.string().min(1).max(255),
-  role:         z.enum(CREATABLE_ROLES),
+  role:         z.enum(CREATABLE_ROLES, {
+    message: 'Choose a staff role: principal, teacher, registrar or bursar. Students are added under Students → Register Student, and a parent from their child\'s profile.',
+  }),
   title:        z.string().max(20).optional().nullable(),
   phone:        z.string().max(50).optional().nullable(),
   teacher_mode: z.enum(['class', 'subject']).optional(),

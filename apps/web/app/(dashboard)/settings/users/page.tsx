@@ -38,6 +38,11 @@ interface AssignmentDetail {
 
 const ROLES: Role[] = ['super_admin', 'principal', 'teacher', 'parent', 'student', 'registrar', 'bursar'];
 
+/** The accounts this page creates: staff only, the API's STAFF_ROLES (usersCreatableRoles.test.ts keeps
+ *  them equal). Students are registered under Students; a parent is added from the child's profile. */
+type StaffRole = 'principal' | 'teacher' | 'registrar' | 'bursar';
+const STAFF_ROLES: StaffRole[] = ['teacher', 'registrar', 'bursar', 'principal'];
+
 const ROLE_LABELS: Record<Role, string> = {
   super_admin: 'Super Admin',
   principal:   'Principal',
@@ -78,7 +83,7 @@ const createSchema = z.object({
   last_name:    z.string().min(1, 'Last name is required').max(255),
   title:        z.string().max(20).optional().or(z.literal('')),
   phone:        z.string().max(50).optional().or(z.literal('')),
-  role:         z.enum(['super_admin', 'principal', 'teacher', 'parent', 'student', 'registrar', 'bursar'], { error: 'Select a role' }),
+  role:         z.enum(['teacher', 'registrar', 'bursar', 'principal'], { error: 'Select a role' }),
   teacher_mode: z.enum(['class', 'subject']).optional(),
 }).superRefine((data, ctx) => {
   if (data.role === 'teacher' && !data.teacher_mode) {
@@ -220,8 +225,12 @@ function CreateUserModal({ schoolId, onClose, onCreated }: {
         <Field label="Role" error={errors.role?.message}>
           <select {...register('role')} className={inputClass} defaultValue="">
             <option value="" disabled>Select a role…</option>
-            {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            {STAFF_ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
           </select>
+          <p className="mt-1 text-xs text-gray-500">
+            Staff only. Students are added under Students → Register Student, and a parent from their
+            child&apos;s profile, so each is linked to the right records.
+          </p>
         </Field>
 
         {role === 'teacher' && (
@@ -584,7 +593,10 @@ export default function UsersPage() {
           </button>
         </div>
       </div>
-      <p className="text-sm text-gray-500 mb-6">Manage staff, students, and parent accounts for this school.</p>
+      <p className="text-sm text-gray-500 mb-6">
+        Create and manage staff accounts. Every account in the school is listed here; students and parents are
+        added under Students.
+      </p>
 
       {credentials && (
         <div className="mb-6 bg-green-50 border border-green-200 rounded-xl px-5 py-4 flex items-start justify-between gap-4">
