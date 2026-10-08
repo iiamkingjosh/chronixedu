@@ -22,8 +22,11 @@ details again, and the settings below are made again in the new account.
 
   which still answers. **While the dashboard still holds it, Chronix High School must not be deleted:** its
   address would answer 404, and every school's online payments would stop being credited by webhook, with
-  nothing reporting it (a payment would land only if the payer's browser came back). Change the URL once the
-  code with the new address is live, then send a test event from the dashboard and see it answered 200. Leave the **Callback URL** as it is; Chronix Edu
+  nothing reporting it (a payment would land only if the payer's browser came back). **Change the URL only once
+  the code with the new address is deployed** (it is in `83ac65d`; before that the new address answers 401).
+  Then check it: the dashboard has no "send a test" button, so in Developers → Webhooks, Live mode, open a recent
+  delivered event and choose Retry. It goes to the new address and must answer 200. A retried payment is never
+  credited twice (`feeCheckouts.db.test.ts`: delivered again, it is credited once). Leave the **Callback URL** as it is; Chronix Edu
   sets the return address on every payment itself.
 - **Disputes Email** (Settings → Contact): an inbox someone reads every working day. Chargebacks have a
   16-hour deadline (below).
