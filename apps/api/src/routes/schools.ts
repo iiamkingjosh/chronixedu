@@ -6,6 +6,7 @@ import { verifyToken, requireRole, type SupportSessionContext } from '../middlew
 import { clientIp } from '../middleware/clientIp';
 import { requireFeature } from '../middleware/requireFeature';
 import { redis, bestEffort } from '../middleware/rateLimit';
+import { readLock, sendLockedOut } from '../services/loginLockout';
 import {
   insertSchool,
   insertSchoolSettings,
@@ -1203,20 +1204,11 @@ router.put(
       const stepUpIpKey = `payout_step_up_attempts_ip:${stepUpIp}`;
       // Best-effort, like the login lockout (SECURITY.md Round 19): a Redis failure is
       // logged as step_up_lockout_unavailable and the password check decides alone.
-      if (redis) {
-        const r = redis;
-        const counts = await bestEffort('step_up_lockout_unavailable', () => Promise.all([r.get(stepUpEmailKey), r.get(stepUpIpKey)]));
-        const [emailCount, ipCount] = counts ?? [null, null];
-        if (
-          (emailCount !== null && parseInt(emailCount, 10) >= MAX_STEP_UP_ATTEMPTS) ||
-          (ipCount !== null && parseInt(ipCount, 10) >= MAX_STEP_UP_IP_ATTEMPTS)
-        ) {
-          return res.status(429).json({
-            success: false,
-            error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
-          });
-        }
-      }
+      const stepUpLock = await readLock(
+        [{ key: stepUpEmailKey, max: MAX_STEP_UP_ATTEMPTS }, { key: stepUpIpKey, max: MAX_STEP_UP_IP_ATTEMPTS }],
+        'step_up_lockout_unavailable'
+      );
+      if (stepUpLock.locked) return sendLockedOut(res, stepUpLock.retryAfterSeconds);
 
       // Checked through Supabase with the session revoked at once (services/passwordCheck.ts, Round 35).
       if (!(await passwordMatches(callerEmail, current_password))) {

@@ -1,5 +1,14 @@
 # Chronix Edu — Changelog
 
+## A locked sign-in counts down to when it lifts (2026-10-08)
+
+### For everyone signing in
+- **After too many wrong passwords, the sign-in page shows a live countdown**: "You can try again in 9:12",
+  and the Sign in button comes back by itself at zero. The two-factor step does the same.
+- **The time is the real one.** The lock runs from the first wrong attempt, so the old "Try again in 15
+  minutes" was usually too long. Every place that locks (sign-in, the two-factor step and screens, the payout
+  password check) now names the minutes actually left.
+
 ## A student without a class can be given one; Settings → Users is for staff (2026-10-08)
 
 ### For schools

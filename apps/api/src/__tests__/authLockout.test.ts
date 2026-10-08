@@ -41,19 +41,28 @@ jest.mock('../db/queries/users');
 jest.mock('../db/queries/auditLog');
 
 /**
- * The four ioredis commands the lockout uses, over a plain map. TTLs are not modelled.
- * `broken` makes every command throw, as a dead Redis does once its command timeout fires.
+ * The ioredis commands the lockout uses, over plain maps. A key's remaining life is whatever `expire`
+ * last set, and a test moves time on by setting it lower.
+ * `broken` makes every command throw, as a dead Redis does once its command timeout fires;
+ * `ttlBroken` makes only the expiry read throw.
  */
 const store = new Map<string, number>();
+const ttls = new Map<string, number>();
 let broken = false;
+let ttlBroken = false;
 const down = () => { if (broken) throw new Error('fake redis: connection refused'); };
 jest.mock('../middleware/rateLimit', () => ({
   ...jest.requireActual('../middleware/rateLimit'),
   redis: {
     get: async (k: string) => { down(); return store.has(k) ? String(store.get(k)) : null; },
     incr: async (k: string) => { down(); const n = (store.get(k) ?? 0) + 1; store.set(k, n); return n; },
-    expire: async () => { down(); return 1; },
-    del: async (k: string) => { down(); store.delete(k); return 1; },
+    expire: async (k: string, seconds: number) => { down(); ttls.set(k, seconds); return 1; },
+    ttl: async (k: string) => {
+      down();
+      if (ttlBroken) throw new Error('fake redis: ttl timed out');
+      return store.has(k) ? (ttls.get(k) ?? -1) : -2;
+    },
+    del: async (k: string) => { down(); store.delete(k); ttls.delete(k); return 1; },
   },
 }));
 
@@ -69,7 +78,7 @@ const attempt = (ip: string, password: string) =>
   request(app).post('/api/auth/login').set('X-Forwarded-For', ip)
     .send({ email: 'Target@School.ng', password });
 
-beforeEach(() => { store.clear(); broken = false; mockSignIn.mockReset(); jest.clearAllMocks(); });
+beforeEach(() => { store.clear(); ttls.clear(); broken = false; ttlBroken = false; mockSignIn.mockReset(); jest.clearAllMocks(); });
 
 describe('per-email lockout', () => {
   it('five wrong passwords from five addresses lock the account; the right password from a sixth is refused unchecked', async () => {
@@ -102,6 +111,61 @@ describe('per-email lockout', () => {
     await attempt('203.0.113.5', 'correct-password');
     expect(mockSignIn).toHaveBeenCalledTimes(5); // the fifth call reached Supabase
     expect(mockSignIn.mock.calls[4][0]).toEqual({ email: 'target@school.ng', password: 'correct-password' }); // zod lowercases it
+  });
+});
+
+describe('a lock says how long is left (8 Oct 2026)', () => {
+  // The window runs from the FIRST failure, so "Try again in 15 minutes" was wrong after the first
+  // second. The refusal now carries the counter's own remaining life: in the message, in
+  // retry_after_seconds for the sign-in page's countdown, and in Retry-After.
+  it('the locking attempt, and every one after it, carries the time the lock has left', async () => {
+    mockSignIn.mockResolvedValue({ data: null, error: { message: 'Invalid login credentials' } });
+    for (let i = 1; i <= 4; i++) await attempt(`203.0.113.${i}`, 'wrong');
+    const fifth = await attempt('203.0.113.5', 'wrong');
+    expect(fifth.status).toBe(429);
+    expect(fifth.headers['retry-after']).toBe('900');
+    expect(fifth.body.error).toEqual({ code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.', retry_after_seconds: 900 });
+
+    ttls.set('login_attempts:target@school.ng', 541); // nine minutes and a second later
+    const later = await attempt('203.0.113.6', 'right');
+    expect(later.headers['retry-after']).toBe('541');
+    expect(later.body.error).toEqual({ code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 10 minutes.', retry_after_seconds: 541 });
+
+    ttls.set('login_attempts:target@school.ng', 59);
+    expect((await attempt('203.0.113.6', 'right')).body.error.message).toBe('Too many failed attempts. Try again in 1 minute.');
+  });
+
+  it('a network locked by 20 failures says when the network\'s lock lifts', async () => {
+    mockSignIn.mockResolvedValue({ data: null, error: { message: 'Invalid login credentials' } });
+    for (let i = 1; i <= 20; i++) {
+      await request(app).post('/api/auth/login').set('X-Real-IP', '198.51.100.7').send({ email: `person${i}@school.ng`, password: 'wrong' });
+    }
+    ttls.set('login_attempts_ip:198.51.100.7', 300);
+    const res = await request(app).post('/api/auth/login').set('X-Real-IP', '198.51.100.7').send({ email: 'someone.else@school.ng', password: 'right' });
+    expect(res.status).toBe(429);
+    expect(res.body.error.retry_after_seconds).toBe(300);
+  });
+
+  it('locked both ways, it waits for the later of the two, since both must lift', async () => {
+    store.set('login_attempts:target@school.ng', 5);
+    ttls.set('login_attempts:target@school.ng', 120);
+    store.set('login_attempts_ip:203.0.113.9', 20);
+    ttls.set('login_attempts_ip:203.0.113.9', 600);
+    const res = await attempt('203.0.113.9', 'right');
+    expect(res.status).toBe(429);
+    expect(res.body.error.retry_after_seconds).toBe(600);
+    expect(mockSignIn).not.toHaveBeenCalled();
+  });
+
+  it('when the time left cannot be read, the account stays locked and the message says "within"', async () => {
+    mockSignIn.mockResolvedValue({ data: null, error: { message: 'Invalid login credentials' } });
+    for (let i = 1; i <= 5; i++) await attempt(`203.0.113.${i}`, 'wrong');
+    ttlBroken = true;
+    const res = await attempt('203.0.113.6', 'right');
+    expect(res.status).toBe(429);
+    expect(res.headers['retry-after']).toBeUndefined();
+    expect(res.body.error).toEqual({ code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again within 15 minutes.', retry_after_seconds: null });
+    expect(mockSignIn).toHaveBeenCalledTimes(5); // still not checked
   });
 });
 

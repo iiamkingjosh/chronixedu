@@ -11,6 +11,10 @@ jest.mock('../services/passwordCheck', () => ({
   passwordMatches: jest.fn(async (_email: string, password: string) => password === 'the-right-password'),
 }));
 jest.mock('../services/loginLockout', () => ({
+  // The refusal's shape is real; only the counters are stood in for.
+  lockedOutError: jest.requireActual('../services/loginLockout').lockedOutError,
+  sendLockedOut: jest.requireActual('../services/loginLockout').sendLockedOut,
+  lockoutState: jest.fn(async () => ({ locked: false, retryAfterSeconds: null })),
   isLockedOut: jest.fn(async () => false),
   recordFailedAttempt: jest.fn(async () => ({ counted: true, locked: false })),
   clearFailedAttempts: jest.fn(async () => undefined),

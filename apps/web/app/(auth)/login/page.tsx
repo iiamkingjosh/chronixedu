@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { useAuth } from '@/app/providers';
 import { getDefaultDashboardPath } from '@/lib/auth';
 import { loginNoticeFor } from '@/lib/refusalRedirect';
+import { formatCountdown, retryAfterFrom, secondsUntil } from '@/lib/countdown';
 import TwoFactorSignIn from '@/components/TwoFactorSignIn';
 
 if (process.env.NODE_ENV === 'production' && !process.env.NEXT_PUBLIC_API_URL) {
@@ -59,6 +60,22 @@ export default function LoginPage() {
   // A platform admin with two-factor on gets a challenge, not a token, for the password alone
   // (2FA commit 3). Held in memory only: a refresh starts again at the password.
   const [challenge, setChallenge] = useState<string | null>(null);
+  // Too many wrong passwords: the moment the lock lifts, from the API's retry_after_seconds, and a clock
+  // that ticks towards it. The button comes back by itself at zero.
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const lockSecondsLeft = lockedUntil === null ? 0 : secondsUntil(lockedUntil, now);
+  const locked = lockSecondsLeft > 0;
+
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [lockedUntil]);
+
+  useEffect(() => {
+    if (lockedUntil !== null && lockSecondsLeft === 0) setLockedUntil(null);
+  }, [lockedUntil, lockSecondsLeft]);
 
   useEffect(() => {
     // The reason a session ended arrives in the address (lib/refusalRedirect.ts), not in a 401 body.
@@ -90,6 +107,12 @@ export default function LoginPage() {
       });
       const json = await res.json();
       if (!res.ok) {
+        const wait = json.error?.code === 'ACCOUNT_LOCKED' ? retryAfterFrom(json) : null;
+        if (wait !== null) {
+          setNow(Date.now());
+          setLockedUntil(Date.now() + wait * 1000);
+          return;
+        }
         const message =
           typeof json.error === 'string' ? json.error : json.error?.message ?? 'Login failed';
         throw new Error(message);
@@ -270,6 +293,19 @@ export default function LoginPage() {
               </div>
             )}
 
+            {locked && (
+              <div role="status" aria-live="polite" className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+                <svg className="mt-0.5 shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+                <span>
+                  Too many failed attempts. You can try again in{' '}
+                  <span className="font-semibold tabular-nums">{formatCountdown(lockSecondsLeft)}</span>.
+                  {' '}Not sure of the password? Use Forgot password once the time is up.
+                </span>
+              </div>
+            )}
+
             {submitError && (
               <div className="mb-5 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
                 <svg className="mt-0.5 shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -369,7 +405,7 @@ export default function LoginPage() {
               {/* Submit */}
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || locked}
                 className="w-full rounded-xl font-bold text-white py-3.5 text-[15px] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 style={{
                   background: 'linear-gradient(135deg, #FF761B 0%, #ff9248 100%)',
@@ -384,7 +420,7 @@ export default function LoginPage() {
                     </svg>
                     Signing in…
                   </span>
-                ) : 'Sign in'}
+                ) : locked ? `Try again in ${formatCountdown(lockSecondsLeft)}` : 'Sign in'}
               </button>
             </form>
             )}

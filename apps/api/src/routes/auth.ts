@@ -12,7 +12,7 @@ import { logAudit } from '../db/queries/auditLog';
 import { redis, bestEffort } from '../middleware/rateLimit';
 import { clientIp } from '../middleware/clientIp';
 import { logger } from '../config/logger';
-import { isLockedOut, recordFailedAttempt, clearFailedAttempts } from '../services/loginLockout';
+import { lockoutState, recordFailedAttempt, clearFailedAttempts, sendLockedOut } from '../services/loginLockout';
 import { signInAndRevoke } from '../services/passwordCheck';
 import { judgeResetToken } from '../services/resetLink';
 import { resetPasswordRedirect } from '../config/appUrls';
@@ -208,12 +208,8 @@ router.post('/login', async (req, res, next) => {
     // Redis is DOWN: each call is best-effort (SECURITY.md Round 19, decided: fail open). A Redis
     // failure is logged as login_lockout_unavailable and the login proceeds on the password check
     // alone; it is never turned into a 500, and never into a lockout.
-    if (await isLockedOut(email, ip)) {
-      return res.status(429).json({
-        success: false,
-        error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
-      });
-    }
+    const lock = await lockoutState(email, ip);
+    if (lock.locked) return sendLockedOut(res, lock.retryAfterSeconds);
 
     // Checked through Supabase, and the Supabase session that creates is revoked at once
     // (services/passwordCheck.ts, SECURITY.md Round 35): the app runs on its own JWT, and every
@@ -221,13 +217,8 @@ router.post('/login', async (req, res, next) => {
     const userId = await signInAndRevoke(email, password);
 
     if (!userId) {
-      const { counted, locked } = await recordFailedAttempt(email, ip);
-      if (locked) {
-        return res.status(429).json({
-          success: false,
-          error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' },
-        });
-      }
+      const { counted, locked, retryAfterSeconds } = await recordFailedAttempt(email, ip);
+      if (locked) return sendLockedOut(res, retryAfterSeconds);
       return res.status(401).json({
         success: false,
         error: { code: 'INVALID_CREDENTIALS', message: counted ? 'Incorrect email or password' : 'Invalid credentials.' },
@@ -332,9 +323,8 @@ router.post('/login/verify', async (req: Request, res: Response, next: NextFunct
       if (!local || !local.is_active || local.role !== 'super_admin') {
         return signInAgain(res, 'SIGN_IN_EXPIRED', 'This sign-in has expired. Enter your password again.');
       }
-      if (await isLockedOut(local.email, ip)) {
-        return res.status(429).json({ success: false, error: { code: 'ACCOUNT_LOCKED', message: 'Too many failed attempts. Try again in 15 minutes.' } });
-      }
+      const lock = await lockoutState(local.email, ip);
+      if (lock.locked) return sendLockedOut(res, lock.retryAfterSeconds);
       const state = await readTotpState(local.id, pg);
       if (!state?.activatedAt) {
         // Two-factor was switched off (break-glass) since the password step.

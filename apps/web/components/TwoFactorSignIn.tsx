@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import type { AuthUser } from '@/app/providers';
+import { formatCountdown, retryAfterFrom, secondsUntil } from '@/lib/countdown';
 
 /**
  * The second step of a platform admin's sign-in (2FA commit 3): the password was right, and the API
@@ -33,6 +34,19 @@ export default function TwoFactorSignIn({ apiBase, challenge, onSignedIn, onRest
   const [mode, setMode] = useState<'code' | 'recovery'>('code');
   const [error, setError] = useState<string | null>(null);
   const [recovered, setRecovered] = useState<Verified | null>(null);
+  // Too many wrong attempts on this account: count down to the moment the lock lifts (lib/countdown.ts).
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const lockSecondsLeft = lockedUntil === null ? 0 : secondsUntil(lockedUntil, now);
+  const locked = lockSecondsLeft > 0;
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [lockedUntil]);
+  useEffect(() => {
+    if (lockedUntil !== null && lockSecondsLeft === 0) setLockedUntil(null);
+  }, [lockedUntil, lockSecondsLeft]);
   const codeForm = useForm<z.infer<typeof codeSchema>>({ resolver: zodResolver(codeSchema) });
   const recoveryForm = useForm<z.infer<typeof recoverySchema>>({ resolver: zodResolver(recoverySchema) });
 
@@ -45,6 +59,12 @@ export default function TwoFactorSignIn({ apiBase, challenge, onSignedIn, onRest
     });
     const json = await res.json();
     if (!res.ok) {
+      const wait = json.error?.code === 'ACCOUNT_LOCKED' ? retryAfterFrom(json) : null;
+      if (wait !== null) {
+        setNow(Date.now());
+        setLockedUntil(Date.now() + wait * 1000);
+        return;
+      }
       const message: string = typeof json.error?.message === 'string' ? json.error.message : 'That did not work. Try again.';
       if (json.error?.code === 'SIGN_IN_EXPIRED') onRestart(message);
       else setError(message);
@@ -83,6 +103,13 @@ export default function TwoFactorSignIn({ apiBase, challenge, onSignedIn, onRest
         </p>
       </div>
 
+      {locked && (
+        <div role="status" aria-live="polite" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+          Too many failed attempts. You can try again in{' '}
+          <span className="font-semibold tabular-nums">{formatCountdown(lockSecondsLeft)}</span>. If this sign-in has
+          expired by then, enter your password again.
+        </div>
+      )}
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>}
 
       {mode === 'code' ? (
@@ -90,10 +117,10 @@ export default function TwoFactorSignIn({ apiBase, challenge, onSignedIn, onRest
           <input {...codeForm.register('code')} inputMode="numeric" autoComplete="one-time-code" autoFocus placeholder="123456"
             className="w-full rounded-xl border border-[#e0e6ef] px-4 py-3 text-center text-lg tracking-[0.4em] outline-none focus:border-[#003366]" />
           {codeForm.formState.errors.code && <p className="text-xs text-red-600">{codeForm.formState.errors.code.message}</p>}
-          <button type="submit" disabled={codeForm.formState.isSubmitting}
+          <button type="submit" disabled={codeForm.formState.isSubmitting || locked}
             className="w-full rounded-xl py-3 text-[15px] font-bold text-white disabled:opacity-60"
             style={{ background: 'linear-gradient(135deg, #FF761B 0%, #ff9248 100%)' }}>
-            {codeForm.formState.isSubmitting ? 'Checking…' : 'Verify'}
+            {codeForm.formState.isSubmitting ? 'Checking…' : locked ? `Try again in ${formatCountdown(lockSecondsLeft)}` : 'Verify'}
           </button>
         </form>
       ) : (
@@ -101,10 +128,10 @@ export default function TwoFactorSignIn({ apiBase, challenge, onSignedIn, onRest
           <input {...recoveryForm.register('recovery_code')} autoComplete="off" autoFocus placeholder="ABCD-EFGH-JKMN-PQRS"
             className="w-full rounded-xl border border-[#e0e6ef] px-4 py-3 text-center font-mono text-sm uppercase outline-none focus:border-[#003366]" />
           {recoveryForm.formState.errors.recovery_code && <p className="text-xs text-red-600">{recoveryForm.formState.errors.recovery_code.message}</p>}
-          <button type="submit" disabled={recoveryForm.formState.isSubmitting}
+          <button type="submit" disabled={recoveryForm.formState.isSubmitting || locked}
             className="w-full rounded-xl py-3 text-[15px] font-bold text-white disabled:opacity-60"
             style={{ background: 'linear-gradient(135deg, #FF761B 0%, #ff9248 100%)' }}>
-            {recoveryForm.formState.isSubmitting ? 'Checking…' : 'Use recovery code'}
+            {recoveryForm.formState.isSubmitting ? 'Checking…' : locked ? `Try again in ${formatCountdown(lockSecondsLeft)}` : 'Use recovery code'}
           </button>
         </form>
       )}

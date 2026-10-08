@@ -5,7 +5,7 @@ import { verifyToken, requireRole } from '../middleware/auth';
 import { clientIp } from '../middleware/clientIp';
 import { logger } from '../config/logger';
 import { passwordMatches } from '../services/passwordCheck';
-import { isLockedOut, recordFailedAttempt } from '../services/loginLockout';
+import { lockoutState, recordFailedAttempt, sendLockedOut } from '../services/loginLockout';
 import { generateTotpSecret, otpauthUri, base32Encode, matchTotpStep, totpStep } from '../services/totp';
 import { generateRecoveryCodes } from '../services/recoveryCodes';
 import { terminateActiveSupportSessions } from '../services/supportSessions';
@@ -134,10 +134,11 @@ router.post('/enrolment', ...guard, async (req: Request, res: Response, next: Ne
     const state = await readTotpState(userId);
     if (state?.activatedAt) return refuse(res, 409, 'TWO_FACTOR_ALREADY_ON', 'Two-factor sign-in is already on for this account.');
 
-    if (await isLockedOut(email, ip)) return refuse(res, 429, 'ACCOUNT_LOCKED', 'Too many failed attempts. Try again in 15 minutes.');
+    const lock = await lockoutState(email, ip);
+    if (lock.locked) return sendLockedOut(res, lock.retryAfterSeconds);
     if (!(await passwordMatches(email, parsed.data.password))) {
-      const { locked } = await recordFailedAttempt(email, ip);
-      if (locked) return refuse(res, 429, 'ACCOUNT_LOCKED', 'Too many failed attempts. Try again in 15 minutes.');
+      const { locked, retryAfterSeconds } = await recordFailedAttempt(email, ip);
+      if (locked) return sendLockedOut(res, retryAfterSeconds);
       return refuse(res, 401, 'INVALID_PASSWORD', 'That password is not right.');
     }
 
@@ -249,10 +250,11 @@ router.post('/device-move', ...guard, async (req: Request, res: Response, next: 
     if (!state?.activatedAt) return refuse(res, 409, 'TWO_FACTOR_NOT_ON', 'Two-factor sign-in is not on for this account.');
     if (isLocked(state)) return refuse(res, 423, 'TWO_FACTOR_LOCKED', `Too many wrong codes. Try again in ${TOTP_LOCK_MINUTES} minutes.`);
 
-    if (await isLockedOut(email, ip)) return refuse(res, 429, 'ACCOUNT_LOCKED', 'Too many failed attempts. Try again in 15 minutes.');
+    const lock = await lockoutState(email, ip);
+    if (lock.locked) return sendLockedOut(res, lock.retryAfterSeconds);
     if (!(await passwordMatches(email, parsed.data.password))) {
-      const { locked } = await recordFailedAttempt(email, ip);
-      if (locked) return refuse(res, 429, 'ACCOUNT_LOCKED', 'Too many failed attempts. Try again in 15 minutes.');
+      const { locked, retryAfterSeconds } = await recordFailedAttempt(email, ip);
+      if (locked) return sendLockedOut(res, retryAfterSeconds);
       return refuse(res, 401, 'INVALID_PASSWORD', 'That password is not right.');
     }
 
@@ -367,10 +369,11 @@ router.post('/disable', ...guard, async (req: Request, res: Response, next: Next
     if (await isTwoFactorRequired(userId)) return required();
     if (isLocked(state)) return refuse(res, 423, 'TWO_FACTOR_LOCKED', `Too many wrong codes. Try again in ${TOTP_LOCK_MINUTES} minutes.`);
 
-    if (await isLockedOut(email, ip)) return refuse(res, 429, 'ACCOUNT_LOCKED', 'Too many failed attempts. Try again in 15 minutes.');
+    const lock = await lockoutState(email, ip);
+    if (lock.locked) return sendLockedOut(res, lock.retryAfterSeconds);
     if (!(await passwordMatches(email, parsed.data.password))) {
-      const { locked } = await recordFailedAttempt(email, ip);
-      if (locked) return refuse(res, 429, 'ACCOUNT_LOCKED', 'Too many failed attempts. Try again in 15 minutes.');
+      const { locked, retryAfterSeconds } = await recordFailedAttempt(email, ip);
+      if (locked) return sendLockedOut(res, retryAfterSeconds);
       return refuse(res, 401, 'INVALID_PASSWORD', 'That password is not right.');
     }
 

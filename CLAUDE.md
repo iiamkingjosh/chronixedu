@@ -284,6 +284,13 @@ Monorepo, npm workspaces:
     (`auditOwnPasswordChange`). Neither recorded an admin's before.
   - **A wrong current password answers 400, never 401:** `apiFetch` treats a 401 as a lapsed sign-in
     and signs the person out.
+- **A lockout refusal says how long is left** (8 Oct 2026). `sendLockedOut` (`services/loginLockout.ts`) is
+  the one 429 `ACCOUNT_LOCKED` answer: the minutes in the message, `retry_after_seconds` and `Retry-After`,
+  read from the counters' own expiry (`readLock`; the longer one when the email and the address are both
+  locked, because both must lift). The lock is decided by the counts alone: if the expiry cannot be read,
+  the account stays locked and the message says "within 15 minutes". The sign-in page and the two-factor
+  step count down from it (`lib/countdown.ts`). The payout password check uses the same reader on its own
+  counters. Never type a fixed "15 minutes" again: the window runs from the first failure.
 - **`POST /forgot-password` answers the same 200 and body for every well-formed request, before any
   email is attempted** (`sendResetEmail` runs after the response; a failure is logged by user id).
   Never await the send in the handler, or vary the answer on its result: the answer or its timing
