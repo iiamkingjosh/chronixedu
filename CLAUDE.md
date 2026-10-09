@@ -903,6 +903,10 @@ Monorepo, npm workspaces:
   (migration 046). **MRR divides termly by 4** (three terms ÷ twelve months) in `getPlatformRevenue`,
   which is now the only MRR arithmetic — the subscriptions summary and the analytics overview each
   had their own copy, and both counted termly revenue as nothing.
+- **Billing stays termly** (Moses, 9 Oct 2026). Never switch a school to `annual` or `monthly` as it stands:
+  the amount is students × the per-student rate whatever the cycle (045's trigger), so an annual
+  subscription would bill ₦800 per student per YEAR, a third of the termly year. A cycle other than termly
+  needs its own price decided and the trigger changed first.
 - **A termly subscription's next billing date is derived on read**: `next_term_start(school)`, the
   school's next term start after today (Lagos). Never stored — term dates are editable. The API
   returns it with `next_billing_basis` (`next_term | not_yet_known | not_billed | stored | not_set`),
