@@ -77,7 +77,19 @@
       "SELECT",
       "UPDATE"
     ],
+    "fee_checkouts": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
     "fee_invoices": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "fee_refunds": [
       "DELETE",
       "INSERT",
       "SELECT",
@@ -126,6 +138,12 @@
       "UPDATE"
     ],
     "parent_students": [
+      "DELETE",
+      "INSERT",
+      "SELECT",
+      "UPDATE"
+    ],
+    "password_history": [
       "DELETE",
       "INSERT",
       "SELECT",
@@ -305,6 +323,7 @@
     "INSERT platform_audit_logs.target_school_id",
     "INSERT platform_audit_logs.target_user_id",
     "SELECT schools.id",
+    "SELECT schools.is_active",
     "SELECT schools.subscription_tier",
     "SELECT user_recovery_codes.code_hash",
     "SELECT user_recovery_codes.used_at",
@@ -331,6 +350,6 @@
     "SELECT users.title",
     "UPDATE users.last_login_at"
   ],
-  "app_bypass_policies": 47,
-  "public_tables": 49
+  "app_bypass_policies": 50,
+  "public_tables": 52
 }

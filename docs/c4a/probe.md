@@ -6,7 +6,7 @@ each probe in its own rolled-back transaction. **Phase B** is `grants.sql` as pr
 none of the semantics probed changed between them, but the plan requires re-running this
 against the real roles before cutover.
 
-**68 of 68 probe expectations held; 8 of 8 boundary-check expectations held.** 47 `app_bypass_*` policies for 49 tables (the owner-only ones excluded, by their comment).
+**70 of 70 probe expectations held; 8 of 8 boundary-check expectations held.** 50 `app_bypass_*` policies for 52 tables (the owner-only ones excluded, by their comment).
 
 ## Privilege probes
 
@@ -27,6 +27,7 @@ against the real roles before cutover.
 | login | login: read the ten user columns | ✅ ok:rows=1 | ✅ ok:rows=1 | no | Exactly what POST /login selects. |
 | login | login: stamp last_login_at | ✅ ok:1 | ✅ ok:1 | no | Column-scoped, in the same style as processed_at. |
 | login | login: read subscription_tier | ✅ ok:rows=1 | ✅ ok:rows=1 | no | The read the first inventory missed (a generic type argument hid pg.query). |
+| login | login: read the school is_active | ✅ ok:rows=1 | ✅ ok:rows=1 | no | The members of a suspended school are refused at sign-in (SECURITY.md Round 42). |
 | login | login: read password_hash | ✅ denied — permission denied for table users | ✅ denied — permission denied for table users | no | Login verifies through Supabase Auth, so the role serving unauthenticated callers cannot read a hash. |
 | login | login: change a role | ✅ denied — permission denied for table users | ✅ denied — permission denied for table users | no | Only last_login_at is writable. |
 | login | login: create a user | ✅ denied — permission denied for table users | ✅ denied — permission denied for table users | no | Why /create-user moved to the app pool: otherwise this role would need it. |

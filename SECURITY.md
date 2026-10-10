@@ -1,8 +1,72 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 41 — 2026-10-10  
-**Scope:** The template library behind report cards, receipts and transcripts (handlebars)  
-**Round 41 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+**Latest audit:** Round 42 — 2026-10-10  
+**Scope:** The suspension and read-only guards on every school route, and sign-in to a suspended school  
+**Round 42 total findings:** 3 (0 Critical · 0 High · 1 Medium · 2 Low) — remediated in code, not yet deployed
+
+---
+
+## Round 42 — 2026-10-10
+
+**Found** on 9 Oct 2026, in a review of how the two school guards read the address. Fixed on its own, so its
+deploy tests one change.
+
+### M-01 — A percent-encoded school id walked past the suspension and read-only guards ✅ Remediated
+
+**Files:** `apps/api/src/middleware/schoolInPath.ts` (new), `requireActiveSchool.ts`, `requireWritableSubscription.ts`.
+
+**The mechanism.** Both guards read the first segment of the raw address and tested it against a uuid pattern.
+Anything that did not match was taken to mean "no school id" and passed along. The route reads the same segment
+decoded. So with one hyphen of the school id written as `%2D`, the address failed the pattern and skipped both
+guards, and the route decoded it into the right school. A suspended school, or one whose trial had lapsed into
+read-only, could still read and write on every school route, and nothing alerted. The defect was doctrine 8:
+whether there is a school id was inferred from what the id looks like.
+
+**Why Medium.** It needs a signed-in member of the school, and no school is suspended or read-only today. But it
+voided both controls, on every school route, for anyone willing to type the address by hand.
+
+**Fix.**
+- **Presence by shape.** Exactly `/` carries no school id: `POST /api/schools`, the one route behind the guards
+  without one (all 154 checked). Every other address carries one in its first segment.
+- **Read as the route reads it.** The segment is decoded with `decodeURIComponent`, as Express decodes
+  `:schoolId`, so the guards check the school the route will use.
+- **Fail closed.** A first segment that does not decode to a uuid gets the guard's 404, never a pass: a word, the
+  empty segment of a doubled slash (`//scores`), a double encoding, a broken escape. Platform admins too: their
+  bypass applies to a real school id only.
+- **Every other reader of the raw address was checked.** Each one logs it, or matches it against an allowlist that
+  refuses on a mismatch. None admits a request the route would refuse.
+
+### L-01 — The read-only guard read "no school loaded" as writable ✅ Remediated
+
+**Files:** `requireWritableSubscription.ts`, `config/alerts.ts`.
+
+`school?.subscription_status !== 'read_only'` passed a write whose school had never been loaded. That happens only
+if the guards are mounted out of order, so it was latent, but "unknown" was read as "writable". Such a write now
+gets 500 `SCHOOL_STATE_UNAVAILABLE` and raises the `school_guard_state_missing` alert.
+
+### L-02 — Sign-in issued fresh tokens to the members of a suspended school ✅ Remediated
+
+**Files:** `apps/api/src/routes/auth.ts` (`POST /login`), `docs/c4a/grants.sql`, `scripts/sql/c4a_boundary_check.sql`,
+`scripts/c4a/probe.js`.
+
+Sign-in checked the account's `is_active`, never the school's. The suspension guard refused such a token on every
+school route, but each sign-in still minted another hour-long token. A member of a suspended school is now refused
+at sign-in with 403 `SCHOOL_SUSPENDED`, and a missing school row reads as not active. Platform admins pass, as they
+do at the guard.
+
+**A read-only school still signs in, on purpose.** A lapsed school signs in to pay and restore itself
+(`READ_ONLY_WRITE_ALLOWLIST`), and the read-only guard refuses its writes.
+
+**Every other path that signs a token was checked.** `/login/verify` and the two-factor routes serve platform
+admins only. A support session's token carries the impersonated member's role, which the guard refuses at a
+suspended school.
+
+The login connection reads one more column, `schools.is_active`. It is recorded in the C-4a grant proposal and
+proven by its probe (70 of 70, boundary check 8 of 8). C-4a is not applied to production, so no grant changes there.
+
+**Tests:** `schoolGuardsFailClosed.db.test.ts` (9), each refusal beside a request that succeeds. Run against the
+old code first: 7 failed, each on the defect (a suspended school's encoded address answered 200, a read-only
+school's encoded write 201, a suspended school's principal got a token), and the 2 controls passed.
 
 ---
 

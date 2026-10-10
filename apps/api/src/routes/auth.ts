@@ -254,6 +254,21 @@ router.post('/login', async (req, res, next) => {
           error: { code: 'ACCOUNT_SUSPENDED', message: 'This account has been suspended. Contact your administrator.' },
         });
       }
+      // A suspended school's members get no token (SECURITY.md Round 42). requireActiveSchool refuses
+      // their every school route, but this checked only the account, so each sign-in still minted a
+      // fresh hour-long token. A school row that is missing reads as not active (doctrine 8). Platform
+      // admins pass, as they do in requireActiveSchool: they manage suspended schools. A read-only
+      // subscription is not refused: a lapsed school signs in to pay and restore itself
+      // (READ_ONLY_WRITE_ALLOWLIST), and requireWritableSubscription refuses its writes.
+      if (local.school_id && local.role !== 'super_admin') {
+        const school = await pg.query<{ is_active: boolean }>(`SELECT is_active FROM schools WHERE id = $1`, [local.school_id]);
+        if (school.rows[0]?.is_active !== true) {
+          return res.status(403).json({
+            success: false,
+            error: { code: 'SCHOOL_SUSPENDED', message: 'This school has been suspended. Contact Chronix support.' },
+          });
+        }
+      }
       // Two-factor, commit 3: a platform admin who has switched it on gets no token for the password
       // alone, only a challenge for POST /login/verify (migration 057). The lockout counters are NOT
       // cleared here: clearing them on a correct password would let someone who has the password

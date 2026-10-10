@@ -58,6 +58,8 @@ login_expected (table_name, column_name, privilege_type) AS (
          ('users','last_name','SELECT'), ('users','is_active','SELECT'), ('users','support_code','SELECT'),
          ('users','must_change_password','SELECT'), ('users','last_login_at','UPDATE'),
          ('schools','id','SELECT'), ('schools','subscription_tier','SELECT'),
+         -- A suspended school's members are refused at sign-in (SECURITY.md Round 42, 10 Oct 2026).
+         ('schools','is_active','SELECT'),
          -- Platform-admin two-factor at sign-in (2FA commit 3, migration 057, 3 Oct 2026).
          ('user_totp','user_id','SELECT'), ('user_totp','secret_ciphertext','SELECT'),
          ('user_totp','activated_at','SELECT'), ('user_totp','last_used_step','SELECT'),

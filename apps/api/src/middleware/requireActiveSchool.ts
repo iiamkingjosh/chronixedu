@@ -1,8 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { findSchoolById } from '../db/queries/schools';
 import { cache, schoolCacheKey } from '../services/cacheService';
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { schoolInPath, refuseUnreadableSchool } from './schoolInPath';
 
 // Applied at the Express app level for all /api/schools/:schoolId routes.
 // Verifies the school exists and is active before any route handler runs.
@@ -15,15 +14,18 @@ export async function requireActiveSchool(
   res: Response,
   next: NextFunction
 ): Promise<void> {
-  // req.path is relative to the /api/schools mount point: /:schoolId/...
-  const segments = req.path.split('/');
-  const schoolId = segments[1];
-
-  if (!schoolId || !UUID_RE.test(schoolId)) {
-    // No schoolId in path (e.g. POST /api/schools to create one) — skip.
+  // req.path is relative to the /api/schools mount point: /:schoolId/... (middleware/schoolInPath.ts).
+  const where = schoolInPath(req.path);
+  if (where.kind === 'none') {
+    // POST /api/schools, which creates one: the only address here without a school id.
     next();
     return;
   }
+  if (where.kind === 'invalid') {
+    refuseUnreadableSchool(res);
+    return;
+  }
+  const schoolId = where.id;
 
   // Super admins can always reach suspended or non-existent schools.
   if (req.user?.role === 'super_admin') {

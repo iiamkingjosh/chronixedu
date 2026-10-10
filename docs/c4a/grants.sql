@@ -14,7 +14,7 @@
 --   chronixedu_login  POST /login only — the one path that reaches the database on behalf
 --                     of an UNAUTHENTICATED caller. If a flaw there shared the app role it
 --                     would reach scores, payments and audit rows; with this role it
---                     reaches ten user columns and one schools column.
+--                     reaches ten user columns and two schools columns.
 --
 -- Revision 2, after the second read:
 --   * Owner-only and append-only tables are identified by a PROPERTY (their table
@@ -86,7 +86,8 @@ GRANT USAGE ON SCHEMA public TO chronixedu_login;
 GRANT SELECT (id, school_id, role, title, email, first_name, last_name, is_active, support_code, must_change_password)
   ON users TO chronixedu_login;
 GRANT UPDATE (last_login_at) ON users TO chronixedu_login;
-GRANT SELECT (id, subscription_tier) ON schools TO chronixedu_login;
+-- is_active: a suspended school's members are refused at sign-in (SECURITY.md Round 42, 10 Oct 2026).
+GRANT SELECT (id, subscription_tier, is_active) ON schools TO chronixedu_login;
 
 DROP POLICY IF EXISTS login_read_users ON users;
 CREATE POLICY login_read_users ON users FOR SELECT TO chronixedu_login USING (true);

@@ -313,6 +313,12 @@ Monorepo, npm workspaces:
 - Middleware chain on `/api/schools`: `detectSupportSession → verifyToken →
   requirePasswordChanged → requireActiveSchool → router`. Routes additionally
   use `requireSchoolAccess` + `requireRole(...)`.
+- **The school guards read the school id through `schoolInPath`** (`middleware/schoolInPath.ts`, SECURITY.md
+  Round 42). Exactly `/` carries none (`POST /api/schools`, the only such route); any other first segment must
+  decode to a uuid, or the guard answers 404. So a new route mounted behind the guards without `:schoolId` first
+  is refused until `schoolInPath` says otherwise (the public routers mounted before them are unaffected). Never decide whether there is a school id from what it looks like:
+  `%2D` once walked past both guards. Sign-in refuses the members of a suspended school, never a read-only one,
+  which must sign in to pay.
 - Support sessions (impersonation) require the `x-support-session-id` header and
   a live `support_sessions` row. `ROOT_ADMIN_EMAIL` alone may manage other
   super_admins and wipe school data.

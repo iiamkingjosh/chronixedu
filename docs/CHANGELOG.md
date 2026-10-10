@@ -1,5 +1,13 @@
 # Chronix Edu — Changelog
 
+## A suspended school's members can no longer sign in (2026-10-10)
+
+### For schools
+- **When Chronix suspends a school, its staff, parents and students can no longer sign in.** They see "This school
+  has been suspended. Contact Chronix support." Before, they could sign in, but every page then refused them.
+- **A school whose trial has ended can still sign in**, view and export its records, and pay to restore full
+  access, as before.
+
 ## Security update to the documents' template library (2026-10-10)
 
 No change you can see. The library that lays out report cards, receipts and transcripts is updated to fix three

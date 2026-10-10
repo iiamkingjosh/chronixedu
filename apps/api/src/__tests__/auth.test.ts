@@ -187,9 +187,11 @@ describe('POST /api/auth/login', () => {
           support_code: '123456',
         }],
       })
-      // 2. UPDATE last_login_at
+      // 2. the school is active (a suspended school's members get no token, SECURITY.md Round 42)
+      .mockResolvedValueOnce({ rows: [{ is_active: true }] })
+      // 3. UPDATE last_login_at
       .mockResolvedValueOnce({ rows: [] })
-      // 3. schools.subscription_tier lookup
+      // 4. schools.subscription_tier lookup
       .mockResolvedValueOnce({ rows: [{ subscription_tier: 'premium' }] });
 
     const res = await request(app)
@@ -404,6 +406,7 @@ describe('POST /api/auth/login — the Supabase session a sign-in creates is rev
     mockSignIn.mockResolvedValueOnce({ data: { user: { id: 'auth-uuid-1' }, session: { access_token: 'supabase-session-token' } }, error: null });
     mockQuery
       .mockResolvedValueOnce({ rows: [{ id: 'local-uuid-1', school_id: 'school-1', role: 'teacher', title: null, email: 'a@b.com', first_name: 'A', last_name: 'B', is_active: true, support_code: '123456', must_change_password: false }] })
+      .mockResolvedValueOnce({ rows: [{ is_active: true }] })
       .mockResolvedValueOnce({ rows: [] })
       .mockResolvedValueOnce({ rows: [{ subscription_tier: 'premium' }] });
     const res = await request(app).post('/api/auth/login').send({ email: 'a@b.com', password: 'password123' });

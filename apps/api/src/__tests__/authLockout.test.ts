@@ -27,10 +27,10 @@ jest.mock('../supabaseClient', () => ({
   supabase: { auth: { signInWithPassword: (...a: unknown[]) => mockSignIn(...a) } },
   supabaseAdmin: { auth: { admin: {} } },
 }));
-/** What the login connection answers: the local user row, the last_login stamp, the tier. */
+/** What the login connection answers: the local user row, the school (active, SECURITY.md Round 42), the last_login stamp, the tier. */
 const mockQuery = jest.fn(async (sql: string) => {
   if (/FROM users/.test(sql)) return { rows: [{ id: 'local-1', school_id: 'school-1', role: 'teacher', title: null, email: 'target@school.ng', first_name: 'T', last_name: 'A', is_active: true, support_code: '000000', must_change_password: false }] };
-  if (/FROM schools/.test(sql)) return { rows: [{ subscription_tier: 'premium' }] };
+  if (/FROM schools/.test(sql)) return { rows: [{ subscription_tier: 'premium', is_active: true }] };
   return { rows: [] };
 });
 jest.mock('pg', () => ({
