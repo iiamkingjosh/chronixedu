@@ -1,5 +1,10 @@
 # Chronix Edu — Changelog
 
+## Security update to the documents' template library (2026-10-10)
+
+No change you can see. The library that lays out report cards, receipts and transcripts is updated to fix three
+published security advisories (SECURITY.md Round 41); the documents come out exactly as before.
+
 ## Schools choose who pays the online payment charge (2026-10-06)
 
 ### For schools

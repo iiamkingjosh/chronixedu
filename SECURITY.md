@@ -1,8 +1,39 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 38 — 2026-10-06  
-**Scope:** Where an online fee payment is credited  
-**Round 38 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+**Latest audit:** Round 41 — 2026-10-10  
+**Scope:** The template library behind report cards, receipts and transcripts (handlebars)  
+**Round 41 total findings:** 1 (0 Critical · 0 High · 0 Medium · 1 Low) — remediated in code, not yet deployed
+
+---
+
+## Round 41 — 2026-10-10
+
+Numbered after Rounds 39 and 40, which are recorded in local commits not yet merged with this one, so the
+numbers never collide.
+
+### L-01 — handlebars 4.7.9 carried two critical advisories and one moderate ✅ Remediated
+
+**Files:** `package.json`, `package-lock.json` (`handlebars` 4.7.9 → 4.7.10, pinned exactly).
+
+**Found** on 10 Oct 2026, when a local run of `node scripts/audit-gate.js` (CI's third step) failed with two
+`NEW` criticals that were not reported the day before.
+
+**The advisories**, all for handlebars 4.0.0 to 4.7.9, all fixed in 4.7.10:
+- GHSA-8r5x-fm3f-whwj (critical): JavaScript injection through AST type confusion in `compile`.
+- GHSA-p8wg-vrv2-v86f (critical): JavaScript injection through an own-property check bypass.
+- GHSA-xw65-4hp5-5hc7 (moderate): JavaScript injection through unsafe inline embedding of precompiled templates.
+
+**Why Low here.** Each needs an attacker to shape the template, or the objects passed to it. Chronix Edu compiles
+four fixed files from `apps/api/src/templates` (`receiptService`, `transcriptService`, `reportCardService`), with
+no custom helpers and no `{{{ }}}`, and fills them with objects it builds field by field. No request reaches the
+template source or the shape of the data.
+
+**Fix.** Upgraded and pinned, with no allowlist entry: a fix exists. The gate now passes with only the two dated
+`next` exceptions.
+
+**Tests.** The four templates rendered from fixed data, every field filled with text that must be escaped and
+again nearly empty, with the clock fixed (every date a constant): the HTML from 4.7.9 and 4.7.10 is identical,
+eight documents, no differing line.
 
 ---
 
