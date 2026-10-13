@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../config/logger';
+import { schoolInPath, refuseUnreadableSchool } from './schoolInPath';
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
@@ -54,16 +55,32 @@ export function isAllowedWhileReadOnly(method: string, path: string): boolean {
  * status carried on res.locals.school by requireActiveSchool — never on schools.is_active,
  * which is a separate, deliberate administrator decision. Super admins bypass, as they do in
  * requireActiveSchool. Mounted directly after requireActiveSchool.
+ *
+ * It reads the address as requireActiveSchool does (middleware/schoolInPath.ts), and a write it
+ * cannot judge is refused: a school id whose school was never loaded means the guards are mounted
+ * out of order, and "unknown" is never read as "writable" (SECURITY.md Round 42).
  */
 export function requireWritableSubscription(req: Request, res: Response, next: NextFunction): void {
   if (READ_METHODS.has(req.method)) { next(); return; }
 
-  const schoolId = req.path.split('/')[1];
-  if (!schoolId || !UUID_RE.test(schoolId)) { next(); return; }
+  const where = schoolInPath(req.path);
+  if (where.kind === 'none') { next(); return; }
+  if (where.kind === 'invalid') { refuseUnreadableSchool(res); return; }
   if (req.user?.role === 'super_admin') { next(); return; }
 
   const school = res.locals.school as { subscription_status?: string | null } | undefined;
-  if (school?.subscription_status !== 'read_only') { next(); return; }
+  if (!school) {
+    logger.error('school_guard_state_missing', { method: req.method });
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'SCHOOL_STATE_UNAVAILABLE',
+        message: "This school's status could not be checked, so the change was not made. Please try again, and contact Chronix support if it keeps happening.",
+      },
+    });
+    return;
+  }
+  if (school.subscription_status !== 'read_only') { next(); return; }
 
   if (isAllowedWhileReadOnly(req.method, req.path)) { next(); return; }
 

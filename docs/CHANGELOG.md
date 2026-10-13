@@ -1,5 +1,24 @@
 # Chronix Edu — Changelog
 
+## The dashboard greets you by first name (2026-10-13)
+
+### For schools
+- **The principal's dashboard now says "Good morning, Ada"** rather than "Good morning, Ada Obi". Staff with a
+  title set still see it with their surname: "Good morning, Mrs. Obi".
+
+## A suspended school's members can no longer sign in (2026-10-10)
+
+### For schools
+- **When Chronix suspends a school, its staff, parents and students can no longer sign in.** They see "This school
+  has been suspended. Contact Chronix support." Before, they could sign in, but every page then refused them.
+- **A school whose trial has ended can still sign in**, view and export its records, and pay to restore full
+  access, as before.
+
+## Security update to the documents' template library (2026-10-10)
+
+No change you can see. The library that lays out report cards, receipts and transcripts is updated to fix three
+published security advisories (SECURITY.md Round 41); the documents come out exactly as before.
+
 ## One set of rules for who does what (2026-10-08)
 
 Every screen and every action now follows one table of who does what. Your menu shows the screens of your job,

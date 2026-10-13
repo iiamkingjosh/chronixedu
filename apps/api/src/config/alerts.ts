@@ -90,6 +90,12 @@ export const ALERTS = {
     events: ['trial_expiry_paid_plan_in_trial_status'],
     fields: ['subscription_id', 'plan', 'status'],
   },
+  school_guard_state_missing: {
+    why: 'A write under /api/schools reached the read-only guard with a school id but no school loaded, so the guards are mounted out of order; the write was refused (500), never passed',
+    level: 'error',
+    events: ['school_guard_state_missing'],
+    fields: ['method'],
+  },
   system_actor_missing: {
     why: 'The trial gate cannot find the system account it signs its audit records with (migration 053), so it changed nothing: no trial is moving to grace or read-only',
     level: 'error',

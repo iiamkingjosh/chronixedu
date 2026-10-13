@@ -80,6 +80,8 @@ const PROBES = [
     'Column-scoped, in the same style as processed_at.'],
   ['chronixedu_login', 'login: read subscription_tier', `SELECT count(*)::int AS n FROM (SELECT subscription_tier FROM schools WHERE id = '${SCHOOL}') x`, { A: 'ok:rows=1', B: 'ok:rows=1' },
     'The read the first inventory missed (a generic type argument hid pg.query).'],
+  ['chronixedu_login', 'login: read the school is_active', `SELECT count(*)::int AS n FROM (SELECT is_active FROM schools WHERE id = '${SCHOOL}') x`, { A: 'ok:rows=1', B: 'ok:rows=1' },
+    'The members of a suspended school are refused at sign-in (SECURITY.md Round 42).'],
   ['chronixedu_login', 'login: read password_hash', `SELECT password_hash FROM users WHERE id = '${USER}'`, { A: 'denied', B: 'denied' },
     'Login verifies through Supabase Auth, so the role serving unauthenticated callers cannot read a hash.'],
   ['chronixedu_login', 'login: change a role', `UPDATE users SET role = 'super_admin' WHERE id = '${USER}'`, { A: 'denied', B: 'denied' },

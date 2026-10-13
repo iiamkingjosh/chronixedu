@@ -40,11 +40,13 @@ router.get(
       );
 
       const user    = req.user!;
+      // Title and surname when a title is set ("Mrs. Obi"), otherwise the first name alone ("Ada"); Moses,
+      // 13 Oct 2026. First and last name read "Joshua Joshua" for an account whose two names match.
       const nameRow = await getUserName(user.user_id);
       const name    = user.title && nameRow
         ? `${user.title} ${nameRow.last_name}`
         : nameRow
-          ? `${nameRow.first_name} ${nameRow.last_name}`
+          ? nameRow.first_name
           : user.email ?? '';
 
       // School-local hour (Railway runs UTC; schools run on Lagos time).

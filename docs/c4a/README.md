@@ -45,7 +45,8 @@ Regenerate: `node scripts/c4a/inventory.js`, then
   table is flagged — default privileges hand it DML — until its migration marks it and
   revokes; the probe shows both halves.
 - **The login connection gets its own role, column-scoped.** `chronixedu_login`: SELECT on the
-  ten `users` columns and `schools (id, subscription_tier)` that POST /login reads, UPDATE on
+  ten `users` columns and `schools (id, subscription_tier)` that POST /login reads (plus
+  `schools.is_active` since 10 Oct 2026, SECURITY.md Round 42), UPDATE on
   `users (last_login_at)`, and nothing else — not even `password_hash`, since passwords are
   verified by Supabase Auth. `/create-user` (super_admin) and `/seed-test-user` (off in
   production) used the same client; they moved to the app pool so the login role needs no
