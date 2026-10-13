@@ -10,8 +10,8 @@ Multi-tenant school management SaaS for Nigerian private schools. No real paying
 client is live yet — every school currently in the database is either a test
 fixture (created by an integration test, never cleaned up — see `L-test-data`
 in `docs/AUDIT-2026-09.md`) or demo/sandbox data, all marked `is_demo`, plus Moses's own
-pilot (Chronix High School), which counts as a customer since 8 Oct 2026 for the ERP revenue pull test
-(`is_demo = false`, below). There is no seed script: the old demo seeder, which wiped
+pilot (Chronix High School), `is_demo = true` again: it counted as a customer from 8 to 13 Oct 2026 for the ERP
+revenue pull test (below). There is no seed script: the old demo seeder, which wiped
 every school and every Supabase Auth user with no guard and committed staff passwords to
 this public repo, was deleted on 1 Oct 2026 and removed from git history the same day (the
 rewrite changed every commit ID since June 2026; SECURITY.md Round 23 has the old→new map and
@@ -1123,12 +1123,14 @@ Monorepo, npm workspaces:
   working set-password link. A trial uses an address that reaches a mailbox Chronix reads, never an
   invented one (`docs/data-deletion-runbook.md`, "Mail during a production trial").
 - **No third party has accepted the Terms or DPA** (1 Oct 2026). Chronix High School is Moses's own
-  pilot, not a customer, whatever older commits say. **It is marked `is_demo = false` since 8 Oct 2026,
-  16:43 UTC,** so the ERP revenue pull is tested against it (Moses ran
-  `scripts/sql/2026-10-08_chronix_high_school_is_demo.sql`, recorded as `SCHOOL_DEMO_FLAG_SET`). It counts in
-  MRR and the platform totals until the same script, with `to_demo := true`, puts it back, which must happen
-  before the first real school pays (`docs/AUDIT-2026-09.md`). The deletion and backup promises bind nobody
-  yet, and must be proven before the first real school signs.
+  pilot (`is_demo = true`), not a customer, whatever older commits say.
+  - **It counted as a customer from 8 Oct 2026, 16:43 UTC,** for the ERP revenue pull test (Moses ran
+    `scripts/sql/2026-10-08_chronix_high_school_is_demo.sql`, recorded as `SCHOOL_DEMO_FLAG_SET`).
+  - **Moses set it back to demo by hand, in the Supabase dashboard, between 10 and 13 Oct 2026.** That left no
+    audit record (`docs/AUDIT-2026-09.md`, "A change made in the Supabase dashboard leaves no audit record").
+    The reviewed script for the same change then ran on 13 Oct and refused, changing nothing.
+
+  The deletion and backup promises bind nobody yet, and must be proven before the first real school signs.
 - **A new table therefore needs two decisions in its commit**: exported or not, and deleted or
   not. Each has its own ratchet test, and both fail until the table is classified.
 - The homepage's "delete our copy within 90 days" is the same promise as the legal text and was
@@ -1163,8 +1165,22 @@ Monorepo, npm workspaces:
   the matching `x-api-key` returned a real `200` with `total_mrr_kobo: 0`, not a refusal.
   The `0` was correct, not a gap — every school in production was a test fixture, demo
   data, or Moses's own `is_demo` pilot (see "What this is"), `getPlatformRevenue`
-  excludes demo tenants by design, and there is no real paying school yet. Since 8 Oct 2026
-  the pilot counts, for the pull test: its ₦1,600 a term reads as 40000 kobo a month.
+  excludes demo tenants by design, and there is no real paying school yet.
+- **The demo filter was tested on live data on 13 Oct 2026.** At 11:19 UTC the endpoint returned
+  `total_mrr_kobo: 0`, with `premium` at `count: 1` and 0 kobo. Production, read by the reviewer at 11:37 UTC:
+  - **The one counted subscription:** King High School Test is the only non-demo school with a subscription
+    (premium, active, termly, ₦0.00, no billable students).
+  - **What the filter excluded:** the pilot is demo, with an active ₦1,600-a-term subscription (2 billable
+    students, 40000 kobo a month).
+  - **The two moments were not read together.** `platform_audit_logs` holds no row from 10:00 to 11:37 UTC, so
+    nothing recorded changed either school. But a dashboard edit would not be recorded (`docs/AUDIT-2026-09.md`).
+    The figures are consistent; they are not proven identical.
+
+  A filter that failed open would have read 40000 and a count of 2. Unlike 2 Oct's 0, this one could have come out
+  otherwise (doctrine 16).
+  - **The zero is a test only while King's amount is ₦0.** Read the whole shape: the total, the count at 0 kobo,
+    and the 40000 excluded. Enrol a student at King and the same endpoint returns a non-zero total for a test
+    school, which looks like a broken filter and is not.
 - Keep partner routes in `routes/partner.ts`, never folded into `superAdmin.ts`. Every
   route in that file carries `...guard` (human session + super_admin); mixing the two
   guards in one file makes "a route drifted past the wrong guard" a one-line mistake in
@@ -1386,6 +1402,52 @@ Monorepo, npm workspaces:
   `/app`, not from the service directory** — which is why `build` and `start` both begin
   `cd apps/api &&`. The command currently set is `cd apps/api && npm run migrate:prod`;
   a root-level `migrate:prod` delegate also exists, so the bare form works too.
+- **Both services wait for CI** (Railway's "Wait for CI", on for the API and the web). It was confirmed from the
+  services' settings by Moses on 10 Oct 2026, and seen working the same day: the `8b6dc6b` API deploy sat
+  `WAITING` from 09:42:53 UTC and began building at 09:49:35, four seconds after CI passed at 09:49:31. So
+  pushing is deploying once CI passes: a commit that fails CI never reaches production, whether or not the
+  pre-deploy migrate would have caught it.
+  - **It records the first attempt's verdict, and never revisits it** (verified by the reviewer, 13 Oct 2026).
+    - **What Railway reads:** the conclusion of each GitHub Actions workflow run. Checks from other GitHub apps
+      are ignored. Five of ours (vercel, railway-app, sentry, cloudflare-workers-and-pages, claude) sit
+      permanently `queued` and are not the gate.
+    - **What a failure does:** it skips the deployment at once. A re-run that passes does not un-skip it, and
+      the SKIPPED deployment offers no Redeploy (`canRedeploy: false`).
+    - **How to recover:** from the API service's command palette, Ctrl+K → Deploy Latest Commit.
+  - **Measured on `08dd1d0`:**
+    - **Attempt 1 failed at 12:56:24 UTC,** at "Start Supabase Auth (local stack)": port 54322 was already in use
+      on that runner. That is a container start, not the code.
+    - **Railway skipped the deploy at 12:56:27,** three seconds later.
+    - **Attempt 2 passed at 13:08:36** and changed nothing on Railway.
+    - **The hand-started deploy succeeded at 13:33:48,** with `migration_runs` row 111 written 21 s before it.
+  - **"CI is green" and "it is deployed" are two different facts,** and the badge cannot tell you which
+    (doctrine 16). After any push to `main`, check the API deploy and a new `migration_runs` row, not the check
+    mark on GitHub.
+  - **A skipped deploy is invisible until the next successful push covers it.** `b7d9a07` (6 Oct) failed attempt 1
+    on the Security audit step and was never re-run, and both its deploys are still SKIPPED. Its content reached
+    production only because `49868c6` superseded it about 20 minutes later. Production ran behind `main` for
+    those 20 minutes with nothing saying so.
+  - **One instance of the Auth-step failure is not a pattern.** Do not add a retry to that step yet: a retry
+    would hide the second instance that would make it one.
+  - **It is load-bearing, so it is never switched off on its own.** Without it, the pre-deploy migrate still
+    orders schema before code, but nothing stops broken code deploying. The replacement is a GitHub
+    branch-protection rule on `main` requiring the three CI checks (Lint & Type Check, Tests, Database & Isolation
+    Tests). CI runs only on pushes to `main` and on pull requests to it, so that rule also refuses a direct push
+    to `main`: work then goes through a pull request, CI passes there, and only then does `main` move. Put the
+    rule in place first, and only then switch "Wait for CI" off.
+  - **A push that touches none of a service's watched files leaves that service SKIPPED.** So the API and the
+    web can run different commits, correctly. On 10 Oct 2026 Batch 2 left the API on `8b6dc6b` and the web on
+    `a2fc8f1`. Never redeploy a service only to make the two numbers match.
+  - **From CI passing to the API deploy's SUCCESS, measured:**
+    - `307da86`: 5m36s (CI 07:35:44, deploy 07:41:20 UTC, 7 Oct 2026).
+    - `a2fc8f1`: 5m19s (CI 03:42:31, deploy 03:47:50 UTC, 10 Oct 2026); the web was rebuilt too.
+    - `8b6dc6b`: 4m26s (CI 09:49:31, deploy 09:53:57 UTC, 10 Oct 2026); the web was SKIPPED.
+
+    The fastest was also the only run with the web skipped. That is recorded as a coincidence, not a cause, so a
+    later deploy is compared like for like.
+  - **The new `migration_runs` row lands seconds before the API deploy completes:** row 109 13 s before,
+    row 110 11.3 s before (09:53:46.277). A deploy that succeeds with no new row means the pre-deploy migrate
+    did not run.
 - **Railway's build command must be `npm ci && npm run build --workspace=@chronixedu/api`.**
   It was `cd apps/api && npm install && npm run build` — `npm install` inside a workspace
   member bypasses the root lockfile, so production builds were not reproducible and could
