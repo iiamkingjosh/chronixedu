@@ -1,5 +1,11 @@
 # Chronix Edu — Changelog
 
+## The dashboard greets you by first name (2026-10-13)
+
+### For schools
+- **The principal's dashboard now says "Good morning, Ada"** rather than "Good morning, Ada Obi". Staff with a
+  title set still see it with their surname: "Good morning, Mrs. Obi".
+
 ## A suspended school's members can no longer sign in (2026-10-10)
 
 ### For schools
