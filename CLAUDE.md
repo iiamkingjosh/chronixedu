@@ -639,6 +639,16 @@ Monorepo, npm workspaces:
   or their **school** either. Teardown therefore guards those deletes:
   `AND id NOT IN (SELECT user_id FROM audit_logs WHERE user_id IS NOT NULL)` and the
   `school_id` equivalent, leaving the audited ones behind.
+- **A code change that starts creating a row adds it to every test teardown that deletes the row's owner.**
+  - **What happened:** onboarding `/complete` began creating a trial `platform_subscriptions` row on 8 Oct 2026.
+    The Onboarding Wizard's `afterAll` in `tests/superAdmin.test.ts` deletes its tables from a hand-written list,
+    and nobody added the new one. So its `DELETE FROM schools` hit the foreign key, and CI failed on 13 Oct after
+    all 195 tests had passed.
+  - **Why five days passed unseen:** those tests need Supabase Auth and skip locally, so the whole `afterAll` body
+    was skipped too. That is "a test that returns early counts as a pass" (below), applied to teardown.
+  - **Why it needs checking by hand:** the production delete path has a ratchet (`schoolDeletion.db.test.ts`:
+    every table in `STEPS` or `NOT_DELETED`). Hand-written test teardowns have none, so they are checked by hand
+    whenever a new write lands.
 - **A test that returns early counts as a pass.** `if (skip) return;` inside `it()` is
   reported by Jest as PASSED, so a run where the assertions never executed is
   indistinguishable from one where they held — doctrine 9 inside a test.

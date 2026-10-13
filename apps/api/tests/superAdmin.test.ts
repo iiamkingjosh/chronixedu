@@ -550,6 +550,10 @@ describe('superAdmin — platform school management', () => {
         await pool.query(`DELETE FROM terms WHERE school_id = $1`, [onboardingSchoolId]);
         await pool.query(`DELETE FROM academic_sessions WHERE school_id = $1`, [onboardingSchoolId]);
         await pool.query(`DELETE FROM school_settings WHERE school_id = $1`, [onboardingSchoolId]);
+        // /complete starts a 30-day trial (8 Oct 2026), so the school now owns a subscription. Payments first:
+        // both foreign keys are NO ACTION, so either row left behind blocks the school's delete.
+        await pool.query(`DELETE FROM platform_subscription_payments WHERE subscription_id IN (SELECT id FROM platform_subscriptions WHERE school_id = $1)`, [onboardingSchoolId]);
+        await pool.query(`DELETE FROM platform_subscriptions WHERE school_id = $1`, [onboardingSchoolId]);
         await pool.query(`DELETE FROM schools WHERE id = $1 AND id NOT IN (SELECT school_id FROM users WHERE school_id IS NOT NULL) AND id NOT IN (SELECT school_id FROM audit_logs WHERE school_id IS NOT NULL)`, [onboardingSchoolId]);
       }
     }, 20000);
