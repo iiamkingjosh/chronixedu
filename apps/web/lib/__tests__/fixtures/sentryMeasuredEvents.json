@@ -1,0 +1,521 @@
+{
+ "_about": "Measured 14 Oct 2026: @sentry/browser 10.58.0 in headless Chrome (Puppeteer) against a local ingest, page /registrar/students/<id>?q=Ada#tab, a fetch and a client-side navigation carrying a school id and a student id, a profile link and a photo, then an error. Unscrubbed. Ids are invented; 127.0.0.1 is the local test server. Trimmed: the resource spans for the SDK module files the test page itself loaded (/nm/@sentry/...) are removed; nothing that carried a planted value was.",
+ "plants": [
+  "a0a0a0a0-1111-4111-8111-5c0001000001",
+  "b1b1b1b1-2222-4222-8222-0000000a0002",
+  "q=Ada",
+  "#tab"
+ ],
+ "transaction": {
+  "contexts": {
+   "trace": {
+    "span_id": "a87bd0493c86db95",
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "data": {
+     "sentry.origin": "auto.pageload.browser",
+     "sentry.op": "pageload",
+     "sentry.source": "url",
+     "sentry.sample_rate": 1,
+     "effectiveConnectionType": "4g",
+     "deviceMemory": "8 GB",
+     "hardwareConcurrency": "8",
+     "sentry.idle_span_finish_reason": "idleTimeout",
+     "lcp.element": "body > h1",
+     "lcp.loadTime": 0,
+     "lcp.renderTime": 1334.9000000059605,
+     "lcp.size": 4233,
+     "performance.timeOrigin": 1791953179.0203001,
+     "performance.activationStart": 0
+    },
+    "op": "pageload",
+    "status": "ok",
+    "origin": "auto.pageload.browser"
+   },
+   "culture": {
+    "locale": "en-US",
+    "timezone": "Europe/London",
+    "calendar": "gregory"
+   }
+  },
+  "spans": [
+   {
+    "data": {
+     "sentry.origin": "auto.ui.browser.metrics",
+     "sentry.op": "ui.long-animation-frame",
+     "browser.script.invoker": "http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=Iw2Zr5JPXnJw6GuftPsFGmgFTHLTSEQ10B8eLM5AzfDkd1PGU2eDB_f1fXZLi7A8i4cRIBpQfJjk4yFTmbFebwdkNU9gD1n1KnYOHL-TeutEq0C1cxT1T8tYFkRs_j2yQkCJn8sJuyrcOwIKz-6dUw",
+     "browser.script.invoker_type": "classic-script",
+     "code.filepath": "http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=Iw2Zr5JPXnJw6GuftPsFGmgFTHLTSEQ10B8eLM5AzfDkd1PGU2eDB_f1fXZLi7A8i4cRIBpQfJjk4yFTmbFebwdkNU9gD1n1KnYOHL-TeutEq0C1cxT1T8tYFkRs_j2yQkCJn8sJuyrcOwIKz-6dUw",
+     "browser.script.source_char_position": 0
+    },
+    "description": "Main UI thread blocked",
+    "op": "ui.long-animation-frame",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "8077b8d1da98cad0",
+    "start_timestamp": 1791953180.0356002,
+    "timestamp": 1791953180.0936003,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.ui.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.ui.browser.metrics",
+     "sentry.op": "browser.domContentLoadedEvent"
+    },
+    "description": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+    "op": "browser.domContentLoadedEvent",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "8f22eb8d439f1b3c",
+    "start_timestamp": 1791953181.7169,
+    "timestamp": 1791953181.7171001,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.ui.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.ui.browser.metrics",
+     "sentry.op": "browser.loadEvent"
+    },
+    "description": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+    "op": "browser.loadEvent",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "a24746e294a891e7",
+    "start_timestamp": 1791953181.7175002,
+    "timestamp": 1791953181.7175002,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.ui.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.ui.browser.metrics",
+     "sentry.op": "browser.connect"
+    },
+    "description": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+    "op": "browser.connect",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "89cad46584f48dd3",
+    "start_timestamp": 1791953179.9810002,
+    "timestamp": 1791953179.9913,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.ui.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.ui.browser.metrics",
+     "sentry.op": "browser.cache"
+    },
+    "description": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+    "op": "browser.cache",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "baf58f5e02cb41bc",
+    "start_timestamp": 1791953179.0228002,
+    "timestamp": 1791953179.9810002,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.ui.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.ui.browser.metrics",
+     "sentry.op": "browser.DNS"
+    },
+    "description": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+    "op": "browser.DNS",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "9f6a15e74c608b9a",
+    "start_timestamp": 1791953179.9810002,
+    "timestamp": 1791953179.9810002,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.ui.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.ui.browser.metrics",
+     "sentry.op": "browser.request"
+    },
+    "description": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+    "op": "browser.request",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "8b9cf4513f19c0ba",
+    "start_timestamp": 1791953179.9930003,
+    "timestamp": 1791953180.0335002,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.ui.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.ui.browser.metrics",
+     "sentry.op": "browser.response"
+    },
+    "description": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+    "op": "browser.response",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "9047252a61490b09",
+    "start_timestamp": 1791953180.032,
+    "timestamp": 1791953180.0335002,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.ui.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.resource.browser.metrics",
+     "sentry.op": "resource.script",
+     "url.scheme": "http",
+     "server.address": "gc.kis.v2.scr.kaspersky-labs.com",
+     "url.same_origin": false,
+     "http.response.status_code": 0,
+     "http.response_transfer_size": 0,
+     "http.response_content_length": 0,
+     "http.decoded_response_content_length": 0,
+     "resource.render_blocking_status": "blocking",
+     "http.response_delivery_type": "",
+     "network.protocol.version": "unknown",
+     "network.protocol.name": "",
+     "http.request.redirect_start": 0,
+     "http.request.redirect_end": 0,
+     "http.request.worker_start": 0,
+     "http.request.fetch_start": 1791953180.04,
+     "http.request.domain_lookup_start": 0,
+     "http.request.domain_lookup_end": 0,
+     "http.request.connect_start": 0,
+     "http.request.secure_connection_start": 0,
+     "http.request.connection_end": 0,
+     "http.request.request_start": 0,
+     "http.request.response_start": 0,
+     "http.request.response_end": 1791953180.0488,
+     "http.request.time_to_first_byte": 0
+    },
+    "description": "http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=Iw2Zr5JPXnJw6GuftPsFGmgFTHLTSEQ10B8eLM5AzfDkd1PGU2eDB_f1fXZLi7A8i4cRIBpQfJjk4yFTmbFebwdkNU9gD1n1KnYOHL-TeutEq0C1cxT1T8tYFkRs_j2yQkCJn8sJuyrcOwIKz-6dUw",
+    "op": "resource.script",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "a2286a14f70c97e0",
+    "start_timestamp": 1791953180.0400002,
+    "timestamp": 1791953180.0488002,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.resource.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.resource.browser.metrics",
+     "sentry.op": "resource.img",
+     "url.scheme": "http",
+     "server.address": "127.0.0.1:59766",
+     "url.same_origin": true,
+     "http.response.status_code": 200,
+     "http.response_transfer_size": 2010,
+     "http.response_content_length": 1710,
+     "http.decoded_response_content_length": 1710,
+     "resource.render_blocking_status": "non-blocking",
+     "http.response_delivery_type": "",
+     "network.protocol.version": "1.1",
+     "network.protocol.name": "http",
+     "http.request.redirect_start": 0,
+     "http.request.redirect_end": 0,
+     "http.request.worker_start": 0,
+     "http.request.fetch_start": 1791953180.0403001,
+     "http.request.domain_lookup_start": 1791953180.0403001,
+     "http.request.domain_lookup_end": 1791953180.0403001,
+     "http.request.connect_start": 1791953180.0403001,
+     "http.request.secure_connection_start": 0,
+     "http.request.connection_end": 1791953180.0403001,
+     "http.request.request_start": 1791953180.0419002,
+     "http.request.response_start": 1791953180.0551002,
+     "http.request.response_end": 1791953180.0636,
+     "http.request.time_to_first_byte": 1.0348000000119209
+    },
+    "description": "/photos/a0a0a0a0-1111-4111-8111-5c0001000001/b1b1b1b1-2222-4222-8222-0000000a0002.jpg",
+    "op": "resource.img",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "87f15bc212291f48",
+    "start_timestamp": 1791953180.0403001,
+    "timestamp": 1791953180.0636,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.resource.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.resource.browser.metrics",
+     "sentry.op": "paint"
+    },
+    "description": "first-paint",
+    "op": "paint",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "a4f94ffa35baf70b",
+    "start_timestamp": 1791953180.3552,
+    "timestamp": 1791953180.3552,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.resource.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.resource.browser.metrics",
+     "sentry.op": "paint"
+    },
+    "description": "first-contentful-paint",
+    "op": "paint",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "937ed54c9328bed6",
+    "start_timestamp": 1791953180.3552,
+    "timestamp": 1791953180.3552,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.resource.browser.metrics"
+   },
+   {
+    "data": {
+     "sentry.origin": "auto.resource.browser.metrics",
+     "sentry.op": "mark"
+    },
+    "description": "sentry-tracing-init",
+    "op": "mark",
+    "parent_span_id": "a87bd0493c86db95",
+    "span_id": "bedeed62148d9f05",
+    "start_timestamp": 1791953181.7010002,
+    "timestamp": 1791953181.7010002,
+    "trace_id": "de6c1ef8e17f41598bfe2663493f2dd5",
+    "origin": "auto.resource.browser.metrics"
+   }
+  ],
+  "start_timestamp": 1791953179.0203001,
+  "timestamp": 1791953181.7175002,
+  "transaction": "/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002",
+  "type": "transaction",
+  "request": {
+   "url": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+   "headers": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/127.0.0.0 Safari/537.36"
+   }
+  },
+  "transaction_info": {
+   "source": "url"
+  },
+  "measurements": {
+   "connection.rtt": {
+    "value": 0,
+    "unit": "millisecond"
+   },
+   "lcp": {
+    "value": 1334.9000000059605,
+    "unit": "millisecond"
+   },
+   "fp": {
+    "value": 1334.9000000059605,
+    "unit": "millisecond"
+   },
+   "fcp": {
+    "value": 1334.9000000059605,
+    "unit": "millisecond"
+   },
+   "ttfb": {
+    "value": 1011.6999999880791,
+    "unit": "millisecond"
+   },
+   "ttfb.requestTime": {
+    "value": 39,
+    "unit": "millisecond"
+   }
+  },
+  "platform": "javascript",
+  "event_id": "b6593aa33c984afd8ef6f93532f691e9",
+  "environment": "production",
+  "sdk": {
+   "integrations": [
+    "InboundFilters",
+    "FunctionToString",
+    "ConversationId",
+    "BrowserApiErrors",
+    "Breadcrumbs",
+    "GlobalHandlers",
+    "LinkedErrors",
+    "Dedupe",
+    "HttpContext",
+    "CultureContext",
+    "BrowserSession",
+    "BrowserTracing",
+    "Replay",
+    "WebVitals"
+   ],
+   "name": "sentry.javascript.browser",
+   "version": "10.58.0",
+   "packages": [
+    {
+     "name": "npm:@sentry/browser",
+     "version": "10.58.0"
+    }
+   ],
+   "settings": {
+    "infer_ip": "never"
+   }
+  }
+ },
+ "error": {
+  "exception": {
+   "values": [
+    {
+     "type": "Error",
+     "value": "measured error",
+     "stacktrace": {
+      "frames": [
+       {
+        "filename": "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada",
+        "function": "window.__go",
+        "in_app": true,
+        "lineno": 23,
+        "colno": 27
+       }
+      ]
+     },
+     "mechanism": {
+      "type": "generic",
+      "handled": true
+     }
+    }
+   ]
+  },
+  "level": "error",
+  "event_id": "744784c35c7d4812b37a25880a2b04fd",
+  "platform": "javascript",
+  "request": {
+   "url": "http://127.0.0.1:59766/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab",
+   "headers": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/127.0.0.0 Safari/537.36"
+   }
+  },
+  "contexts": {
+   "trace": {
+    "trace_id": "ebba5186d4d1425b83d744d99a189b5f",
+    "span_id": "a9710f0b82a9a802"
+   },
+   "culture": {
+    "locale": "en-US",
+    "timezone": "Europe/London",
+    "calendar": "gregory"
+   }
+  },
+  "timestamp": 1791953185.686,
+  "environment": "production",
+  "sdk": {
+   "integrations": [
+    "InboundFilters",
+    "FunctionToString",
+    "ConversationId",
+    "BrowserApiErrors",
+    "Breadcrumbs",
+    "GlobalHandlers",
+    "LinkedErrors",
+    "Dedupe",
+    "HttpContext",
+    "CultureContext",
+    "BrowserSession",
+    "BrowserTracing",
+    "Replay",
+    "WebVitals"
+   ],
+   "name": "sentry.javascript.browser",
+   "version": "10.58.0",
+   "packages": [
+    {
+     "name": "npm:@sentry/browser",
+     "version": "10.58.0"
+    }
+   ],
+   "settings": {
+    "infer_ip": "never"
+   }
+  },
+  "transaction": "/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results",
+  "breadcrumbs": [
+   {
+    "timestamp": 1791953182.876,
+    "category": "sentry.transaction",
+    "event_id": "b6593aa33c984afd8ef6f93532f691e9",
+    "message": "b6593aa33c984afd8ef6f93532f691e9"
+   },
+   {
+    "timestamp": 1791953184.173,
+    "category": "fetch",
+    "data": {
+     "method": "GET",
+     "url": "/api/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab",
+     "__span": "a245b86260f18b43",
+     "status_code": 200
+    },
+    "type": "http"
+   },
+   {
+    "timestamp": 1791953184.176,
+    "category": "navigation",
+    "data": {
+     "from": "/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab",
+     "to": "/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab"
+    }
+   },
+   {
+    "timestamp": 1791953185.182,
+    "category": "sentry.transaction",
+    "event_id": "1030e53689db4fd9b2cef87f98f66dfc",
+    "message": "1030e53689db4fd9b2cef87f98f66dfc"
+   }
+  ],
+  "tags": {
+   "replayId": "df139f740d214835bb7739de61e5421f"
+  }
+ },
+ "replay_event": {
+  "type": "replay_event",
+  "replay_start_timestamp": 1791953179.0203001,
+  "timestamp": 1791953190.813,
+  "error_ids": [
+   "744784c35c7d4812b37a25880a2b04fd"
+  ],
+  "trace_ids": [
+   "de6c1ef8e17f41598bfe2663493f2dd5",
+   "ebba5186d4d1425b83d744d99a189b5f"
+  ],
+  "urls": [
+   "http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002#tab?q=Ada",
+   "http://127.0.0.1:59766/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab"
+  ],
+  "replay_id": "df139f740d214835bb7739de61e5421f",
+  "segment_id": 0,
+  "replay_type": "buffer",
+  "request": {
+   "url": "http://127.0.0.1:59766/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab",
+   "headers": {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/127.0.0.0 Safari/537.36"
+   }
+  },
+  "contexts": {
+   "culture": {
+    "locale": "en-US",
+    "timezone": "Europe/London",
+    "calendar": "gregory"
+   }
+  },
+  "event_id": "df139f740d214835bb7739de61e5421f",
+  "environment": "production",
+  "sdk": {
+   "integrations": [
+    "InboundFilters",
+    "FunctionToString",
+    "ConversationId",
+    "BrowserApiErrors",
+    "Breadcrumbs",
+    "GlobalHandlers",
+    "LinkedErrors",
+    "Dedupe",
+    "HttpContext",
+    "CultureContext",
+    "BrowserSession",
+    "BrowserTracing",
+    "Replay",
+    "WebVitals"
+   ],
+   "name": "sentry.javascript.browser",
+   "version": "10.58.0",
+   "settings": {
+    "infer_ip": "never"
+   }
+  },
+  "transaction": "/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results",
+  "platform": "javascript"
+ },
+ "replay_recording": "{\"segment_id\":0}\n[{\"type\":4,\"data\":{\"href\":\"http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab\",\"width\":800,\"height\":600},\"timestamp\":1791953181709},{\"type\":5,\"timestamp\":1791953181710,\"data\":{\"tag\":\"options\",\"payload\":{\"shouldRecordCanvas\":false,\"sessionSampleRate\":0,\"errorSampleRate\":1,\"useCompressionOption\":true,\"blockAllMedia\":true,\"maskAllText\":true,\"maskAllInputs\":true,\"useCompression\":false,\"networkDetailHasUrls\":false,\"networkCaptureBodies\":true,\"networkRequestHasHeaders\":true,\"networkResponseHasHeaders\":true}}},{\"type\":2,\"data\":{\"node\":{\"type\":0,\"childNodes\":[{\"type\":1,\"name\":\"html\",\"publicId\":\"\",\"systemId\":\"\",\"id\":2},{\"type\":2,\"tagName\":\"html\",\"attributes\":{},\"childNodes\":[{\"type\":2,\"tagName\":\"head\",\"attributes\":{},\"childNodes\":[{\"type\":2,\"tagName\":\"meta\",\"attributes\":{\"charset\":\"utf-8\"},\"childNodes\":[],\"id\":5}],\"id\":4},{\"type\":2,\"tagName\":\"body\",\"attributes\":{},\"childNodes\":[{\"type\":2,\"tagName\":\"h1\",\"attributes\":{},\"childNodes\":[{\"type\":3,\"textContent\":\"*** ***\",\"id\":8}],\"id\":7},{\"type\":2,\"tagName\":\"p\",\"attributes\":{},\"childNodes\":[{\"type\":3,\"textContent\":\"********* *** ******\",\"id\":10}],\"id\":9},{\"type\":2,\"tagName\":\"input\",\"attributes\":{\"id\":\"name\",\"value\":\"*******\"},\"childNodes\":[],\"id\":11},{\"type\":2,\"tagName\":\"a\",\"attributes\":{\"id\":\"profile\",\"href\":\"http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002\"},\"childNodes\":[{\"type\":3,\"textContent\":\"*******\",\"id\":13}],\"id\":12},{\"type\":2,\"tagName\":\"img\",\"attributes\":{\"rr_width\":\"52.45000076293945px\",\"rr_height\":\"18.399999618530273px\"},\"childNodes\":[],\"id\":14},{\"type\":3,\"textContent\":\"\\n\",\"id\":15}],\"id\":6}],\"id\":3}],\"id\":1},\"initialOffset\":{\"left\":0,\"top\":0}},\"timestamp\":1791953181715},{\"type\":5,\"timestamp\":1791953184176,\"data\":{\"tag\":\"breadcrumb\",\"payload\":{\"timestamp\":1791953184.176,\"type\":\"default\",\"category\":\"navigation\",\"data\":{\"from\":\"/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab\",\"to\":\"/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab\"}}}},{\"type\":5,\"timestamp\":1791953184.178,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"navigation.push\",\"description\":\"http://127.0.0.1:59766/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab\",\"startTimestamp\":1791953184.178,\"endTimestamp\":1791953184.178,\"data\":{}}}},{\"type\":5,\"timestamp\":1791953184.1555,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"resource.fetch\",\"description\":\"/api/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab\",\"startTimestamp\":1791953184.1555,\"endTimestamp\":1791953184.1729002,\"data\":{\"method\":\"GET\",\"statusCode\":200,\"request\":{\"headers\":{},\"_meta\":{\"warnings\":[\"URL_SKIPPED\"]}},\"response\":{\"headers\":{},\"size\":11,\"_meta\":{\"warnings\":[\"URL_SKIPPED\"]}}}}}},{\"type\":4,\"data\":{\"href\":\"http://127.0.0.1:59766/schools/a0a0a0a0-1111-4111-8111-5c0001000001/students/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab\",\"width\":800,\"height\":600},\"timestamp\":1791953185736},{\"type\":5,\"timestamp\":1791953185736,\"data\":{\"tag\":\"options\",\"payload\":{\"shouldRecordCanvas\":false,\"sessionSampleRate\":0,\"errorSampleRate\":1,\"useCompressionOption\":true,\"blockAllMedia\":true,\"maskAllText\":true,\"maskAllInputs\":true,\"useCompression\":true,\"networkDetailHasUrls\":false,\"networkCaptureBodies\":true,\"networkRequestHasHeaders\":true,\"networkResponseHasHeaders\":true}}},{\"type\":2,\"data\":{\"node\":{\"type\":0,\"childNodes\":[{\"type\":1,\"name\":\"html\",\"publicId\":\"\",\"systemId\":\"\",\"rootId\":16,\"id\":17},{\"type\":2,\"tagName\":\"html\",\"attributes\":{},\"childNodes\":[{\"type\":2,\"tagName\":\"head\",\"attributes\":{},\"childNodes\":[{\"type\":2,\"tagName\":\"meta\",\"attributes\":{\"charset\":\"utf-8\"},\"childNodes\":[],\"rootId\":16,\"id\":20}],\"rootId\":16,\"id\":19},{\"type\":2,\"tagName\":\"body\",\"attributes\":{},\"childNodes\":[{\"type\":2,\"tagName\":\"h1\",\"attributes\":{},\"childNodes\":[{\"type\":3,\"textContent\":\"*** ***\",\"rootId\":16,\"id\":23}],\"rootId\":16,\"id\":22},{\"type\":2,\"tagName\":\"p\",\"attributes\":{},\"childNodes\":[{\"type\":3,\"textContent\":\"********* *** ******\",\"rootId\":16,\"id\":25}],\"rootId\":16,\"id\":24},{\"type\":2,\"tagName\":\"input\",\"attributes\":{\"id\":\"name\",\"value\":\"*******\"},\"childNodes\":[],\"rootId\":16,\"id\":26},{\"type\":2,\"tagName\":\"a\",\"attributes\":{\"id\":\"profile\",\"href\":\"http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002\"},\"childNodes\":[{\"type\":3,\"textContent\":\"*******\",\"rootId\":16,\"id\":28}],\"rootId\":16,\"id\":27},{\"type\":2,\"tagName\":\"img\",\"attributes\":{\"rr_width\":\"52.45000076293945px\",\"rr_height\":\"18.399999618530273px\"},\"childNodes\":[],\"rootId\":16,\"id\":29},{\"type\":3,\"textContent\":\"\\n\",\"rootId\":16,\"id\":30}],\"rootId\":16,\"id\":21}],\"rootId\":16,\"id\":18}],\"id\":16},\"initialOffset\":{\"left\":0,\"top\":0}},\"timestamp\":1791953185738},{\"type\":5,\"timestamp\":1791953180.3552,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"paint\",\"description\":\"first-paint\",\"startTimestamp\":1791953180.3552,\"endTimestamp\":1791953180.3552}}},{\"type\":5,\"timestamp\":1791953180.3552,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"paint\",\"description\":\"first-contentful-paint\",\"startTimestamp\":1791953180.3552,\"endTimestamp\":1791953180.3552}}},{\"type\":5,\"timestamp\":1791953179.0203001,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"navigation.navigate\",\"description\":\"http://127.0.0.1:59766/registrar/students/b1b1b1b1-2222-4222-8222-0000000a0002?q=Ada#tab\",\"startTimestamp\":1791953179.0203001,\"endTimestamp\":1791953181.7174,\"data\":{\"size\":2313,\"decodedBodySize\":2013,\"encodedBodySize\":2013,\"duration\":2697.199999988079,\"domInteractive\":1077.800000011921,\"domContentLoadedEventStart\":2696.5999999940395,\"domContentLoadedEventEnd\":2696.800000011921,\"loadEventStart\":2697.199999988079,\"loadEventEnd\":2697.199999988079,\"domComplete\":2697.0999999940395,\"redirectCount\":0}}}},{\"type\":5,\"timestamp\":1791953180.04,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"resource.script\",\"description\":\"http://gc.kis.v2.scr.kaspersky-labs.com/FD126C42-EBFA-4E12-B309-BB3FDD723AC1/main.js?attr=Iw2Zr5JPXnJw6GuftPsFGmgFTHLTSEQ10B8eLM5AzfDkd1PGU2eDB_f1fXZLi7A8i4cRIBpQfJjk4yFTmbFebwdkNU9gD1n1KnYOHL-TeutEq0C1cxT1T8tYFkRs_j2yQkCJn8sJuyrcOwIKz-6dUw\",\"startTimestamp\":1791953180.04,\"endTimestamp\":1791953180.0488,\"data\":{\"size\":0,\"statusCode\":0,\"decodedBodySize\":0,\"encodedBodySize\":0}}}},{\"type\":5,\"timestamp\":1791953180.0403001,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"resource.img\",\"description\":\"http://127.0.0.1:59766/photos/a0a0a0a0-1111-4111-8111-5c0001000001/b1b1b1b1-2222-4222-8222-0000000a0002.jpg\",\"startTimestamp\":1791953180.0403001,\"endTimestamp\":1791953180.0636,\"data\":{\"size\":2010,\"statusCode\":200,\"decodedBodySize\":1710,\"encodedBodySize\":1710}}}},{\"type\":5,\"timestamp\":1791953181.7349002,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"resource.other\",\"description\":\"blob:http://127.0.0.1:59766/414a7eb5-7187-476e-8816-73c94e3b4c7b\",\"startTimestamp\":1791953181.7349002,\"endTimestamp\":1791953181.7086,\"data\":{\"size\":0,\"statusCode\":200,\"decodedBodySize\":0,\"encodedBodySize\":0}}}},{\"type\":5,\"timestamp\":1791953181.7302,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"resource.other\",\"description\":\"http://127.0.0.1:59766/favicon.ico\",\"startTimestamp\":1791953181.7302,\"endTimestamp\":1791953181.7471,\"data\":{\"size\":2010,\"statusCode\":200,\"decodedBodySize\":1710,\"encodedBodySize\":1710}}}},{\"type\":5,\"timestamp\":1791953184.1956,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"resource.other\",\"description\":\"http://127.0.0.1:59766/favicon.ico\",\"startTimestamp\":1791953184.1956,\"endTimestamp\":1791953184.203,\"data\":{\"size\":2010,\"statusCode\":200,\"decodedBodySize\":1710,\"encodedBodySize\":1710}}}},{\"type\":5,\"timestamp\":1791953180.3552,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"web-vital\",\"description\":\"largest-contentful-paint\",\"startTimestamp\":1791953180.3552,\"endTimestamp\":1791953180.3552,\"data\":{\"value\":1334.9000000059605,\"size\":1334.9000000059605,\"rating\":\"good\",\"nodeIds\":[7]}}}},{\"type\":5,\"timestamp\":1791953179.0203001,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"web-vital\",\"description\":\"cumulative-layout-shift\",\"startTimestamp\":1791953179.0203001,\"endTimestamp\":1791953179.0203001,\"data\":{\"value\":0,\"size\":0,\"rating\":\"good\",\"nodeIds\":[],\"attributions\":[]}}}},{\"type\":5,\"timestamp\":1791953190.813,\"data\":{\"tag\":\"performanceSpan\",\"payload\":{\"op\":\"memory\",\"description\":\"memory\",\"startTimestamp\":1791953190.813,\"endTimestamp\":1791953190.813,\"data\":{\"memory\":{\"jsHeapSizeLimit\":4294705152,\"totalJSHeapSize\":12953381,\"usedJSHeapSize\":7377705}}}}}]"
+}

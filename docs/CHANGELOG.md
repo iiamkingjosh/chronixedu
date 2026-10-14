@@ -1,5 +1,14 @@
 # Chronix Edu — Changelog
 
+## Error reports send less (2026-10-14)
+
+### For everyone
+- **A recording of what happened on screen is sent only when something goes wrong.** Before, one session in ten
+  was recorded even when nothing did. Recordings still hide all text and typing, show no images, and are never
+  made on the sign-in pages.
+- **Error reports no longer carry record numbers.** An address like a student's page is sent as
+  `/registrar/students/[id]`, and a recording no longer includes search terms or the addresses of links on the page.
+
 ## The dashboard greets you by first name (2026-10-13)
 
 ### For schools

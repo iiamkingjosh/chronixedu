@@ -583,6 +583,11 @@ Monorepo, npm workspaces:
   SECURITY.md Round 21). Replay keeps `maskAllText`, `maskAllInputs` and `blockAllMedia`
   stated explicitly in `instrumentation-client.ts` (named `sentry.client.config.ts` until 1 Oct 2026). Never put a name, email, phone number or
   student record in a Sentry tag, context or breadcrumb.
+  **Replay records only on an error** (`replaysSessionSampleRate: 0`; SECURITY.md Round 43): the DPA lists Sentry
+  for error monitoring. **Record ids leave every address as `[id]`**, and the replay is scrubbed whole at the
+  transport (`scrubbingTransport`), because its own hook never sees the recorded page or its address. So replay
+  compression stays off, and a recording that cannot be read is dropped. `lib/__tests__/sentryReplayConfig.test.ts`
+  loads `instrumentation-client.ts` and fails if a mask flag, the 0 baseline or the compression setting changes.
 - **The API alerts through an allow-list, `config/alerts.ts`** (since 1 Oct 2026). A winston format
   sends the log events listed in `ALERTS` to Sentry, each under one alert name, at level `error`
   (the level measured to trigger the email rule), once per 15 minutes per process, grouped by name

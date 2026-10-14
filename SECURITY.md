@@ -1,8 +1,78 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 42 — 2026-10-10  
-**Scope:** The suspension and read-only guards on every school route, and sign-in to a suspended school  
-**Round 42 total findings:** 3 (0 Critical · 0 High · 1 Medium · 2 Low) — remediated, live since 10 Oct 2026 (`8b6dc6b`)
+**Latest audit:** Round 43 — 2026-10-14  
+**Scope:** What the web app's Sentry session replay records and sends, and the record ids in every address it sends  
+**Round 43 total findings:** 3 (0 Critical · 0 High · 0 Medium · 3 Low) — remediated in code, not yet deployed
+
+---
+
+## Round 43 — 2026-10-14
+
+**Raised** on 14 Oct 2026, in a review of session replay against the DPA, which lists Sentry for "error monitoring
+(technical/diagnostic data only)". **Measured** the same day: the installed browser SDK (`@sentry/browser` 10.58.0,
+inside `@sentry/nextjs`) in a real headless Chrome (Puppeteer) against a local ingest. The page's address, a fetch,
+a client-side navigation, a link and a photo carried a school id and a student id. Unscrubbed, they appeared in
+105 places across a trace, an error, the replay event and the replay recording.
+
+### L-01 — Replay recorded one session in ten, with or without an error ✅ Remediated
+
+**File:** `apps/web/instrumentation-client.ts`.
+
+`replaysSessionSampleRate` was 0.1, so a tenth of all sessions were recorded and sent whether or not anything went
+wrong. That is not error monitoring, and no legal page discloses it. It is now 0. `replaysOnErrorSampleRate` stays 1:
+a replay is sent only with an error.
+
+**Why Low:** the masking held (all text and inputs masked, media blocked, never on the sign-in pages or the
+platform-admin area).
+
+### L-02 — Record ids reached Sentry in every address it was sent ✅ Remediated
+
+**File:** `apps/web/lib/sentryScrub.ts` (used by the browser, server and edge configs).
+
+`/schools/<uuid>/students/<uuid>/results` names a child. The ids rode in:
+- the page path (`transaction`, `request.url`);
+- fetch and navigation breadcrumbs;
+- span descriptions and span data (`browser.script.invoker`, `code.filepath`);
+- stack-frame file names;
+- the replay event (`urls`, `request.url`, `transaction`).
+
+Every uuid in these is now `[id]`; a path still says where it happened (`/registrar/students/[id]`). `Sentry.setUser`
+keeps the user id it is given on purpose.
+
+**Why Low:** an id is opaque, not a name. But it ties a child's record to every error made on it.
+
+### L-03 — The replay recording kept what Round 34 removed everywhere else ✅ Remediated
+
+**Files:** `apps/web/lib/sentryScrub.ts` (`scrubEnvelope`, `scrubbingTransport`), `apps/web/instrumentation-client.ts`.
+
+Round 34 cut query strings and fragments from errors, traces and breadcrumbs. Replay data passes neither
+`beforeSend` nor `beforeBreadcrumb`, and the replay's own hook, `beforeAddRecordingEvent`, runs only for custom
+events (`maybeApplyCallback` checks `isCustomEvent` in `@sentry/replay` 10.58). So the recording sent the page's
+full address (query string and fragment included), its breadcrumbs, its performance spans, and the `href` of
+every link on the recorded page. Text masking does not cover attributes.
+
+**Why Low:** replay never runs on the pages where a credential arrives in the address, and the page text was
+masked. But a search term in a query string, or any id in a link, went to Sentry inside the recording.
+
+**Fix.** The whole envelope is scrubbed at the transport, the one place that sees the recording whole:
+`transport: scrubbingTransport(makeFetchTransport(...))`. Replay compression is off, so the recording reaches the
+transport as JSON. A recording the scrubber cannot read (compressed, or malformed) is dropped, never sent.
+Scrubbed, the same real-Chrome run sent everything, with 0 planted values left.
+
+**Tests:**
+- **`sentryScrub.test.ts`, 4 new.** They run on `fixtures/sentryMeasuredEvents.json`, the trace, error, replay
+  event and replay recording captured unscrubbed. Each test shows the planted ids present before scrubbing and
+  absent after. A compressed recording is dropped.
+- **`sentryReplayConfig.test.ts`, the ratchet, 4.** It loads `instrumentation-client.ts` itself with
+  `@sentry/nextjs` replaced by a recorder. It shows these settings fail it, each by one test:
+  - removing `maskAllText`, `maskAllInputs` or `blockAllMedia`;
+  - switching compression on;
+  - raising the baseline to 0.1.
+
+  Nothing tested the masking before.
+
+**Not changed:** the legal pages. The Privacy Policy and Cookie Policy name neither Sentry nor replay; the DPA lists
+Sentry for error monitoring. Their wording is with Moses and counsel.
 
 ---
 

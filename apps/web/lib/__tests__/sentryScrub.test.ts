@@ -1,7 +1,9 @@
+import fs from 'fs';
+import path from 'path';
 import http from 'http';
 import type { AddressInfo } from 'net';
 import * as Sentry from '@sentry/browser';
-import { scrubEvent, scrubBreadcrumb, replayAllowed, stripUrl } from '../sentryScrub';
+import { scrubEvent, scrubBreadcrumb, replayAllowed, stripUrl, stripIds, scrubEnvelope, scrubbingTransport } from '../sentryScrub';
 
 /**
  * The web app's Sentry gets technical data only (SECURITY.md Round 34). The second block runs the
@@ -97,5 +99,58 @@ describe('what the browser SDK sends with these rules', () => {
     for (const [where, value] of Object.entries(PLANTED)) {
       expect({ where, sent: all.includes(value) }).toEqual({ where, sent: false });
     }
+  });
+});
+
+/**
+ * Record ids (SECURITY.md Round 43), against what a real Chrome sent: fixtures/sentryMeasuredEvents.json
+ * holds a trace, an error, a replay event and a replay recording, captured unscrubbed from the installed
+ * browser SDK on a page whose address, fetch, navigation, link and photo carried a school id and a student id.
+ */
+describe('record ids, on the shapes a real browser sent', () => {
+  const measured = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'sentryMeasuredEvents.json'), 'utf8'));
+  const plants: string[] = measured.plants;
+  const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+  const found = (v: unknown) => plants.filter((p) => JSON.stringify(v).includes(p));
+
+  it('a uuid becomes [id] in any case, and nothing else changes', () => {
+    expect(stripIds('/schools/A0A0A0A0-1111-4111-8111-5C0001000001/students')).toBe('/schools/[id]/students');
+    expect(stripUrl('/a/b1b1b1b1-2222-4222-8222-0000000a0002/results?q=Ada#tab')).toBe('/a/[id]/results');
+    expect(stripIds('/students/AD-001/12345')).toBe('/students/AD-001/12345');
+  });
+
+  it('the trace and the error carry the ids before scrubbing and none after, and still say where they were', () => {
+    for (const name of ['transaction', 'error'] as const) {
+      expect({ name, before: found(measured[name]) }).toEqual({ name, before: plants });
+      const after = scrubEvent(copy(measured[name]));
+      expect({ name, after: found(after) }).toEqual({ name, after: [] });
+    }
+    expect(scrubEvent(copy(measured.error)).request.url).toMatch(/\/schools\/\[id\]\/students\/\[id\]\/results$/);
+  });
+
+  it('the replay (its event and its whole recording, links included) carries none after the transport scrubs it', () => {
+    const envelope: [object, Array<[{ type: string }, unknown]>] = [{}, [
+      [{ type: 'replay_event' }, copy(measured.replay_event)],
+      [{ type: 'replay_recording' }, measured.replay_recording],
+    ]];
+    expect(found(envelope)).toEqual(plants);
+    const scrubbed = scrubEnvelope(copy(envelope));
+    expect(scrubbed).not.toBeNull();
+    expect(found(scrubbed)).toEqual([]);
+    const recording = (scrubbed as typeof envelope)[1][1][1] as string;
+    const events = JSON.parse(recording.slice(recording.indexOf('\n') + 1));
+    // The control: the recording is all still there, its profile link pointing at [id], not emptied.
+    expect(events).toHaveLength(JSON.parse(measured.replay_recording.slice(measured.replay_recording.indexOf('\n') + 1)).length);
+    expect(recording).toContain('/registrar/students/[id]');
+  });
+
+  it('a recording it cannot read (compressed) is dropped, never sent unscrubbed', async () => {
+    const compressed: [object, Array<[{ type: string }, unknown]>] = [{}, [[{ type: 'replay_recording' }, new Uint8Array([120, 156, 1, 2, 3])]]];
+    expect(scrubEnvelope(compressed)).toBeNull();
+    const sent: unknown[] = [];
+    const transport = scrubbingTransport({ send: async (e: unknown) => { sent.push(e); return { statusCode: 200 }; }, flush: async () => true });
+    await transport.send(compressed);
+    await transport.send([{}, [[{ type: 'event' }, { message: 'ok' }]]]);
+    expect(sent).toHaveLength(1);
   });
 });

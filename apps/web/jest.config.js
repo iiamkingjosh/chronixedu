@@ -5,6 +5,9 @@
 module.exports = {
   testEnvironment: 'node',
   testMatch: ['<rootDir>/lib/**/*.test.ts'],
+  // The app's own alias, so a test can load a file that uses it (sentryReplayConfig.test.ts loads
+  // instrumentation-client.ts as the browser does).
+  moduleNameMapper: { '^@/(.*)$': '<rootDir>/$1' },
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: { module: 'commonjs', isolatedModules: true, esModuleInterop: true, strict: true } }],
   },
