@@ -1,12 +1,108 @@
 # Security Audit — Chronix Edu
 
-**Latest audit:** Round 43 — 2026-10-14  
-**Scope:** What the web app's Sentry session replay records and sends, and the record ids in every address it sends  
-**Round 43 total findings:** 3 (0 Critical · 0 High · 0 Medium · 3 Low) — remediated in code, not yet deployed
+**Latest audit:** Round 44 — 2026-10-14  
+**Scope:** What the browser's Sentry sends outside errors, traces and replays (the INP span), and the names a page writes into the labels of what is clicked  
+**Round 44 total findings:** 2 (0 Critical · 0 High · 1 Medium · 1 Low) — remediated in code, not yet deployed
+
+---
+
+## Round 44 — 2026-10-14
+
+**Found** on 14 Oct 2026, while preparing Round 43's follow-ups, by reading the installed SDK for what else it
+sends. **Measured** as Round 43 was (`@sentry/browser` 10.58.0 in a real headless Chrome against a local ingest),
+on the same page with one addition: a button labelled with a name (`aria-label="Edit Ada Obi"`) that takes 400 ms
+to answer a click. It was clicked after navigating to an address with both ids, then an error was raised, then the
+page was hidden. With Round 43's scrubber in place, the INP span still carried both ids and the name, and the
+replay's click breadcrumbs carried the name.
+
+### M-01 — A pupil's name reached Sentry in the description of a clicked element ✅ Remediated
+
+**Files:** `apps/web/lib/sentryScrub.ts` (`stripLabels`), `apps/web/instrumentation-client.ts`.
+
+The SDK describes an element it records by its tag, id and classes, then its `aria-label`, `type`, `name`, `title`
+and `alt` (core's `htmlTreeAsString`). This app writes a pupil's name into two of those:
+- the promotions page labels each pupil's controls `aria-label="Decision for <full name>"`
+  (`registrar/promotions/page.tsx`);
+- the student profile photo's `alt` is the pupil's name (`registrar/students/[id]/page.tsx`).
+
+The description went into the click breadcrumb that every later error on the page carries, into the replay's
+click and slow-click breadcrumbs, and into the INP span (L-01). The replay's own copy of the page masked the label
+(`"**** *** ***"`); the SDK's description of the element did not. The scrubbers cut ids, query strings and
+fragments, never labels.
+
+**Why Medium:** a name identifies a child without our database, and the DPA lists Sentry for technical data only.
+It took only an error after a click on one of those controls, an ordinary sequence on the promotions page.
+
+**Fix.** A description keeps the attribute's name and loses its value: `select[aria-label="Decision for Ada Obi"]`
+is sent as `select[aria-label]`, in breadcrumbs, span descriptions and the replay. id, classes, `type` and `name`
+are the page's own and stay. The SDK does not escape a value, so where one ends is read from what follows it.
+
+**Not changed:** the pages. A screen reader needs the name in the label.
+
+### L-01 — The INP span carried record ids, which Round 43 said were gone from every address ✅ Remediated
+
+**Files:** `apps/web/lib/sentryScrub.ts` (`scrubSpan`, `scrubEnvelope`), `apps/web/instrumentation-client.ts`.
+
+The browser tracing that `@sentry/nextjs` turns on reports INP (how long the page took to answer a click) as a
+span in an envelope item of its own, type `span`. It passes neither `beforeSend` nor `beforeSendTransaction`, and
+Round 43's transport scrubber touched only the replay's items. Its `transaction` attribute is the page's address:
+`/schools/<uuid>/students/<uuid>/results` arrived whole. Production traces a fifth of page loads.
+
+Round 43's real-Chrome run never made the SDK report INP, which needs a slow click and the page hidden. Its 0 was
+true of what that run sent, not of everything the SDK can send (doctrine 16). Round 43's L-02 and CLAUDE.md said ids
+leave "every address".
+
+**Why Low:** as Round 43's L-02, an id is opaque, not a name.
+
+**Fix.** The transport now sends only the item types it names (`SENT_ITEMS`), and cuts each one:
+- errors and traces, again: the hooks already cut them, and now the transport alone is enough;
+- the INP span: its attributes as any span's data, its description as free text;
+- the replay event and recording, as in Round 43;
+- sessions and client reports, unchanged: they carry no address.
+
+Any other type is removed. The SDK can send attachments, feedback, profiles, logs and metrics, none of which this
+app turns on, so a type nobody has looked at is not sent on trust. An envelope left empty is not sent. The trace
+context in an envelope's header loses its ids too (measured absent, cut anyway).
+
+**Told, not silent.** What the transport keeps back (a replay it cannot read, or an item of a type it does not send)
+is now reported to Sentry as one warning, `sentry_item_not_sent`. It goes once per page load for each reason and
+item type, and carries only those two (doctrine 9). Until now a dropped replay simply never arrived.
+
+The notice must not start a replay of its own. Today it cannot: the replay sends itself only for an event with an
+exception, and a message has none while `attachStacktrace` is off. With it on, the notice alone sent a replay
+(measured). So the replay's `beforeErrorSampling` refuses the notice whatever that setting becomes.
+
+**Measured after the fix:** the same run sent the error, both traces, the INP span, four replay segments and a
+client report, with 0 planted values anywhere, envelope headers included.
+
+**Tests:**
+- **`sentryScrub.test.ts`, 9 new.** They run on four fixture entries captured unscrubbed in the second measurement
+  (`click_error`, `inp_span`, `click_replay_event`, `click_replay_recording`). They cover:
+  - labels;
+  - the error after the click;
+  - the INP span;
+  - the replay's slow click;
+  - the allow-list (an unknown type, and one named `constructor`, removed and reported);
+  - the transport alone;
+  - the envelope header;
+  - a recording that is a string but not JSON (a residual from Round 43's review);
+  - the notice, told once.
+- **`sentryReplayConfig.test.ts`, the ratchet, 6 (was 4).** It now also fails if the configured transport stops
+  reporting drops, if a type it does not name gets through, or if `beforeErrorSampling` stops refusing the notice,
+  with an ordinary error as the control.
+- **Eleven mutants,** one per piece, each fail at least one test. One run crashed jest without a summary; it was
+  rerun, not counted.
+
+**Not changed:** the legal pages.
 
 ---
 
 ## Round 43 — 2026-10-14
+
+**Deployed** 14 Oct 2026. CI passed on its first attempt at 13:26:46 UTC. By 13:44:03 UTC the live web's own
+JavaScript carried `replaysSessionSampleRate: 0`, compression off and the transport scrubber; it was read from
+edu.chronixtechnology.com, Cloudflare reporting `DYNAMIC`, so not a cache. The API was correctly skipped: nothing it
+watches changed.
 
 **Raised** on 14 Oct 2026, in a review of session replay against the DPA, which lists Sentry for "error monitoring
 (technical/diagnostic data only)". **Measured** the same day: the installed browser SDK (`@sentry/browser` 10.58.0,

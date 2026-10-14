@@ -1,5 +1,14 @@
 # Chronix Edu — Changelog
 
+## Error reports leave out pupils' names (2026-10-14)
+
+### For everyone
+- **Error reports no longer carry the names a page writes on its controls.** Some buttons and pictures carry a
+  pupil's name for screen readers, such as each pupil's decision on the promotions page. When something goes wrong
+  after a click, the report now says what kind of control was clicked, never the name on it.
+- **Reports of how quickly a page answers a click no longer carry record numbers**, as error reports already
+  didn't.
+
 ## Error reports send less (2026-10-14)
 
 ### For everyone

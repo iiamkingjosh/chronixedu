@@ -3,7 +3,10 @@ import path from 'path';
 import http from 'http';
 import type { AddressInfo } from 'net';
 import * as Sentry from '@sentry/browser';
-import { scrubEvent, scrubBreadcrumb, replayAllowed, stripUrl, stripIds, scrubEnvelope, scrubbingTransport } from '../sentryScrub';
+import {
+  scrubEvent, scrubBreadcrumb, replayAllowed, stripUrl, stripIds, stripLabels, scrubEnvelope, scrubbingTransport,
+  scrubRecordingPayload, dropNotifier, isDropNotice, DROP_NOTICE, type Dropped,
+} from '../sentryScrub';
 
 /**
  * The web app's Sentry gets technical data only (SECURITY.md Round 34). The second block runs the
@@ -152,5 +155,121 @@ describe('record ids, on the shapes a real browser sent', () => {
     await transport.send(compressed);
     await transport.send([{}, [[{ type: 'event' }, { message: 'ok' }]]]);
     expect(sent).toHaveLength(1);
+  });
+});
+
+/**
+ * Round 44, against the second measurement in the same fixture: a button labelled with a name, clicked after
+ * navigating to an address with both ids, then an error, then the page hidden so the SDK reported INP.
+ */
+describe('element labels, the INP span and the item types sent, on the shapes a real browser sent', () => {
+  const measured = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'sentryMeasuredEvents.json'), 'utf8'));
+  const plants: string[] = measured.plants;
+  const names: string[] = measured.names;
+  const everything = [...plants, ...names];
+  const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v));
+  const found = (v: unknown, list: string[]) => list.filter((p) => JSON.stringify(v).includes(p));
+  type Env = [Record<string, unknown>, Array<[{ type: string }, unknown]>];
+
+  it('an element keeps its tag, id, classes, type and name, and loses the values of aria-label, title and alt', () => {
+    expect(stripLabels('body > button#slow[aria-label="Edit Ada Obi"]')).toBe('body > button#slow[aria-label]');
+    expect(stripLabels('div.row > select.w-full[aria-label="Decision for Ada Obi"][name="decision"]'))
+      .toBe('div.row > select.w-full[aria-label][name="decision"]');
+    expect(stripLabels('td[title="Ada Obi"] > img[alt="Ada Obi"]')).toBe('td[title] > img[alt]');
+    // The SDK does not escape a value, so a quote inside one must not end it early.
+    expect(stripLabels('a[title="Ada "the" Obi"][type="button"]')).toBe('a[title][type="button"]');
+    // The control: what is the page's own stays.
+    expect(stripLabels('form > input#first.w-full[type="text"][name="first_name"]')).toBe('form > input#first.w-full[type="text"][name="first_name"]');
+  });
+
+  it('the error after the click carries the ids and the name before scrubbing, none after, and still names the element', () => {
+    expect(found(measured.click_error, everything)).toEqual(everything);
+    const after = scrubEvent(copy(measured.click_error));
+    expect(found(after, everything)).toEqual([]);
+    const click = after.breadcrumbs.find((b: { category?: string }) => b.category === 'ui.click');
+    expect(click.message).toBe('body > button#slow[aria-label]');
+  });
+
+  it('the INP span, its own envelope item, is cut at the transport and still says which page, which element and how long', () => {
+    const envelope: Env = [{}, [[{ type: 'span' }, copy(measured.inp_span)]]];
+    expect(found(envelope, everything)).toEqual([plants[0], plants[1], ...names]);
+    const scrubbed = scrubEnvelope(copy(envelope)) as Env;
+    expect(found(scrubbed, everything)).toEqual([]);
+    const span = scrubbed[1][0][1] as { data: Record<string, unknown>; description: string; measurements: unknown };
+    expect(span.data.transaction).toBe('/schools/[id]/students/[id]/results');
+    expect(span.description).toBe('body > button#slow[aria-label]');
+    expect(span.measurements).toEqual(measured.inp_span.measurements);
+  });
+
+  it('the replay segment holding the slow click carries none after the transport scrubs it, and the click is still there', () => {
+    const envelope: Env = [{}, [
+      [{ type: 'replay_event' }, copy(measured.click_replay_event)],
+      [{ type: 'replay_recording' }, measured.click_replay_recording],
+    ]];
+    expect(found(envelope, everything)).toEqual(everything);
+    const scrubbed = scrubEnvelope(copy(envelope)) as Env;
+    expect(found(scrubbed, everything)).toEqual([]);
+    expect(scrubbed[1][1][1]).toContain('"message":"body > button#slow[aria-label]"');
+  });
+
+  it('sends only the item types it names: another is removed and reported, and an envelope left empty is not sent', () => {
+    const dropped: Dropped[] = [];
+    const mixed: Env = [{}, [[{ type: 'statsd' }, 'probe:1|c'], [{ type: 'event' }, { message: 'ok' }], [{ type: 'constructor' }, {}]]];
+    const out = scrubEnvelope(mixed, (d) => dropped.push(d)) as Env;
+    expect(out[1].map(([header]) => header.type)).toEqual(['event']);
+    expect(dropped).toEqual([
+      { reason: 'item_type_not_allowed', itemType: 'statsd' },
+      { reason: 'item_type_not_allowed', itemType: 'constructor' },
+    ]);
+    expect(scrubEnvelope([{}, [[{ type: 'profile' }, {}]]])).toBeNull();
+    // The control: every type it names is sent (the recording is tested above, as it must be a readable string).
+    for (const type of ['event', 'transaction', 'span', 'replay_event', 'session', 'client_report']) {
+      expect({ type, sent: scrubEnvelope([{}, [[{ type }, {}]]]) !== null }).toEqual({ type, sent: true });
+    }
+  });
+
+  it('the transport alone is enough: an error and a trace that reach it unscrubbed leave it carrying nothing', () => {
+    const envelope: Env = [{}, [
+      [{ type: 'event' }, copy(measured.click_error)],
+      [{ type: 'transaction' }, copy(measured.transaction)],
+    ]];
+    expect(found(envelope, everything)).toEqual(everything);
+    const scrubbed = scrubEnvelope(copy(envelope)) as Env;
+    expect(found(scrubbed, everything)).toEqual([]);
+    // The control: both are still sent, and still say where they were.
+    expect(scrubbed[1].map(([header]) => header.type)).toEqual(['event', 'transaction']);
+    expect((scrubbed[1][0][1] as { request: { url: string } }).request.url).toMatch(/\/schools\/\[id\]\/students\/\[id\]\/results$/);
+  });
+
+  it('an envelope header naming the page loses its ids', () => {
+    const out = scrubEnvelope([{ trace: { transaction: `/schools/${plants[0]}/students` } }, [[{ type: 'event' }, {}]]]) as Env;
+    expect(out[0]).toEqual({ trace: { transaction: '/schools/[id]/students' } });
+  });
+
+  it('a recording that is a string but not JSON, or has no segment header, is dropped and reported', async () => {
+    expect(scrubRecordingPayload('{"segment_id":0}\nnot json')).toBeNull();
+    expect(scrubRecordingPayload('{"segment_id":0}')).toBeNull();
+    // The control: the same shape, readable, is kept.
+    expect(scrubRecordingPayload('{"segment_id":0}\n[]')).toBe('{"segment_id":0}\n[]');
+    const dropped: Dropped[] = [];
+    const sent: unknown[] = [];
+    const transport = scrubbingTransport({ send: async (e: unknown) => { sent.push(e); return {}; }, flush: async () => true }, (d) => dropped.push(d));
+    await transport.send([{}, [[{ type: 'replay_event' }, {}], [{ type: 'replay_recording' }, '{"segment_id":0}\nnot json']]]);
+    expect(sent).toEqual([]);
+    expect(dropped).toEqual([{ reason: 'replay_unreadable', itemType: 'replay_recording' }]);
+  });
+
+  it('a drop is told once per page load for each reason and item type, and the notice is recognisable', () => {
+    const told: unknown[] = [];
+    const note = dropNotifier((message, tags) => told.push([message, tags]));
+    note({ reason: 'replay_unreadable', itemType: 'replay_recording' });
+    note({ reason: 'replay_unreadable', itemType: 'replay_recording' });
+    note({ reason: 'item_type_not_allowed', itemType: 'statsd' });
+    expect(told).toEqual([
+      [DROP_NOTICE, { reason: 'replay_unreadable', item_type: 'replay_recording' }],
+      [DROP_NOTICE, { reason: 'item_type_not_allowed', item_type: 'statsd' }],
+    ]);
+    expect(isDropNotice({ message: DROP_NOTICE })).toBe(true);
+    expect(isDropNotice({ message: 'measured error' })).toBe(false);
   });
 });

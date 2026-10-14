@@ -584,10 +584,15 @@ Monorepo, npm workspaces:
   stated explicitly in `instrumentation-client.ts` (named `sentry.client.config.ts` until 1 Oct 2026). Never put a name, email, phone number or
   student record in a Sentry tag, context or breadcrumb.
   **Replay records only on an error** (`replaysSessionSampleRate: 0`; SECURITY.md Round 43): the DPA lists Sentry
-  for error monitoring. **Record ids leave every address as `[id]`**, and the replay is scrubbed whole at the
-  transport (`scrubbingTransport`), because its own hook never sees the recorded page or its address. So replay
-  compression stays off, and a recording that cannot be read is dropped. `lib/__tests__/sentryReplayConfig.test.ts`
-  loads `instrumentation-client.ts` and fails if a mask flag, the 0 baseline or the compression setting changes.
+  for error monitoring. **Record ids leave every address as `[id]`, and a clicked element's `aria-label`, `title`
+  and `alt` lose their values** (Round 44: the promotions page labels each pupil's controls with the pupil's name).
+  **The transport sends only the item types `SENT_ITEMS` names, and cuts each** (`scrubbingTransport`), because the
+  replay and the INP span pass no hook: the replay's own sees neither the recorded page nor its address, and the INP
+  span carried ids that Round 43 had called gone from every address. Anything else is removed, so a new item type
+  is a decision in `SENT_ITEMS`. Replay compression stays off; a recording that cannot be read is dropped; every
+  drop is reported once per page load as `sentry_item_not_sent`, which `beforeErrorSampling` keeps from starting a
+  replay. `lib/__tests__/sentryReplayConfig.test.ts` loads `instrumentation-client.ts` and fails if a mask flag,
+  the 0 baseline, the compression setting, the drop notice or its replay guard changes.
 - **The API alerts through an allow-list, `config/alerts.ts`** (since 1 Oct 2026). A winston format
   sends the log events listed in `ALERTS` to Sentry, each under one alert name, at level `error`
   (the level measured to trigger the email rule), once per 15 minutes per process, grouped by name
