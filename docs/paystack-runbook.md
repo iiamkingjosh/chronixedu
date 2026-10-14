@@ -16,15 +16,27 @@ details again, and the settings below are made again in the new account.
       https://api.chronixtechnology.com/api/schools/payments/paystack/webhook
 
   It credits every school's payments: a payment is matched by its own record (migration 062), never by an
-  address. Until 8 Oct 2026 the dashboard held the pilot school's address,
+  address. **Set in the dashboard on 13 Oct 2026** (Moses), after the code carrying it went live (`7b89eaf`;
+  before that the new address answered 401). Until then the dashboard held the pilot school's address,
 
       https://api.chronixtechnology.com/api/schools/f1347b5c-584f-43e5-ba05-6770139c6c8f/payments/paystack/webhook
 
-  which still answers. **While the dashboard still holds it, Chronix High School must not be deleted:** its
-  address would answer 404, and every school's online payments would stop being credited by webhook, with
-  nothing reporting it (a payment would land only if the payer's browser came back). **Change the URL only once
-  the code with the new address is deployed** (it is in `83ac65d`; before that the new address answers 401).
-  Then check it: the dashboard has no "send a test" button, so in Developers → Webhooks, Live mode, open a recent
+  which still answers: both paths are registered to the same handler (`routes/feesPublic.ts`).
+
+  ~~While the dashboard still holds it, Chronix High School must not be deleted: its address would answer 404,
+  and every school's online payments would stop being credited by webhook.~~ **That warning was wrong, and never
+  true** (corrected by the reviewer, 13 Oct 2026):
+  - `paystackWebhook` matches a payment by Paystack's `reference` and takes the school from the settled record
+    (`settled.schoolId`). It never reads the school in the address, looks one up, or answers 404 for a missing
+    one. This was checked in the handler before `83ac65d` and in the live one.
+  - The router is mounted ahead of the whole sign-in chain (`app.use('/api/schools', feesPublicRoutes)` in
+    `index.ts`, above `verifyToken` and the school guards), so nothing on that request reads the school either.
+    `83ac65d` did not change that: it touched `feesPublic.ts`, not `index.ts`.
+  - So deleting any school leaves both addresses answering. Deleting a school does remove its fee checkouts, so
+    a webhook arriving later for one of its payments is not credited and raises `fee_payment_not_credited`.
+    That is true at either address; it is about the records, not the address.
+
+  Check it: the dashboard has no "send a test" button, so in Developers → Webhooks, Live mode, open a recent
   delivered event and choose Retry. It goes to the new address and must answer 200. A retried payment is never
   credited twice (`feeCheckouts.db.test.ts`: delivered again, it is credited once). Leave the **Callback URL** as it is; Chronix Edu
   sets the return address on every payment itself.

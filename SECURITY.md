@@ -2,7 +2,7 @@
 
 **Latest audit:** Round 42 — 2026-10-10  
 **Scope:** The suspension and read-only guards on every school route, and sign-in to a suspended school  
-**Round 42 total findings:** 3 (0 Critical · 0 High · 1 Medium · 2 Low) — remediated in code, not yet deployed
+**Round 42 total findings:** 3 (0 Critical · 0 High · 1 Medium · 2 Low) — remediated, live since 10 Oct 2026 (`8b6dc6b`)
 
 ---
 

@@ -29,10 +29,12 @@ deleting transaction.
 
 ## Procedure
 
-0. **Is this the school Paystack's webhook names?** Read the Live Webhook URL in the Paystack dashboard
-   (docs/paystack-runbook.md). If it contains this school's id, change it to the address that names no
-   school first. Deleting the school it names makes every school's payment webhook answer 404, and nothing
-   reports it.
+0. **(Removed 13 Oct 2026: there is nothing to check here.)** This step said to check the Paystack webhook
+   first, because deleting the school its address names would make every school's payment webhook answer 404.
+   That was wrong (corrected by the reviewer, 13 Oct 2026). The webhook takes the school from the payment's
+   own record, never from its address, and is mounted ahead of every school guard, so deleting any school leaves
+   both webhook addresses answering. The dashboard has held the address that names no school since 13 Oct 2026
+   anyway (docs/paystack-runbook.md).
 1. **Save what Chronix must keep for itself.** `platform_subscriptions` is Chronix's own billing
    record for the school, and the script deletes it. Before running, save it to the accounts:
    ```sql

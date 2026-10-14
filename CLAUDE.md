@@ -971,7 +971,7 @@ Monorepo, npm workspaces:
   Paystack's metadata and the `:schoolId` in the return page's or webhook's address are never used; the
   return page took the school from its own address until then (SECURITY.md Round 38). A payment with
   no record is not credited and alerts (`fee_payment_not_credited`); the bursar records it by reference.
-  Because payments are matched by reference, one webhook address serves every school: `/api/schools/payments/paystack/webhook`, which names none (8 Oct 2026). The dashboard named the pilot school's address, and deleting that school would have silenced every school's webhook; the old address still answers until the dashboard is changed (`docs/paystack-runbook.md`), and the deletion runbook checks first. Here the money is Chronix's own revenue, not a tenant's, so identity is
+  Because payments are matched by reference, one webhook address serves every school: `/api/schools/payments/paystack/webhook`, which names none (8 Oct 2026). The dashboard held the pilot school's address until 13 Oct 2026, and both addresses answer, on one handler. ~~Deleting that school would have silenced every school's webhook~~: wrong (corrected by the reviewer, 13 Oct 2026). The handler never reads the school in its address, and the router sits ahead of the sign-in chain, so deleting any school leaves both answering (`docs/paystack-runbook.md`). Here the money is Chronix's own revenue, not a tenant's, so identity is
   resolved ONLY from the local `reference`-keyed row this server wrote before calling Paystack
   (`findPendingPaymentForSchool`/`settlePayment` in `db/queries/platformBilling.ts`) — never from the
   webhook or callback's `metadata`, not even cross-checked. `platformBillingFullStack.test.ts` proves
@@ -1452,8 +1452,25 @@ Monorepo, npm workspaces:
     to `main`: work then goes through a pull request, CI passes there, and only then does `main` move. Put the
     rule in place first, and only then switch "Wait for CI" off.
   - **A push that touches none of a service's watched files leaves that service SKIPPED.** So the API and the
-    web can run different commits, correctly. On 10 Oct 2026 Batch 2 left the API on `8b6dc6b` and the web on
-    `a2fc8f1`. Never redeploy a service only to make the two numbers match.
+    web can run different commits, correctly, but only while nothing the service watches changed between the
+    commit it serves and `main`'s head. On 10 Oct 2026 Batch 2 left the API on `8b6dc6b` and the web on
+    `a2fc8f1`, correctly. Before calling a mismatch correct, run
+    `git diff --stat <served>..origin/main -- apps/web package.json package-lock.json` for the web, and
+    `git diff --stat <served>..origin/main -- apps/api migrations package.json package-lock.json tsconfig.base.json`
+    for the API. If that is empty, leave the service alone. If not, it is behind: deploy it (Ctrl+K → Deploy
+    Latest Commit).
+  - **A skipped service is not caught up by a later push.** Railway decides per push from what that push changed,
+    never from what a service has missed since its last successful deploy. So skips compound. Its SKIPPED row says
+    "No changes to watched files", which is true of that push and silent about what lies beneath it.
+    - **Measured 13 Oct 2026:** CI failed on `24387ec`, 36 commits, and both services were skipped. The next push,
+      `7b89eaf`, was one commit, a test and a doc. It deployed the API (`migration_runs` 112, 064 applied) and
+      skipped the web.
+    - **The result:** the web stayed on `08dd1d0`, 62 watched files behind (+2,228 / −436), while the API ran the
+      new capability guards. It had to be deployed by hand.
+    - **What one push of one commit cannot show:** whether Railway reads the head commit or the push's range.
+  - **So the check after a push is not "both deploys reached SUCCESS".** It is "the commit each service serves
+    equals `origin/main`'s head", read from each service's last SUCCESS, or the diff above is empty. A correct
+    skip and a service 37 commits adrift produce the same SKIPPED row (doctrine 16).
   - **From CI passing to the API deploy's SUCCESS, measured:**
     - `307da86`: 5m36s (CI 07:35:44, deploy 07:41:20 UTC, 7 Oct 2026).
     - `a2fc8f1`: 5m19s (CI 03:42:31, deploy 03:47:50 UTC, 10 Oct 2026); the web was rebuilt too.
@@ -1544,7 +1561,7 @@ npm run test:unit                       # mocked, no DB
 # test:db rebuilds the schema that test:integration:local seeds into:
 export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/chronixedu_test
 export DATABASE_URL=$TEST_DATABASE_URL SUPABASE_URL=http://127.0.0.1:54321        SUPABASE_SERVICE_ROLE_KEY=local-placeholder SUPABASE_PUBLISHABLE_KEY=local-placeholder
-npm run test:db                         # 48 suites, 502 passed + 2 skipped (5 Oct 2026), ~90s with durability off (below)
+npm run test:db                         # 86 suites, 711 passed + 2 skipped (13 Oct 2026), ~90s with durability off (below)
                                         # on a starved host, one process per suite — see "flaky local run" below
 npm run test:integration:local -- --forceExit   # 23 suites, 187 passed + 8 skipped locally (Auth-dependent; the setup
                                                 # says why). CI runs those 8 against Supabase's local stack and sets
