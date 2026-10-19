@@ -3,7 +3,7 @@ import path from 'path';
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 // Payout config changes fan out email/SMS alerts (3-way fraud alert). Mock these
-// so the test suite doesn't make real SendGrid/Termii network calls.
+// so the test suite doesn't make real Resend/Termii network calls.
 jest.mock('../src/services/termiiService', () => ({
   ...jest.requireActual('../src/services/termiiService'),
   isSmsEnabled: jest.fn().mockReturnValue(true), // the SMS-on path; off is smsSwitchedOff.db.test.ts

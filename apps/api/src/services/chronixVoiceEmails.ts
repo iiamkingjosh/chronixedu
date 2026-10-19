@@ -42,6 +42,6 @@ export const TEST_EMAIL_SUBJECT = 'Chronix Edu — Test Email';
 
 /** The test email a school sends itself from Settings → Notifications, so it shows the real design. */
 export function testEmail(appUrl: string): { text: string; html: string } {
-  const text = 'This is a test email from Chronix Edu confirming your SendGrid configuration is working correctly.';
+  const text = 'This is a test email from Chronix Edu confirming that email from Chronix Edu is working.';
   return { text, html: renderEmail({ title: TEST_EMAIL_SUBJECT, bodyHtml: paragraphs(text), appUrl }) };
 }

@@ -70,14 +70,14 @@ describe('one outage is one alert', () => {
 
   it('throttles each condition separately', () => {
     alertFromLog({ message: 'redis_client_error', error: 'a' }, 0);
-    alertFromLog({ message: 'sendgrid_email_failed', error: 'b' }, 1);
+    alertFromLog({ message: 'email_send_failed', error: 'b' }, 1);
     expect(captureMessage).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('Sentry gets technical data only', () => {
   it('drops the address and subject a mail failure logs, keeping the error', () => {
-    logger.error('sendgrid_email_failed', { to: 'ada.parent@example.com', subject: 'Fee reminder for Ada Obi', error: 'Unauthorized' });
+    logger.error('email_send_failed', { to: 'ada.parent@example.com', subject: 'Fee reminder for Ada Obi', error: 'Unauthorized' });
 
     expect(captureMessage).toHaveBeenCalledTimes(1); // it was sent: the absences below are not from silence
     const sent = sentToSentry();

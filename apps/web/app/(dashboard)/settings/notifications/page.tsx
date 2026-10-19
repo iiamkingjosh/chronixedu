@@ -185,7 +185,7 @@ export default function NotificationSettingsPage() {
         <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Email Delivery</h2>
           <p className="text-sm text-gray-500">
-            Send a test email to <span className="font-medium text-gray-700">{user?.email ?? 'your account email'}</span> to confirm SendGrid is configured correctly.
+            Send a test email to <span className="font-medium text-gray-700">{user?.email ?? 'your account email'}</span> to confirm email is set up correctly.
           </p>
           <button
             type="button"

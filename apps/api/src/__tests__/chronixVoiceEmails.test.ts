@@ -76,7 +76,7 @@ describe('the platform announcement', () => {
 describe('the test email', () => {
   it('keeps its words and comes on the layout, so a test shows the real design', () => {
     const mail = testEmail(APP);
-    expect(mail.text).toBe('This is a test email from Chronix Edu confirming your SendGrid configuration is working correctly.');
+    expect(mail.text).toBe('This is a test email from Chronix Edu confirming that email from Chronix Edu is working.');
     expect(mail.html).toContain(`<p>${mail.text}</p>`);
     expect(mail.html).toContain(BANNER);
     expect(mail.html).toContain('>Reach out to us</a>');

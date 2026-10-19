@@ -309,14 +309,22 @@ Monorepo, npm workspaces:
   would again say whether an account exists (SECURITY.md Round 24).
 - **The reset email and where it lands.** Observed 2 Oct 2026 by following a real email from the
   app's own flow. Most of this lives in dashboards and in no file.
-  - **The email.** Supabase sends it through custom SMTP (SendGrid, `no-reply@chronixtechnology.com`),
-    with a custom template. Its link has the `{{ .ConfirmationURL }}` shape:
+  - **The email.** Supabase sends it through custom SMTP, set in its dashboard (Authentication → SMTP),
+    with a custom template. Since 19 Oct 2026 that is Resend, from `no-reply@edu.chronixtechnology.com`.
+    It was SendGrid until its credits ran out: Supabase's auth log at 06:51:16 UTC on 19 Oct still showed
+    SendGrid's 451 "Maximum credits exceeded". Its link has the `{{ .ConfirmationURL }}` shape:
     `…supabase.co/auth/v1/verify?token&type=recovery&redirect_to=https://edu.chronixtechnology.com/reset-password`.
   - **SendGrid click tracking was on, account-wide, until 2 Oct 2026.** It wrapped every link in
     `ct.sendgrid.net`, so SendGrid saw every recovery token, and a mail scanner following the tracking
     link could use one up before the person clicked. Moses turned click and open tracking off; read
     back through the API's key at 11:45 UTC. Whether Supabase's SMTP sends through that same account
     shows only in a reset email: its link must not start `ct.sendgrid.net`. Keep tracking off.
+  - **The same holds for Resend.** Chronix Edu sends from its own domain there, `edu.chronixtechnology.com`
+    (Moses, 19 Oct 2026); Chronix ERP sends from `notify.chronixtechnology.com`. Click and open tracking on
+    Edu's domain must stay off (Resend → Domains). A reset email's link must start with the Supabase address,
+    never a tracking one. Its DNS, read 19 Oct: the DKIM key at `resend._domainkey.edu`, and `send.edu`
+    pointing at Resend's `send.forge.rmta.net` for the bounce MX and SPF. Nothing was added on `edu` itself,
+    which stays the website's Cloudflare record. DMARC is the parent's `p=none`.
   - **What arrives.** supabase-js defaults to the implicit flow, so a working link lands with
     `#access_token…&type=recovery`, and a used or expired one with
     `#error=access_denied&error_code=otp_expired`.
@@ -703,10 +711,28 @@ Monorepo, npm workspaces:
   the temporary password until then (SECURITY.md Round 40 L-04). Reset Password answers with the email's outcome; a
   student with a `@students.internal` address gets a new temporary password instead, shown once.
 
-  **"Sent" means SendGrid accepted it.** `sendEmail` never throws; it returns
+  **"Sent" means Resend accepted it** (SendGrid until 19 Oct 2026). `sendEmail` never throws; it returns
   `'sent' | 'queued' | 'lost' | 'disabled'`. Anything that tells a person an email went reads that
   value, never the absence of an error. `email_queue` keeps the body of every refused email, so
   never put a password in an email body.
+
+  **Every email leaves through `services/emailProvider.ts`** (Resend, 19 Oct 2026): `sendEmail` and the
+  retry job both call `deliver()`, so they cannot differ again (the retry job sent without the sender name).
+  - **Resend's SDK never throws for a refusal.** It answers `{ data: null, error }`, so code that waits for
+    an exception counts every refusal as sent. Only an answer with Resend's id is accepted.
+  - **The account is shared with Chronix ERP:** 100 emails a day, 3,000 a month, one per-second limit, and
+    Supabase's password resets count too (advisor, 19 Oct 2026). One real school's bulk import can spend
+    days of both products' email. A paid plan or a separate Edu account is Moses's decision before the
+    first real school (`docs/AUDIT-2026-09.md`).
+  - **A spent quota is not a failure.** `daily_quota_exceeded` or `monthly_quota_exceeded` queues the email
+    without using a try, holds every send for 15 minutes without asking Resend (`QUOTA_HOLD_MS`), and
+    raises `email_quota_exhausted`. The retry job stops at the first such refusal. Before, five tries 30
+    minutes apart ran out long before a daily quota came back (`emailQueueQuota.db.test.ts`).
+  - **Every send is paced,** `SENDS_PER_SECOND` across the whole API, below the team's limit. The welcome
+    loop sends five at a time and no longer sleeps.
+  - **The sender has no default.** `RESEND_FROM_EMAIL` must be an address on a domain verified in Resend,
+    and the API refuses to start with a key and no sender. SendGrid's default, `no-reply@chronixedu.com`,
+    was never verified.
 - **"Use Forgot password" is only true for an account with a Supabase Auth identity** (same id, same
   address).
   - **Why it matters.** Forgot password answers 200 for every address (Round 24), so an account
@@ -757,8 +783,8 @@ Monorepo, npm workspaces:
   auth` for any role without USAGE on `auth` — and the C-4a probe measured the stub, not the
   system. Copy bodies from `pg_proc`, and grants too.
 - **A local integration run cannot reach a real provider.** `jest.globalSetup.ts` loads `.env` and
-  then empties `SENDGRID_API_KEY`, `TERMII_API_KEY`, `PAYSTACK_SECRET_KEY`, `SMS_ENABLED` and
-  `SENTRY_DSN`. Emptied, not deleted: suites call `dotenv.config` themselves, and dotenv never
+  then empties `RESEND_API_KEY`, `TERMII_API_KEY`, `PAYSTACK_SECRET_KEY`, `SMS_ENABLED` and
+  `SENTRY_DSN` (`SENDGRID_API_KEY` until 19 Oct 2026). Emptied, not deleted: suites call `dotenv.config` themselves, and dotenv never
   overwrites a set variable. A test that needs a provider sets a fake key and stubs the call
   (`feesPayout`, `payoutSettings`); `noOutsideWorldKeys.test.ts` guards it. Until 1 Oct 2026 each
   local run sent one real email through production SendGrid (SECURITY.md Round 26).
@@ -1632,7 +1658,7 @@ a deliberate staging run.
 | Supabase Auth JWT with custom claims; RLS enforces isolation | Custom HS256 JWT; RLS is defence in depth only (doctrine 2) |
 | `result_status` draft→submitted→approved→published per student | Two-level workflow (doctrine 5) |
 | Hosting: Vercel (web) | Railway (web and api) |
-| Firebase Cloud Messaging | Not used. In-app notifications (polled every 60s) + SendGrid; Termii SMS switched off 1 Oct 2026 |
+| Firebase Cloud Messaging | Not used. In-app notifications (polled every 60s) + email (Resend since 19 Oct 2026, SendGrid before); Termii SMS switched off 1 Oct 2026 |
 | `packages/shared`, Axios, Zustand | Not present. Types live per app; `fetch` wrapper in `lib/api.ts` |
 | Launch 7 Sep 2025 (PRD) | Launched 7 Sep 2026 |
 | Flat subscription tiers | trial / basic / premium / enterprise, per student per term |

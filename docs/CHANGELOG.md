@@ -1,5 +1,15 @@
 # Chronix Edu — Changelog
 
+## Emails send again (2026-10-19)
+
+### For everyone
+- **Emails from Chronix Edu are going out again,** through a new email service. They had stopped when the
+  previous service's credits ran out.
+- **They now come from `no-reply@edu.chronixtechnology.com`.** If one does not arrive, check the spam
+  folder once and mark it as not spam.
+- **An email that cannot go at once is kept and sent later,** including when the day's sending limit has
+  been reached. Before, it was given up on after a few hours.
+
 ## Error reports leave out pupils' names (2026-10-14)
 
 ### For everyone

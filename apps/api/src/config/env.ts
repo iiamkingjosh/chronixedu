@@ -22,8 +22,12 @@ const envSchema = z.object({
   SUPABASE_STORAGE_BUCKET: z.string().min(1).default('school-assets'),
   PORT: z.coerce.number().int().positive().default(3001),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  SENDGRID_API_KEY: z.string().optional(),
-  SENDGRID_FROM_EMAIL: z.string().email('SENDGRID_FROM_EMAIL must be a valid email').default('no-reply@chronixedu.com'),
+  // Email (Resend, since 19 Oct 2026). Unset key means email is off. The sender has no default: it must be
+  // an address on a domain verified in Resend (no-reply@edu.chronixtechnology.com), and index.ts refuses
+  // to start with a key and no sender. SendGrid's default, no-reply@chronixedu.com, was never verified.
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().email('RESEND_FROM_EMAIL must be a valid email').optional(),
+  RESEND_FROM_NAME: z.string().min(1).optional(),
   // SMS sends only when this is "true" AND TERMII_API_KEY is set. Unset means off, which it is
   // by decision since 1 Oct 2026 (Termii unfunded, keys kept). See termiiService.isSmsEnabled.
   SMS_ENABLED: z.string().optional(),

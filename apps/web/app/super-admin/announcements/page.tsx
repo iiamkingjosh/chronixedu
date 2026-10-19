@@ -236,7 +236,7 @@ export default function SuperAdminAnnouncementsPage() {
     setBusyId(announcement.id);
     try {
       const res = await publishAnnouncement(announcement.id);
-      // Says what SendGrid accepted, not who it was addressed to (2 Oct 2026).
+      // Says what the email service accepted, not who it was addressed to (2 Oct 2026).
       if (res.recipients_count === 0) {
         show('Announcement published. No principal is on its plans, so no email was sent.', 'success');
       } else if (res.emails_sent === res.recipients_count) {

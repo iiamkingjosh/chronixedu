@@ -65,7 +65,7 @@ const auditMeta = async () => (await pool.query<{ metadata: Record<string, unkno
   `SELECT metadata FROM platform_audit_logs WHERE action_type = 'ANNOUNCEMENT_PUBLISHED'`)).rows.map(r => r.metadata);
 
 describe('publishing a platform announcement', () => {
-  it('emails every principal on the layout, with clean text, and counts what SendGrid accepted', async () => {
+  it('emails every principal on the layout, with clean text, and counts what Resend accepted', async () => {
     const res = await publish(await announcement());
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ recipients_count: 2, emails_sent: 2 });
@@ -83,7 +83,7 @@ describe('publishing a platform announcement', () => {
     expect(await auditMeta()).toEqual([expect.objectContaining({ recipients_count: 2, emails_sent: 2 })]);
   });
 
-  it('says how many SendGrid accepted when one is refused, rather than "sent to 2"', async () => {
+  it('says how many Resend accepted when one is refused, rather than "sent to 2"', async () => {
     sendEmail.mockImplementation(async (to: string) => (to === principalB ? 'queued' : 'sent'));
     const res = await publish(await announcement());
     expect(res.status).toBe(200);
@@ -103,23 +103,23 @@ describe('publishing a platform announcement', () => {
 describe('the test email from Settings → Notifications', () => {
   const send = () => request(schools).post(`/api/schools/${I.schoolA}/notifications/test-email`).set('Authorization', tokens.principalA());
 
-  it('comes on the layout and says it was sent when SendGrid accepted it', async () => {
+  it('comes on the layout and says it was sent when Resend accepted it', async () => {
     const res = await send();
     expect(res.status).toBe(200);
     expect(res.body.data.message).toBe(`Test email sent to ${principalA}`);
     const [to, subject, text, html] = sendEmail.mock.calls[0] as [string, string, string, string];
     expect({ to, subject }).toEqual({ to: principalA, subject: 'Chronix Edu — Test Email' });
-    expect(text).toBe('This is a test email from Chronix Edu confirming your SendGrid configuration is working correctly.');
+    expect(text).toBe('This is a test email from Chronix Edu confirming that email from Chronix Edu is working.');
     expect(html).toContain(`<p>${text}</p>`);
     expect(html).toContain(BANNER());
   });
 
-  it('says it was not sent, and why, when SendGrid refused it', async () => {
+  it('says it was not sent, and why, when Resend refused it', async () => {
     sendEmail.mockImplementation(async () => 'queued');
     const queued = await send();
     expect(queued.status).toBe(502);
     expect(queued.body.error.code).toBe('TEST_EMAIL_NOT_SENT');
-    expect(queued.body.error.message).toMatch(/was not sent\. SendGrid did not accept it\. It has been queued/);
+    expect(queued.body.error.message).toMatch(/was not sent\. The email service did not accept it\. It has been queued/);
 
     sendEmail.mockImplementation(async () => 'lost');
     const lost = await send();

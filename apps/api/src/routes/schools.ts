@@ -860,18 +860,18 @@ router.post(
       }
 
       if (!isEmailConfigured()) {
-        return res.status(400).json({ success: false, error: { code: 'EMAIL_NOT_CONFIGURED', message: 'SendGrid is not configured (SENDGRID_API_KEY missing).' } });
+        return res.status(400).json({ success: false, error: { code: 'EMAIL_NOT_CONFIGURED', message: 'Email is not configured on this server (RESEND_API_KEY missing).' } });
       }
 
-      // On the shared layout (2 Oct 2026), so the test shows the real design. And it says what SendGrid
-      // did: it used to answer "Test email sent" whatever happened, which defeats a test.
+      // On the shared layout (2 Oct 2026), so the test shows the real design. And it says what the email
+      // service did: it used to answer "Test email sent" whatever happened, which defeats a test.
       const mail = testEmail(appBaseUrl());
       const outcome = await sendEmail(email, TEST_EMAIL_SUBJECT, mail.text, mail.html);
       if (outcome !== 'sent') {
         const why = outcome === 'queued'
-          ? 'SendGrid did not accept it. It has been queued and will be retried, so it may still arrive.'
+          ? 'The email service did not accept it. It has been queued and will be retried, so it may still arrive.'
           : outcome === 'lost'
-            ? 'SendGrid did not accept it, and it could not be queued for a retry.'
+            ? 'The email service did not accept it, and it could not be queued for a retry.'
             : 'Email is not configured on this server.';
         return res.status(502).json({ success: false, error: { code: 'TEST_EMAIL_NOT_SENT', message: `The test email to ${email} was not sent. ${why}` } });
       }

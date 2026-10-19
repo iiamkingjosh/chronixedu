@@ -8,12 +8,19 @@ export interface QueuedEmail {
   attempts: number;
 }
 
-export async function enqueueEmail(to: string, subject: string, text: string, error: string): Promise<void> {
+/** Queues an email for the retry job. `attempts` is how many tries it has used: 1 for a refused send, 0 for
+ *  one held because the quota is spent, which has not used a try. */
+export async function enqueueEmail(to: string, subject: string, text: string, error: string, attempts = 1): Promise<void> {
   await pool.query(
     `INSERT INTO email_queue (to_email, subject, text_body, attempts, last_attempt_at, status, last_error)
-     VALUES ($1, $2, $3, 1, now(), 'pending', $4)`,
-    [to, subject, text, error]
+     VALUES ($1, $2, $3, $5, now(), 'pending', $4)`,
+    [to, subject, text, error, attempts]
   );
+}
+
+/** Records a try refused because the quota is spent: when and why, without counting it against the five. */
+export async function markEmailHeld(id: string, error: string): Promise<void> {
+  await pool.query(`UPDATE email_queue SET last_attempt_at = now(), last_error = $2 WHERE id = $1`, [id, error]);
 }
 
 export async function getPendingEmails(maxAttempts: number): Promise<QueuedEmail[]> {

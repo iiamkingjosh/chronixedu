@@ -622,7 +622,7 @@ export interface PublishAnnouncementResponse {
   published_at: string;
   /** Principals the announcement was addressed to. */
   recipients_count: number;
-  /** How many of those emails SendGrid accepted. Fewer than recipients_count means some did not go. */
+  /** How many of those emails the email service (Resend) accepted. Fewer than recipients_count means some did not go. */
   emails_sent: number;
 }
 

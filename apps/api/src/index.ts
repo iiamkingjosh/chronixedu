@@ -78,8 +78,8 @@ if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.error('FATAL: SUPABASE_SERVICE_ROLE_KEY is not set. Refusing to start.');
   process.exit(1);
 }
-if (process.env.SENDGRID_API_KEY && !process.env.SENDGRID_FROM_EMAIL) {
-  console.error('FATAL: SENDGRID_FROM_EMAIL is required when SENDGRID_API_KEY is set. Refusing to start.');
+if (process.env.RESEND_API_KEY && !process.env.RESEND_FROM_EMAIL) {
+  console.error('FATAL: RESEND_FROM_EMAIL is required when RESEND_API_KEY is set. Refusing to start.');
   process.exit(1);
 }
 

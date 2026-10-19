@@ -1,15 +1,14 @@
 import * as cron from 'node-cron';
-import sgMail from '@sendgrid/mail';
-import { getPendingEmails, markEmailSent, markEmailRetryFailed, deleteQueuedEmailsOlderThan } from '../db/queries/emailQueue';
+import { getPendingEmails, markEmailSent, markEmailRetryFailed, markEmailHeld, deleteQueuedEmailsOlderThan } from '../db/queries/emailQueue';
 import { isEmailConfigured } from './emailService';
+import { deliver } from './emailProvider';
 import { logger } from '../config/logger';
 import { registerCron, markCronRun, runExclusive, CRON_TIMEZONE } from './cronTracker';
 
 const CRON_NAME = 'email-queue-retry';
 const MAX_ATTEMPTS = 5;
-const FROM_EMAIL = process.env.SENDGRID_FROM_EMAIL || 'no-reply@chronixedu.com';
 
-registerCron(CRON_NAME, '*/30 * * * *', 'Retries emails that failed to send via SendGrid, up to 5 attempts');
+registerCron(CRON_NAME, '*/30 * * * *', 'Retries emails that failed to send, up to 5 attempts; one held for a spent quota waits without using one');
 
 const RETENTION_CRON_NAME = 'email-queue-retention';
 const RETENTION_SCHEDULE = '15 3 * * *';
@@ -18,7 +17,8 @@ const RETENTION_SCHEDULE = '15 3 * * *';
  * How long a queued email is kept, whatever its status. The retry job is done with a row within
  * about two and a half hours (5 attempts, 30 minutes apart), so every row has settled long before
  * this. A week leaves time to read `last_error` when someone asks why an email never arrived; after
- * that, SendGrid's own activity log is the record.
+ * that, Resend's own email log is the record. An email held for a spent quota uses no try and waits
+ * longer, until the quota comes back or the week runs out.
  *
  * Until 2 Oct 2026 nothing deleted a queued email. The queue held 1,993 rows, the oldest 104 days old,
  * and 1,954 of them were welcome emails with a temporary password in the body (SECURITY.md Round 29).
@@ -29,20 +29,28 @@ export const EMAIL_QUEUE_RETENTION_DAYS = 7;
 
 registerCron(RETENTION_CRON_NAME, RETENTION_SCHEDULE, `Deletes queued emails older than ${EMAIL_QUEUE_RETENTION_DAYS} days, whatever their status`);
 
-/** Retries every pending queued email. Marks as failed after MAX_ATTEMPTS. */
+/**
+ * Retries every pending queued email. Marks one as failed after MAX_ATTEMPTS refusals. A refusal because the
+ * shared quota is spent uses no try, and ends the run: every email after it would be refused for the same
+ * reason. The next run, 30 minutes later, tries again.
+ */
 export async function runEmailQueueRetry(): Promise<void> {
   if (!isEmailConfigured()) return;
 
   const pending = await getPendingEmails(MAX_ATTEMPTS);
   for (const email of pending) {
-    try {
-      await sgMail.send({ to: email.to_email, from: FROM_EMAIL, subject: email.subject, text: email.text_body });
+    const result = await deliver({ to: email.to_email, subject: email.subject, text: email.text_body });
+    if (result.accepted) {
       await markEmailSent(email.id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await markEmailRetryFailed(email.id, email.attempts + 1, MAX_ATTEMPTS, message);
-      logger.error('email_queue_retry_failed', { id: email.id, to: email.to_email, attempts: email.attempts + 1, error: message });
+      continue;
     }
+    if (result.quota) {
+      await markEmailHeld(email.id, result.error);
+      logger.warn('email_queue_retry_held', { id: email.id, waiting: pending.length, error: result.error });
+      return;
+    }
+    await markEmailRetryFailed(email.id, email.attempts + 1, MAX_ATTEMPTS, result.error);
+    logger.error('email_queue_retry_failed', { id: email.id, to: email.to_email, attempts: email.attempts + 1, error: result.error });
   }
 }
 

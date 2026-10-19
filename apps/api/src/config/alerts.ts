@@ -13,7 +13,7 @@ import * as Sentry from '@sentry/node';
  *   NOT_ALERTED with the reason it is not, and `alerts.test.ts` fails on an event that is in
  *   neither, so a new failure path cannot stay silent by accident.
  * - An alert carries only the fields named for it, never the whole log line. Log lines carry
- *   addresses (`sendgrid_email_failed` has `to`), and the DPA names Sentry a sub-processor for
+ *   addresses (`email_send_failed` has `to`), and the DPA names Sentry a sub-processor for
  *   technical data only (CLAUDE.md, Conventions).
  * - Each alert is sent at most once per THROTTLE_MS per process, grouped in Sentry by its name
  *   and environment. A Redis outage logs every ~2s; it should be one issue with a count, not
@@ -58,10 +58,16 @@ export const ALERTS = {
     fields: ['connection', 'notAfter', 'daysLeft'],
   },
   email_failing: {
-    why: 'Sending email through SendGrid is failing: notifications and receipts are queued for retry, or lost if the queue write failed too',
+    why: 'Sending email through Resend is failing: notifications and receipts are queued for retry, or lost if the queue write failed too',
     level: 'error',
-    events: ['sendgrid_email_failed', 'email_queue_insert_failed', 'announcement_email_failed'],
+    events: ['email_send_failed', 'email_queue_insert_failed', 'announcement_email_failed'],
     fields: ['error'],
+  },
+  email_quota_exhausted: {
+    why: "Resend refused an email because the shared quota (Chronix Edu and ERP: 100 a day, 3,000 a month) is spent: email waits in the queue until it comes back, or is dropped after 7 days",
+    level: 'error',
+    events: ['email_quota_exhausted'],
+    fields: ['error', 'held_minutes'],
   },
   password_reset_email_failing: {
     why: 'Supabase Auth could not send a password-reset email: the person was told to check their inbox and nothing came',
@@ -222,7 +228,7 @@ export const NOT_ALERTED: Record<string, string> = {
   must_change_password_check_failed: 'Same as auth_suspension_check_failed: a per-request database failure, covered by the uptime monitor.',
   pg_pool_idle_client_error: 'The pool discards the client and opens another; routine when the Supabase pooler restarts.',
   cron_unlock_failed: 'The advisory lock is released when its session ends; nothing stays locked.',
-  email_queue_retry_failed: 'One retry of an already-queued email; the underlying SendGrid failure raises email_failing.',
+  email_queue_retry_failed: 'One retry of an already-queued email; the first refusal raised email_failing (or email_quota_exhausted).',
   payment_receipt_notify_failed: 'The payment is recorded; only the receipt email is affected, and a SendGrid failure raises email_failing.',
   payment_receipt_notify_email_failed: 'As payment_receipt_notify_failed.',
   payment_receipt_notify_payment_not_found: 'The receipt notifier was handed a payment id that is gone; the payment path itself is unaffected.',

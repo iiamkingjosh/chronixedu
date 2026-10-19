@@ -131,7 +131,10 @@ export interface WelcomeEmailReport {
   not_sent: string[];
 }
 
-const WELCOME_EMAIL_BATCH_SIZE = 50;
+/** How many accounts are checked and mailed at once (advisor, 19 Oct 2026). The Resend account is shared with
+ *  the ERP; the pace itself is the provider's (emailProvider.ts, SENDS_PER_SECOND), which covers every
+ *  sender, so this loop no longer sleeps between batches. Fifty at once was SendGrid's. */
+export const WELCOME_EMAIL_BATCH_SIZE = 5;
 
 /** A new account to welcome. `userId` is its `users.id`, which is also its Supabase Auth id. */
 export interface WelcomeRecipient { userId: string; email: string; name: string; role: string }
@@ -218,12 +221,9 @@ export async function sendWelcomeEmails(
       outcomes[results[n]] = (outcomes[results[n]] ?? 0) + 1;
       if (results[n] !== 'sent') notSent.push(r.email);
     });
-    if (i + WELCOME_EMAIL_BATCH_SIZE < recipients.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
   }
   if (notSent.length === 0) return { outcome: 'sent', not_sent: [] };
-  // Counts only: the addresses are already in sendgrid_email_failed, which is not forwarded.
+  // Counts only: the addresses are already in email_send_failed, which is not forwarded.
   if (noLogin) logger.error('welcome_email_no_login', { school_id: schoolId, not_sent: noLogin, of: recipients.length });
   if (unverified) logger.error('welcome_email_failed', { school_id: schoolId, stage: 'verify', not_sent: unverified, of: recipients.length, error: verifyError });
   const refused = notSent.length - noLogin - unverified;
